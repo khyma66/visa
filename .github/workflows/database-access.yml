@@ -1,0 +1,22 @@
+name: Database access regression
+on:
+  pull_request:
+    paths: ['supabase/**', 'tests/database/**', '.github/workflows/database-access.yml']
+  push:
+    branches: ['fix/visaflow-community-access-20260928']
+permissions:
+  contents: read
+jobs:
+  access:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/database/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: tests/database
+      - run: npm test
+        working-directory: tests/database
