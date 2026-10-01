@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": ["../../src/lib/auth/**/*.ts", "../../src/components/auth/**/*.tsx", "../../src/app/login/**/*.tsx", "../../src/app/signup/**/*.tsx", "../../src/app/reset-password/**/*.tsx", "../../src/app/auth/**/*.tsx"],
+  "exclude": ["../../node_modules"]
+}

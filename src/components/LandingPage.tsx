@@ -1,10 +1,16 @@
 import AdBanner from './ads/AdBanner';
 import AdSidebar from './ads/AdSidebar';
 import AdInFeed from './ads/AdInFeed';
+import Link from 'next/link';
+import AuthNav from './auth/AuthNav';
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-gray-50">
+      <header className="relative z-50 flex items-center justify-between border-b bg-white px-6 py-4">
+        <Link href="/" className="text-xl font-bold text-gray-900">VisaFlow</Link>
+        <AuthNav />
+      </header>
       <AdSidebar slotId="left-sidebar-home" position="left" />
       <AdSidebar slotId="right-sidebar-home" position="right" />
 
