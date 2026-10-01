@@ -1,0 +1,41 @@
+name: Auth and launch security
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/auth/**'
+      - 'tests/security/**'
+      - 'scripts/check-secrets.mjs'
+      - 'package*.json'
+      - 'next.config.js'
+      - '.env.example'
+      - '.github/workflows/auth-security.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auth-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node scripts/check-secrets.mjs
+      - run: npm --prefix tests/auth test
+      - run: npm --prefix tests/auth run typecheck
+      - run: node --test tests/security/*.test.mjs
+      - run: npm audit --audit-level=high
+  production-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      # Keep the known missing-service-module blocker visible; never suppress it.
+      - run: npm run build
