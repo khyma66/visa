@@ -818,7 +818,7 @@ echo "✅ Data uploaded and queued!"
 
 ### `frontend/.env`
 ```
-PUBLIC_SUPABASE_URL=https://cycnichledvqbxevrwnt.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 PUBLIC_WORKER_URL=https://visa-1.YOUR_SUBDOMAIN.workers.dev
 ```
@@ -830,7 +830,7 @@ main = "src/index.py"
 compatibility_date = "2026-01-22"
 compatibility_flags = ["nodejs_compat", "python_workers"]
 
-account_id = "3ae98b91b615a3cf17f8acb402881aae"
+account_id = "your-cloudflare-account-id"
 
 [[r2_buckets]]
 binding = "MY_BUCKET"
@@ -848,7 +848,7 @@ queue = "r2-process-queue"
 queue = "r2-process-queue"
 
 [vars]
-SUPABASE_URL = "https://cycnichledvqbxevrwnt.supabase.co"
+SUPABASE_URL = "https://your-project.supabase.co"
 ```
 
 ---

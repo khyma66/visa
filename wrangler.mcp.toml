@@ -2,26 +2,12 @@ name = "visa-mcp-server"
 main = "workers/mcp_server.ts"
 compatibility_date = "2026-01-16"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
 
 [observability]
 enabled = true
 
-[vars]
-SUPABASE_URL = "https://cycnichledvqbxevrwnt.supabase.co"
-
-# Secrets required:
-# - SUPABASE_SERVICE_ROLE_KEY
-# - CF_ACCOUNT_ID
-# - CF_API_TOKEN
-
-# Resources
-[[kv_namespaces]]
-binding = "SESSION"
-id = "5efb3f36000f4319ab0e926229da7b9d"
-
-[[r2_buckets]]
-binding = "MY_BUCKET"
-bucket_name = "data-pipeline"
-
-[ai]
-binding = "AI"
+# Retired: no database, storage, AI, or secret bindings are needed.
+# Existing deployments must be inventoried and disabled explicitly; editing
+# this file does not remove an older deployed version or revoke its secrets.

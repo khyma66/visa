@@ -1,226 +1,131 @@
-# Visa Platform
+# VisaFlow
 
-A modern visa information platform built with Next.js, TypeScript, and Cloudflare Workers.
+**Current handoff (October 2, 2026):** [consolidated release status and owner checklist](docs/RELEASE_HANDOFF_2026-10-02.md). It supersedes historical deployment/audit counts below.
 
-## Features
+**Public launch is not yet approved.** See [production readiness and release steps](docs/PRODUCTION_READINESS.md) for implemented safeguards, verification evidence, remaining approvals, and the guarded deployment workflow.
 
-- **Post management**: Create, read, update, and delete visa-related posts
-- **Clustering**: AI-powered post clustering using Cloudflare Workers AI
-- **Analytics**: Platform analytics using Supabase and Cloudflare Workers
-- **Search**: Semantic search using pgvector and Cloudflare Workers AI
-- **Storage**: R2 bucket integration for content storage
-- **Authentication**: Supabase authentication
-- **AI Integration**: Cloudflare Workers AI for embeddings and clustering
+Current launch packet: [ordered steps](docs/GO_LIVE_CHECKLIST.md), [security findings](docs/SECURITY_REVIEW_2026-09-11.md), [human testing](docs/HUMAN_ACCEPTANCE_TESTS.md), [U.S. policy review](docs/US_LAUNCH_REVIEW.md), and [tools/credentials](docs/LIVE_CREDENTIALS.md). New preview privacy/rules/request-status pages are informational drafts, not finalized production policies.
 
-## Tech Stack
+VisaFlow is an anonymous community for visa questions. Its primary experience combines:
 
-- **Frontend**: Next.js 16, TypeScript, Tailwind CSS
-- **Backend**: Cloudflare Workers, Supabase
-- **Database**: Supabase PostgreSQL (with pgvector extension)
-- **Storage**: Cloudflare R2
-- **AI**: Cloudflare Workers AI (@cf/baai/bge-small-en-v1.5, @cf/meta/llama-3.2-1b-instruct)
-- **Search**: pgvector (PostgreSQL extension)
+- Stack Overflow-style questions, tags, answers, votes, and related-question discovery
+- Facebook group discussions normalized from Apify post text and top comments
+- Related-question discovery while searching and before posting
+- Random Reddit-style public handles; account emails are never exposed publicly
+- Private one-to-one messaging protected by Supabase Row Level Security (RLS)
+- A built-in demo mode so the complete interface works before a backend is connected
 
-## Getting Started
+Community experiences are not legal advice. The interface repeatedly reminds members to remove passport, receipt, address, and other identifying information.
 
-### Prerequisites
+## Run locally
 
-- Node.js 18+
-- npm or yarn
-- Cloudflare account
-- Supabase account
+Requirements: Node.js 22 or later and npm.
 
-### Installation
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/mohan6695/visa.git
-   cd visa-1
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-3. **Set up environment variables**:
-   ```bash
-   cp .env.example .env.local
-   ```
-   Fill in the values in `.env.local` with your Cloudflare and Supabase credentials.
-
-4. **Start the development server**:
-   ```bash
-   npm run dev
-   ```
-
-### Environment Variables
-
-- **SUPABASE_URL**: Your Supabase project URL
-- **SUPABASE_SERVICE_ROLE_KEY**: Your Supabase service role key
-- **CF_ACCOUNT_ID**: Your Cloudflare account ID
-- **CF_API_TOKEN**: Your Cloudflare API token
-- **MEILISEARCH_HOST**: Your MeiliSearch host (optional)
-- **MEILISEARCH_API_KEY**: Your MeiliSearch API key (optional)
-
-## Project Structure
-
-```
-visa-1/
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── cache/
-│   │   │   ├── clusters/
-│   │   │   ├── posts/
-│   │   │   ├── queue/
-│   │   │   ├── r2-delete/
-│   │   │   ├── r2-fetch/
-│   │   │   ├── r2-upload/
-│   │   │   ├── search/
-│   │   │   └── v1/
-│   │   ├── post/
-│   │   └── usa-posts/
-│   ├── components/
-│   │   ├── LandingPage.tsx
-│   │   ├── USAPostsPage.tsx
-│   │   └── ads/
-│   ├── lib/
-│   │   ├── cluster-service-v2.ts
-│   │   ├── cluster-service.ts
-│   │   ├── r2-client.ts
-│   │   ├── supabase.ts
-│   │   └── types.ts
-│   └── data/
-├── public/
-├── workers/
-│   ├── clustering.ts
-│   ├── mcp_server.ts
-│   └── queue-handler.ts
-├── .gitignore
-├── astro-scripts-guide
-├── astro.config.mjs
-├── astro-to-nextjs-migration-check.md
-├── complete-implementation.md
-├── docker-compose.yml
-├── index.html
-├── next-env.d.ts
-├── next.config.js
-├── package-lock.json
-├── package.json
-├── README.md
-├── render.yaml
-├── tailwind.config.mjs
-├── tsconfig.json
-├── wrangler.clustering.toml
-├── wrangler.mcp.toml
-├── wrangler.temp.toml
-├── wrangler.toml
-└── wrangler.worker.toml
+```bash
+npm ci
+npm run dev
 ```
 
-## API Routes
+Open `http://localhost:3000`. Without environment variables the app uses browser-local demo data and signs in as `quiet-otter-4821`.
 
-### Posts
+The default development command runs through the same Vite-based Next.js compatibility layer used by the Cloudflare Worker. Use `npm run dev:next` only when comparing behavior with the native Next.js development server.
 
-- `GET /api/posts`: Get all posts
-- `POST /api/posts`: Create a new post
-- `GET /api/posts/:id`: Get a single post
-- `PUT /api/posts/:id`: Update a post
-- `DELETE /api/posts/:id`: Delete a post
+## Connect Apify community data
 
-### Clusters
+The real development archive is ignored by Git and must not be committed to this public repository. Clean checkouts, CI, and production builds use `src/data/archive-fixture.json` (42 clearly synthetic posts). Local development uses the private snapshot when present. Production imports remain disabled, regardless of whether a local archive exists.
 
-- `GET /api/clusters`: Get all clusters
-- `POST /api/queue/cluster`: Queue a post for clustering
+**Current snapshot mode does not automatically ingest the daily Apify run.** Refresh with `npm run archive:refresh`, verify it, then rebuild/redeploy development. The optional live mode below is a different, explicitly enabled path—not a durable production import pipeline.
 
-### R2 Storage
+The refreshed development archive combines three completed source runs: **549 unique posts, 606 available comments and 21 tags** from 1,500 source records. No Apify secret is installed on the Worker. See [archive coverage and deployment verification](docs/API_ARCHIVE.md). The live-source instructions below apply when explicitly switching `COMMUNITY_SOURCE_MODE` away from `snapshot`.
 
-- `POST /api/r2-upload`: Upload a file to R2
-- `GET /api/r2-fetch/:key`: Fetch a file from R2
-- `DELETE /api/r2-delete/:key`: Delete a file from R2
+VisaFlow reads the latest successful run for the configured Facebook Groups Scraper Actor through `/api/community`, using 100-item pages and Apify's total-count header. A daily Apify schedule starts a fresh run with the saved group input; the site discovers the latest successful run automatically and refreshes it after the five-minute cache window. All nonempty posts are retained, classified as questions, discussions, or promotions, and deduplicated by source post ID. The response reports source, imported, empty, and duplicate counts. Failed or incomplete imports return an error instead of silently serving a partial dataset. The safety ceiling is 5,000 items. Only required fields are fetched, and the browser reuses the normalized dataset for search, tags, related questions, and 20-post display pages without extra Apify requests.
 
-### Search
+1. Copy `.dev.vars.example` to `.dev.vars`.
+2. Set `APIFY_TOKEN` to an Apify token with read access to the configured run.
+3. Restart `npm run dev`.
 
-- `GET /api/search/:query`: Search for posts
+The run ID and non-secret API settings live in `wrangler.jsonc`. The token must stay in `.dev.vars` locally and must be installed as a Worker secret before deployment:
 
-### Cache
+```bash
+npx wrangler secret put APIFY_TOKEN --env development
+```
 
-- `GET /api/cache/get/:key`: Get a value from the cache
+The Apify schedule `visaflow-daily-community` is enabled for 02:00 America/Chicago each day. It runs Actor `2chN8UQcH1CfxLRNE` with the saved public group input and up to 500 results. The app follows that Actor's latest successful run, so a failed or still-running refresh leaves the last complete dataset available.
 
-## Workers
+Imported records remain source-owned: VisaFlow does not expose scraped account IDs or profile photos, and it never posts local replies back to Facebook. Native VisaFlow questions and messages continue to use the existing Supabase path.
 
-### Clustering Worker
+## Connect Supabase
 
-The clustering worker runs on a cron schedule to automatically cluster posts. It uses Cloudflare Workers AI to generate embeddings and cluster posts based on their content.
+The app is connected to the resumed `cycnichledvqbxevrwnt` project, with six September community migrations applied, including reporting, moderation and posting limits. Earlier cross-account realtime tests passed; current checks and their limits are in [production readiness](docs/PRODUCTION_READINESS.md). The browser-safe settings are in ignored `.env.local`; no service-role key is used by the app.
 
-### MCP Server
+For another development environment:
 
-The MCP server exposes tools for semantic search, analytics, and clustering. It implements the Model Context Protocol (MCP) over HTTP/SSE.
+1. Create a Supabase project.
+2. Apply the six `202609*` community migrations in order. Older migrations belong to legacy experiments; do not blindly replay them into an existing database. Reconcile remote migration history before using `supabase db push`.
+3. Copy `.env.example` to `.env.local`.
+4. Set the project URL and publishable key:
 
-### Queue Handler
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
 
-The queue handler processes messages from Cloudflare Queues to handle post clustering and other tasks.
+5. In Supabase Authentication, configure the site URL and allowed redirect URLs for local and production domains.
+6. Restart the development server.
 
-## Deployment
+The migration creates an anonymous profile automatically when a user signs up. It also creates full-text and trigram indexes, related-question functions, vote aggregation, accepted answers, private conversations, Realtime messages, explicit Data API grants, and RLS policies.
 
-### Cloudflare Pages
+## Product flows
 
-1. **Build the app**:
-   ```bash
-   npm run build
-   ```
+- `/` — searchable and filterable question feed
+- `/ask` — question composer with live duplicate suggestions
+- `/questions/[id]` — answers or imported comments, tags, source attribution, related discussions, and message-author actions
+- `/messages` — private inbox, anonymous-handle lookup, and realtime conversations
+- `/login` — password or email-code login; Google when configured
+- `/signup` — email verification followed by password setup
+- `/account/recovery` and `/account/update-password` — password recovery flow
+- `/moderation` — operator-approved report review, removal and suspension
+- `/community-safety` — current privacy limits and community rules
 
-2. **Deploy to Cloudflare Pages**:
-   ```bash
-   npm run deploy
-   ```
+## Verify
 
-### Cloudflare Workers
+```bash
+npm run check
+```
 
-1. **Deploy the clustering worker**:
-   ```bash
-   wrangler deploy --config wrangler.clustering.toml
-   ```
+This runs deterministic discovery checks, real PostgreSQL migration/RLS tests with three identities, TypeScript, and the application build. `scripts/test-live-realtime.mjs` additionally tests the hosted service using explicitly provisioned disposable accounts; it is not run by CI and requires fixture cleanup by an authorized administrator. See the implementation status document.
 
-2. **Deploy the MCP server**:
-   ```bash
-   wrangler deploy --config wrangler.mcp.toml
-   ```
+The build produces the complete Worker application, including dynamic routes. After building, `npm start` serves that output locally at `http://localhost:8787`; `/api/health` provides a runtime health check.
 
-3. **Deploy the queue handler**:
-   ```bash
-   wrangler deploy --config wrangler.worker.toml
-   ```
+## Deploy to Cloudflare Workers
 
-## Contributing
+Development preview: https://visaflow-dev.varunchinna5966.workers.dev
 
-1. **Fork the repository**:
-   ```bash
-   git fork https://github.com/mohan6695/visa.git
-   ```
+The development environment is a separate Worker named `visaflow-dev`. Publish updates with:
 
-2. **Create a branch**:
-   ```bash
-   git checkout -b feature/your-feature
-   ```
+```bash
+npm run deploy:dev
+```
 
-3. **Make changes**:
-   ```bash
-   # Make your changes
-   git status
-   git add .
-   git commit -m "Add your commit message"
-   ```
+For a build without publishing, use `npm run build:dev`. The generated `dist/server/wrangler.json` must name `visaflow-dev` before deploying that build. Named environments are selected at build time. The development preview was republished September 10 with the combined API archive, tag directory and related-question browsing. Hosted browser verification was blocked by the computer's admin policy. The bundled snapshot requires no Apify secret transfer; future source runs require a local archive refresh and redeployment. Do not assume named Worker environments inherit root variables.
 
-4. **Push changes**:
-   ```bash
-   git push origin feature/your-feature
-   ```
+See [the platform and scale assessment](docs/PLATFORM_AND_SCALE.md) for the hosting, messaging, storage, cost, and launch recommendations.
 
-5. **Create a pull request**:
-   Go to the repository on GitHub and create a pull request.
+Production deployment is intentionally blocked until the requirements in [production readiness](docs/PRODUCTION_READINESS.md) are verified. After recording real evidence, configuring the production origin/environment and approving launch:
 
-## License
+```bash
+npx wrangler login
+npm run deploy
+```
 
-This project is licensed under the MIT License.
+`wrangler.jsonc` intentionally uses the Workers cache and contains no KV, R2, Queue, AI, or database-secret bindings. Those services should be added only when the official-source ingestion and grounded-answer phases are implemented. Set Supabase's browser-safe URL and publishable key as build environment variables. Never add the service-role key to the client build.
+
+Run `npm run types:worker` after changing Cloudflare bindings so `worker-configuration.d.ts` remains synchronized with `wrangler.jsonc`.
+
+For local database verification, install Docker and the Supabase CLI, then run `supabase start` and `supabase db reset`.
+
+## Security before transferring this repository
+
+This repository previously contained Supabase and Cloudflare credentials in tracked files and Git history. The working tree now contains placeholders, but the old credentials must be rotated and the history must be rewritten before transferring or making a destination repository public. Do not add secret or service-role keys to any `NEXT_PUBLIC_` variable.
+
+The legacy FastAPI, Cloudflare Worker, ingestion, and AI-clustering experiments remain in the repository as future/reference subsystems. The production community UI uses the coherent Next.js + Supabase path described above.

@@ -5,7 +5,7 @@
       "dom.iterable",
       "esnext"
     ],
-    "allowJs": true,
+    "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
@@ -22,21 +22,27 @@
       }
     ],
     "paths": {
+      "@visa/archive": ["./src/data/archive-fixture.json"],
       "@/*": [
         "./src/*"
       ]
     },
-    "target": "ES2017"
+    "target": "ES2022"
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "worker-configuration.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "backend"
+    "backend",
+    "workers",
+    "supabase",
+    "src/pages-old",
+    ".next"
   ]
 }

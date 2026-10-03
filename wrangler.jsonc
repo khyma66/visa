@@ -1,0 +1,57 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "visaflow",
+  "compatibility_date": "2026-09-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "COMMUNITY_SOURCE_MODE": "snapshot",
+    "APIFY_RUN_ID": "9iVj9RajtVcIVkzgZ",
+    "APIFY_ACTOR_ID": "2chN8UQcH1CfxLRNE",
+    "APIFY_USE_LATEST_RUN": "true",
+    "APIFY_API_BASE_URL": "https://api.apify.com/v2"
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
+  },
+  "main": "vinext/server/fetch-handler",
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "cache": { "enabled": true },
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "env": {
+    "development": {
+      "name": "visaflow-dev",
+      "workers_dev": true,
+      "vars": {
+        "APP_ENV": "development",
+        "COMMUNITY_SOURCE_MODE": "snapshot",
+        "APIFY_RUN_ID": "9iVj9RajtVcIVkzgZ",
+        "APIFY_ACTOR_ID": "2chN8UQcH1CfxLRNE",
+        "APIFY_USE_LATEST_RUN": "true",
+        "APIFY_API_BASE_URL": "https://api.apify.com/v2"
+      },
+      "version_metadata": { "binding": "CF_VERSION_METADATA" }
+    },
+    "production": {
+      "name": "visaflow",
+      "workers_dev": true,
+      "vars": {
+        "APP_ENV": "production",
+        "PUBLIC_LAUNCH_APPROVED": "false",
+        "IMPORTED_CONTENT_APPROVED": "false"
+      },
+      "version_metadata": { "binding": "CF_VERSION_METADATA" }
+    }
+  }
+}
