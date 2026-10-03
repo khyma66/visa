@@ -7,7 +7,7 @@ const origin = process.argv[2] ?? 'https://visa-central.com';
 assert(['https://visa-central.com','https://visaflow-dev.varunchinna5966.workers.dev'].includes(origin), 'Use an approved preview origin.');
 const env = parseEnv(await readFile(new URL('../.env.local',import.meta.url),'utf8'));
 const database = env.NEXT_PUBLIC_SUPABASE_URL;
-assert.equal(database,'https://cycnichledvqbxevrwnt.supabase.co','This smoke test targets the existing development project only.');
+assert.equal(database,'https://cycnichledvqbxevrwnt.supabase.co','This read-only smoke test targets the existing project selected for production.');
 const key = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 assert(key,'A publishable key is required.');
 if (!key.startsWith('sb_publishable_')) {
@@ -61,3 +61,21 @@ for(const [name,args] of [
   await response.body?.cancel();
 }
 console.log('PASS public read RPCs, tag totals and anonymous denial for private messaging/voting. No records were written.');
+
+// Promotion retires obsolete browser APIs without deleting their records.
+// limit=0 checks access without downloading any legacy personal data.
+if (process.argv.includes('--verify-promotion')) {
+  for (const table of [
+    'analytics_events','clusters','comment_likes','comments','countries','group_members',
+    'group_message_likes','group_messages','groups','message_read_receipts','notifications',
+    'post_likes','post_reactions','post_tags','posts','tags','user_interactions',
+    'user_presence','user_sessions','users','visa_requirements','visa_types',
+  ]) {
+    const response = await fetch(new URL(`/rest/v1/${table}?select=*&limit=0`, database), {
+      headers: { apikey: key }, signal: AbortSignal.timeout(15000), redirect: 'error',
+    });
+    assert([401,403].includes(response.status), `Legacy ${table} must deny anonymous browser access`);
+    await response.body?.cancel();
+  }
+  console.log('PASS anonymous browser access denied for all 22 retired legacy tables.');
+}

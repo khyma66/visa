@@ -2,7 +2,9 @@
 
 ## October 3, 2026: development/production alignment decision
 
-Keep the current database as development unless its old browser-access paths are explicitly approved for retirement. The recommended production path is an isolated Supabase project using the same reviewed application commit and community migration set. New project/organization/plan approval is still pending; no new paid project has been created.
+The owner subsequently chose to **promote the existing Supabase project `cycnichledvqbxevrwnt` to production** rather than create another production database. This supersedes the earlier separate-production-project recommendation. Preserve its account IDs, native records and legacy archive rows in place; close legacy browser-access paths without deleting data. Supabase already labels its main branch Production, but that label is not a security or public-launch approval.
+
+Development must use isolated fixtures/local PostgreSQL or a separately approved staging project, not duplicate or mutate production users and messages. The current `visaflow-dev` Worker/domain is a transitional preview still connected to the selected database; it is not an isolated development backend. Keep public-launch gates closed until auth, secrets, dependency, privacy, backup and acceptance requirements pass. No new project, paid plan, branch or database-engine upgrade has been purchased or started.
 
 “In sync” should mean **versioned code, schema and approved source content**, not two-way replication of every row. Promote reviewed commits and additive migrations from development to production. Import the same approved Apify records with stable source IDs and a run ledger so retries do not duplicate posts. Do not copy development fixture accounts, passwords, sessions, private conversations, or moderation test traffic into production. Future realistic development datasets should be synthetic or explicitly anonymized. Imported source authors remain attributed source identities, not registered accounts.
 
