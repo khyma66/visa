@@ -2,6 +2,8 @@
 
 Status: development preview, not approved for public launch. Domain selection alone will not make this production-ready. This file supersedes older audit/deployment counts.
 
+Review: [draft PR #3](https://github.com/khyma66/visa/pull/3), branch `release/visaflow-consolidated-20261002`. Application commit `fdacf9e`. Development deployment: `c31c7b0e-a70e-403d-999b-ed5c733c7624` at [VisaFlow preview](https://visaflow-dev.varunchinna5966.workers.dev). Production was not deployed.
+
 ## Consolidated implementation
 
 - Preserved the newer local Q&A, tags, comment-aware discovery, private messaging, reporting, and moderation implementation instead of reverting to January GitHub main.
@@ -31,6 +33,10 @@ Do not blindly run `supabase db push` or replay all legacy SQL. Hosted timestamp
 The consolidated local check passed: 71 tests (8 auth, 42 community access, 6 security, 2 notices, 2 archive, 8 release, 3 realtime/database), type checking, and Worker build. A repeated CI-mode run stalled once in the embedded database suite; the bounded isolated rerun passed. The test command now has a 60-second timeout so it cannot hang indefinitely. This is not a hosted load test.
 
 Development bundle scanning passed for known local secrets and privileged database keys. This is a pattern check, not proof that all historical secrets are revoked. Existing history remains unchanged.
+
+GitHub's clean runner successfully completed npm ci and the full code check on the initial consolidated commit; the job correctly failed at the remaining high-severity dependency audit. A hosted smoke check caught fixture data selected in the first preview build; the archive resolution was corrected and a compiled-artifact check was added. Development must contain all 549 existing snapshot posts; CI/production must contain only the 42 synthetic posts and none of the private post IDs. The actual Apify source was not refreshed in this release pass.
+
+Browser checks confirmed the updated login and signup screens render and navigate correctly. No real email or password was submitted. Google is visibly unavailable until provider configuration is completed.
 
 Dependency patch versions: Next.js 16.3.8, eslint-config-next 16.3.8, Cloudflare Vite plugin 1.62.5, Wrangler 4.147.0; compatible brace-expansion and fast-uri fixes are pinned. Fresh full audit after installation: **11 high findings**, all in the unresolved braces dependency chain. The high-severity CI/release gate is intentionally not bypassed. See [upstream braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm). Earlier “zero vulnerabilities” statements are historical and do not apply now.
 
