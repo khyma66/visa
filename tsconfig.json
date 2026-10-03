@@ -22,7 +22,6 @@
       }
     ],
     "paths": {
-      "@visa/archive": ["./src/data/archive-fixture.json"],
       "@/*": [
         "./src/*"
       ]

@@ -5,10 +5,8 @@ import { cdnAdapter } from "@vinext/cloudflare/cache/cdn-adapter";
 import { archiveSource } from "./scripts/archive-source.mjs";
 
 export default defineConfig({
+  resolve: { alias: { "@visa/archive": archiveSource(process.cwd()) } },
   plugins: [
-    { name: "private-development-archive", enforce: "pre", resolveId(id) {
-      if (id === "@visa/archive") return archiveSource(process.cwd());
-    } },
     vinext({
       cache: { cdn: cdnAdapter() },
     }),
