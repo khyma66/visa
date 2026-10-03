@@ -1,0 +1,4 @@
+# Local-only Cloudflare Worker secret. Copy this file to .dev.vars.
+APIFY_TOKEN=replace_with_your_apify_token
+# Prefer the existing snapshot. Only for a controlled local live-import test:
+APIFY_LIVE_FETCH_ENABLED=false

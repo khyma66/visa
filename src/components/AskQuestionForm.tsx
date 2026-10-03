@@ -1,0 +1,98 @@
+'use client';
+
+import { FormEvent, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { AlertTriangle, Check, CheckCircle2, Plus, Search, X } from 'lucide-react';
+import { createQuestion } from '@/lib/community';
+import { normalizeTags, suggestTags } from '@/lib/tagging';
+import { useAuth } from './AuthProvider';
+import { RelatedQuestions } from './RelatedQuestions';
+import { SafetyNotice } from './SafetyNotice';
+
+const VISA_TYPES = ['H-1B', 'B1/B2', 'F-1 / OPT', 'Schengen', 'Study permit', 'Work permit', 'Family / spouse', 'General'];
+
+export function AskQuestionForm() {
+  const { user, profile, loading } = useAuth();
+  const router = useRouter();
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [country, setCountry] = useState('United States');
+  const [visaType, setVisaType] = useState('H-1B');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const suggestedTags = suggestTags(`${title}\n${body}`);
+
+  function addTag(value: string) {
+    const next = normalizeTags([...selectedTags, value]);
+    if (next.length > selectedTags.length) setSelectedTags(next);
+    setTagInput('');
+  }
+
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!user) { router.push('/login?next=/ask'); return; }
+    const normalizedTags = normalizeTags([...selectedTags, tagInput, ...suggestedTags]);
+    setSubmitting(true);
+    setError('');
+    try {
+      const id = await createQuestion(user.id, {
+        title: title.trim(), body: body.trim(), destination_country: country.trim(), visa_type: visaType, tags: normalizedTags,
+      });
+      router.push(`/questions/${id}`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not publish the question.');
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) return <div className="mx-auto max-w-4xl p-8">Loading your anonymous profile…</div>;
+
+  return (
+    <main className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <section>
+        <p className="text-sm font-bold uppercase tracking-wider text-teal-700">Ask the community</p>
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Share the details that make your case different</h1>
+        <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your-random-handle'}</b>.</p>
+        <SafetyNotice kind="publishing" />
+        {!user && <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mr-2 inline" size={17} /> <Link href="/login?next=/ask" className="font-bold underline">Log in</Link> before publishing. Your email remains private.</div>}
+        <form onSubmit={submit} className="mt-7 space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+          <label className="block">
+            <span className="font-bold text-slate-900">Question title</span>
+            <span className="mt-1 block text-sm text-slate-500">Write the exact question another person might search.</span>
+            <input required minLength={15} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Can I… / How should I…"
+              className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100" />
+          </label>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <label><span className="font-bold text-slate-900">Destination country</span><input required value={country} onChange={(event) => setCountry(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-teal-600" /></label>
+            <label><span className="font-bold text-slate-900">Visa type</span><select value={visaType} onChange={(event) => setVisaType(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-teal-600">{VISA_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label>
+          </div>
+          <label className="block">
+            <span className="font-bold text-slate-900">Situation and timeline</span>
+            <span className="mt-1 block text-sm text-slate-500">Describe relevant dates, visa type and steps already taken. Do not paste documents or identifying numbers.</span>
+            <textarea required minLength={30} maxLength={10000} rows={9} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100" />
+          </label>
+          <div className="block">
+            <span className="font-bold text-slate-900">Tags</span>
+            <span className="mt-1 block text-sm text-slate-500">Tags are suggested from your title and situation as you type. Add up to five.</span>
+            <div className="mt-3 flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 focus-within:border-teal-600 focus-within:ring-4 focus-within:ring-teal-100">
+              {selectedTags.map((tag) => <span key={tag} className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1.5 text-sm font-bold text-blue-700">{tag}<button type="button" aria-label={`Remove ${tag}`} onClick={() => setSelectedTags((current) => current.filter((item) => item !== tag))} className="rounded p-0.5 hover:bg-blue-100"><X size={13} /></button></span>)}
+              <input value={tagInput} onChange={(event) => setTagInput(event.target.value)} onKeyDown={(event) => { if (event.key === ',' || event.key === 'Enter' || event.key === 'Tab') { if (tagInput.trim()) { event.preventDefault(); addTag(tagInput); } } }} placeholder={selectedTags.length ? 'Add another tag' : 'h1b, transfer, premium-processing'} className="min-w-48 flex-1 border-0 p-1 outline-none" />
+            </div>
+            {suggestedTags.length > 0 && <div className="mt-3 rounded-lg bg-slate-50 p-3"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500"><Check size={14} /> Suggested from your post</div><div className="mt-2 flex flex-wrap gap-2">{suggestedTags.map((tag) => selectedTags.includes(tag) ? <span key={tag} className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700"><Check size={12} /> {tag}</span> : <button key={tag} type="button" onClick={() => addTag(tag)} disabled={selectedTags.length >= 5} className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-blue-700 shadow-sm ring-1 ring-slate-200 hover:bg-blue-50 disabled:opacity-40"><Plus size={12} /> {tag}</button>)}</div></div>}
+            <p className="mt-2 text-xs text-slate-500">Your selected tags are saved. Suggested tags are added automatically when you publish.</p>
+          </div>
+          {error && <p className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
+          <button disabled={submitting} className="rounded-lg bg-teal-700 px-5 py-3 font-bold text-white hover:bg-teal-800 disabled:opacity-60">{submitting ? 'Publishing…' : 'Publish question'}</button>
+        </form>
+      </section>
+      <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+        <RelatedQuestions drafting context={{ title, body, tags: normalizeTags([...selectedTags, tagInput, ...suggestedTags]), visa_type: visaType, destination_country: country }} />
+        {['Search first and review close matches.', 'Use a specific title with the visa type.', 'Remove names, case numbers, emails, and addresses.', 'Return to accept the answer that solved your question.'].map((tip) => <div key={tip} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600"><CheckCircle2 className="mt-0.5 shrink-0 text-teal-600" size={18} />{tip}</div>)}
+      </aside>
+    </main>
+  );
+}

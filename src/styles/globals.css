@@ -10,8 +10,8 @@
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 174 84% 25%;
+    --primary-foreground: 166 76% 97%;
     --secondary: 210 40% 96%;
     --secondary-foreground: 222.2 84% 4.9%;
     --muted: 210 40% 96%;
@@ -22,253 +22,52 @@
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --ring: 174 84% 25%;
     --radius: 0.5rem;
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
-  }
-}
-
-@layer base {
   * {
     @apply border-border;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground;
+    overflow-wrap: anywhere;
+  }
+
+  main, section, aside, nav, form, label { min-width: 0; }
+  input, textarea, select { max-width: 100%; min-width: 0; }
+  button, a, input, select, textarea { touch-action: manipulation; }
+  button:disabled { cursor: not-allowed; }
+  main { scroll-margin-top: 8rem; }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  ::selection {
+    @apply bg-primary/20;
   }
 }
 
-/* Custom scrollbar styles */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+@layer components {
+  .site-shell { width: 100%; margin-inline: auto; padding-inline: clamp(1rem, 2.5vw, 3rem); }
+  .skip-link { @apply sr-only; }
+  .skip-link:focus { @apply not-sr-only fixed left-4 top-4 z-[100] rounded-lg bg-slate-950 px-5 py-3 text-white; }
+  .community-hero { background: radial-gradient(ellipse at right top, #ccfbf1 0%, transparent 60%), #ffffff; }
 }
 
-::-webkit-scrollbar-track {
-  @apply bg-gray-100 dark:bg-gray-800;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400 dark:bg-gray-500;
-}
-
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Focus styles for accessibility */
-.focus-visible {
-  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
-}
-
-/* Loading animations */
-@keyframes pulse {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: .5;
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes bounce {
-
-  0%,
-  100% {
-    transform: translateY(-25%);
-    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
-  }
-
-  50% {
-    transform: none;
-    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
-  }
-}
-
-/* Utility classes */
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-.animate-bounce {
-  animation: bounce 1s infinite;
-}
-
-/* Text selection */
-::selection {
-  @apply bg-primary/20;
-}
-
-/* Print styles */
-@media print {
-  .no-print {
-    display: none !important;
-  }
-}
-
-/* Ad Space Styles - >50% ad space for monetization */
-.ad-banner,
-.ad-sidebar,
-.ad-in-feed {
-  @apply bg-gray-50 border border-gray-200 rounded-lg;
-}
-
-.ad-banner.horizontal {
-  @apply w-full h-[90px] my-4;
-}
-
-.ad-banner.vertical {
-  @apply w-[160px] h-[600px] mx-auto;
-}
-
-.ad-banner.rectangle {
-  @apply w-[300px] h-[250px] mx-auto;
-}
-
-.ad-sidebar {
-  @apply fixed top-20 z-40 hidden lg:block;
-}
-
-.ad-sidebar-left {
-  @apply left-4;
-}
-
-.ad-sidebar-right {
-  @apply right-4;
-}
-
-.ad-in-feed {
-  @apply w-full h-[250px] my-8;
-}
-
-/* Ad placeholder for development */
-.ad-placeholder {
-  @apply bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-dashed border-blue-200 rounded-lg flex items-center justify-center text-blue-500 font-medium;
-}
-
-/* Main content area with ad space */
-.main-with-ads {
-  @apply min-h-screen;
-}
-
-/* High contrast mode support */
-@media (prefers-contrast: high) {
-  .border {
-    @apply border-2;
-  }
-}
-
-/* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* Dark mode improvements */
-.dark img {
-  filter: brightness(0.9) contrast(1.1);
-}
-
-/* Custom component styles */
-.glass-effect {
-  backdrop-filter: blur(16px) saturate(180%);
-  background-color: rgba(255, 255, 255, 0.75);
-  border: 1px solid rgba(209, 213, 219, 0.3);
-}
-
-.dark .glass-effect {
-  background-color: rgba(17, 24, 39, 0.75);
-  border: 1px solid rgba(75, 85, 99, 0.3);
-}
-
-/* Gradient text */
-.gradient-text {
-  background: linear-gradient(45deg, #0ea5e9, #8b5cf6);
-  background-size: 200% 200%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: gradient-shift 3s ease infinite;
-}
-
-@keyframes gradient-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-
-  50% {
-    background-position: 100% 50%;
-  }
-
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-/* Toast notification styles */
-.toast-enter {
-  transform: translateX(100%);
-  opacity: 0;
-}
-
-.toast-enter-active {
-  transform: translateX(0);
-  opacity: 1;
-  transition: transform 300ms, opacity 300ms;
-}
-
-.toast-exit {
-  transform: translateX(0);
-  opacity: 1;
-}
-
-.toast-exit-active {
-  transform: translateX(100%);
-  opacity: 0;
-  transition: transform 300ms, opacity 300ms;
 }

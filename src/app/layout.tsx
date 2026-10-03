@@ -1,20 +1,27 @@
 import type { Metadata } from 'next';
 import '../styles/globals.css';
+import { AuthProvider } from '@/components/AuthProvider';
+import { SiteHeader } from '@/components/SiteHeader';
+import Link from 'next/link';
+
+// A fresh CSP nonce must be attached to each request's streamed script tags.
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Visa Platform - Your Gateway to Global Travel',
-  description: 'Comprehensive visa information, community discussions, and AI-powered assistance for travelers worldwide.',
-  keywords: 'visa, travel, immigration, embassy, passport, country information, visa requirements',
-  authors: [{ name: 'Visa Platform Team' }],
+  title: { default: 'VisaFlow — Visa questions, answered', template: '%s · VisaFlow' },
+  description: 'Ask visa questions with a public pseudonym, find similar cases, share experiences, and message other community members.',
+  icons: { icon: '/favicon.svg' },
+  keywords: 'visa questions, immigration community, pseudonymous visa discussions, visa answers',
+  authors: [{ name: 'VisaFlow' }],
   openGraph: {
     type: 'website',
-    title: 'Visa Platform - Your Gateway to Global Travel',
-    description: 'Comprehensive visa information, community discussions, and AI-powered assistance for travelers worldwide.',
+    title: 'VisaFlow — Visa questions, answered',
+    description: 'Pseudonymous visa Q&A and access-controlled community messaging.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Visa Platform - Your Gateway to Global Travel',
-    description: 'Comprehensive visa information, community discussions, and AI-powered assistance for travelers worldwide.',
+    title: 'VisaFlow — Visa questions, answered',
+    description: 'Pseudonymous visa Q&A and access-controlled community messaging.',
   },
 };
 
@@ -25,18 +32,20 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta httpEquiv="X-Content-Type-Options" content="nosniff" />
-        <meta httpEquiv="X-Frame-Options" content="SAMEORIGIN" />
-        <meta httpEquiv="X-XSS-Protection" content="1; mode=block" />
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-YOUR_PUBLISHER_ID" crossOrigin="anonymous"></script>
-      </head>
-      <body className="min-h-screen bg-gray-50">
-        {children}
+      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+        <AuthProvider>
+          <SiteHeader />
+          <div id="main-content" tabIndex={-1}>{children}</div>
+          <footer className="site-shell border-t border-slate-200 bg-white py-6 text-xs leading-6 text-slate-500">
+            VisaFlow is a peer community, not a government service or legal adviser. Public usernames are pseudonyms, not a guarantee of anonymity.{' '}
+            <Link href="/community-safety" className="font-bold text-teal-700 underline">Community safety</Link>
+            <nav aria-label="Policies and support" className="mt-2 flex flex-wrap gap-x-4">
+              <Link href="/privacy" className="underline">Preview privacy notice</Link>
+              <Link href="/terms" className="underline">Community rules</Link>
+              <Link href="/contact" className="underline">Reporting and privacy requests</Link>
+            </nav>
+          </footer>
+        </AuthProvider>
       </body>
     </html>
   );
