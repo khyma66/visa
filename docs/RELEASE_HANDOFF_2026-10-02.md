@@ -1,5 +1,41 @@
 # VisaFlow release handoff — October 2, 2026 (America/Chicago)
 
+## October 3 continuation — current evidence
+
+**Live preview:** https://visa-central.com (HTTPS verified), backed by `visaflow-dev`, version `1dfedea6-402b-4222-908e-fec20d450e68`. The existing workers.dev URL serves the same deployment. The domain is intentionally bound to the development environment, noindex remains enabled, and the page shows an early-preview notice. This is not approval to open production. No existing DNS records were overwritten and no service plans were purchased. Last known-good previous preview version: `c31c7b0e-a70e-403d-999b-ed5c733c7624`.
+
+Implemented and deployed:
+
+- Hidden-parent RLS for native answers/votes; answering and accepting on closed questions is refused.
+- Native voting via authenticated security-invoker RPCs, deriving voter identity instead of generic key-column upserts.
+- Full inbox/message paging, reconnect-window repair, displayed-message-only read receipts, and moderator-redaction refresh. Chat remains access-controlled, **not end-to-end encrypted**.
+- Ranked answer cursor pages beyond 100, preserved imported source comments, and no messaging links that pretend imported source identities are accounts.
+- Related suggestions use the newest 12 visible replies across the whole discussion independently of ranked answer pages. Candidate pools are deterministically ordered so new posts/comments are not excluded by old storage order. Results are approximate bounded candidates, not globally exhaustive top-k or a latency guarantee.
+- Native-plus-import tag directory with cursor pagination, summary-only archive reads, separate source counts and focus/manual refresh. Native aggregation is an MVP implementation, not million-row capacity certification.
+- All four matching completed Apify runs merged: **563 posts, 628 comments, 21 tags**, from 1,593 source rows. Zero prior posts/comments lost. The latest source run is September 12, not today. No new scraper run was started; no Apify secret was uploaded.
+
+Verification: **163 tests passed**, TypeScript and development build passed, all 563 expected post IDs found in the compiled archive, 155 bundle files passed the known-secret scan. Both public origins passed 13 route/header checks, fresh CSP nonce/untrusted-header tests, and real 404 checks. `scripts/smoke-community.mjs` verified the deployed archive and tag counts, public discovery/answer RPCs, and anonymous denial for private inbox/read-receipt/voting RPCs without writing records. Actual two-device authenticated browser, email delivery, backup/restore and capacity tests remain unperformed in this pass. Fresh dependency audit still reports **11 high findings** through the braces chain; the release gate was not bypassed.
+
+Additional live migration mapping (preserves content; applied only to the current community tables):
+
+| Local version | Hosted version | Migration |
+| --- | --- | --- |
+| 20261003175707 | 20261003180542 | native_parent_visibility_hardening |
+| 20261003175714 | 20261003180919 | messaging_delivery_reliability |
+| 20261003180348 | 20261003180927 | secure_native_vote_rpcs |
+| 20261003180857 | 20261003182005 | native_tag_directory |
+| 20261003180924 | 20261003182012 | answer_cursor_pagination |
+| 20261003181308 | 20261003181611 | deterministic_discovery_candidates |
+| 20261003181839 | 20261003183206 | discussion_latest_reply_indexes |
+
+Post-migration advisor review still finds the 15 legacy tables without RLS, four mutable search paths, public vector extension and disabled leaked-password protection. GraphQL discovery notices need interpretation alongside RLS; they are not automatically proof of row leakage. [RLS remediation](https://supabase.com/docs/guides/database/database-linter?lint=0013_rls_disabled_in_public). Legacy containment remains unapplied because the owner wants to preserve development. A separate production project is recommended and awaits the exact project/organization/plan decision. Keep code/schema and approved imports aligned, not bidirectional private-user/message replication; see PLATFORM_AND_SCALE.md.
+
+The owner explicitly confirmed imported republication rights, recorded in release-review.json. Public takedown/retention, reviewed production ingestion and other release checks remain separate blockers. Supabase's browser dashboard is signed out; it was left at the login handoff. New-domain redirect/SMTP/Google configuration and real email checks need that access and an approved test inbox. No accounts, passwords or private chats were copied or fabricated.
+
+The optional Stripe foundation is isolated in `feature/business-subscriptions`, disabled by default and not deployed. It requires 10,000 confirmed native accounts plus explicit enablement and configured prices. Imported author handles do not count. Billing review, Stripe test-mode validation and pricing/terms remain prerequisites; nothing will charge automatically at 10,000 users.
+
+## Earlier October 2 baseline (historical)
+
 Status: development preview, not approved for public launch. Domain selection alone will not make this production-ready. This file supersedes older audit/deployment counts.
 
 Review: [draft PR #3](https://github.com/khyma66/visa/pull/3), branch `release/visaflow-consolidated-20261002`. Application commit `fdacf9e`. Development deployment: `c31c7b0e-a70e-403d-999b-ed5c733c7624` at [VisaFlow preview](https://visaflow-dev.varunchinna5966.workers.dev). Production was not deployed.

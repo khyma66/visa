@@ -19,5 +19,6 @@ export const publicQuestion = cache(async (id: string): Promise<Question | null>
   return (await publicRows<Question>('question_feed',{id:`eq.${id}`,select:'*',limit:'1'}))?.[0] ?? null;
 });
 export async function publicAnswers(id: string): Promise<Answer[]> {
-  return await publicRows<Answer>('answer_feed',{question_id:`eq.${id}`,select:'*',order:'is_accepted.desc,vote_score.desc,created_at.asc',limit:'100'}) ?? [];
+  // Match the browser's ranked cursor order. Further pages are fetched on demand.
+  return await publicRows<Answer>('answer_feed',{question_id:`eq.${id}`,select:'*',order:'is_accepted.desc,vote_score.desc,id.desc',limit:'50'}) ?? [];
 }

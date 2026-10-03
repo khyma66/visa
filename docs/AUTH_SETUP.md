@@ -8,6 +8,8 @@ Google checks the project's public auth settings and stays disabled when the pro
 
 ## Required dashboard setup — not completed by this code change
 
+October 3 domain update: the owned site origin is `https://visa-central.com`. The browser dashboard still requires owner sign-in. Set Site URL to that origin and add `https://visa-central.com/login**` and `https://visa-central.com/account/update-password` to the redirect allowlist, preserving supported development/local callbacks. Add `https://visa-central.com` as a Google authorized JavaScript origin; the provider's redirect URI remains the Supabase `/auth/v1/callback` below. Do not redirect an in-progress OAuth callback from workers.dev to the new origin: the PKCE verifier is browser-origin-local. Members must sign in again on the new host; no sessions are copied.
+
 Checked September 17, 2026 (Chicago): email enabled; Google and Apple disabled. Dashboard browser session was signed out, so email template, SMTP and redirect settings could not be verified or changed. End-to-end delivery and social login have not been validated.
 
 1. In Authentication → Emails → Templates, change **Magic Link** to the contents of `supabase/templates/sign-in-code.html`. Use subject **Your VisaFlow sign-in code**. Also apply the branded code template to **Confirm signup**, so new-account confirmation emails carry a code. Preserve other security email templates. Test both a new and an existing account: `signInWithOtp` otherwise defaults to an email link, not the requested visible code.

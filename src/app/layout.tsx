@@ -35,6 +35,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
         <AuthProvider>
           <SiteHeader />
+          {process.env.NEXT_PUBLIC_APP_ENV !== 'production' && <div role="note" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-900">Early preview · Please do not share identity documents or sensitive personal details.</div>}
           <div id="main-content" tabIndex={-1}>{children}</div>
           <footer className="site-shell border-t border-slate-200 bg-white py-6 text-xs leading-6 text-slate-500">
             VisaFlow is a peer community, not a government service or legal adviser. Public usernames are pseudonyms, not a guarantee of anonymity.{' '}

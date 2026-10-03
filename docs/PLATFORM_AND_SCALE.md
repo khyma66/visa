@@ -1,5 +1,17 @@
 # VisaFlow deployment and scale assessment
 
+## October 3, 2026: development/production alignment decision
+
+Keep the current database as development unless its old browser-access paths are explicitly approved for retirement. The recommended production path is an isolated Supabase project using the same reviewed application commit and community migration set. New project/organization/plan approval is still pending; no new paid project has been created.
+
+“In sync” should mean **versioned code, schema and approved source content**, not two-way replication of every row. Promote reviewed commits and additive migrations from development to production. Import the same approved Apify records with stable source IDs and a run ledger so retries do not duplicate posts. Do not copy development fixture accounts, passwords, sessions, private conversations, or moderation test traffic into production. Future realistic development datasets should be synthetic or explicitly anonymized. Imported source authors remain attributed source identities, not registered accounts.
+
+The owner confirmed imported-content republication rights on October 3. Production ingestion, takedown suppression, deletion/retention and the release gate remain separate requirements. Current preview snapshots still need an explicit refresh and redeploy, not a database synchronization claim. At this check there is one confirmed, nonanonymous, nondeleted Auth account and no native questions or private conversations/messages in the existing project.
+
+An optional business-subscription implementation is being kept in `feature/business-subscriptions`, not deployed with the community. Eligibility requires 10,000 confirmed native accounts and an explicit operator enable flag, configured Stripe prices, and reviewed billing operations. It never counts imported author names or automatically charges existing members. Code/schema fixes must be brought into that branch before any later billing release.
+
+For the first pilot retain Workers + Supabase Auth/Postgres/private Broadcast. Cursor-based history, rate limits, indexed discovery and least-privilege policies minimize migration work. Scale measured bottlenecks: maintain tag counters instead of per-request aggregates, replace full loaded-history refreshes with bounded deltas, add durable ingestion/queues, benchmark hot-thread vote counters and search recall, then upgrade database resources or isolate realtime/search as measurements justify. “Unlimited messaging” cannot mean unbounded rate, retention, fan-out, or zero cost. The current implementation is not certified for millions of concurrent users.
+
 Original hosting/cost assessment: September 8, 2026. Recommendations below are engineering judgments, not measured capacity guarantees. **September 10 update:** the resumed Supabase project is connected locally and private Broadcast, request-based chat, cursor feed/message paging and indexed comment-aware discovery are now implemented and live-tested. See [current implementation and remaining gates](REALTIME_IMPLEMENTATION.md). Hosting/pricing figures below are the earlier research snapshot, not a new vendor quote.
 
 ## Development website

@@ -1,5 +1,15 @@
 # Collected API archive on the development Worker
 
+## October 3, 2026 refresh (current)
+
+Published at https://visa-central.com and the existing development URL in Worker version `1dfedea6-402b-4222-908e-fec20d450e68`. Four completed runs match the original group's inputs, with 1,593 source rows. The refreshed archive contains **563 unique posts, 628 available comments, 21 tags**, 1,021 merged duplicate rows and nine textless exclusions. Compared with the previous deployment, 14 posts and 22 comments were added; all 549 prior posts and all 606 prior comments remain.
+
+The additional completed run is `I0AI56pOzxvFHTz40`, finished September 12 at 07:01:15 UTC with 93 source rows. No later matching completed run exists at the October 3 check. Snapshot capture time is October 3 at 18:11:55 UTC; capture time must not be mistaken for source freshness. No scraper was started, no account was created for an imported author, and no source credential was copied to hosting.
+
+The owner confirmed republication permission on October 3. Production import remains disabled until the durable import, takedown/retention and release requirements are fulfilled. The snapshot itself remains ignored in the public repository; CI continues to use synthetic fixtures. The tag directory now combines visible native question counts and imported summaries without downloading all post bodies solely to browse tags.
+
+## September 12 baseline (historical)
+
 Snapshot captured September 12, 2026 at 05:05 UTC (00:05 America/Chicago). Latest completed source run finished September 11 at 07:06 UTC (02:06 America/Chicago).
 
 | Coverage | Count |

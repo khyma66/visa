@@ -4,6 +4,7 @@ import { DEMO_ANSWERS, DEMO_CONVERSATIONS, DEMO_MESSAGES, DEMO_QUESTIONS, DEMO_U
 import { getSupabase, isSupabaseConfigured } from './supabase/client';
 import { inferTags, normalizeTags } from './tagging';
 import { contextTags, createDiscoveryIndex, searchTerms, type DiscoveryContext } from './discovery';
+import { displayedUnreadIds, hasMessageOverlap, MESSAGE_PAGE_SIZE, sortConversations, sortMessages } from './messaging-state';
 import type {
   Answer, CommunityFeed, Conversation, DirectMessage, NewQuestion, Question, RelatedQuestion,
 } from './types';
@@ -201,29 +202,71 @@ export async function createQuestion(authorId: string, input: NewQuestion): Prom
   return data.id as string;
 }
 
-export async function listAnswers(questionId: string): Promise<Answer[]> {
-  if (questionId.startsWith('apify-')) {
-    const state = readDemo();
-    const imported = await importedFeedOrNull();
-    const sourceAnswers = imported?.answersByQuestionId[questionId] ?? [];
-    let localAnswers = state.answers.filter((answer) => answer.question_id === questionId && answer.source !== 'apify');
-    if (isSupabaseConfigured) {
-      const { data, error } = await getSupabase().from('imported_answer_feed').select('*').eq('question_id', questionId)
-        .order('created_at', { ascending: false }).limit(100);
-      throwIfError(error);
-      localAnswers = (data ?? []) as Answer[];
-    }
-    return [...sourceAnswers, ...localAnswers]
-      .sort((a, b) => Number(b.is_accepted) - Number(a.is_accepted) || b.vote_score - a.vote_score);
-  }
+export const ANSWER_PAGE_SIZE = 50;
+export type AnswerCursor = Pick<Answer, 'id' | 'is_accepted' | 'vote_score'>;
+export type AnswerPage = { answers: Answer[]; more: boolean; cursor?: AnswerCursor };
+
+function compareAnswers(a: AnswerCursor, b: AnswerCursor): number {
+  return Number(b.is_accepted) - Number(a.is_accepted) || b.vote_score - a.vote_score
+    || (a.id === b.id ? 0 : a.id < b.id ? 1 : -1);
+}
+export function sortAnswers(rows: Answer[]): Answer[] {
+  return [...new Map(rows.map((row) => [row.id, row])).values()].sort(compareAnswers);
+}
+
+export async function getAnswerPage(questionId: string, before?: AnswerCursor): Promise<AnswerPage> {
+  const imported = questionId.startsWith('apify-');
+  // Source comments are a bounded archive, not registered-member answers. Include
+  // them once and never use their non-UUID IDs as a database pagination cursor.
+  const sourceAnswers = imported && !before
+    ? ((await importedFeedOrNull())?.answersByQuestionId[questionId] ?? []).filter((row) => row.status === 'active') : [];
+  let rows: Answer[];
   if (!isSupabaseConfigured) {
-    return readDemo().answers.filter((answer) => answer.question_id === questionId)
-      .sort((a, b) => Number(b.is_accepted) - Number(a.is_accepted) || b.vote_score - a.vote_score);
+    rows = sortAnswers(readDemo().answers.filter((answer) => answer.question_id === questionId
+      && answer.status === 'active' && (!imported || answer.source !== 'apify')))
+      .filter((row) => !before || compareAnswers(row, before) > 0).slice(0, ANSWER_PAGE_SIZE + 1);
+  } else {
+    const { data, error } = await getSupabase().rpc(imported ? 'imported_answer_page' : 'answer_page', {
+      target_question: questionId, before_accepted: before?.is_accepted ?? null,
+      before_score: before?.vote_score ?? null, before_id: before?.id ?? null,
+    });
+    throwIfError(error);
+    rows = (data ?? []) as Answer[];
   }
-  const { data, error } = await getSupabase().from('answer_feed').select('*').eq('question_id', questionId)
-    .order('is_accepted', { ascending: false }).order('vote_score', { ascending: false }).limit(100);
-  throwIfError(error);
-  return (data ?? []) as Answer[];
+  const page = rows.slice(0, ANSWER_PAGE_SIZE);
+  const last = page.at(-1);
+  return {
+    answers: sortAnswers([...sourceAnswers, ...page]), more: rows.length > ANSWER_PAGE_SIZE,
+    cursor: last ? { id: last.id, is_accepted: last.is_accepted, vote_score: last.vote_score } : undefined,
+  };
+}
+
+/** First page compatibility helper. Use getAnswerPage with its cursor for more. */
+export async function listAnswers(questionId: string): Promise<Answer[]> {
+  return (await getAnswerPage(questionId)).answers;
+}
+
+/** Recent discussion topics must not depend on which ranked answer page is open. */
+export async function getDiscussionContext(questionId: string): Promise<string> {
+  const imported = questionId.startsWith('apify-');
+  const source = imported
+    ? ((await importedFeedOrNull())?.answersByQuestionId[questionId] ?? []).filter((row) => row.status === 'active') : [];
+  let replies: Pick<Answer, 'id' | 'body' | 'created_at'>[];
+  if (!isSupabaseConfigured) {
+    replies = readDemo().answers.filter((row) => row.question_id === questionId && row.status === 'active'
+      && (!imported || row.source !== 'apify'));
+  } else {
+    // Security-invoker views retain parent/answer RLS. Only public discussion
+    // text is selected; this path never touches direct messages or account data.
+    const { data, error } = await getSupabase().from(imported ? 'imported_answer_feed' : 'answer_feed')
+      .select('id,body,created_at').eq('question_id', questionId)
+      .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(12);
+    throwIfError(error);
+    replies = data ?? [];
+  }
+  return [...new Map([...source, ...replies].map((row) => [row.id, row])).values()]
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || (a.id === b.id ? 0 : a.id < b.id ? 1 : -1))
+    .slice(0, 12).map((row) => row.body).join('\n');
 }
 
 export async function createAnswer(questionId: string, authorId: string, body: string): Promise<void> {
@@ -286,7 +329,7 @@ export async function relatedQuestions(question: Question, commentText = ''): Pr
   return discoverQuestions({ ...question, commentText });
 }
 
-export async function voteQuestion(questionId: string, userId: string, value: -1 | 1): Promise<number> {
+export async function voteQuestion(questionId: string, _userId: string, value: -1 | 1): Promise<number> {
   if (questionId.startsWith('apify-')) {
     const state = readDemo();
     state.externalQuestionVotes[questionId] = (state.externalQuestionVotes[questionId] ?? 0) + value;
@@ -303,13 +346,14 @@ export async function voteQuestion(questionId: string, userId: string, value: -1
     writeDemo(state);
     return question.vote_score;
   }
-  const { error } = await getSupabase().from('question_votes').upsert({ question_id: questionId, user_id: userId, value });
+  // The database derives voter identity; the caller cannot submit another user.
+  const { data, error } = await getSupabase().rpc('vote_question', { target_question_id: questionId, vote_value: value });
   throwIfError(error);
-  const question = await getQuestion(questionId);
-  return question?.vote_score ?? 0;
+  if (typeof data !== 'number' || !Number.isInteger(data)) throw new Error('Question vote could not be confirmed.');
+  return data;
 }
 
-export async function voteAnswer(answerId: string, userId: string, value: -1 | 1): Promise<number> {
+export async function voteAnswer(answerId: string, _userId: string, value: -1 | 1): Promise<number> {
   if (answerId.startsWith('apify-comment-')) {
     const state = readDemo();
     state.externalAnswerVotes[answerId] = (state.externalAnswerVotes[answerId] ?? 0) + value;
@@ -327,13 +371,10 @@ export async function voteAnswer(answerId: string, userId: string, value: -1 | 1
     writeDemo(state);
     return answer.vote_score;
   }
-  const supabase = getSupabase();
-  const { error } = await supabase.from('answer_votes').upsert({ answer_id: answerId, user_id: userId, value });
+  const { data, error } = await getSupabase().rpc('vote_answer', { target_answer_id: answerId, vote_value: value });
   throwIfError(error);
-  const { data, error: readError } = await supabase.from('answers').select('vote_score').eq('id', answerId).single();
-  throwIfError(readError);
-  if (!data) throw new Error('Answer was not found after voting.');
-  return data.vote_score as number;
+  if (typeof data !== 'number' || !Number.isInteger(data)) throw new Error('Answer vote could not be confirmed.');
+  return data;
 }
 
 export async function acceptAnswer(answerId: string, questionId: string): Promise<void> {
@@ -350,11 +391,27 @@ export async function acceptAnswer(answerId: string, questionId: string): Promis
   throwIfError(error);
 }
 
-export async function listConversations(): Promise<Conversation[]> {
-  if (!isSupabaseConfigured) return readDemo().conversations.sort((a, b) => Date.parse(b.last_message_at) - Date.parse(a.last_message_at));
-  const { data, error } = await getSupabase().from('conversation_inbox').select('*').order('last_message_at', { ascending: false }).limit(50);
+export async function listConversations(before?: Conversation): Promise<Conversation[]> {
+  if (!isSupabaseConfigured) return sortConversations(readDemo().conversations).filter((row) => !before
+    || row.last_message_at < before.last_message_at || (row.last_message_at === before.last_message_at && row.id < before.id)).slice(0, 50);
+  const { data, error } = await getSupabase().rpc('conversation_page', {
+    before_time: before?.last_message_at ?? null, before_id: before?.id ?? null,
+  });
   throwIfError(error);
   return (data ?? []) as Conversation[];
+}
+
+export async function getConversation(id: string): Promise<Conversation | null> {
+  if (!isSupabaseConfigured) return readDemo().conversations.find((row) => row.id === id) ?? null;
+  const { data, error } = await getSupabase().from('conversation_inbox').select('*').eq('id', id).maybeSingle();
+  throwIfError(error);
+  return data as Conversation | null;
+}
+
+/** Activity ordering is mutable: replay from the newest cursor after any invalidation. */
+export async function refreshConversations(_previous: Conversation[]): Promise<{ conversations: Conversation[]; reset: boolean; hasOlder: boolean }> {
+  const latest = await listConversations();
+  return { conversations: latest, reset: true, hasOlder: latest.length === 50 };
 }
 
 export async function startConversation(username: string): Promise<string> {
@@ -390,6 +447,22 @@ export async function listMessages(conversationId: string, before?: DirectMessag
   });
   throwIfError(error);
   return ((data ?? []) as DirectMessage[]).reverse();
+}
+
+export async function refreshMessages(conversationId: string, previous: DirectMessage[]): Promise<{ messages: DirectMessage[]; reset: boolean; hasOlder: boolean }> {
+  const latest = await listMessages(conversationId);
+  const reset = !previous.length || !hasMessageOverlap(previous, latest);
+  if (reset) return { messages: latest, reset: true, hasOlder: latest.length === MESSAGE_PAGE_SIZE };
+  const ids = new Set(latest.map((message) => message.id));
+  const olderIds = previous.filter((message) => !ids.has(message.id)).map((message) => message.id);
+  const older: DirectMessage[] = [];
+  if (!isSupabaseConfigured) older.push(...readDemo().messages.filter((message) => olderIds.includes(message.id) && message.conversation_id === conversationId));
+  else for (let i = 0; i < olderIds.length; i += 100) {
+    const { data, error } = await getSupabase().from('direct_messages').select('*').eq('conversation_id', conversationId).in('id', olderIds.slice(i, i + 100));
+    throwIfError(error);
+    older.push(...(data ?? []) as DirectMessage[]);
+  }
+  return { messages: sortMessages([...older, ...latest]), reset: false, hasOlder: latest.length === MESSAGE_PAGE_SIZE };
 }
 
 export async function sendMessage(conversationId: string, senderId: string, body: string, messageId = crypto.randomUUID()): Promise<void> {
@@ -432,18 +505,21 @@ export async function respondToConversation(id: string, action: 'accepted' | 'de
   throwIfError(error);
 }
 
-export async function markConversationRead(conversationId: string, userId: string): Promise<void> {
+export async function markConversationRead(conversationId: string, userId: string, displayed: DirectMessage[]): Promise<void> {
+  const ids = displayedUnreadIds(displayed.filter((message) => message.conversation_id === conversationId), userId);
+  if (!ids.length) return;
   if (!isSupabaseConfigured) {
     const state = readDemo();
     const conversation = state.conversations.find((item) => item.id === conversationId);
     if (!state.messages.some((item) => item.conversation_id === conversationId && item.sender_id !== userId && !item.read_at) && !conversation?.unread_count) return;
-    if (conversation) conversation.unread_count = 0;
-    state.messages.filter((item) => item.conversation_id === conversationId && item.sender_id !== userId)
+    if (conversation) conversation.unread_count = Math.max(0, conversation.unread_count - ids.length);
+    state.messages.filter((item) => ids.includes(item.id))
       .forEach((item) => { item.read_at = new Date().toISOString(); });
     writeDemo(state);
     return;
   }
-  const { error } = await getSupabase().from('direct_messages').update({ read_at: new Date().toISOString() })
-    .eq('conversation_id', conversationId).neq('sender_id', userId).is('read_at', null);
-  throwIfError(error);
+  for (let i = 0; i < ids.length; i += 50) {
+    const { error } = await getSupabase().rpc('mark_direct_messages_read', { target_conversation: conversationId, message_ids: ids.slice(i, i + 50) });
+    throwIfError(error);
+  }
 }
