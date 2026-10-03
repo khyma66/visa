@@ -2,7 +2,7 @@
 
 ## October 3 continuation — current evidence
 
-**Live preview:** https://visa-central.com (HTTPS verified), backed by `visaflow-dev`, version `1dfedea6-402b-4222-908e-fec20d450e68`. The existing workers.dev URL serves the same deployment. The domain is intentionally bound to the development environment, noindex remains enabled, and the page shows an early-preview notice. This is not approval to open production. No existing DNS records were overwritten and no service plans were purchased. Last known-good previous preview version: `c31c7b0e-a70e-403d-999b-ed5c733c7624`.
+**Live preview:** https://visa-central.com (HTTPS verified), backed by `visaflow-dev`, version `dc3cf6b9-f0fc-447b-9104-135675451654`. The existing workers.dev URL serves the same deployment. The domain is intentionally bound to the development environment, noindex remains enabled, and the page shows an early-preview notice. This is not approval to open production. No existing DNS records were overwritten and no service plans were purchased. Last known-good previous preview version: `1dfedea6-402b-4222-908e-fec20d450e68`.
 
 Implemented and deployed:
 
@@ -12,6 +12,7 @@ Implemented and deployed:
 - Ranked answer cursor pages beyond 100, preserved imported source comments, and no messaging links that pretend imported source identities are accounts.
 - Related suggestions use the newest 12 visible replies across the whole discussion independently of ranked answer pages. Candidate pools are deterministically ordered so new posts/comments are not excluded by old storage order. Results are approximate bounded candidates, not globally exhaustive top-k or a latency guarantee.
 - Native-plus-import tag directory with cursor pagination, summary-only archive reads, separate source counts and focus/manual refresh. Native aggregation is an MVP implementation, not million-row capacity certification.
+- Replaced remaining misleading "anonymous" interface labels with public-username language. Browser checks confirmed tag filtering, question details with five related suggestions, signed-out inbox protection, and the email-code form. No verification email was sent.
 - All four matching completed Apify runs merged: **563 posts, 628 comments, 21 tags**, from 1,593 source rows. Zero prior posts/comments lost. The latest source run is September 12, not today. No new scraper run was started; no Apify secret was uploaded.
 
 Verification: **163 tests passed**, TypeScript and development build passed, all 563 expected post IDs found in the compiled archive, 155 bundle files passed the known-secret scan. Both public origins passed 13 route/header checks, fresh CSP nonce/untrusted-header tests, and real 404 checks. `scripts/smoke-community.mjs` verified the deployed archive and tag counts, public discovery/answer RPCs, and anonymous denial for private inbox/read-receipt/voting RPCs without writing records. Actual two-device authenticated browser, email delivery, backup/restore and capacity tests remain unperformed in this pass. Fresh dependency audit still reports **11 high findings** through the braces chain; the release gate was not bypassed.
@@ -32,7 +33,9 @@ Post-migration advisor review still finds the 15 legacy tables without RLS, four
 
 The owner explicitly confirmed imported republication rights, recorded in release-review.json. Public takedown/retention, reviewed production ingestion and other release checks remain separate blockers. Supabase's browser dashboard is signed out; it was left at the login handoff. New-domain redirect/SMTP/Google configuration and real email checks need that access and an approved test inbox. No accounts, passwords or private chats were copied or fabricated.
 
-The optional Stripe foundation is isolated in `feature/business-subscriptions`, disabled by default and not deployed. It requires 10,000 confirmed native accounts plus explicit enablement and configured prices. Imported author handles do not count. Billing review, Stripe test-mode validation and pricing/terms remain prerequisites; nothing will charge automatically at 10,000 users.
+The optional Stripe foundation is isolated in `feature/business-subscriptions`, disabled by default and not deployed. The reviewed foundation commit `fe8b2d6` includes release `af22073`; **188 tests** passed (163 community plus 25 billing), along with typecheck/build/archive/bundle checks. Independent review confirmed the cancellation-UI fix: retired or unavailable sale prices do not hide existing customers' management action. It requires 10,000 confirmed native accounts plus explicit enablement and configured prices. Imported author handles do not count. Real Stripe sandbox lifecycle validation, actual premium-feature authorization, reconciliation/alerts and pricing/terms remain prerequisites; nothing will charge automatically at 10,000 users. See the billing branch's `docs/BUSINESS_SUBSCRIPTIONS.md`.
+
+Source publication is separate from the authorized preview deployment. The attempted release-branch push was blocked by auto-review because publishing code/history to the public repository needs explicit approval. No alternate publishing path was used. Reviewed commits and the billing branch remain local pending the owner's response; the private archive and local credentials remain excluded from Git.
 
 ## Earlier October 2 baseline (historical)
 
@@ -80,7 +83,7 @@ Public release review entries remain pending. No real signup email, Google login
 
 ## Minimal owner handoff
 
-1. **Domain + dashboard access:** choose the domain and sign in to Supabase, Cloudflare, Google Cloud, and the selected email provider. Do not paste passwords or private keys into chat. No new paid service has been purchased.
+1. **Dashboard access:** the selected domain is already connected to the development preview. Sign in to the open Supabase dashboard, Google Cloud, and the selected email provider. Do not paste passwords or private keys into chat. No new paid service has been purchased.
 2. **One compatibility decision:** confirm whether the legacy app/tables are unused and may become server-only, or approve a separate production database. This is the main database release blocker.
 3. **Identity setup:** provide an approved test inbox; configure the verified sender/SMTP and branded code templates, Google OAuth credentials, redirect allowlist, backend password policy and abuse controls. See AUTH_SETUP.md for exact paths. A custom auth domain is optional if the Supabase host must disappear from Google consent/redirects.
 4. **Security ownership:** rotate/revoke previously exposed Supabase, Apify, and Cloudflare/R2 credentials at their providers; confirm replacements work. Choose the moderator account, support/deletion contact, approved privacy/retention rules, and pilot budget.

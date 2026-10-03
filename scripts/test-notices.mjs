@@ -23,6 +23,10 @@ test('contextual safety notices render truthful warnings and working internal de
     const html=renderToStaticMarkup(createElement(SafetyNotice,{kind}));
     assert(html.includes(phrase),kind); assert(html.includes('href="/contact"')); assert(html.includes('href="/community-safety"'));
   }
+  for (const name of ['AskQuestionForm', 'QuestionDetail', 'MessagesClient']) {
+    const source = await readFile(new URL(`../src/components/${name}.tsx`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /answer anonymously|anonymous profile|anonymous handle/i, `${name} must not imply guaranteed anonymity`);
+  }
 });
 test('policy pages clearly disclose missing operator processes rather than pretending compliance',async()=>{
   for(const [page,phrase] of Object.entries({privacy:'not a finalized production policy',terms:'not finalized production Terms',contact:'does not submit a request'})) {

@@ -49,7 +49,7 @@ export function AskQuestionForm() {
     }
   }
 
-  if (loading) return <div className="mx-auto max-w-4xl p-8">Loading your anonymous profile…</div>;
+  if (loading) return <div className="mx-auto max-w-4xl p-8">Loading your profile…</div>;
 
   return (
     <main className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
