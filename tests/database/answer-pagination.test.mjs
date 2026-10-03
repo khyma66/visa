@@ -214,6 +214,7 @@ const dependencies = {
   'lucide-react':import.meta.resolve('lucide-react'), 'date-fns':import.meta.resolve('date-fns'),
   '@/lib/community':moduleUrl('export const acceptAnswer=()=>{},createAnswer=()=>{},getAnswerPage=()=>{},getDiscussionContext=()=>{},getQuestion=()=>{},sortAnswers=x=>x,voteAnswer=()=>{},voteQuestion=()=>{};'),
   '@/lib/realtime':moduleUrl('export const subscribeLive=()=>()=>{};'),
+  '@/lib/messaging-state':moduleUrl(transpile(await readFile(new URL('../../src/lib/messaging-state.ts', import.meta.url), 'utf8'))),
   './AuthProvider':moduleUrl('export const useAuth=()=>({user:globalThis.__answerUi.user,demoMode:false});'),
 };
 for (const name of ['RelatedQuestions','Avatar','ReportButton','SafetyNotice']) dependencies[`./${name}`] = moduleUrl(`export const ${name}=()=>null;`);
@@ -243,7 +244,7 @@ test('answer UI exposes total count and load-more instead of silently truncating
 test('imported questions never show Message author or acceptance even without a source URL', () => {
   const html = renderQuestion({id:'apify-fixture',source:'apify',source_url:null,author_id:'source-not-an-account'});
   assert(!html.includes('Message author')); assert(!html.includes('Accept this answer'));
-  assert(html.includes('Load more VisaFlow replies'));
+  assert(html.includes('Load more replies'));
 });
 test('public SSR uses the same bounded ranking and stable tie breaker', async () => {
   const source = await readFile(new URL('../../src/lib/public-server.ts',import.meta.url),'utf8');

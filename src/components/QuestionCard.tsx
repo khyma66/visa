@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { CheckCircle2, ExternalLink, Eye, MessageCircle, Share2 } from 'lucide-react';
+import { CheckCircle2, Eye, MessageCircle, Share2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import type { Question } from '@/lib/types';
 import { Avatar } from './Avatar';
@@ -11,7 +11,7 @@ function compact(value: number) {
 }
 
 export function QuestionCard({ question, onTagSelect, onRelated }: { question: Question; onTagSelect?: (tag: string) => void; onRelated?: (question: Question) => void }) {
-  const imported = question.source === 'apify';
+  const imported = question.source === 'apify' || question.id.startsWith('apify-');
   return (
     <article className="group border-b border-slate-200 bg-white px-4 py-5 transition hover:bg-slate-50/70 sm:px-6">
       <div className="flex gap-4">
@@ -28,7 +28,7 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
           <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-teal-800">
             <span className="rounded-full bg-teal-50 px-2 py-1">{question.visa_type}</span>
             <span className="text-slate-400">{question.destination_country}</span>
-            {imported && <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-blue-700"><MessageCircle size={11} /> {question.post_kind === 'promotion' ? 'Promotional post' : question.post_kind === 'discussion' ? 'Discussion' : 'Group question'}</span>}
+            {(question.post_kind === 'promotion' || question.post_kind === 'discussion') && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-slate-600"><MessageCircle size={11} /> {question.post_kind === 'promotion' ? 'Promotional post' : 'Discussion'}</span>}
           </div>
           <Link href={`/questions/${question.id}`} className="text-[17px] font-medium leading-snug text-blue-700 decoration-1 underline-offset-4 hover:text-blue-900 hover:underline">
             {question.title}
@@ -39,10 +39,9 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
             {onRelated && <button onClick={() => onRelated(question)} className="rounded px-2 py-1 text-xs font-semibold text-slate-500 underline hover:text-blue-700">Related questions</button>}
             <span className="ml-auto flex flex-wrap items-center gap-2 text-xs text-slate-500">
               {question.accepted_answer_id && <CheckCircle2 size={14} className="text-emerald-600" />}
-              <Avatar seed={question.author_avatar_seed} size="sm" />
-              <span className="font-semibold text-slate-700">u/{question.author_username}</span>
-              <span>asked {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</span>
-              {question.source_url && <a href={question.source_url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex items-center gap-1 font-bold text-blue-700 hover:underline">source <ExternalLink size={11} /></a>}
+              {!imported && <Avatar seed={question.author_avatar_seed} size="sm" />}
+              <span className="font-semibold text-slate-700">{imported ? 'Community contributor' : `u/${question.author_username}`}</span>
+              <span>posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</span>
             </span>
           </div>
           <div className="mt-3 flex gap-4 text-xs text-slate-500 sm:hidden">

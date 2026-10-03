@@ -4,7 +4,7 @@ import { DEMO_ANSWERS, DEMO_CONVERSATIONS, DEMO_MESSAGES, DEMO_QUESTIONS, DEMO_U
 import { getSupabase, isSupabaseConfigured } from './supabase/client';
 import { inferTags, normalizeTags } from './tagging';
 import { contextTags, createDiscoveryIndex, searchTerms, type DiscoveryContext } from './discovery';
-import { displayedUnreadIds, hasMessageOverlap, MESSAGE_PAGE_SIZE, sortConversations, sortMessages } from './messaging-state';
+import { displayedUnreadIds, hasMessageOverlap, isMemberId, MESSAGE_PAGE_SIZE, normalizeMessageUsername, sortConversations, sortMessages } from './messaging-state';
 import type {
   Answer, CommunityFeed, Conversation, DirectMessage, NewQuestion, Question, RelatedQuestion,
 } from './types';
@@ -414,9 +414,40 @@ export async function refreshConversations(_previous: Conversation[]): Promise<{
   return { conversations: latest, reset: true, hasOlder: latest.length === 50 };
 }
 
-export async function startConversation(username: string): Promise<string> {
+export type MessageRecipient = { id: string; username: string; avatar_seed: string };
+
+export async function getMessageRecipient(username: string, expectedMemberId?: string): Promise<MessageRecipient> {
+  const normalized = normalizeMessageUsername(username);
+  if (expectedMemberId && !isMemberId(expectedMemberId)) throw new Error('This author is not a registered community member.');
   if (!isSupabaseConfigured) {
-    const normalized = username.trim().toLowerCase();
+    const known = readDemo().questions.find((item) => item.author_username === normalized && item.source !== 'apify');
+    if (!known || (expectedMemberId && known.author_id !== expectedMemberId)) throw new Error('Choose a visible demo member.');
+    return { id: known.author_id, username: known.author_username, avatar_seed: known.author_avatar_seed };
+  }
+  const { data, error } = await getSupabase().from('profiles').select('id,username,avatar_seed').eq('username', normalized).maybeSingle();
+  throwIfError(error);
+  if (!data || !isMemberId(data.id) || (expectedMemberId && data.id !== expectedMemberId)) throw new Error('This member is unavailable. Open their latest question to try again.');
+  return data as MessageRecipient;
+}
+
+export async function getConversationWithMember(memberId: string): Promise<Conversation | null> {
+  if (!isSupabaseConfigured) return readDemo().conversations.find((row) => row.other_user_id === memberId) ?? null;
+  if (!isMemberId(memberId)) throw new Error('Choose a registered community member.');
+  const { data, error } = await getSupabase().from('conversation_inbox').select('*').eq('other_user_id', memberId).maybeSingle();
+  throwIfError(error);
+  return data as Conversation | null;
+}
+
+/** Opening an author link never creates a request or sends a message. */
+export async function getMessageEntry(username: string, currentUserId: string, expectedMemberId?: string): Promise<{ member: MessageRecipient; conversation: Conversation | null }> {
+  const member = await getMessageRecipient(username, expectedMemberId);
+  if (member.id === currentUserId) throw new Error('You cannot message yourself. Choose another community member.');
+  return { member, conversation: await getConversationWithMember(member.id) };
+}
+
+export async function startConversation(username: string, expectedMemberId?: string): Promise<string> {
+  const normalized = normalizeMessageUsername(username);
+  if (!isSupabaseConfigured) {
     if (normalized === DEMO_USER.username) throw new Error('You cannot message yourself');
     const state = readDemo();
     const existing = state.conversations.find((item) => item.other_username === normalized);
@@ -433,8 +464,13 @@ export async function startConversation(username: string): Promise<string> {
     writeDemo(state);
     return id;
   }
-  const { data, error } = await getSupabase().rpc('start_direct_conversation', { other_username: username });
+  // Profile IDs come from the native feed's FK-backed profile join, never from
+  // source-author labels. Recheck a linked author before asking the database to
+  // create/return the participant-only request. Browsers cannot edit usernames.
+  if (expectedMemberId) await getMessageRecipient(normalized, expectedMemberId);
+  const { data, error } = await getSupabase().rpc('start_direct_conversation', { other_username: normalized });
   throwIfError(error);
+  if (typeof data !== 'string' || !isMemberId(data)) throw new Error('Could not open this conversation. Please try again.');
   return data as string;
 }
 

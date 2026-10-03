@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { Lock, MessageCircle, Plus, Send } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
-  getConversation, listConversations, listMessages, markConversationRead, refreshConversations, refreshMessages, respondToConversation, sendMessage, startConversation,
+  getConversation, getMessageEntry, getMessageRecipient, listConversations, listMessages, markConversationRead, refreshConversations, refreshMessages, respondToConversation, sendMessage, startConversation,
+  type MessageRecipient,
 } from '@/lib/community';
-import { sortConversations, sortMessages } from '@/lib/messaging-state';
+import { canSendToConversation, conversationFolder, messageLoginHref, sortConversations, sortMessages } from '@/lib/messaging-state';
 import type { Conversation, DirectMessage } from '@/lib/types';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
@@ -15,13 +16,16 @@ import { ReportButton } from './ReportButton';
 import { SafetyNotice } from './SafetyNotice';
 import { subscribeLive, type LiveStatus } from '@/lib/realtime';
 
-export function MessagesClient() {
+export function MessagesClient({ recipientUsername = '', recipientMemberId = '' }: { recipientUsername?: string; recipientMemberId?: string }) {
   const { user, loading, demoMode } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState('');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
-  const [recipient, setRecipient] = useState('');
+  const [recipient, setRecipient] = useState(recipientUsername);
+  const [linkedRecipientId, setLinkedRecipientId] = useState(recipientMemberId);
+  const [resolvedRecipient, setResolvedRecipient] = useState<MessageRecipient | null>(null);
+  const [resolvingRecipient, setResolvingRecipient] = useState(false);
   const [body, setBody] = useState('');
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
@@ -41,10 +45,28 @@ export function MessagesClient() {
   messageRef.current = messages;
   const inboxGeneration = useRef(0);
   const messageGeneration = useRef(0);
+  const navigationGeneration = useRef(0);
   const activeRef = useRef(activeId);
   activeRef.current = activeId;
   const pendingSend = useRef<{ id: string; body: string; conversation: string } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+
+  const openConversation = useCallback((conversation: Conversation, selectFolder = true) => {
+    // Invalidate any inbox response captured before this explicit selection.
+    ++inboxGeneration.current;
+    if (activeRef.current !== conversation.id) {
+      ++messageGeneration.current;
+      messageRef.current = [];
+      setMessages([]); setBody(''); setHasOlder(false); setMessagesLoading(true);
+    }
+    activeRef.current = conversation.id;
+    setSelectedConversation(conversation);
+    setActiveId(conversation.id);
+    if (selectFolder) {
+      ++navigationGeneration.current;
+      setTab(conversationFolder(conversation, user?.id ?? ''));
+    }
+  }, [user?.id]);
 
   const loadInbox = useCallback(async (selectedId = activeRef.current) => {
     const generation = ++inboxGeneration.current;
@@ -55,21 +77,43 @@ export function MessagesClient() {
     const rows = result.conversations;
     inboxRef.current = rows;
     setConversations(rows);
-    setSelectedConversation(selected);
+    if (activeRef.current === selectedId) {
+      setSelectedConversation(selected);
+    }
     if (previous.length > 50) setInboxNotice('Inbox updated. Earlier conversations remain available below; your open chat is unchanged.');
     if (result.reset) setInboxHasOlder(result.hasOlder);
-    setActiveId((current) => current || rows.find((r) => !r.request_status || r.request_status === 'accepted')?.id || '');
-  }, []);
+    if (!activeRef.current) {
+      const first = rows.find((r) => !r.request_status || r.request_status === 'accepted');
+      if (first) openConversation(first, false);
+    }
+  }, [openConversation, user?.id]);
 
   useEffect(() => {
     if (!user) return;
     void loadInbox().catch((reason: Error) => setError(reason.message));
-    const to = new URLSearchParams(window.location.search).get('to');
-    if (to) {
-      setRecipient(to);
-    }
     return subscribeLive([`inbox:${user.id}`], () => { void loadInbox().catch((reason: Error) => setError(reason.message)); });
   }, [loadInbox, user]);
+
+  useEffect(() => {
+    if (!user || !recipientUsername) return;
+    let valid = true;
+    const navigation = navigationGeneration.current;
+    setResolvingRecipient(true);
+    void (async () => {
+      try {
+        const { member, conversation: existing } = await getMessageEntry(recipientUsername, user.id, recipientMemberId || undefined);
+        if (!valid) return;
+        setResolvedRecipient(member);
+        setRecipient(member.username);
+        // Following an author link only reads. A new request needs the explicit
+        // Start request action; an existing incoming request opens its own folder.
+        if (existing && navigation === navigationGeneration.current) openConversation(existing);
+      } catch (reason) {
+        if (valid) { setResolvedRecipient(null); setError(reason instanceof Error ? reason.message : 'Could not find this member.'); }
+      } finally { if (valid) setResolvingRecipient(false); }
+    })();
+    return () => { valid = false; };
+  }, [recipientUsername, recipientMemberId, user?.id, openConversation]);
 
   useEffect(() => {
     if (!activeId || !user) return;
@@ -105,14 +149,19 @@ export function MessagesClient() {
 
   async function begin(event: FormEvent) {
     event.preventDefault();
-    if (acting) return;
+    if (!user || acting || resolvingRecipient) return;
     setActing(true);
     setError('');
     try {
-      const id = await startConversation(recipient);
-      setActiveId(id);
+      const member = resolvedRecipient ?? await getMessageRecipient(recipient, linkedRecipientId || undefined);
+      if (member.id === user.id) throw new Error('You cannot message yourself. Choose another community member.');
+      const id = await startConversation(member.username, demoMode ? undefined : member.id);
+      const conversation = await getConversation(id);
+      if (!conversation) throw new Error('This conversation is unavailable. Please refresh and try again.');
+      openConversation(conversation);
       setRecipient('');
-      setTab('chats');
+      setLinkedRecipientId('');
+      setResolvedRecipient(null);
       await loadInbox(id);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not start conversation.'); }
     finally { setActing(false); }
@@ -145,8 +194,13 @@ export function MessagesClient() {
 
   async function respond(decision: 'accepted' | 'declined' | 'blocked') {
     if (!user || !activeId || acting) return;
+    const conversation = activeId;
     setActing(true); setError('');
-    try { await respondToConversation(activeId, decision, user.id); await loadInbox(); setTab(decision === 'accepted' ? 'chats' : 'closed'); }
+    try {
+      await respondToConversation(conversation, decision, user.id);
+      await loadInbox();
+      if (activeRef.current === conversation) setTab(decision === 'accepted' ? 'chats' : 'closed');
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update this request.'); }
     finally { setActing(false); }
   }
@@ -184,14 +238,13 @@ export function MessagesClient() {
   }
 
   if (loading) return <main className="mx-auto max-w-6xl p-8">Loading messages…</main>;
-  if (!user) return <main className="mx-auto max-w-xl px-4 py-20 text-center"><Lock className="mx-auto text-teal-700" size={34} /><h1 className="mt-4 text-3xl font-black">Your community inbox</h1><p className="mt-3 text-slate-600">Log in to see conversations for your account.</p><SafetyNotice kind="messaging" /><Link href="/login?next=/messages" className="mt-6 inline-block rounded-lg bg-teal-700 px-5 py-3 font-bold text-white">Log in</Link></main>;
+  if (!user) return <main className="mx-auto max-w-xl px-4 py-20 text-center"><Lock className="mx-auto text-teal-700" size={34} /><h1 className="mt-4 text-3xl font-black">Your community inbox</h1><p className="mt-3 text-slate-600">Log in to see conversations for your account.</p><SafetyNotice kind="messaging" /><Link href={messageLoginHref(recipientUsername, recipientMemberId)} className="mt-6 inline-block rounded-lg bg-teal-700 px-5 py-3 font-bold text-white">Log in</Link></main>;
 
   const active = conversations.find((item) => item.id === activeId) ?? (selectedConversation?.id === activeId ? selectedConversation : null);
-  const incoming = (c: Conversation) => c.request_status === 'pending' && c.requested_by !== user.id;
-  const closed = (c: Conversation) => c.request_status === 'declined' || c.request_status === 'blocked';
+  const incoming = (c: Conversation) => conversationFolder(c, user.id) === 'requests';
+  const closed = (c: Conversation) => conversationFolder(c, user.id) === 'closed';
   const visible = conversations.filter((c) => tab === 'requests' ? incoming(c) : tab === 'closed' ? closed(c) : !incoming(c) && !closed(c));
-  const canSend = active && !messagesLoading && !closed(active) && (!active.request_status || active.request_status === 'accepted'
-    || (active.request_status === 'pending' && active.requested_by === user.id && !messages.length));
+  const canSend = canSendToConversation(active, user.id, messages, messagesLoading);
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-bold uppercase tracking-wider text-teal-700">Private conversations</p><h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">Messages</h1></div><p className="flex items-center gap-1.5 text-xs text-slate-500"><Lock size={13} /> Participant-only access. Reported messages may be reviewed by moderators.</p></div>
@@ -201,11 +254,12 @@ export function MessagesClient() {
         <aside className="border-b border-slate-200 md:border-b-0 md:border-r">
           <form onSubmit={begin} className="border-b border-slate-200 p-4">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-500">New chat request</label>
-            <div className="mt-2 flex gap-2"><input value={recipient} onChange={(event) => setRecipient(event.target.value)} required placeholder="public username" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600" /><button className="grid w-10 place-items-center rounded-lg bg-slate-900 text-white" aria-label="Start conversation"><Plus size={17} /></button></div>
+            <div className="mt-2 flex gap-2"><input aria-label="Recipient public username" value={recipient} onChange={(event) => { setRecipient(event.target.value); setLinkedRecipientId(''); setResolvedRecipient(null); setError(''); }} disabled={acting || resolvingRecipient} maxLength={34} required placeholder="public username" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 disabled:bg-slate-100" /><button disabled={acting || resolvingRecipient || !recipient.trim()} className="grid w-10 place-items-center rounded-lg bg-slate-900 text-white disabled:opacity-40" aria-label={acting ? 'Opening conversation' : 'Start conversation'}><Plus size={17} /></button></div>
+            <p role="status" className="mt-2 text-xs text-slate-500">{resolvingRecipient ? 'Finding this community member…' : resolvedRecipient ? `Member found: u/${resolvedRecipient.username}. Start a request or continue your existing conversation.` : 'Enter a member’s public username. They decide whether to accept your request.'}</p>
           </form>
           <nav aria-label="Message folders" className="flex gap-2 border-b p-3">{(['chats', 'requests', 'closed'] as const).map((item) => <button key={item} onClick={() => setTab(item)} aria-pressed={tab === item} className={`rounded-full px-3 py-2 text-xs font-bold capitalize ${tab === item ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{item}{item === 'requests' ? ` (${conversations.filter(incoming).length}${inboxHasOlder ? '+' : ''})` : ''}</button>)}</nav>
           <div className="max-h-[530px] overflow-y-auto">{visible.map((conversation) => (
-            <button key={conversation.id} onClick={() => setActiveId(conversation.id)} className={`flex w-full gap-3 border-b border-slate-100 p-4 text-left transition ${activeId === conversation.id ? 'bg-teal-50' : 'hover:bg-slate-50'}`}>
+            <button key={conversation.id} onClick={() => openConversation(conversation)} className={`flex w-full gap-3 border-b border-slate-100 p-4 text-left transition ${activeId === conversation.id ? 'bg-teal-50' : 'hover:bg-slate-50'}`}>
               <Avatar seed={conversation.other_avatar_seed} />
               <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><b className="truncate text-sm text-slate-900">u/{conversation.other_username}</b>{conversation.unread_count > 0 && <span className="ml-auto rounded-full bg-teal-700 px-2 py-0.5 text-[10px] font-bold text-white">{conversation.unread_count}</span>}</span><span className="mt-1 block truncate text-xs text-slate-500">{conversation.last_message ?? 'Start the conversation'}</span></span>
             </button>
