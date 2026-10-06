@@ -1,5 +1,10 @@
 # Community discovery, creation, membership and News
 
+> Historical verification of the initial PR #5 commit. The Google News replacement
+> and bounded community pagination update are recorded in
+> [COMMUNITY_SCALE_AND_GOOGLE_NEWS_2026-10-06.md](COMMUNITY_SCALE_AND_GOOGLE_NEWS_2026-10-06.md).
+> Its current status supersedes the original News source and membership reads below.
+
 ## Product scope
 
 Use Reddit's discovery patterns with VisaFlow's existing tagged Q&A model:

@@ -10,159 +10,173 @@ import ts from 'typescript';
 const require = createRequire(import.meta.url);
 const moduleUrl = (code) => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
 const fileModule = (name) => pathToFileURL(require.resolve(name)).href;
-const dependencies = { react: fileModule('react'), 'react/jsx-runtime': fileModule('react/jsx-runtime') };
+const dependencies = { react: fileModule('react'), 'react/jsx-runtime': fileModule('react/jsx-runtime'), saxes:fileModule('saxes') };
 dependencies['next/link'] = moduleUrl(`import {jsx} from ${JSON.stringify(dependencies['react/jsx-runtime'])}; export default function Link(props){return jsx('a',props)}`);
-async function compile(path) {
+async function compile(path, suffix='') {
   const source = await readFile(new URL(path, import.meta.url), 'utf8');
-  return moduleUrl(ts.transpileModule(source, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText
+  return moduleUrl(ts.transpileModule(source+`\n// ${suffix}`, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText
     .replace(/(from\s+)(['"])([^'"]+)\2/g, (match, prefix, _quote, name) => {
       assert(dependencies[name], `Unexpected dependency ${name}`);
       return prefix + JSON.stringify(dependencies[name]);
     }));
 }
-dependencies['@/lib/news'] = await compile('../src/lib/news.ts');
-const news = await import(dependencies['@/lib/news']);
-const { NewsFeed, NewsResults, NewsUnavailable } = await import(await compile('../src/components/NewsFeed.tsx'));
-const uscis = 'u-s-citizenship-and-immigration-services';
-const source = (overrides = {}) => ({
-  document_number:'2026-12345', title:'Visa program public notice', publication_date:'2026-10-01',
-  html_url:'https://www.federalregister.gov/documents/2026/10/01/2026-12345/visa-program',
-  type:'Notice', agencies:[{slug:uscis}], ...overrides,
-});
-const state = source({document_number:'2026-12346', title:'Citizenship regulation', publication_date:'2026-10-02',
-  html_url:'https://www.federalregister.gov/documents/2026/10/02/2026-12346/citizenship', type:'Rule',agencies:[{slug:'state-department'}]});
-const json = (payload) => Response.json(payload);
-const makeFeed = (articles = news.normalizeNews({results:[source(),state]},'all')) => ({status:'ok',articles,agency:'all',retrievedAt:'2026-10-06T05:00:00.000Z',limit:24});
+dependencies['@/lib/news-shared']=dependencies['./news-shared']=await compile('../src/lib/news-shared.ts');
+dependencies['@/lib/news']=await compile('../src/lib/news.ts');
+const news={...await import(dependencies['@/lib/news-shared']),...await import(dependencies['@/lib/news'])};
+const { NewsFeed, NewsResults, NewsUnavailable, NewsExternal } = await import(await compile('../src/components/NewsFeed.tsx'));
+const now=Date.parse('2026-10-06T05:00:00Z');
+const escape=(value)=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+const item=(overrides={})=>{
+  const data={title:'Visa program update - Example Press',link:'https://news.google.com/rss/articles/CBMiVisaFixture12345?oc=5',pubDate:new Date(now-3_600_000).toUTCString(),source:'Example Press',...overrides};
+  return `<item>${Object.entries(data).map(([key,value])=>`<${key}>${escape(value)}</${key}>`).join('')}</item>`;
+};
+const rss=(items)=>`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Google News</title>${items}</channel></rss>`;
+const xmlResponse=(body)=>new Response(body,{headers:{'Content-Type':'application/xml; charset=utf-8'}});
+const parse=(body)=>news.parseGoogleNewsRss(body,now);
+const makeFeed=async(articles)=>({status:'ok',source:'Google News',articles:articles??await parse(rss(item())),retrievedAt:new Date(now).toISOString(),limit:24});
 
-test('agency filters build only a fixed HTTPS API endpoint and bounded field list', () => {
-  for (const agency of ['all','uscis','state']) {
-    const url = new URL(news.buildNewsUrl(agency,Date.parse('2026-10-06T05:00:00Z')));
-    assert.equal(url.origin,'https://www.federalregister.gov');
-    assert.equal(url.pathname,'/api/v1/documents.json');
-    assert.equal(url.searchParams.get('per_page'),'24');
-    assert.equal(url.searchParams.get('order'),'newest');
-    assert.equal(url.searchParams.get('conditions[publication_date][gte]'),'2025-10-06');
-    assert.equal(url.searchParams.get('conditions[publication_date][lte]'),'2026-10-06');
-    assert.equal(url.searchParams.getAll('conditions[agencies][]').length,agency==='all'?2:1);
-  }
-  assert.throws(()=>news.buildNewsUrl('https://localhost'));
+test('the fixed Google search covers immigration, avoids payment-company terms and has no user URL',()=>{
+  const url=new URL(news.GOOGLE_NEWS_RSS_URL);
+  assert.equal(url.origin,'https://news.google.com');assert.equal(url.pathname,'/rss/search');
+  assert.match(url.searchParams.get('q'),/visa OR immigration/);assert.match(url.searchParams.get('q'),/-"Visa Inc"/);
+  assert.match(url.searchParams.get('q'),/when:7d/);assert.equal(url.searchParams.get('hl'),'en-US');
+  assert.equal(new URL(news.GOOGLE_NEWS_SEARCH_URL).pathname,'/search');
 });
 
-test('source normalizer sorts, deduplicates, filters agencies and keeps exact titles', () => {
-  const payload={results:[source(),state,source()]};
-  const rows=news.normalizeNews(payload,'all');
-  assert.deepEqual(rows.map((row)=>row.id),['2026-12346','2026-12345']);
-  assert.equal(rows[1].title,'Visa program public notice');
-  assert.equal(news.normalizeNews(payload,'uscis').length,1);
-  assert.equal(news.normalizeNews(payload,'state')[0].agencyName,'Department of State');
-  const joint={results:[source({agencies:[{slug:uscis},{slug:'state-department'}]})]};
-  assert.equal(news.normalizeNews(joint,'state')[0].agency,'state');
+test('RSS parser decodes entities/CDATA, attributes publishers, strips duplicate suffix and ignores descriptions',async()=>{
+  const xml=rss(item({title:'Visa & immigration update - Example Press',description:'COPYRIGHTED_BODY_SENTINEL'}));
+  const articles=await parse(xml);
+  assert.equal(articles[0].title,'Visa & immigration update');assert.equal(articles[0].publisher,'Example Press');
+  assert.equal(articles[0].sourceUrl,'https://news.google.com/rss/articles/CBMiVisaFixture12345');
+  assert(!JSON.stringify(articles).includes('COPYRIGHTED_BODY_SENTINEL'));
+  const cdata=xml.replace('<title>Visa &amp; immigration update - Example Press</title>','<title><![CDATA[Visa & immigration update - Example Press]]></title>');
+  assert.deepEqual(await parse(cdata),articles);
 });
 
-test('unsafe destinations, mismatched dates, unknown agencies and malformed records cannot render', () => {
+test('headlines sort newest first, deduplicate IDs, cap results and exclude future/old/payment stories',async()=>{
+  const items=Array.from({length:35},(_,index)=>item({title:`Visa story ${index}`,link:`https://news.google.com/rss/articles/CBMiVisaFixture${String(index).padStart(8,'0')}`,pubDate:new Date(now-index*60_000).toUTCString()}));
+  items.unshift(item({title:'Visa Inc shares rise'}));
+  items.push(item({title:'Old immigration report',pubDate:new Date(now-10*86_400_000).toUTCString()}));
+  items.push(item({title:'Future visa report',pubDate:new Date(now+86_400_000).toUTCString()}));
+  items.push(items[0],items[2]);
+  const rows=await parse(rss(items.join('')));
+  assert.equal(rows.length,24);assert.equal(rows[0].title,'Visa story 0');assert.equal(new Set(rows.map((row)=>row.id)).size,24);
+  assert(!rows.some((row)=>/Old|Future|shares/.test(row.title)));
+});
+
+for(const [label,body] of [
+  ['malformed XML',rss(item()).replace('</item>','</wrong>')],
+  ['non-RSS HTML','<html><body>Denied</body></html>'],
+  ['DTD and external entity','<!DOCTYPE rss [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'+rss(item()).replace('Visa program','&xxe;')],
+  ['entity expansion','<!DOCTYPE rss [<!ENTITY a "boom"><!ENTITY b "&a;&a;">]>'+rss(item())],
+  ['unknown entity',rss(item()).replace('Visa program','&unknown;')],
+  ['duplicate channel','<rss><channel></channel><channel></channel></rss>'],
+  ['deep XML',rss('<a>'.repeat(20)+'</a>'.repeat(20))],
+  ['oversized input',' '.repeat(news.NEWS_MAX_BYTES+1)],
+  ['too many items',rss(item().repeat(151))],
+]) test(`${label} is rejected without entity/network resolution`,async()=>{await assert.rejects(parse(body));});
+
+test('invalid URLs, duplicate/nested fields, missing publisher and invalid dates cannot render',async()=>{
   const invalid=[
-    source({html_url:'javascript:alert(1)'}),
-    source({html_url:'https://www.federalregister.gov.evil.example/documents/2026/10/01/2026-12345/visa'}),
-    source({html_url:'https://user:pass@www.federalregister.gov/documents/2026/10/01/2026-12345/visa'}),
-    source({html_url:'https://www.federalregister.gov:1234/documents/2026/10/01/2026-12345/visa'}),
-    source({publication_date:'2026-02-30'}),source({agencies:[{slug:'untrusted'}]}),
-    source({html_url:'https://www.federalregister.gov/documents/2026/09/01/2026-12345/visa'}),
-    source({document_number:'../../12345'}),source({title:''}),null,[],
+    item({link:'javascript:alert(1)'}),item({link:'https://news.google.com.evil.example/rss/articles/CBMiVisaFixture12345'}),
+    item({link:'https://user:pass@news.google.com/rss/articles/CBMiVisaFixture12345'}),item({link:'https://news.google.com:8080/rss/articles/CBMiVisaFixture12345'}),
+    item({link:'https://news.google.com/search?q=evil'}),item({source:''}),item({pubDate:'Mon, 30 Feb 2026 04:00:00 GMT'}),
+    item({pubDate:'Wed, 06 Oct 2026 04:00:00 GMT'}),item({pubDate:'Tue, 06 Oct 2026 24:00:00 GMT'}),
+    item().replace('</title>','</title><title>duplicate</title>'),item().replace('Visa program','<b>Visa</b> program'),
   ];
-  assert.throws(()=>news.normalizeNews({results:invalid},'all'),/No valid/);
-  assert.deepEqual(news.normalizeNews({results:[...invalid,state]},'all').map((row)=>row.id),['2026-12346']);
-  assert.throws(()=>news.normalizeNews({data:[]},'all'),/Invalid/);
-  assert.deepEqual(news.normalizeNews({results:[]},'all'),[]);
+  await assert.rejects(parse(rss(invalid.join(''))),/No valid/);
+  assert.equal((await parse(rss(invalid.join('')+item()))).length,1);
+  assert.deepEqual(await parse(rss('')),[]);
 });
 
-test('source result count is capped even when the upstream ignores per_page',()=>{
-  assert(news.normalizeNews({results:Array.from({length:200},()=>source())},'all').length<=24);
-});
-
-test('successful concurrent reads coalesce and cache expires without changing publication dates',async()=>{
-  let calls=0,clock=Date.parse('2026-10-06T05:00:00Z');
+test('successful concurrent reads coalesce, cache expires and only the fixed query is fetched',async()=>{
+  let calls=0,clock=now;
   const service=news.createNewsService(async(url,options)=>{
-    calls++;assert.equal(options.redirect,'error');assert.equal(options.headers.Accept,'application/json');
-    assert(options.signal instanceof AbortSignal);return json({results:[source()]});
+    calls++;assert.equal(url,news.GOOGLE_NEWS_RSS_URL);assert.equal(options.redirect,'error');
+    assert(options.signal instanceof AbortSignal);return xmlResponse(rss(item()));
   },()=>clock);
-  const [first,second]=await Promise.all([service('all'),service('all')]);
-  assert.equal(calls,1);assert.deepEqual(first,second);assert.equal(first.articles[0].publishedAt,'2026-10-01');
-  await service('all');assert.equal(calls,1);
-  clock+=news.NEWS_CACHE_MS+1;await service('all');assert.equal(calls,2);
-  await service('uscis');assert.equal(calls,3);
+  const [a,b]=await Promise.all([service(),service()]);assert.equal(calls,1);assert.deepEqual(a,b);
+  await service();assert.equal(calls,1);clock+=news.NEWS_CACHE_MS+1;await service();assert.equal(calls,2);
 });
 
-for (const [label,response] of [
+for(const [label,response] of [
   ['HTTP failure',()=>new Response('error',{status:503})],
   ['HTML error page',()=>new Response('<html>Unavailable</html>',{headers:{'Content-Type':'text/html'}})],
-  ['malformed JSON',()=>new Response('{broken',{headers:{'Content-Type':'application/json'}})],
-  ['malformed records',()=>json({results:[{title:'Missing official identity'}]})],
-  ['oversized declared body',()=>new Response('{}',{headers:{'Content-Type':'application/json','Content-Length':String(news.NEWS_MAX_BYTES+1)}})],
-  ['oversized streamed body',()=>new Response(' '.repeat(news.NEWS_MAX_BYTES+1),{headers:{'Content-Type':'application/json'}})],
-]) test(`${label} fails explicitly, is not cached and allows recovery`,async()=>{
+  ['malformed RSS',()=>xmlResponse('<rss>')],
+  ['oversized declared body',()=>new Response('<rss/>',{headers:{'Content-Type':'application/xml','Content-Length':String(news.NEWS_MAX_BYTES+1)}})],
+  ['oversized streamed body',()=>xmlResponse(' '.repeat(news.NEWS_MAX_BYTES+1))],
+]) test(`${label} fails explicitly, is not cached and permits recovery`,async()=>{
   let fail=true,calls=0;
-  const service=news.createNewsService(async()=>{calls++;return fail?response():json({results:[source()]});});
-  await assert.rejects(service('all'));
-  fail=false;assert.equal((await service('all')).articles.length,1);assert.equal(calls,2);
+  const service=news.createNewsService(async()=>{calls++;return fail?response():xmlResponse(rss(item()));},()=>now);
+  await assert.rejects(service());fail=false;assert.equal((await service()).articles.length,1);assert.equal(calls,2);
 });
 
-test('deadline aborts upstream fetch',async()=>{
-  const service=news.createNewsService(async(_url,{signal})=>new Promise((_resolve,reject)=>{
+test('timeout aborts both initial fetch and response body reads',async()=>{
+  const waitingFetch=news.createNewsService(async(_url,{signal})=>new Promise((_resolve,reject)=>{
     signal.addEventListener('abort',()=>reject(new DOMException('Timed out','AbortError')),{once:true});
-  }),Date.now,10);
-  await assert.rejects(service('all'),{name:'AbortError'});
+  }),()=>now,10);
+  await assert.rejects(waitingFetch(),{name:'AbortError'});
+  const waitingBody=news.createNewsService(async(_url,{signal})=>new Response(new ReadableStream({start(controller){
+    signal.addEventListener('abort',()=>controller.error(new DOMException('Timed out','AbortError')),{once:true});
+  }}),{headers:{'Content-Type':'application/xml'}}),()=>now,10);
+  await assert.rejects(waitingBody(),{name:'AbortError'});
 });
 
-test('client feed validation rejects hostile or mismatched response shapes',()=>{
-  assert(news.isNewsFeedData(makeFeed()));
-  assert(!news.isNewsFeedData({...makeFeed(),articles:[{...makeFeed().articles[0],sourceUrl:'https://evil.example/'}]}));
-  assert(!news.isNewsFeedData({...makeFeed(),retrievedAt:'not a date'}));
+test('client validation rejects hostile links, mismatched IDs and invalid timestamps without throwing',async()=>{
+  const feed=await makeFeed();assert(news.isNewsFeedData(feed));
+  for(const replacement of [{sourceUrl:null},{sourceUrl:'https://evil.example/'},{id:'other-fixture-id'},{publishedAt:'2026-02-30T04:00:00.000Z'},{publisher:''}]) {
+    assert.equal(news.isNewsFeedData({...feed,articles:[{...feed.articles[0],...replacement}]}),false);
+  }
   assert(!news.isNewsFeedData({status:'unavailable'}));
 });
 
-test('rendered feed keeps dates, sources and escaped titles, and applies combined filters',()=>{
-  const feed=makeFeed();
-  const html=renderToStaticMarkup(createElement(NewsResults,{feed}));
-  assert.match(html,/2026-10-01/);assert.match(html,/Oct 2, 2026/);assert.match(html,/Federal Register/);
-  assert.match(html,/rel="noopener noreferrer"/);assert.match(html,/Retrieved/);
-  const filtered=renderToStaticMarkup(createElement(NewsResults,{feed,type:'Notice',query:' visa '}));
-  assert.match(filtered,/Visa program public notice/);assert.doesNotMatch(filtered,/Citizenship regulation/);
-  const escaped=renderToStaticMarkup(createElement(NewsResults,{feed:makeFeed([{...feed.articles[0],title:'<script>alert(1)</script>'}])}));
+test('rendered headlines show publisher/date/Google links, escape markup and contain no agency controls',async()=>{
+  const feed=await makeFeed();const html=renderToStaticMarkup(createElement(NewsResults,{feed}));
+  assert.match(html,/Example Press/);assert.match(html,/2026-10-06T04:00:00.000Z/);assert.match(html,/Via Google News/);
+  assert.match(html,/rel="noopener noreferrer"/);assert.doesNotMatch(html,/Federal Register|Document type|USCIS \+ State/);
+  const escaped=renderToStaticMarkup(createElement(NewsResults,{feed:await makeFeed([{...feed.articles[0],title:'<script>alert(1)</script>'}])}));
   assert.match(escaped,/&lt;script&gt;/);assert.doesNotMatch(escaped,/<script>/);
 });
 
-test('loading, no results, filter mismatch and official fallbacks are accessible',()=>{
-  const loading=renderToStaticMarkup(createElement(NewsFeed));
-  assert.match(loading,/role="status"/);assert.match(loading,/Loading agency updates/);
-  for(const source of news.NEWS_SOURCES) assert(loading.includes(source.url));
-  const empty=renderToStaticMarkup(createElement(NewsResults,{feed:makeFeed([])}));
-  assert.match(empty,/No updates were returned/);
-  const mismatch=renderToStaticMarkup(createElement(NewsResults,{feed:makeFeed(),query:'unmatched-query'}));
-  assert.match(mismatch,/No updates match/);
-  const unavailable=renderToStaticMarkup(createElement(NewsUnavailable,{error:'Agency updates are temporarily unavailable.',retry:()=>{}}));
-  assert.match(unavailable,/role="alert"/);assert.match(unavailable,/<button type="button"/);assert.match(unavailable,/Try again/);
+test('loading, empty, unavailable and always-available external Google search are accessible',async()=>{
+  const loading=renderToStaticMarkup(createElement(NewsFeed));assert.match(loading,/role="status"/);assert.match(loading,/Loading latest headlines/);
+  assert(loading.includes(escape(news.GOOGLE_NEWS_SEARCH_URL).replaceAll('"','&quot;')));
+  assert.doesNotMatch(loading,/<select/);
+  const empty=renderToStaticMarkup(createElement(NewsResults,{feed:await makeFeed([])}));assert.match(empty,/No recent visa headlines/);
+  const error=renderToStaticMarkup(createElement(NewsUnavailable,{retry:()=>{}}));assert.match(error,/role="alert"/);assert.match(error,/Try again/);
+  const external=renderToStaticMarkup(createElement(NewsExternal));assert.match(external,/directly on Google News/);assert.doesNotMatch(external,/Try again|role="alert"/);
 });
 
-test('actual route rejects invalid agency, caches success and returns explicit unavailable without internal details',async()=>{
-  const originalFetch=globalThis.fetch;
-  globalThis.fetch=async()=>json({results:[source()]});
+test('actual route is disabled by default before fetch/cache, shares canonical edge cache and fails safely',async()=>{
+  const originalFetch=globalThis.fetch,originalCaches=globalThis.caches,originalFlag=process.env.GOOGLE_NEWS_RSS_ENABLED;
+  let calls=0,reads=0,puts=0,cached;
+  globalThis.fetch=async(url)=>{calls++;assert.equal(url,news.GOOGLE_NEWS_RSS_URL);return xmlResponse(rss(item({pubDate:new Date(Date.now()-60_000).toUTCString()})));};
+  globalThis.caches={default:{async match(key){reads++;assert.equal(new URL(key.url).search,'?feed=google-visa-v1');return cached?.clone();},async put(_key,response){puts++;cached=response;}}};
   try {
-    const {GET}=await import(await compile('../src/app/api/news/route.ts'));
-    const bad=await GET(new Request('https://app.example/api/news?agency=https://localhost'));
-    assert.equal(bad.status,400);assert.equal(bad.headers.get('cache-control'),'no-store');
-    const good=await GET(new Request('https://app.example/api/news?agency=all'));
-    assert.equal(good.status,200);assert.equal(good.headers.get('cache-control'),'public, max-age=60, s-maxage=300');
-    assert.equal((await good.json()).articles[0].id,'2026-12345');
-  } finally {globalThis.fetch=originalFetch;}
-  // A separately compiled route owns a fresh service and mocked upstream.
-  globalThis.fetch=async()=>{throw new Error('internal-provider-failure-sentinel');};
-  try {
-    const routeSource=await readFile(new URL('../src/app/api/news/route.ts',import.meta.url),'utf8');
-    const code=ts.transpileModule(routeSource+'\n// failure fixture',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText
-      .replace("'@/lib/news'",JSON.stringify(dependencies['@/lib/news']));
-    const {GET}=await import(moduleUrl(code));
-    const failed=await GET(new Request('https://app.example/api/news'));
-    assert.equal(failed.status,503);assert.equal(failed.headers.get('cache-control'),'no-store');
-    const body=await failed.text();assert.match(body,/unavailable/);assert.doesNotMatch(body,/sentinel/);
-  } finally {globalThis.fetch=originalFetch;}
+    const {GET}=await import(await compile('../src/app/api/news/route.ts','success-route'));
+    delete process.env.GOOGLE_NEWS_RSS_ENABLED;
+    const external=await GET(new Request('https://app.example/api/news'));assert.equal(external.status,200);assert.deepEqual(await external.json(),{status:'external'});assert.equal(calls,0);assert.equal(reads,0);
+    process.env.GOOGLE_NEWS_RSS_ENABLED='true';
+    const good=await GET(new Request('https://app.example/api/news?url=https://localhost'));assert.equal(good.status,200);
+    assert.match(good.headers.get('cache-control'),/s-maxage=/);assert.equal((await good.json()).source,'Google News');
+    assert.equal(calls,1);assert.equal(puts,1);
+    const warm=await GET(new Request('https://app.example/api/news?anything=123'));assert.equal(warm.status,200);assert.equal(calls,1);assert.equal(puts,1);
+    delete process.env.GOOGLE_NEWS_RSS_ENABLED;
+    assert.deepEqual(await (await GET(new Request('https://app.example/api/news'))).json(),{status:'external'});assert.equal(reads,2);
+    process.env.GOOGLE_NEWS_RSS_ENABLED='true';
+    globalThis.fetch=async()=>{throw new Error('internal-provider-failure-sentinel');};
+    globalThis.caches=undefined;
+    const failing=await import(await compile('../src/app/api/news/route.ts','failure-route'));
+    const failed=await failing.GET(new Request('https://app.example/api/news'));assert.equal(failed.status,503);
+    assert.equal(failed.headers.get('cache-control'),'no-store');assert.doesNotMatch(await failed.text(),/sentinel/);
+  } finally {
+    globalThis.fetch=originalFetch;globalThis.caches=originalCaches;
+    if(originalFlag===undefined)delete process.env.GOOGLE_NEWS_RSS_ENABLED;else process.env.GOOGLE_NEWS_RSS_ENABLED=originalFlag;
+  }
+});
+
+test('client dependency graph is independent of XML parser and upstream fetch service',async()=>{
+  const component=await readFile(new URL('../src/components/NewsFeed.tsx',import.meta.url),'utf8');
+  const shared=await readFile(new URL('../src/lib/news-shared.ts',import.meta.url),'utf8');
+  assert.doesNotMatch(component,/from ['"]@\/lib\/news['"]/);assert.doesNotMatch(shared,/saxes|createNewsService|fetch\(/);
 });

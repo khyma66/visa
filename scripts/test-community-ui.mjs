@@ -122,7 +122,7 @@ function change(h, labelText, value) { field(h, labelText).props.onChange({ targ
 const event = () => ({ preventDefault() {} });
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
-const groupMethods = ['listCommunities', 'listMyCommunities', 'listMyMemberships', 'getCommunityById', 'getCommunityBySlug', 'createCommunity', 'joinCommunity', 'leaveCommunity', 'listCommunityQuestions'];
+const groupMethods = ['listCommunities', 'listMyCommunitiesPage', 'getMembershipForCommunity', 'getMembershipsForCommunities', 'getCommunityById', 'getCommunityBySlug', 'createCommunity', 'joinCommunity', 'leaveCommunity', 'listCommunityQuestions'];
 dependencies['@/lib/groups'] = dataUrl(groupMethods.map((name) => `export async function ${name}(...args){return globalThis.__communityHarness.invoke(${JSON.stringify(name)},args);}`).join('\n'));
 dependencies['@/lib/community'] = dataUrl('export async function createQuestion(...args){return globalThis.__communityHarness.invoke("createQuestion",args);}');
 dependencies['@/lib/tagging'] = await compile('../src/lib/tagging.ts');
@@ -133,7 +133,9 @@ function createHarness(search = '') {
   const h = new Harness();
   h.search = search;
   globalThis.window = { location: { search } };
-  h.handlers.listMyCommunities = async () => [group];
+  h.handlers.listMyCommunitiesPage = async () => ({ communities: [group], nextCursor: null });
+  h.handlers.getCommunityById = async (id) => id === group.id ? group : null;
+  h.handlers.getMembershipForCommunity = async (userId, id) => userId === 'member-a' && id === group.id ? { community_id: id, role: 'member', is_active: true } : null;
   h.handlers.createQuestion = async () => 'created-question';
   return h;
 }
@@ -158,7 +160,7 @@ test('question form preserves the selected community, real actor and suggested t
   } finally { h.close(); }
 });
 test('General questions omit community_id and are available without membership', async () => {
-  const h = createHarness(); h.handlers.listMyCommunities = async () => [];
+  const h = createHarness(); h.handlers.listMyCommunitiesPage = async () => ({ communities: [], nextCursor: null });
   try {
     h.render(AskQuestionForm); await h.settle(); fillQuestion(h); await publish(h);
     const input = h.calls.find((c) => c.name === 'createQuestion').args[1];
@@ -177,14 +179,14 @@ test('a selected community without membership cannot be published, even by invok
 });
 test('a failed membership lookup blocks community posting and exposes a working retry', async () => {
   const h = createHarness('?community=group-a');
-  h.handlers.listMyCommunities = async () => { throw new Error('Offline'); };
+  h.handlers.getMembershipForCommunity = async () => { throw new Error('Offline'); };
   try {
     h.render(AskQuestionForm); await h.settle(); await publish(h); h.render();
     assert.equal(h.calls.filter((c) => c.name === 'createQuestion').length, 0);
-    assert.match(textOf(h.tree), /could not be loaded/);
-    h.handlers.listMyCommunities = async () => [group];
+    assert.match(textOf(h.tree), /could not be checked/);
+    h.handlers.getMembershipForCommunity = async (_userId, id) => ({ community_id: id, role: 'member', is_active: true });
     byText(h, 'button', 'Retry').props.onClick(); h.render(); await h.settle();
-    assert.doesNotMatch(textOf(h.tree), /could not be loaded/);
+    assert.doesNotMatch(textOf(h.tree), /could not be checked/);
     fillQuestion(h); await publish(h);
     assert.equal(h.calls.filter((c) => c.name === 'createQuestion').length, 1);
   } finally { h.close(); }
@@ -224,14 +226,58 @@ test('question submission stays locked after success until navigation unmounts t
 });
 test('an old account membership response cannot authorize a newly signed-in account', async () => {
   const h = createHarness('?community=group-a'), old = deferred();
-  h.handlers.listMyCommunities = (userId) => userId === 'member-a' ? old.promise : [];
+  h.handlers.getMembershipForCommunity = (userId) => userId === 'member-a' ? old.promise : null;
   try {
     h.render(AskQuestionForm); await h.settle();
     h.auth = { ...h.auth, user: { id: 'member-b' } }; h.render(); await h.settle();
-    old.resolve([group]); await h.settle();
+    old.resolve({ community_id: group.id, role: 'member', is_active: true }); await h.settle();
     await publish(h); h.render();
     assert.equal(h.calls.filter((c) => c.name === 'createQuestion').length, 0);
     assert.match(textOf(h.tree), /Join this community before posting/);
+  } finally { h.close(); }
+});
+test('the question community selector stays bounded and preserves a valid selection outside the current page', async () => {
+  const h = createHarness('?community=group-a');
+  const first = Array.from({ length: 24 }, (_, i) => ({ ...group, id: `first-${i}`, slug: `first-${i}`, display_name: `First ${i}` }));
+  const second = Array.from({ length: 24 }, (_, i) => ({ ...group, id: `second-${i}`, slug: `second-${i}`, display_name: `Second ${i}` }));
+  h.handlers.listMyCommunitiesPage = async ({ after }) => ({ communities: after ? second : first, nextCursor: after ? null : 'first-23' });
+  try {
+    h.render(AskQuestionForm); await h.settle();
+    assert.equal(nodes(field(h, 'Community')).filter(n => n.type === 'option').length, 26);
+    const next = byText(h, 'button', 'Next communities'); next.props.onClick(); next.props.onClick(); h.render(); await h.settle();
+    assert.equal(h.calls.filter(c => c.name === 'listMyCommunitiesPage').length, 2);
+    assert.equal(nodes(field(h, 'Community')).filter(n => n.type === 'option').length, 26);
+    assert.equal(field(h, 'Community').props.value, group.id);
+    assert.match(textOf(field(h, 'Community')), /Second 0/); assert.doesNotMatch(textOf(field(h, 'Community')), /First 0/);
+    byText(h, 'button', 'Previous communities').props.onClick(); h.render(); await h.settle();
+    assert.match(textOf(field(h, 'Community')), /First 0/);
+    assert.equal(h.calls.filter(c => c.name === 'getMembershipForCommunity').length, 1);
+    fillQuestion(h); await publish(h);
+    assert.equal(h.calls.find(c => c.name === 'createQuestion').args[1].community_id, group.id);
+  } finally { h.close(); }
+});
+test('community selector search is server-filtered, while directory failure does not invalidate a checked selection', async () => {
+  const h = createHarness('?community=group-a');
+  try {
+    h.render(AskQuestionForm); await h.settle();
+    change(h, 'Search your communities', 'Canada'); await h.settle();
+    await new Promise(resolve => setTimeout(resolve, 260)); await h.settle();
+    assert.equal(h.calls.filter(c => c.name === 'listMyCommunitiesPage').at(-1).args[0].search, 'Canada');
+    h.handlers.listMyCommunitiesPage = async () => { throw new Error('Directory offline'); };
+    change(h, 'Search your communities', ''); await h.settle();
+    assert.match(textOf(h.tree), /could not be loaded/);
+    fillQuestion(h); await publish(h);
+    assert.equal(h.calls.find(c => c.name === 'createQuestion').args[1].community_id, group.id);
+  } finally { h.close(); }
+});
+test('an old account publishing result cannot redirect the newly signed-in account', async () => {
+  const h = createHarness(), pending = deferred(); h.handlers.createQuestion = () => pending.promise;
+  try {
+    h.render(AskQuestionForm); await h.settle(); fillQuestion(h); const submission = publish(h);
+    h.auth = { ...h.auth, user: { id: 'member-b' } }; h.render(); await h.settle();
+    pending.resolve('old-account-question'); await submission; await h.settle();
+    assert.deepEqual(h.pushes, []);
+    assert.equal(byText(h, 'button', 'Publish question').props.disabled, false);
   } finally { h.close(); }
 });
 
@@ -251,7 +297,7 @@ function fakeClient(respond = () => ({ data: [], error: null })) {
       }
       return query;
     },
-    async rpc(name, args) { const request = { rpc: name, args }; requests.push(request); return respond(request); },
+    rpc(name, args) { const request = { rpc: name, args, operations: [] }; requests.push(request); const query = { then: (resolve, reject) => Promise.resolve().then(() => respond(request)).then(resolve, reject), abortSignal(signal) { request.operations.push({ name: 'abortSignal', args: [signal] }); return query; } }; return query; },
   };
   globalThis.__communityClient = client;
   return requests;
@@ -292,11 +338,8 @@ test('group questions are scoped to one community with a stable timestamp/id cur
   const result = await groups.listCommunityQuestions(realId, { after: { id: otherId, created_at } });
   assert.equal(result.questions.length, 20);
   assert.deepEqual(result.nextCursor, { id: rows[19].id, created_at });
-  const query = requests[0]; assert.equal(query.table, 'question_feed');
-  assert(query.operations.some((op) => op.name === 'eq' && op.args[0] === 'community_id' && op.args[1] === realId));
-  assert.deepEqual(query.operations.filter((op) => op.name === 'order').map((op) => op.args), [['created_at', { ascending: false }], ['id', { ascending: false }]]);
-  assert(query.operations.some((op) => op.name === 'limit' && op.args[0] === 21));
-  assert(query.operations.some((op) => op.name === 'or' && op.args[0] === `created_at.lt.${created_at},and(created_at.eq.${created_at},id.lt.${otherId})`));
+  assert.equal(requests[0].rpc, 'community_group_question_page');
+  assert.deepEqual(requests[0].args, { target_community: realId, before_time: created_at, before_id: otherId, filter_tag: '' });
 });
 test('invalid IDs and pagination input cannot be embedded into database filters', async () => {
   fakeClient();
@@ -320,32 +363,42 @@ test('duplicate creation and unavailable migrations expose useful errors without
   fakeClient(() => ({ data: 'not-a-community-id', error: null }));
   await assert.rejects(() => groups.createCommunity(draft), /Check your communities before retrying/);
 });
-test('memberships paginate past 500 and community lookup batches 100 IDs without N+1 queries', async () => {
-  const memberships = Array.from({ length: 503 }, (_, i) => ({ community_id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, role: 'member', is_active: true }));
-  const requests = fakeClient((request) => {
-    if (request.table === 'community_members') return { data: request.operations.some((op) => op.name === 'gt') ? memberships.slice(500) : memberships.slice(0, 500), error: null };
-    const ids = request.operations.find((op) => op.name === 'in').args[1];
-    return { data: ids.map((id) => ({ ...group, id, slug: `slug-${id}` })), error: null };
-  });
-  const rows = await groups.listMyCommunities(realId);
-  assert.equal(rows.length, 503); assert.equal(new Set(rows.map((r) => r.id)).size, 503);
-  assert.equal(requests.filter((r) => r.table === 'community_members').length, 2);
-  assert.equal(requests.filter((r) => r.table === 'community_directory').length, 6);
-  for (const request of requests.filter((r) => r.table === 'community_members')) {
-    assert(request.operations.some((op) => op.name === 'eq' && op.args[0] === 'user_id' && op.args[1] === realId));
-    assert(request.operations.some((op) => op.name === 'eq' && op.args[0] === 'is_active' && op.args[1] === true));
-  }
+test('own community browsing requests one bounded server page without supplying an account ID', async () => {
+  const rows = Array.from({ length: 25 }, (_, i) => ({ ...group, slug: `community-${String(i).padStart(3, '0')}` }));
+  const requests = fakeClient(() => ({ data: rows, error: null }));
+  const signal = new AbortController().signal;
+  const result = await groups.listMyCommunitiesPage({ search: ' Canada ', category: 'Study', country: ' Canada ', after: 'before-page', limit: 20000, signal });
+  assert.equal(requests.length, 1); assert.equal(result.communities.length, 24); assert.equal(result.nextCursor, rows[23].slug);
+  assert.equal(requests[0].rpc, 'my_community_directory_page');
+  assert.deepEqual(requests[0].args, { query_text: 'Canada', filter_category: 'Study', filter_country: 'Canada', after_slug: 'before-page', result_limit: 24 });
+  assert.equal(requests[0].operations[0].args[0], signal);
+});
+test('membership lookups read only current page IDs and reject unbounded input', async () => {
+  const ids = Array.from({ length: 25 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
+  const requests = fakeClient(() => ({ data: [{ community_id: ids[0], role: 'member', is_active: true }], error: null }));
+  const rows = await groups.getMembershipsForCommunities(realId, ids.slice(0, 24));
+  assert.equal(rows.length, 1); assert.equal(requests.length, 1);
+  assert.equal(requests[0].table, 'community_members');
+  assert(requests[0].operations.some(op => op.name === 'limit' && op.args[0] === 24));
+  assert(requests[0].operations.some(op => op.name === 'eq' && op.args[0] === 'user_id' && op.args[1] === realId));
+  assert(requests[0].operations.some(op => op.name === 'in' && op.args[0] === 'community_id' && op.args[1].length === 24));
+  await assert.rejects(() => groups.getMembershipsForCommunities(realId, ids), /one page/);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(await groups.getMembershipsForCommunities(realId, []), []); assert.equal(requests.length, 1);
+  const membership = await groups.getMembershipForCommunity(realId, ids[0]);
+  assert.equal(membership.community_id, ids[0]);
+  assert.deepEqual(requests[1].operations.find(op => op.name === 'in').args, ['community_id', [ids[0]]]);
 });
 
-const completeGroupMethods = [...groupMethods, 'communitiesForMemberships'];
+const completeGroupMethods = groupMethods;
 dependencies['@/lib/groups'] = dataUrl(`export {COMMUNITY_CATEGORIES,validateCommunity} from ${JSON.stringify(await compile('../src/lib/groups.ts', { './supabase/client': supabaseStub }))};\n` + completeGroupMethods.map((name) => `export async function ${name}(...args){return globalThis.__communityHarness.invoke(${JSON.stringify(name)},args);}`).join('\n'));
 const { ExploreCommunities } = await import(await compile('../src/components/ExploreCommunities.tsx'));
 function exploreHarness() {
   const h = createHarness();
   h.handlers.listCommunities = async () => ({ communities: [group], nextCursor: null });
-  h.handlers.listMyMemberships = async () => [];
+  h.handlers.getMembershipsForCommunities = async () => [];
   h.handlers.getCommunityById = async () => group;
-  h.handlers.communitiesForMemberships = async (memberships) => memberships.length ? [group] : [];
+  h.handlers.listMyCommunitiesPage = async () => ({ communities: [], nextCursor: null });
   return h;
 }
 function buttonLabel(h, label) {
@@ -362,7 +415,7 @@ test('Explore guest can browse groups and Join leads to login with the correct r
     assert(destinations.includes('/news')); assert(destinations.includes('/tags')); assert(destinations.includes('/c/h1b-careers'));
     buttonLabel(h, 'Join H1B careers').props.onClick();
     assert.deepEqual(h.pushes, ['/login?next=%2Fc%2Fh1b-careers']);
-    assert.equal(h.calls.filter((c) => ['joinCommunity', 'leaveCommunity', 'listMyMemberships'].includes(c.name)).length, 0);
+    assert.equal(h.calls.filter((c) => ['joinCommunity', 'leaveCommunity', 'getMembershipsForCommunities'].includes(c.name)).length, 0);
   } finally { h.close(); }
 });
 test('Explore join and leave update the rendered membership and suppress duplicate in-flight clicks', async () => {
@@ -381,18 +434,18 @@ test('Explore join and leave update the rendered membership and suppress duplica
 });
 test('Explore ownership and membership read failures prevent accidental mutations', async () => {
   const h = exploreHarness();
-  h.handlers.listMyMemberships = async () => [{ community_id: group.id, role: 'owner', is_active: true }];
+  h.handlers.getMembershipsForCommunities = async () => [{ community_id: group.id, role: 'owner', is_active: true }];
   try {
     h.render(ExploreCommunities); await h.settle();
     const owner = byText(h, 'button', 'Owner'); assert.equal(owner.props.disabled, true); owner.props.onClick(); await h.settle();
     assert.equal(h.calls.filter((c) => c.name === 'leaveCommunity').length, 0);
   } finally { h.close(); }
-  const failed = exploreHarness(); failed.handlers.listMyMemberships = async () => { throw new Error('Membership unavailable'); };
+  const failed = exploreHarness(); failed.handlers.getMembershipsForCommunities = async () => { throw new Error('Membership unavailable'); };
   try {
     failed.render(ExploreCommunities); await failed.settle();
     const join = buttonLabel(failed, 'Join H1B careers'); assert.equal(join.props.disabled, true); join.props.onClick();
     assert.equal(failed.calls.filter((c) => c.name === 'joinCommunity').length, 0);
-    failed.handlers.listMyMemberships = async () => [];
+    failed.handlers.getMembershipsForCommunities = async () => [];
     byText(failed, 'button', 'Retry memberships').props.onClick(); failed.render(); await failed.settle();
     assert.equal(buttonLabel(failed, 'Join H1B careers').props.disabled, false);
   } finally { failed.close(); }
@@ -414,7 +467,7 @@ test('Explore My communities uses active memberships and the empty state returns
     h.render(ExploreCommunities); await h.settle();
     byText(h, 'button', 'My communities').props.onClick(); h.render(); await h.settle();
     assert.match(textOf(h.tree), /Find your first community/);
-    assert.equal(h.calls.filter((c) => c.name === 'communitiesForMemberships').length, 1);
+    assert.equal(h.calls.filter((c) => c.name === 'listMyCommunitiesPage').length, 1);
     byText(h, 'button', 'Explore all communities').props.onClick(); h.render(); await h.settle();
     assert.match(textOf(h.tree), /H1B careers/);
   } finally { h.close(); }
@@ -428,6 +481,40 @@ test('Explore ignores an old account mutation after the current account changes'
     oldJoin.resolve(); await h.settle();
     assert(buttonLabel(h, 'Join H1B careers'));
     assert.equal(nodes(h.tree).some((n) => n.type === 'button' && n.props['aria-label'] === 'Leave H1B careers'), false);
+  } finally { h.close(); }
+});
+test('Explore holds one page of cards and reads only visible memberships across thousands of communities', async () => {
+  const h = exploreHarness();
+  h.handlers.listCommunities = async ({ after }) => {
+    const offset = after ? Number(after.split('-')[1]) + 1 : 0;
+    return { communities: Array.from({ length: 24 }, (_, i) => ({ ...group, id: `group-${offset + i}`, slug: `community-${offset + i}`, display_name: `Community ${offset + i}` })), nextCursor: offset + 24 < 10000 ? `community-${offset + 23}` : null };
+  };
+  try {
+    h.render(ExploreCommunities); await h.settle();
+    for (let page = 1; page <= 3; page++) {
+      assert.equal(nodes(h.tree).filter(n => n.type === 'article').length, 24);
+      assert.equal(h.calls.filter(c => c.name === 'getMembershipsForCommunities').at(-1).args[1].length, 24);
+      const next = byText(h, 'button', 'Next communities'); next.props.onClick(); next.props.onClick(); h.render(); await h.settle();
+    }
+    assert.equal(h.calls.filter(c => c.name === 'listCommunities').length, 4);
+    assert.equal(nodes(h.tree).filter(n => n.type === 'article').length, 24);
+    assert.match(textOf(h.tree), /Community 72/); assert.doesNotMatch(textOf(h.tree), /Community 0\s/);
+    byText(h, 'button', 'Previous communities').props.onClick(); h.render(); await h.settle();
+    assert.match(textOf(h.tree), /Community 48/);
+    byText(h, 'button', 'First page').props.onClick(); h.render(); await h.settle();
+    assert.match(textOf(h.tree), /Community 0\s/);
+  } finally { h.close(); }
+});
+test('Explore My communities passes category filters to its bounded page endpoint', async () => {
+  const h = exploreHarness();
+  try {
+    h.render(ExploreCommunities); await h.settle();
+    byText(h, 'button', 'My communities').props.onClick(); h.render(); await h.settle();
+    const category = nodes(h.tree).find(n => n.type === 'select' && n.props['aria-label'] === 'Community category');
+    category.props.onChange({ target: { value: 'Study' } }); h.render(); await h.settle();
+    const request = h.calls.filter(c => c.name === 'listMyCommunitiesPage').at(-1);
+    assert.equal(request.args[0].category, 'Study'); assert.equal(request.args[0].after, null);
+    assert.equal(h.calls.filter(c => c.name === 'listCommunities').length, 1);
   } finally { h.close(); }
 });
 
@@ -539,6 +626,7 @@ const { CommunityPage } = await import(await compile('../src/components/Communit
 const fixtureQuestion = { id: realId, title: 'Which documents should I prepare?', tags: ['documents'], created_at: '2026-10-06T01:00:00Z' };
 function communityPageHarness() {
   const h = exploreHarness();
+  h.handlers.getMembershipForCommunity = async () => null;
   h.handlers.getCommunityBySlug = async () => group;
   h.handlers.listCommunityQuestions = async () => ({ questions: [fixtureQuestion], nextCursor: null });
   return h;
@@ -560,8 +648,9 @@ test('community detail pagination, refresh and tag filters keep the selected com
   h.handlers.listCommunityQuestions = async (_id, options) => ({ questions: options.after ? [{ ...fixtureQuestion, id: otherId }] : [fixtureQuestion], nextCursor: options.after ? null : cursor });
   try {
     h.render(CommunityPage, { slug: group.slug }); await h.settle();
-    byText(h, 'button', 'Load more questions').props.onClick(); h.render(); await h.settle();
-    assert.equal(nodes(h.tree).filter((n) => n.props?.question).length, 2);
+    byText(h, 'button', 'Next questions').props.onClick(); h.render(); await h.settle();
+    assert.equal(nodes(h.tree).filter((n) => n.props?.question).length, 1);
+    assert.equal(nodes(h.tree).find((n) => n.props?.question).props.question.id, otherId);
     assert.deepEqual(h.calls.filter((c) => c.name === 'listCommunityQuestions').at(-1).args[1].after, cursor);
     nodes(h.tree).find((n) => n.props?.question).props.onTagSelect('documents'); h.render(); await h.settle();
     const filterRequest = h.calls.filter((c) => c.name === 'listCommunityQuestions').at(-1);
