@@ -120,6 +120,9 @@ export function CommunityHome() {
     <main className="mx-auto grid max-w-[1500px] md:grid-cols-[155px_minmax(0,1fr)]">
       <nav aria-label="Community sections" className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 p-3 text-sm md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:flex-col md:gap-2 md:border-b-0 md:border-r md:pt-7">
         <Link href="/" aria-current="page" className="flex items-center gap-2 rounded bg-orange-100 px-3 py-2 font-bold text-slate-900"><CircleHelp size={16} /> Questions</Link>
+        <Link href="/explore" className="rounded px-3 py-2 text-slate-600 hover:bg-slate-200">Explore communities</Link>
+        <Link href="/news" className="rounded px-3 py-2 text-slate-600 hover:bg-slate-200">News</Link>
+        <Link href="/communities/new" className="rounded px-3 py-2 font-bold text-teal-700 hover:bg-teal-50">Start a community</Link>
         <Link href="/tags" className="flex items-center gap-2 rounded px-3 py-2 text-slate-600 hover:bg-slate-200"><Tags size={16} /> Tags</Link>
         <Link href="/messages" className="flex items-center gap-2 rounded px-3 py-2 text-slate-600 hover:bg-slate-200"><MessageCircle size={16} /> Messages</Link>
         <p className="mt-7 hidden px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 md:block">VisaFlow community</p>
@@ -230,8 +233,8 @@ export function CommunityHome() {
             <p className="mt-3 text-sm leading-6 text-slate-600">Compare reactions and replies at a glance. Open a post for its full text, available comments, and questions with matching visa topics.</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2"><Users className="text-violet-600" size={19} /><h3 className="font-extrabold text-slate-900">Privacy-aware import</h3></div>
-            <p className="mt-3 text-sm leading-6 text-slate-600">Public discussion text is organized without copying profile photos or exposing account identifiers.</p>
+            <div className="flex items-center gap-2"><Users className="text-violet-600" size={19} /><h3 className="font-extrabold text-slate-900">Connect with the community</h3></div>
+            <p className="mt-3 text-sm leading-6 text-slate-600">Join a discussion or message a registered member. Keep personal documents and application numbers private.</p>
           </div>
           <p className="px-2 text-xs leading-5 text-slate-400">Community posts are personal experiences, not legal advice. Verify important decisions with an official source or qualified professional.</p>
         </aside>

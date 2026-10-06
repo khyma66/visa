@@ -183,6 +183,7 @@ export async function getQuestionPage(options: QuestionPageOptions = {}): Promis
 }
 
 export async function createQuestion(authorId: string, input: NewQuestion): Promise<string> {
+  if (input.community_id && !isSupabaseConfigured) throw new Error('Connect the community service before posting to a group.');
   const tags = normalizeTags([...input.tags, ...inferTags(`${input.title}\n${input.body}`)]);
   const normalizedInput = { ...input, tags };
   if (!isSupabaseConfigured) {
