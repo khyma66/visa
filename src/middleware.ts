@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export function middleware(request: NextRequest) {
+  // Canonicalize before a login starts so PKCE state stays on the same origin.
+  if (request.nextUrl.hostname === 'www.visathreads.com') {
+    const destination = new URL(request.nextUrl.toString());
+    destination.protocol = 'https:';
+    destination.hostname = 'visathreads.com';
+    destination.port = '';
+    return NextResponse.redirect(destination, 308);
+  }
   const production = process.env.APP_ENV === 'production';
   const approved = process.env.PUBLIC_LAUNCH_APPROVED === 'true';
   const sensitive = /^\/(login|signup|account|messages|moderation|ask)(\/|$)/.test(request.nextUrl.pathname);
@@ -32,7 +40,7 @@ export function middleware(request: NextRequest) {
   requestHeaders.set('Content-Security-Policy', csp);
   requestHeaders.set('x-nonce', nonce);
   const response = production && !approved && request.nextUrl.pathname !== '/api/health'
-    ? new NextResponse('VisaFlow is completing its public-launch checks. Please check back later.', {
+    ? new NextResponse('VisaThreads is completing its public-launch checks. Please check back later.', {
       status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '3600', 'Cache-Control': 'no-store' },
     }) : NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('X-Content-Type-Options', 'nosniff');

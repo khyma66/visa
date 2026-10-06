@@ -8,6 +8,7 @@ export const requiredReviews = [
   'bot_and_auth_abuse', 'privacy_requests_and_retention', 'public_takedown_intake',
   'age_and_us_legal_review', 'human_cross_account_tests', 'accessibility_review',
   'dependency_and_security_review', 'incident_response_and_alerts',
+  'versioned_policy_acceptance', 'all_us_jurisdictions_reviewed',
 ];
 
 export function releaseProblems(env, review, config) {

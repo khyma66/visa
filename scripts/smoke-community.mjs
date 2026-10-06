@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { parseEnv } from 'node:util';
 
-const origin = process.argv[2] ?? 'https://visa-central.com';
-assert(['https://visa-central.com','https://visaflow-dev.varunchinna5966.workers.dev'].includes(origin), 'Use an approved preview origin.');
+const origin = process.argv[2] ?? 'https://visathreads.com';
+assert(['https://visathreads.com','https://visaflow-dev.varunchinna5966.workers.dev'].includes(origin), 'Use an approved preview origin.');
 const env = parseEnv(await readFile(new URL('../.env.local',import.meta.url),'utf8'));
 const database = env.NEXT_PUBLIC_SUPABASE_URL;
 assert.equal(database,'https://cycnichledvqbxevrwnt.supabase.co','This read-only smoke test targets the existing project selected for production.');
@@ -42,6 +42,8 @@ assert(tags.length>0 && tags.length<=51);
 for(const tag of tags) assert.equal(Number(tag.question_count),Number(tag.native_count)+Number(tag.archive_count));
 const nonexistent='00000000-0000-4000-8000-000000000000';
 for(const [name,args] of [
+  ['community_post_page',{filter_kind:'question',sort_mode:'newest'}],
+  ['community_post_page',{filter_kind:'experience',filter_category:'Other',filter_visa:'Other',sort_mode:'newest'}],
   ['answer_page',{target_question:nonexistent}],
   ['imported_answer_page',{target_question:'apify-preview-smoke-nonexistent'}],
   ['discover_community',{query_tags:['h1b'],comment_tags:['rfe'],query_text:''}],

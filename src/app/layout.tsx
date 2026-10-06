@@ -3,24 +3,27 @@ import '../styles/globals.css';
 import { AuthProvider } from '@/components/AuthProvider';
 import { SiteHeader } from '@/components/SiteHeader';
 import Link from 'next/link';
+import { PolicyAcceptance } from '@/components/PolicyAcceptance';
+import { SafetyNotice } from '@/components/SafetyNotice';
 
 // A fresh CSP nonce must be attached to each request's streamed script tags.
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: { default: 'VisaFlow — Visa questions, answered', template: '%s · VisaFlow' },
+  metadataBase: new URL('https://visathreads.com'),
+  title: { default: 'VisaThreads — Visa questions, answered', template: '%s · VisaThreads' },
   description: 'Ask visa questions with a public pseudonym, find similar cases, share experiences, and message other community members.',
   icons: { icon: '/favicon.svg' },
   keywords: 'visa questions, immigration community, pseudonymous visa discussions, visa answers',
-  authors: [{ name: 'VisaFlow' }],
+  authors: [{ name: 'VisaThreads' }],
   openGraph: {
     type: 'website',
-    title: 'VisaFlow — Visa questions, answered',
+    title: 'VisaThreads — Visa questions, answered',
     description: 'Pseudonymous visa Q&A and access-controlled community messaging.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'VisaFlow — Visa questions, answered',
+    title: 'VisaThreads — Visa questions, answered',
     description: 'Pseudonymous visa Q&A and access-controlled community messaging.',
   },
 };
@@ -35,14 +38,16 @@ export default function RootLayout({
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
         <AuthProvider>
           <SiteHeader />
-          {process.env.NEXT_PUBLIC_APP_ENV !== 'production' && <div role="note" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-900">Early preview · Please do not share identity documents or sensitive personal details.</div>}
-          <div id="main-content" tabIndex={-1}>{children}</div>
+          <div id="main-content" tabIndex={-1}><PolicyAcceptance>{children}</PolicyAcceptance></div>
           <footer className="site-shell border-t border-slate-200 bg-white py-6 text-xs leading-6 text-slate-500">
-            VisaFlow is a peer community, not a government service or legal adviser. Public usernames are pseudonyms, not a guarantee of anonymity.{' '}
-            <Link href="/community-safety" className="font-bold text-teal-700 underline">Community safety</Link>
+            {process.env.NEXT_PUBLIC_APP_ENV !== 'production' && <p role="note" className="mb-2 font-semibold text-slate-700">Early preview · Not open for general public signup.</p>}
+            <SafetyNotice />
             <nav aria-label="Policies and support" className="mt-2 flex flex-wrap gap-x-4">
               <Link href="/privacy" className="underline">Preview privacy notice</Link>
               <Link href="/terms" className="underline">Community rules</Link>
+              <Link href="/cookies" className="underline">Cookies and storage</Link>
+              <Link href="/privacy-choices" className="underline">Your privacy choices</Link>
+              <Link href="/countries" className="underline">Country communities</Link>
               <Link href="/contact" className="underline">Reporting and privacy requests</Link>
             </nav>
           </footer>

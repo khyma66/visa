@@ -24,12 +24,64 @@ test('email request and verification use passwordless APIs with no password', as
     verifyOtp: async args => { calls.push(args); return { data: { session: { user: {} } }, error: null }; },
   } };
   await flow.requestEmailCode(client, ' test@example.invalid ', 'https://visaflow.example/login');
-  assert.deepEqual(calls[0], { email: 'test@example.invalid', options: { shouldCreateUser: true, emailRedirectTo: 'https://visaflow.example/login' } });
+  assert.deepEqual(calls[0], { email: 'test@example.invalid', options: { shouldCreateUser: false, emailRedirectTo: 'https://visaflow.example/login' } });
   await flow.verifyEmailCode(client, ' test@example.invalid ', ' 123456 ');
   assert.deepEqual(calls[1], { email: 'test@example.invalid', token: '123456', type: 'email' });
   for (const code of ['', '12345', '12345678901', 'abcdef']) await assert.rejects(() => flow.verifyEmailCode(client, 'test@example.invalid', code), e => e.code === 'invalid_code');
   assert.equal(calls.length, 2);
   await assert.rejects(() => flow.verifyEmailCode({ auth: { verifyOtp: async () => ({ data: { session: null }, error: null }) } }, 'a@b.invalid', '123456'), /Session missing/);
+});
+
+test('email signup stores only trimmed private name metadata and supports a single name', async () => {
+  const calls=[];
+  const client={auth:{signInWithOtp:async input=>{calls.push(input);return {error:null};}}};
+  await flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,{firstName:'  Ada  ',lastName:'  Lovelace  ',role:'admin'});
+  assert.deepEqual(calls[0],{
+    email:'new@example.invalid',
+    options:{shouldCreateUser:true,emailRedirectTo:'https://visathreads.com/login',data:{first_name:'Ada',last_name:'Lovelace'}},
+  });
+  await flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,{firstName:'  李  '});
+  assert.deepEqual(calls[1].options.data,{first_name:'李',last_name:''});
+  await flow.requestEmailCode(client,'existing@example.invalid','https://visathreads.com/login',false,{firstName:'Unrelated',lastName:'Name'});
+  assert.equal(calls[2].options.shouldCreateUser,false);
+  assert(!Object.hasOwn(calls[2].options,'data'),'Signing in must not update a member’s private name');
+  for(const firstName of ['Anne-Marie','O’Connor','Mary Jane','محمد','E\u0301lodie']) {
+    await flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,{firstName});
+    assert.equal(calls.at(-1).options.data.first_name,firstName.normalize('NFC'));
+  }
+});
+
+test('email signup validates names before any network request without applying name requirements to login', async () => {
+  let calls=0;
+  const client={auth:{signInWithOtp:async()=>{calls++;return {error:null};}}};
+  for(const names of [undefined,{firstName:''},{firstName:'   '},{firstName:'123'},{firstName:'123John'},{firstName:'alice@example.test'},{firstName:'@John'},{firstName:'-John'},{firstName:'<John>'},{firstName:'😀John'},{firstName:'x'.repeat(81)},{firstName:'A\u0000da'}]) {
+    await assert.rejects(()=>flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,names),error=>error.code==='invalid_first_name');
+  }
+  for(const lastName of ['x'.repeat(81),'Lo\u0000ve']) {
+    await assert.rejects(()=>flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,{firstName:'Ada',lastName}),error=>error.code==='invalid_last_name');
+  }
+  assert.equal(calls,0);
+  await flow.requestEmailCode(client,'existing@example.invalid','https://visathreads.com/login');
+  assert.equal(calls,1);
+  assert.match(flow.authErrorMessage({code:'invalid_first_name'}),/first name/);
+  assert.match(flow.authErrorMessage({code:'invalid_last_name'}),/leave it blank/);
+});
+
+test('phone request and verification use sms otp APIs', async () => {
+  const calls = [];
+  const client = { auth: {
+    signInWithOtp: async args => { calls.push(args); return { error: null }; },
+    verifyOtp: async args => { calls.push(args); return { data: { session: { user: {} } }, error: null }; },
+  } };
+  await flow.requestPhoneCode(client, ' +1 (555) 123-4567 ', { google: false, phone: true });
+  assert.deepEqual(calls[0], { phone: '+15551234567', options: { shouldCreateUser: false } });
+  await flow.verifyPhoneCode(client, '+15551234567', ' 123456 ');
+  assert.deepEqual(calls[1], { phone: '+15551234567', token: '123456', type: 'sms' });
+  await flow.requestPhoneCode(client, '+15551234567', { google: false, phone: true }, true);
+  assert.deepEqual(calls[2], { phone: '+15551234567', options: { shouldCreateUser: true } });
+  await assert.rejects(() => flow.requestPhoneCode(client, '+15551234567', { google: false, phone: false }), e => e.code === 'phone_provider_disabled');
+  for (const phone of ['', '5551234567', '+0123', '+1555']) assert.throws(() => flow.normalizePhone(phone));
+  for (const code of ['', '12345', '12345678901', 'abcdef']) await assert.rejects(() => flow.verifyPhoneCode(client, '+15551234567', code), e => e.code === 'invalid_code');
 });
 
 test('disabled and unapproved social providers never initiate OAuth', async () => {
@@ -42,6 +94,7 @@ test('disabled and unapproved social providers never initiate OAuth', async () =
   await flow.startSocialSignIn(client, 'google', { google: true }, 'https://visaflow.example/login');
   assert.deepEqual(calls.map(c => c.provider), ['google']);
   assert(calls.every(c => c.options.redirectTo === 'https://visaflow.example/login'));
+  assert(calls.every(c => c.options.queryParams?.prompt === 'select_account'), 'Google must ask which account to use even when a browser already has a Google session');
 });
 
 test('friendly errors never echo raw backend messages', () => {
@@ -59,6 +112,8 @@ test('code template and screen keep branding and security boundaries', async () 
   assert(!form.includes('Continue with Apple'));
   assert(!form.includes('Discuss visa experiences with a public pseudonym.'));
   assert(form.includes('autoComplete="one-time-code"'));
+  assert(form.includes('Phone number'));
+  assert(form.includes('Continue with Google'));
   assert(form.includes('role="alert"'));
   assert(form.includes('setCooldown(60)'));
   assert(form.includes('safeAuthNext'));

@@ -55,7 +55,7 @@ test('account switch immediately clears prior profile and discards late profile 
   reads.get('alice')({id:'alice',username:'alice-profile'}); await tick();
   assert.equal(states.at(-1).profile.id,'bob');
   sync.event(null);
-  assert.deepEqual(states.at(-1),{user:null,profile:null,loading:false});
+  assert.deepEqual(states.at(-1),{user:null,profile:null,loading:false,profileLoading:false});
   sync.initial(user('alice')); await tick();
   assert.equal(states.at(-1).user,null);
   sync.stop();
@@ -71,7 +71,125 @@ test('auth cleanup cancels deferred reads and ignores pending reads; failed read
   finish({id:'alice'}); await tick(); assert.equal(states.length,1);
   const failed=createAuthSessionSync((s)=>states.push(s),async()=>{throw new Error('offline');});
   failed.initial(user('alice')); await tick(); await tick();
-  assert.equal(states.at(-1).loading,false); assert.equal(states.at(-1).profile,null); failed.stop();
+  assert.equal(states.at(-1).loading,false); assert.equal(states.at(-1).profile,null);
+  assert.equal(states.at(-1).profileLoading,false,'A failed read must leave profile loading so the UI can offer retry'); failed.stop();
+});
+
+test('session readiness never waits for profile and repeated identity events do not refetch or hide the UI', async () => {
+  const states=[]; let reads=0, finish;
+  const sync=createAuthSessionSync(state=>states.push(state),()=>{
+    reads++;
+    return new Promise(resolve=>{finish=resolve;});
+  });
+  try {
+    sync.initial(user('alice'));
+    assert.deepEqual(states.at(-1),{user:user('alice'),profile:null,loading:false,profileLoading:true});
+    assert.equal(reads,0,'Profile reads remain outside the auth-event callback');
+    sync.event(user('alice')); await tick();
+    assert.equal(reads,1);
+    const pendingStates=states.length;
+    sync.event(user('alice')); sync.event(user('alice')); await tick();
+    assert.equal(states.length,pendingStates);
+    assert.equal(reads,1,'Focus and token refresh must reuse the pending profile request');
+    assert.equal(states.at(-1).profileLoading,true);
+    finish({id:'alice',username:'alice-profile'}); await tick();
+    const settledStates=states.length;
+    sync.event(user('alice')); await tick();
+    assert.equal(states.length,settledStates);
+    assert.equal(reads,1,'Focus and token refresh must reuse the loaded profile');
+    assert.equal(states.at(-1).profile.username,'alice-profile');
+    assert.equal(states.at(-1).profileLoading,false);
+    assert(states.every(state=>state.loading===false),'A known identity must never return to auth loading');
+  } finally { sync.stop(); }
+});
+
+test('same-account contact updates survive a profile read already in flight', async () => {
+  const states=[]; let finish;
+  const sync=createAuthSessionSync(state=>states.push(state),()=>new Promise(resolve=>{finish=resolve;}));
+  try {
+    sync.event({id:'alice',email:'old@example.invalid'}); await tick();
+    sync.event({id:'alice',email:'new@example.invalid'});
+    assert.equal(states.at(-1).user.email,'new@example.invalid');
+    finish({id:'alice',username:'alice-profile'}); await tick();
+    assert.equal(states.at(-1).user.email,'new@example.invalid','A stale profile completion must not restore stale identity details');
+    assert.equal(states.at(-1).profile.id,'alice');
+  } finally { sync.stop(); }
+});
+
+test('explicit profile refresh updates the current profile without blocking session readiness', async () => {
+  const states=[], pending=[];
+  const sync=createAuthSessionSync(state=>states.push(state),id=>new Promise(resolve=>pending.push({id,resolve})));
+  try {
+    sync.event(user('alice')); await tick();
+    pending.shift().resolve({id:'alice',username:'original'}); await tick();
+    const first=sync.refresh();
+    const older=pending.shift();
+    assert.equal(states.at(-1).loading,false);
+    assert.equal(states.at(-1).profileLoading,true);
+    assert.equal(states.at(-1).profile.username,'original','Keep the current profile visible while refreshing');
+    const second=sync.refresh();
+    const latest=pending.shift();
+    latest.resolve({id:'alice',username:'latest'}); await second;
+    assert.equal(states.at(-1).profileLoading,false);
+    older.resolve({id:'alice',username:'stale'}); await first;
+    assert.equal(states.at(-1).profile.username,'latest','An older refresh must not replace a newer one');
+    const mismatched=sync.refresh();
+    pending.shift().resolve({id:'bob',username:'wrong-account'}); await mismatched;
+    assert.equal(states.at(-1).profile,null,'Never display another account’s profile');
+    assert.equal(states.at(-1).profileLoading,false);
+    assert(states.every(state=>state.loading===false));
+  } finally { sync.stop(); }
+});
+
+test('profile refresh failure is retryable and does not erase the current identity', async () => {
+  const states=[]; let shouldFail=false;
+  const sync=createAuthSessionSync(state=>states.push(state),async id=>{
+    if(shouldFail) throw new Error('temporary network failure');
+    return {id,username:'current'};
+  });
+  try {
+    sync.event(user('alice')); await tick();
+    shouldFail=true;
+    await assert.rejects(()=>sync.refresh(),/temporary network failure/);
+    assert.equal(states.at(-1).user.id,'alice');
+    assert.equal(states.at(-1).profile.username,'current');
+    assert.equal(states.at(-1).loading,false);
+    assert.equal(states.at(-1).profileLoading,false,'A failed refresh must settle so it can be retried');
+    shouldFail=false;
+    await sync.refresh();
+    assert.equal(states.at(-1).profile.username,'current');
+  } finally { sync.stop(); }
+});
+
+test('late refreshes cannot restore a signed-out or switched account', async () => {
+  for(const action of ['logout','switch','stop']) {
+    const states=[], pending=[];
+    const sync=createAuthSessionSync(state=>states.push(state),id=>new Promise(resolve=>pending.push({id,resolve})));
+    try {
+      sync.event(user('alice')); await tick();
+      pending.shift().resolve({id:'alice',username:'original'}); await tick();
+      const refresh=sync.refresh();
+      const stale=pending.shift();
+      if(action==='stop') sync.stop();
+      else sync.event(action==='logout'?null:user('bob'));
+      if(action==='switch') {
+        assert.equal(states.at(-1).profile,null);
+        await tick();
+        const current=pending.shift();
+        assert.equal(current.id,'bob');
+        current.resolve({id:'bob',username:'bob-profile'}); await tick();
+      }
+      const count=states.length;
+      stale.resolve({id:'alice',username:'must-not-return'}); await refresh;
+      assert.equal(states.length,count,`Stale refresh published after ${action}`);
+      if(action==='logout') {
+        assert.deepEqual(states.at(-1),{user:null,profile:null,loading:false,profileLoading:false});
+        await sync.refresh();
+        assert.equal(pending.length,0,'Signed-out refresh must not fetch a profile');
+      }
+      if(action==='switch') assert.equal(states.at(-1).profile.id,'bob');
+    } finally { sync.stop(); }
+  }
 });
 
 test('account UI is keyed by identity and rejects mismatched returned profiles', async () => {

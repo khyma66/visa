@@ -13,7 +13,6 @@ import type { Conversation, DirectMessage } from '@/lib/types';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 import { ReportButton } from './ReportButton';
-import { SafetyNotice } from './SafetyNotice';
 import { subscribeLive, type LiveStatus } from '@/lib/realtime';
 
 export function MessagesClient({ recipientUsername = '', recipientMemberId = '' }: { recipientUsername?: string; recipientMemberId?: string }) {
@@ -39,6 +38,8 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   const [inboxOlderLoading, setInboxOlderLoading] = useState(false);
   const [historyNotice, setHistoryNotice] = useState('');
   const [inboxNotice, setInboxNotice] = useState('');
+  const [inboxLoading, setInboxLoading] = useState(true);
+  const [inboxError, setInboxError] = useState('');
   const inboxRef = useRef(conversations);
   inboxRef.current = conversations;
   const messageRef = useRef(messages);
@@ -54,6 +55,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   const openConversation = useCallback((conversation: Conversation, selectFolder = true) => {
     // Invalidate any inbox response captured before this explicit selection.
     ++inboxGeneration.current;
+    setInboxLoading(false);
     if (activeRef.current !== conversation.id) {
       ++messageGeneration.current;
       messageRef.current = [];
@@ -70,28 +72,33 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
 
   const loadInbox = useCallback(async (selectedId = activeRef.current) => {
     const generation = ++inboxGeneration.current;
-    const previous = inboxRef.current;
-    const result = await refreshConversations(previous);
-    const selected = selectedId ? result.conversations.find((row) => row.id === selectedId) ?? await getConversation(selectedId) : null;
-    if (generation !== inboxGeneration.current) return;
-    const rows = result.conversations;
-    inboxRef.current = rows;
-    setConversations(rows);
-    if (activeRef.current === selectedId) {
-      setSelectedConversation(selected);
-    }
-    if (previous.length > 50) setInboxNotice('Inbox updated. Earlier conversations remain available below; your open chat is unchanged.');
-    if (result.reset) setInboxHasOlder(result.hasOlder);
-    if (!activeRef.current) {
-      const first = rows.find((r) => !r.request_status || r.request_status === 'accepted');
-      if (first) openConversation(first, false);
+    setInboxLoading(true); setInboxError('');
+    try {
+      const previous = inboxRef.current;
+      const result = await refreshConversations(previous);
+      const selected = selectedId ? result.conversations.find((row) => row.id === selectedId) ?? await getConversation(selectedId) : null;
+      if (generation !== inboxGeneration.current) return;
+      const rows = result.conversations;
+      inboxRef.current = rows;
+      setConversations(rows);
+      if (activeRef.current === selectedId) setSelectedConversation(selected);
+      if (previous.length > 50) setInboxNotice('Inbox updated. Load earlier conversations to see more; your open chat is unchanged.');
+      if (result.reset) setInboxHasOlder(result.hasOlder);
+      if (!activeRef.current) {
+        const first = rows.find((r) => !r.request_status || r.request_status === 'accepted');
+        if (first) openConversation(first, false);
+      }
+    } catch {
+      if (generation === inboxGeneration.current) setInboxError('We couldn’t load your conversations. Please try again.');
+    } finally {
+      if (generation === inboxGeneration.current) setInboxLoading(false);
     }
   }, [openConversation, user?.id]);
 
   useEffect(() => {
     if (!user) return;
-    void loadInbox().catch((reason: Error) => setError(reason.message));
-    return subscribeLive([`inbox:${user.id}`], () => { void loadInbox().catch((reason: Error) => setError(reason.message)); });
+    void loadInbox();
+    return subscribeLive([`inbox:${user.id}`], () => { void loadInbox(); });
   }, [loadInbox, user]);
 
   useEffect(() => {
@@ -223,7 +230,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   }
 
   async function olderConversations() {
-    if (inboxOlderLoading || !conversations.length) return;
+    if (inboxLoading || inboxOlderLoading || !conversations.length) return;
     const generation = ++inboxGeneration.current;
     setInboxOlderLoading(true);
     try {
@@ -238,18 +245,22 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   }
 
   if (loading) return <main className="mx-auto max-w-6xl p-8">Loading messages…</main>;
-  if (!user) return <main className="mx-auto max-w-xl px-4 py-20 text-center"><Lock className="mx-auto text-teal-700" size={34} /><h1 className="mt-4 text-3xl font-black">Your community inbox</h1><p className="mt-3 text-slate-600">Log in to see conversations for your account.</p><SafetyNotice kind="messaging" /><Link href={messageLoginHref(recipientUsername, recipientMemberId)} className="mt-6 inline-block rounded-lg bg-teal-700 px-5 py-3 font-bold text-white">Log in</Link></main>;
+  if (!user) return <main className="mx-auto max-w-xl px-4 py-20 text-center"><Lock className="mx-auto text-teal-700" size={34} /><h1 className="mt-4 text-3xl font-black">Your community inbox</h1><p className="mt-3 text-slate-600">Log in to see conversations for your account.</p><Link href={messageLoginHref(recipientUsername, recipientMemberId)} className="mt-6 inline-block rounded-lg bg-teal-700 px-5 py-3 font-bold text-white">Log in</Link></main>;
 
   const active = conversations.find((item) => item.id === activeId) ?? (selectedConversation?.id === activeId ? selectedConversation : null);
   const incoming = (c: Conversation) => conversationFolder(c, user.id) === 'requests';
   const closed = (c: Conversation) => conversationFolder(c, user.id) === 'closed';
   const visible = conversations.filter((c) => tab === 'requests' ? incoming(c) : tab === 'closed' ? closed(c) : !incoming(c) && !closed(c));
   const canSend = canSendToConversation(active, user.id, messages, messagesLoading);
+  const emptyFolder = {
+    chats: { title: 'No chats yet', description: 'Start a request using a member’s public username.' },
+    requests: { title: 'No message requests', description: 'New chat requests from other members appear here.' },
+    closed: { title: 'No closed conversations', description: 'Declined or blocked conversations appear here.' },
+  }[tab];
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-bold uppercase tracking-wider text-teal-700">Private conversations</p><h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">Messages</h1></div><p className="flex items-center gap-1.5 text-xs text-slate-500"><Lock size={13} /> Participant-only access. Reported messages may be reviewed by moderators.</p></div>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-bold uppercase tracking-wider text-teal-700">Private conversations</p><h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">Messages</h1></div><p className="flex items-center gap-1.5 text-xs text-slate-500"><Lock size={13} /> Participant-only inbox · Not end-to-end encrypted.</p></div>
       {demoMode && <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Development preview: sample conversations are saved in this browser. Real accounts across devices require the community database.</p>}
-      <SafetyNotice kind="messaging" />
       <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:h-[700px] md:grid-cols-[330px_minmax(0,1fr)]">
         <aside className="border-b border-slate-200 md:border-b-0 md:border-r">
           <form onSubmit={begin} className="border-b border-slate-200 p-4">
@@ -257,15 +268,15 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
             <div className="mt-2 flex gap-2"><input aria-label="Recipient public username" value={recipient} onChange={(event) => { setRecipient(event.target.value); setLinkedRecipientId(''); setResolvedRecipient(null); setError(''); }} disabled={acting || resolvingRecipient} maxLength={34} required placeholder="public username" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 disabled:bg-slate-100" /><button disabled={acting || resolvingRecipient || !recipient.trim()} className="grid w-10 place-items-center rounded-lg bg-slate-900 text-white disabled:opacity-40" aria-label={acting ? 'Opening conversation' : 'Start conversation'}><Plus size={17} /></button></div>
             <p role="status" className="mt-2 text-xs text-slate-500">{resolvingRecipient ? 'Finding this community member…' : resolvedRecipient ? `Member found: u/${resolvedRecipient.username}. Start a request or continue your existing conversation.` : 'Enter a member’s public username. They decide whether to accept your request.'}</p>
           </form>
-          <nav aria-label="Message folders" className="flex gap-2 border-b p-3">{(['chats', 'requests', 'closed'] as const).map((item) => <button key={item} onClick={() => setTab(item)} aria-pressed={tab === item} className={`rounded-full px-3 py-2 text-xs font-bold capitalize ${tab === item ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{item}{item === 'requests' ? ` (${conversations.filter(incoming).length}${inboxHasOlder ? '+' : ''})` : ''}</button>)}</nav>
-          <div className="max-h-[530px] overflow-y-auto">{visible.map((conversation) => (
+          <nav aria-label="Message folders" className="flex gap-2 border-b p-3">{(['chats', 'requests', 'closed'] as const).map((item) => <button key={item} onClick={() => { ++navigationGeneration.current; setTab(item); }} aria-pressed={tab === item} className={`rounded-full px-3 py-2 text-xs font-bold capitalize ${tab === item ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{item}{item === 'requests' ? ` (${conversations.filter(incoming).length}${inboxHasOlder ? '+' : ''})` : ''}</button>)}</nav>
+          <div aria-busy={inboxLoading} className="max-h-[530px] overflow-y-auto">{inboxLoading && <p role="status" className="p-4 text-center text-sm text-slate-500">{conversations.length ? 'Updating inbox…' : 'Loading conversations…'}</p>}{inboxError && <div role="alert" className="p-4 text-sm text-rose-700"><p>{inboxError}</p><button onClick={() => void loadInbox()} disabled={inboxLoading} className="mt-2 font-bold underline disabled:opacity-50">Retry inbox</button></div>}{visible.map((conversation) => (
             <button key={conversation.id} onClick={() => openConversation(conversation)} className={`flex w-full gap-3 border-b border-slate-100 p-4 text-left transition ${activeId === conversation.id ? 'bg-teal-50' : 'hover:bg-slate-50'}`}>
               <Avatar seed={conversation.other_avatar_seed} />
-              <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><b className="truncate text-sm text-slate-900">u/{conversation.other_username}</b>{conversation.unread_count > 0 && <span className="ml-auto rounded-full bg-teal-700 px-2 py-0.5 text-[10px] font-bold text-white">{conversation.unread_count}</span>}</span><span className="mt-1 block truncate text-xs text-slate-500">{conversation.last_message ?? 'Start the conversation'}</span></span>
+              <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><b className="truncate text-sm text-slate-900">u/{conversation.other_username}</b>{conversation.unread_count > 0 && <span className="ml-auto rounded-full bg-teal-700 px-2 py-0.5 text-xs font-bold text-white">{conversation.unread_count}</span>}</span><span className="mt-1 block truncate text-xs text-slate-500">{conversation.last_message ?? 'Start the conversation'}</span></span>
             </button>
-          ))}{visible.length === 0 && <p className="p-6 text-center text-sm text-slate-500">No {tab} in the loaded conversations.</p>}
+          ))}{!inboxLoading && !inboxError && visible.length === 0 && <div className="p-6 text-center text-sm text-slate-500"><p className="font-semibold">{inboxHasOlder ? `No ${tab === 'requests' ? 'message requests' : tab === 'closed' ? 'closed conversations' : 'chats'} on this page` : emptyFolder.title}</p><p className="mt-1 text-xs">{inboxHasOlder ? 'Load earlier conversations to check this folder’s older history.' : emptyFolder.description}</p></div>}
           {inboxNotice && <p role="status" className="px-4 pt-3 text-xs text-slate-500">{inboxNotice}</p>}
-          {inboxHasOlder && <button onClick={() => void olderConversations()} disabled={inboxOlderLoading} className="w-full p-4 text-sm font-bold text-teal-700">{inboxOlderLoading ? 'Loading…' : 'Load earlier conversations'}</button>}</div>
+          {inboxHasOlder && <button onClick={() => void olderConversations()} disabled={inboxLoading || inboxOlderLoading} className="w-full p-4 text-sm font-bold text-teal-700 disabled:opacity-50">{inboxOlderLoading ? 'Loading…' : 'Load earlier conversations'}</button>}</div>
         </aside>
         <section className="flex h-[600px] min-h-0 flex-col md:h-auto">
           {active ? <>
@@ -277,7 +288,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
               {messages.map((message) => {
               const mine = message.sender_id === user.id;
               return <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}><div className="max-w-[78%]">
-                <div className={`rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${mine ? 'rounded-br-md bg-teal-700 text-white' : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'}`}><p className="whitespace-pre-wrap break-words">{message.body}</p><p className={`mt-1 text-[10px] ${mine ? 'text-teal-100' : 'text-slate-400'}`}>{formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}{mine ? ` · ${message.read_at ? 'Read' : 'Sent'}` : ''}</p></div>
+                <div className={`rounded-2xl px-4 py-3 text-base leading-normal shadow-sm ${mine ? 'rounded-br-md bg-teal-700 text-white' : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'}`}><p className="whitespace-pre-wrap break-words">{message.body}</p><p className={`mt-1 text-xs ${mine ? 'text-teal-100' : 'text-slate-500'}`}>{formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}{mine ? ` · ${message.read_at ? 'Read' : 'Sent'}` : ''}</p></div>
                 {!mine && <ReportButton kind="message" target={message.id} />}
               </div></div>;
             })}<div ref={endRef} /></div>

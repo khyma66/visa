@@ -97,6 +97,15 @@ test('production stays closed unless approved; private pages remain uncached and
   }
 });
 
+test('www canonicalization preserves the destination on the owned VisaThreads domain', async () => {
+  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } }');
+  const source = transpile(await readFile(new URL('../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub));
+  const { middleware } = await import(moduleUrl(source));
+  const response = middleware({nextUrl:new URL('https://www.visathreads.com/login?next=%2Fmessages')});
+  assert.equal(response.status,308);
+  assert.equal(response.headers.get('location'),'https://visathreads.com/login?next=%2Fmessages');
+});
+
 test('import source selects only successful runs and stays disabled in production', async () => {
   const stub=moduleUrl('export class NextResponse extends Response {}');
   const tags=moduleUrl(transpile(await readFile(new URL('../src/lib/tagging.ts',import.meta.url),'utf8')));

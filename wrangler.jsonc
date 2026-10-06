@@ -33,7 +33,10 @@
     "development": {
       "name": "visaflow-dev",
       "workers_dev": true,
-      "routes": [{ "pattern": "visa-central.com", "custom_domain": true }],
+      "routes": [
+        { "pattern": "visathreads.com", "custom_domain": true },
+        { "pattern": "www.visathreads.com", "custom_domain": true }
+      ],
       "vars": {
         "APP_ENV": "development",
         "COMMUNITY_SOURCE_MODE": "snapshot",

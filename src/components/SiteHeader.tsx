@@ -2,14 +2,15 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
-import { CircleHelp, LogOut, MessageCircle, Plus, ShieldCheck } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Activity, ChevronDown, CircleHelp, LogOut, MessageCircle, Plus, Settings, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const { profile, user, demoMode, signOut } = useAuth();
+  const router = useRouter();
+  const { profile, user, loading, profileLoading, demoMode, signOut, refreshProfile } = useAuth();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -23,13 +24,13 @@ export function SiteHeader() {
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
   }, [open]);
-  async function logout() {
+  async function logout(switchAccount = false) {
     if (busy) return;
     setBusy(true); setError('');
-    try { await signOut(); setOpen(false); } catch { setError('Sign out failed. Please try again.'); }
+    try { await signOut(); setOpen(false); router.replace(switchAccount ? '/login' : '/'); } catch { setError('Sign out failed. Please try again.'); }
     finally { setBusy(false); }
   }
-  const active = (path: string) => pathname === path ? 'text-slate-950 bg-slate-100' : 'text-slate-600 hover:text-slate-950 hover:bg-slate-50';
+  const active = (path: string) => (pathname === path || (path === '/experiences' && pathname.startsWith('/experiences/'))) ? 'text-slate-950 bg-slate-100' : 'text-slate-600 hover:text-slate-950 hover:bg-slate-50';
 
   return (
     <header className="sticky top-0 z-50 border-b border-t-[3px] border-b-slate-200 border-t-orange-500 bg-white/95 backdrop-blur">
@@ -37,14 +38,13 @@ export function SiteHeader() {
       <div className="site-shell flex h-16 items-center gap-2 sm:gap-3">
         <Link href="/" className="mr-auto flex items-center gap-2 text-lg font-extrabold tracking-tight text-slate-950">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-teal-700 text-white"><CircleHelp size={21} /></span>
-          <span>Visa<span className="text-teal-700">Flow</span></span>
+          <span>Visa<span className="text-teal-700">Threads</span></span>
         </Link>
         <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
           <Link href="/" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/')}`}>Questions</Link>
-          <Link href="/explore" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/explore')}`}>Explore</Link>
-          <Link href="/news" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/news')}`}>News</Link>
           <Link href="/tags" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/tags')}`}>Tags</Link>
           <Link href="/messages" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/messages')}`}>Messages</Link>
+          <Link href="/experiences" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/experiences')}`}>Experience</Link>
         </nav>
         {demoMode && (
           <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 sm:flex">
@@ -54,18 +54,31 @@ export function SiteHeader() {
         <Link href="/ask" aria-label="Ask a question" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-teal-800">
           <Plus size={16} /> <span className="hidden sm:inline">Ask</span>
         </Link>
-        {user ? (
+        {loading ? <span role="status" aria-label="Checking account" className="h-10 w-10 animate-pulse rounded-full bg-slate-100" /> : user ? (
           <div ref={accountRef} className="relative">
             <button ref={accountButton} onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="account-panel" className="flex min-h-10 items-center gap-2 rounded-full p-1 hover:bg-slate-100" aria-label={`Account: ${profile?.username ?? 'Signed in'}`}>
               <Avatar seed={profile?.avatar_seed ?? user.id} />
+              <ChevronDown size={14} aria-hidden="true" className="mr-1 text-slate-500" />
             </button>
             {open && <div id="account-panel" className="absolute right-0 top-12 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Public pseudonym</p>
-              <p className="mt-1 font-bold text-slate-900">{profile ? `u/${profile.username}` : 'Setting up your profile…'}</p>
-              <p className="text-xs text-slate-500">{profile?.reputation ?? 0} reputation · email not displayed</p>
-              <Link href="/communities/new" className="mt-3 block rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Start a community</Link>
-              <Link href="/messages" className="mt-1 flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><MessageCircle size={16} /> Messages</Link>
-              {!demoMode && <button disabled={busy} onClick={() => void logout()} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><LogOut size={16} /> {busy ? 'Signing out…' : 'Sign out'}</button>}
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Your account</p>
+              <p className="mt-1 break-words font-bold text-slate-900">{profile ? `u/${profile.username}` : 'Signed in'}</p>
+              <p className="text-xs text-slate-500">{profile ? `${profile.reputation} reputation` : 'Private account menu'}</p>
+              {user.email && <p className="mt-2 break-all text-xs text-slate-600">{user.email}<span className="mt-1 block text-slate-400">Sign-in email · visible only to you</span></p>}
+              {!profile && (profileLoading ? <p role="status" className="mt-2 text-xs text-slate-500">Loading profile…</p> : <button className="mt-2 text-xs text-teal-700 underline" onClick={() => { void refreshProfile().catch(() => setError('Couldn’t load your profile. Try again.')); }}>Reload profile</button>)}
+              <nav aria-label="Account options" className="mt-3 border-y border-slate-100 py-2" onClick={() => setOpen(false)}>
+                {[
+                  ['/account?tab=profile', 'My profile', UserRound],
+                  ['/account?tab=activity', 'My activity', Activity],
+                  ['/account?tab=settings', 'Edit profile & settings', Settings],
+                  ['/messages', 'Messages', MessageCircle],
+                  ['/privacy-choices', 'Privacy & account help', ShieldCheck],
+                ].map(([href, label, Icon]) => { const ItemIcon = Icon as typeof UserRound; return <Link key={href as string} href={href as string} className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><ItemIcon size={16} aria-hidden="true" />{label as string}</Link>; })}
+              </nav>
+              {!demoMode && <div className="mt-2">
+                <button disabled={busy} onClick={() => void logout(true)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><UsersRound size={16} /> Use a different account</button>
+                <button disabled={busy} onClick={() => void logout()} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><LogOut size={16} /> {busy ? 'Signing out…' : 'Sign out'}</button>
+              </div>}
               {error && <p role="alert" className="mt-2 text-xs text-rose-700">{error}</p>}
             </div>}
           </div>
@@ -73,8 +86,8 @@ export function SiteHeader() {
           <Link href="/login" className="rounded-lg px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100">Log in</Link>
         )}
       </div>
-      <nav aria-label="Mobile navigation" className="grid grid-cols-5 border-t border-slate-100 px-4 py-1 md:hidden">
-        {[['/', 'Questions'], ['/explore', 'Explore'], ['/news', 'News'], ['/tags', 'Tags'], ['/messages', 'Messages']].map(([path, label]) => <Link key={path} href={path} aria-current={pathname === path ? 'page' : undefined} className={`rounded-lg px-2 py-3 text-center text-xs font-bold ${active(path)}`}>{label}</Link>)}
+      <nav aria-label="Mobile navigation" className="grid grid-cols-4 border-t border-slate-100 px-4 py-1 md:hidden">
+        {[['/', 'Questions'], ['/tags', 'Tags'], ['/messages', 'Messages'], ['/experiences', 'Experience']].map(([path, label]) => <Link key={path} href={path} aria-current={pathname === path ? 'page' : undefined} className={`rounded-lg px-2 py-3 text-center text-xs font-bold ${active(path)}`}>{label}</Link>)}
       </nav>
     </header>
   );

@@ -4,6 +4,13 @@
 
 @layer base {
   :root {
+    --type-body-large: 0.9375rem;
+    --type-body-title: 1rem;
+    --type-subheading: 1.125rem;
+    --type-title: 1.25rem;
+    --type-headline: 1.4375rem;
+    --type-headline-large: 1.625rem;
+    --type-display: 1.8125rem;
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -35,9 +42,11 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans text-base;
     overflow-wrap: anywhere;
   }
+
+  b, strong { @apply font-semibold; }
 
   main, section, aside, nav, form, label { min-width: 0; }
   input, textarea, select { max-width: 100%; min-width: 0; }
@@ -52,6 +61,23 @@
   ::selection {
     @apply bg-primary/20;
   }
+}
+
+@media (min-width: 640px) {
+  :root {
+    --type-body-large: 1rem;
+    --type-body-title: 1.125rem;
+    --type-subheading: 1.25rem;
+    --type-title: 1.375rem;
+    --type-headline: 1.75rem;
+    --type-headline-large: 2.25rem;
+    --type-display: 2.875rem;
+  }
+}
+
+/* Keep phone form fields at 16px to avoid browser auto-zoom on focus. */
+@media (max-width: 639px) {
+  input:not([type='checkbox']):not([type='radio']), textarea, select { font-size: 1rem; }
 }
 
 @layer components {

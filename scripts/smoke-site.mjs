@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 const origin = process.argv[2];
 assert(origin && /^https?:\/\//.test(origin), 'Pass the exact site origin to test.');
 let firstNonce;
-for (const path of ['/', '/login', '/signup', '/account/recovery', '/account/update-password', '/messages', '/moderation', '/community-safety', '/privacy', '/terms', '/contact', '/tags', '/api/health']) {
+for (const path of ['/', '/login', '/signup', '/account', '/account/recovery', '/account/update-password', '/messages', '/moderation', '/community-safety', '/privacy', '/terms', '/contact', '/cookies', '/privacy-choices', '/countries', '/us', '/tags', '/api/health']) {
   const response = await fetch(new URL(path,origin), { signal:AbortSignal.timeout(15000),redirect:'error' });
   assert.equal(response.status,200,`${path}: unexpected status`);
   assert.equal(response.headers.get('x-content-type-options'),'nosniff',`${path}: missing nosniff`);

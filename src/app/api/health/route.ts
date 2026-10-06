@@ -7,7 +7,7 @@ export function GET() {
   return Response.json(
     {
       status: 'ok',
-      service: 'visaflow',
+      service: 'visathreads',
       runtime: 'cloudflare-workers',
       environment: production ? 'production' : 'development',
       releaseStatus: ready ? 'configured' : 'not-ready',

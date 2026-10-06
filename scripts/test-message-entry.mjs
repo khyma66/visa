@@ -51,9 +51,9 @@ test('only genuine native question/reply identities produce author messaging lin
 
 test('login preserves the exact member target without allowing external return URLs',()=>{
   const href=messageLoginHref('bob-test',bob);
-  assert.equal(new URL(href,'https://visa-central.com').searchParams.get('next'),`/messages?to=bob-test&member=${bob}`);
-  assert.equal(new URL(messageLoginHref('//evil.invalid','bad'),'https://visa-central.com').searchParams.get('next'),'/messages');
-  assert.equal(new URL(messageLoginHref('bob-test','apify-source'),'https://visa-central.com').searchParams.get('next'),'/messages');
+  assert.equal(new URL(href,'https://visathreads.com').searchParams.get('next'),`/messages?to=bob-test&member=${bob}`);
+  assert.equal(new URL(messageLoginHref('//evil.invalid','bad'),'https://visathreads.com').searchParams.get('next'),'/messages');
+  assert.equal(new URL(messageLoginHref('bob-test','apify-source'),'https://visathreads.com').searchParams.get('next'),'/messages');
   assert.equal(normalizeMessageUsername(' U/Bob-Test '),'bob-test');
   assert.throws(()=>normalizeMessageUsername('source author'),/registered public username/);
 });

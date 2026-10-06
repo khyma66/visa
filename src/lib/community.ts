@@ -167,18 +167,19 @@ export async function getQuestion(id: string): Promise<Question | null> {
   return data as Question | null;
 }
 
-export type QuestionPageOptions = { search?: string; tag?: string; visaType?: string; sort?: string; before?: Question };
+export type QuestionPageOptions = { search?: string; tag?: string; visaType?: string; sort?: string; before?: Question; experience?: boolean; category?: string };
 export async function getQuestionPage(options: QuestionPageOptions = {}): Promise<{ questions: Question[]; more: boolean; cursor?: Question }> {
-  if (!isSupabaseConfigured) return { questions: await listQuestions(), more: false };
+  if (!isSupabaseConfigured) return { questions: (await listQuestions()).filter(q => options.experience ? q.post_kind === 'experience' : q.post_kind !== 'experience'), more: false };
   const before = options.before;
-  const { data, error } = await getSupabase().rpc('community_question_page', {
+  const { data, error } = await getSupabase().rpc('community_post_page', {
+    filter_kind: options.experience ? 'experience' : 'question', filter_category: options.category ?? '',
     query_text: options.search?.trim() ?? '', filter_tag: options.tag ?? '', filter_visa: options.visaType ?? '', sort_mode: options.sort ?? 'newest',
     before_time: before?.created_at ?? null, before_id: before?.id ?? null,
     before_score: before ? options.sort === 'score' ? before.vote_score : options.sort === 'activity' ? before.vote_score + before.answer_count * 2 : 0 : null,
   });
   throwIfError(error);
   const rows = (data ?? []) as Question[];
-  const imported = before ? [] : (await importedFeedOrNull())?.questions ?? [];
+  const imported = before || options.experience ? [] : (await importedFeedOrNull())?.questions ?? [];
   return { questions: [...rows, ...imported], more: rows.length === 50, cursor: rows.at(-1) };
 }
 

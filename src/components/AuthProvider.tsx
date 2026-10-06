@@ -1,21 +1,25 @@
 'use client';
 
-import { Fragment, createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { DEMO_USER } from '@/lib/demo-data';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import type { CommunityUser, Profile } from '@/lib/types';
 import { createAuthSessionSync, type AuthState } from '@/lib/auth-session';
-import { requestEmailCode, verifyEmailCode, startSocialSignIn, signInWithPassword, type AuthMethods, type SocialProvider } from '@/lib/auth-flow';
+import { requestEmailCode, verifyEmailCode, requestPhoneCode, verifyPhoneCode, startSocialSignIn, signInWithPassword, type AuthMethods, type SocialProvider, type SignupNames } from '@/lib/auth-flow';
 
 type AuthContextValue = {
   user: CommunityUser | null;
   profile: Profile | null;
   loading: boolean;
+  profileLoading: boolean;
   demoMode: boolean;
+  refreshProfile: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  requestCode: (email: string, redirectTo: string) => Promise<void>;
+  requestCode: (email: string, redirectTo: string, createAccount?: boolean, names?: SignupNames) => Promise<void>;
   verifyCode: (email: string, token: string) => Promise<void>;
+  requestPhoneCode: (phone: string, methods: AuthMethods, createAccount?: boolean) => Promise<void>;
+  verifyPhoneCode: (phone: string, token: string) => Promise<void>;
   signInWithProvider: (provider: SocialProvider, methods: AuthMethods, redirectTo: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -23,7 +27,8 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [{ user, profile, loading }, setAuth] = useState<AuthState>({
+  const sessionSync = useRef<ReturnType<typeof createAuthSessionSync> | null>(null);
+  const [{ user, profile, loading, profileLoading = false }, setAuth] = useState<AuthState>({
     user: isSupabaseConfigured ? null : { id: DEMO_USER.id, email: 'demo@local.invalid' },
     profile: isSupabaseConfigured ? null : DEMO_USER,
     loading: isSupabaseConfigured,
@@ -35,32 +40,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const sessionUser = (session: Session | null): CommunityUser | null => session?.user
       ? { id: session.user.id, email: session.user.email ?? null } : null;
     const sync = createAuthSessionSync(setAuth, async (id) => {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
+      const { data, error } = await supabase.from('profiles').select('id,username,avatar_seed,bio,reputation').eq('id', id).abortSignal(AbortSignal.timeout(8000)).maybeSingle();
       if (error) throw error;
       return data as Profile | null;
     });
+    sessionSync.current = sync;
     const { data: listener } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session) => {
       sync.event(sessionUser(session));
     });
     void supabase.auth.getSession().then(({ data }) => sync.initial(sessionUser(data.session))).catch(() => sync.initial(null));
-    return () => { sync.stop(); listener.subscription.unsubscribe(); };
+    return () => { sync.stop(); sessionSync.current = null; listener.subscription.unsubscribe(); };
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
     user,
     profile,
     loading,
+    profileLoading,
     demoMode: !isSupabaseConfigured,
+    refreshProfile: async () => { await sessionSync.current?.refresh(); },
     login: async (email, password) => signInWithPassword(getSupabase(), email, password),
-    requestCode: async (email, redirectTo) => requestEmailCode(getSupabase(), email, redirectTo),
+    requestCode: async (email, redirectTo, createAccount = false, names) => requestEmailCode(getSupabase(), email, redirectTo, createAccount, names),
     verifyCode: async (email, token) => verifyEmailCode(getSupabase(), email, token),
+    requestPhoneCode: async (phone, methods, createAccount = false) => requestPhoneCode(getSupabase(), phone, methods, createAccount),
+    verifyPhoneCode: async (phone, token) => verifyPhoneCode(getSupabase(), phone, token),
     signInWithProvider: async (provider, methods, redirectTo) => startSocialSignIn(getSupabase(), provider, methods, redirectTo),
     signOut: async () => {
       if (!isSupabaseConfigured) return;
-      const { error } = await getSupabase().auth.signOut();
+      const { error } = await getSupabase().auth.signOut({ scope: 'local' });
       if (error) throw error;
     },
-  }), [loading, profile, user]);
+  }), [loading, profile, profileLoading, user]);
 
   if (process.env.NEXT_PUBLIC_APP_ENV === 'production' && !isSupabaseConfigured) {
     return <main className="mx-auto max-w-xl p-10"><h1 className="text-2xl font-bold">Service temporarily unavailable</h1><p className="mt-3">The community configuration needs attention. Please try again later.</p></main>;

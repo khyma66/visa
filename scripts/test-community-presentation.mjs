@@ -31,6 +31,7 @@ const dependencies = {
   './RelatedQuestions': moduleUrl('export const RelatedQuestions=()=>null;'),
 };
 dependencies['@/lib/messaging-state'] = moduleUrl(transpile(await readFile(new URL('../src/lib/messaging-state.ts',import.meta.url),'utf8')));
+dependencies['@/lib/post-categories'] = moduleUrl(transpile(await readFile(new URL('../src/lib/post-categories.ts',import.meta.url),'utf8')));
 async function component(name) {
   let code = transpile(await readFile(new URL(`../src/components/${name}.tsx`,import.meta.url),'utf8'));
   for(const [specifier,replacement] of Object.entries(dependencies)) {
@@ -38,7 +39,6 @@ async function component(name) {
   }
   return { url:moduleUrl(code), value:await import(moduleUrl(code)) };
 }
-dependencies['./SafetyNotice'] = (await component('SafetyNotice')).url;
 const {value:{QuestionCard},url:cardUrl} = await component('QuestionCard');
 dependencies['./QuestionCard']=cardUrl;
 const {value:{QuestionDetail}} = await component('QuestionDetail');
@@ -76,6 +76,27 @@ test('native cards preserve public usernames, member avatars, votes and normal q
   assert(html.includes('u/alice-test'));assert(html.includes('Member avatar'));assert(html.includes('votes'));
   assert(html.includes(`/questions/${native.id}`));assert(!html.includes('Community contributor'));
 });
+test('experience cards and details expose category and discussion actions without answer acceptance',()=>{
+  const experience={...native,post_kind:'experience',experience_category:'Other',visa_type:'Other'};
+  const card=render(QuestionCard,{question:experience});
+  assert(card.includes(`/experiences/${native.id}`)); assert(card.includes('Experience · Other'));
+  assert(card.toLowerCase().includes(`datetime="${native.created_at.toLowerCase()}"`));
+  const detail=render(QuestionDetail,{initialQuestion:experience,initialAnswers:[reply]},{user:{id:alice}});
+  assert(detail.includes('Join the discussion')); assert(detail.includes('Post reply'));
+  assert(!detail.includes('Accept this answer')); assert(!detail.includes('Accepted answers and highest votes first'));
+});
+test('experience feed excludes questions, includes Other, and defaults to newest',()=>{
+  const older={...native,id:'older',post_kind:'experience',experience_category:'Other',created_at:'2026-09-01T00:00:00Z'};
+  const newer={...older,id:'newer',title:'A newer visa experience',created_at:'2026-10-01T00:00:00Z'};
+  const html=render(CommunityHome,{experience:true},{values:{0:[older,native,newer],3:false}});
+  assert(html.includes('Share your experience')); assert(html.includes('/experiences/new'));
+  assert(html.includes('All experience categories')); assert(html.includes('Other</option>'));
+  assert(html.indexOf('/experiences/newer') < html.indexOf('/experiences/older'));
+  assert(!html.includes(`/questions/${native.id}`));
+  assert.match(html,/aria-pressed="true"[^>]*>Newest/);
+  const filtered=render(CommunityHome,{experience:true},{values:{0:[older,newer],3:false,15:'Visa interview'}});
+  assert(filtered.includes('No close match yet')); assert(!filtered.includes('/experiences/newer'));
+});
 test('discussion and promotion labels describe content rather than where it came from',()=>{
   for(const sourceKind of ['apify','visaflow']) {
     assert(render(QuestionCard,{question:{...native,source:sourceKind,post_kind:'discussion'}}).includes('Discussion'));
@@ -85,10 +106,10 @@ test('discussion and promotion labels describe content rather than where it came
 test('source detail preserves genuine attribution but has no source author messaging or voting affordance',()=>{
   const html=render(QuestionDetail,{initialQuestion:source},{user:{id:bob}});
   noPipelineLabels(html);assert(html.includes('Originally shared in Visa experience group.'));
-  assert(html.includes(source.source_url));assert(html.includes('Contributor labels are not VisaFlow accounts.'));
+  assert(html.includes(source.source_url));assert(html.includes('Contributor labels are not VisaThreads accounts.'));
   assert(html.includes('Join the discussion'));assert(html.includes('new replies stay here'));
   assert(!html.includes('Message author'));assert(!html.includes('/messages?'));assert(!html.includes('aria-label="Upvote"'));
-  assert(!html.includes(source.author_username));assert(html.includes('Peer experiences, not legal advice'));
+  assert(!html.includes(source.author_username));assert(!html.includes('Peer experiences, not legal advice'));
 });
 test('an apify ID remains source-only even when its source flag/link are absent and author fields resemble a member',()=>{
   const malformed={...source,source:undefined,source_url:null,author_id:alice,author_username:'alice-test'};
