@@ -8,7 +8,7 @@ export type Profile = {
 
 export type Question = {
   id: string;
-  author_id: string;
+  author_id: string | null;
   author_username: string;
   author_avatar_seed: string;
   title: string;
@@ -33,7 +33,7 @@ export type Question = {
 export type Answer = {
   id: string;
   question_id: string;
-  author_id: string;
+  author_id: string | null;
   author_username: string;
   author_avatar_seed: string;
   body: string;

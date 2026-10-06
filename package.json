@@ -19,7 +19,7 @@
     "test:security": "node --test scripts/test-security.mjs",
     "test:auth": "node --test scripts/test-auth.mjs",
     "test:database": "node --test tests/database/access.test.mjs",
-    "test": "npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime",
+    "test": "npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:presentation && npm run test:messaging",
     "check:bundle": "node scripts/check-bundle.mjs",
     "check:archive-bundle": "node scripts/check-archive-bundle.mjs",
     "check:secrets": "node scripts/check-repository-secrets.mjs",
@@ -34,7 +34,9 @@
     "build:prod": "npm run check:release && CLOUDFLARE_ENV=production NEXT_PUBLIC_APP_ENV=production vinext build && NEXT_PUBLIC_APP_ENV=production npm run check:archive-bundle && npm run check:bundle",
     "deploy:prod": "npm run check:secrets && npm test && npm run typecheck && npm audit --audit-level=high && npm run build:prod && vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build",
     "build:dev": "CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development vinext build && CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development npm run check:archive-bundle",
-    "deploy:dev": "vinext-cloudflare deploy --config wrangler.jsonc --env development"
+    "deploy:dev": "vinext-cloudflare deploy --config wrangler.jsonc --env development",
+    "test:presentation": "node --test scripts/test-post-presentation.mjs",
+    "test:messaging": "node --test --test-timeout=60000 scripts/test-messaging-ten-users.mjs"
   },
   "keywords": [
     "visa",
