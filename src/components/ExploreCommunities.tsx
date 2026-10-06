@@ -7,10 +7,10 @@ import { Compass, Plus, Search, Users } from 'lucide-react';
 import { COMMUNITY_CATEGORIES, getCommunityById, getMembershipsForCommunities, joinCommunity, leaveCommunity, listCommunities, listMyCommunitiesPage, type Community, type CommunityMembership } from '@/lib/groups';
 import { useAuth } from './AuthProvider';
 
-export function ExploreCommunities() {
+export function ExploreCommunities({ initialTab = 'all' }: { initialTab?: 'all' | 'mine' } = {}) {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'all' | 'mine'>('all');
+  const [tab, setTab] = useState<'all' | 'mine'>(initialTab);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [country, setCountry] = useState('');
@@ -127,7 +127,7 @@ export function ExploreCommunities() {
     </div>
     {membershipError && <div role="alert" className="mb-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">{membershipError} <button onClick={() => setRetry((n) => n + 1)} className="font-bold underline">Retry memberships</button></div>}
     {actionError && <p role="alert" className="mb-4 rounded-lg bg-rose-50 p-4 text-sm text-rose-800">{actionError}</p>}
-    {tab === 'mine' && !user ? <div className="rounded-xl border bg-white p-8"><h2 className="text-lg font-bold">Your communities, together</h2><p className="mt-2 text-sm text-slate-600">Log in to join communities and find them here.</p><Link href="/login?next=%2Fexplore" className="mt-4 inline-block font-bold text-teal-700 underline">Log in</Link></div> : <>
+    {tab === 'mine' && !user ? <div className="rounded-xl border bg-white p-8"><h2 className="text-lg font-bold">Your communities, together</h2><p className="mt-2 text-sm text-slate-600">Log in to join communities and find them here.</p><Link href="/login?next=%2Fmy-communities" className="mt-4 inline-block font-bold text-teal-700 underline">Log in</Link></div> : <>
       {error && <div role="alert" className="mb-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">{error} <button onClick={() => setRetry((n) => n + 1)} className="font-bold underline">Retry</button></div>}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{rows.map((community) => {
         const membership = memberMap.get(community.id);
