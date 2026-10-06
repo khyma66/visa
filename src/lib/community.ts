@@ -1,5 +1,6 @@
 'use client';
 
+import { canMessageAuthor } from './post-presentation';
 import { DEMO_ANSWERS, DEMO_CONVERSATIONS, DEMO_MESSAGES, DEMO_QUESTIONS, DEMO_USER } from './demo-data';
 import { getSupabase, isSupabaseConfigured } from './supabase/client';
 import { inferTags, normalizeTags } from './tagging';
@@ -365,7 +366,7 @@ export async function startConversation(username: string): Promise<string> {
     const existing = state.conversations.find((item) => item.other_username === normalized);
     if (existing) return existing.id;
     const known = state.questions.find((item) => item.author_username === normalized);
-    if (!known) throw new Error('Try a visible demo handle, such as wise-raven-1840.');
+    if (!known?.author_id || !canMessageAuthor(known, DEMO_USER.id)) throw new Error('Choose a registered member to message.');
     const id = `c-${crypto.randomUUID()}`;
     state.conversations.unshift({
       id, other_user_id: known.author_id, other_username: known.author_username,

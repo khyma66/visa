@@ -3,11 +3,12 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowDown, ArrowUp, Check, CheckCircle2, ExternalLink, MessageCircle, Share2, ThumbsUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, CheckCircle2, MessageCircle, Share2, ThumbsUp } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   acceptAnswer, createAnswer, getQuestion, listAnswers, voteAnswer, voteQuestion,
 } from '@/lib/community';
+import { canMessageAuthor, isImportedPost } from '@/lib/post-presentation';
 import type { Answer, Question } from '@/lib/types';
 import { subscribeLive, type LiveStatus } from '@/lib/realtime';
 import { RelatedQuestions } from './RelatedQuestions';
@@ -36,12 +37,12 @@ function VoteRail({ score, onVote, accepted }: { score: number; onVote: (value: 
   );
 }
 
-function ImportedScore({ score }: { score: number }) {
+function ReadOnlyScore({ score }: { score: number }) {
   return (
-    <div className="flex w-11 shrink-0 flex-col items-center gap-1.5 text-blue-700" aria-label={`${score} source reactions`}>
+    <div className="flex w-11 shrink-0 flex-col items-center gap-1.5 text-blue-700" aria-label={`${score} score`}>
       <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-50"><ThumbsUp size={17} /></span>
       <b className="text-base text-slate-800">{score}</b>
-      <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">likes</span>
+      <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">score</span>
     </div>
   );
 }
@@ -102,18 +103,18 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
   if (!question) return <main className="mx-auto max-w-4xl p-8"><h1 className="text-2xl font-black">Question not found</h1><Link href="/" className="mt-4 inline-block font-bold text-teal-700">Back to questions</Link></main>;
 
   const owner = user?.id === question.author_id;
-  const imported = question.source === 'apify';
+  const imported = isImportedPost(question);
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_310px]">
         <div>
           <section className="border-b border-slate-200 pb-6">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-teal-800"><span className="rounded-full bg-teal-50 px-2.5 py-1">{question.visa_type}</span><span className="text-slate-400">{question.destination_country}</span>{imported && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">Imported group discussion</span>}</div>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-teal-800"><span className="rounded-full bg-teal-50 px-2.5 py-1">{question.visa_type}</span><span className="text-slate-400">{question.destination_country}</span></div>
             <h1 className="mt-4 text-3xl font-black leading-tight tracking-tight text-slate-950 sm:text-4xl">{question.title}</h1>
-            <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500"><span>Asked {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</span><span>{question.vote_score} {imported ? 'source reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : 'answers'}</span></div>
+            <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500"><span>Asked {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</span><span>{question.vote_score} score</span><span>{question.answer_count} replies</span></div>
           </section>
           <article className="flex gap-4 py-7">
-            {imported ? <ImportedScore score={question.vote_score} /> : <VoteRail score={question.vote_score} onVote={(value) => {
+            {imported ? <ReadOnlyScore score={question.vote_score} /> : <VoteRail score={question.vote_score} onVote={(value) => {
               if (!user) { window.location.href = `/login?next=/questions/${id}`; return; }
               void voteQuestion(id, user.id, value).then((score) => setQuestion((current) => current ? { ...current, vote_score: score } : current)).catch((reason: Error) => setError(reason.message));
             }} />}
@@ -124,35 +125,31 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
               <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
                 <div className="flex gap-2">
                   <button onClick={() => { void navigator.clipboard.writeText(window.location.href); setCopied(true); }} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900"><Share2 size={15} /> {copied ? 'Copied' : 'Share'}</button>
-                  {imported && question.source_url ? <a href={question.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm font-bold text-blue-700 hover:underline">Open group post <ExternalLink size={14} /></a> : user?.id !== question.author_id && <Link href={`/messages?to=${question.author_username}`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900"><MessageCircle size={15} /> Message author</Link>}
+                  {canMessageAuthor(question, user?.id) && <Link href={`/messages?to=${encodeURIComponent(question.author_username)}`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900"><MessageCircle size={15} /> Message author</Link>}
                 </div>
                 <Author username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} />
               </div>
               {!imported && <ReportButton kind="question" target={question.id} />}
-              {imported && <SafetyNotice kind="imported" />}
-              {imported && <p className="mt-5 rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-xs leading-5 text-blue-900">Source: {question.source_group ?? 'public visa community group'}. VisaFlow organizes the public post text and available top comments; the original group remains the source of record.</p>}
             </div>
           </article>
 
           <section className="mt-4 border-t border-slate-200 pt-7">
-            <h2 className="text-2xl font-black text-slate-950">{imported ? 'Community comments' : `${answers.length} ${answers.length === 1 ? 'answer' : 'answers'}`}</h2>
+            <h2 className="text-2xl font-black text-slate-950">{answers.length} {answers.length === 1 ? 'reply' : 'replies'}</h2>
             <p className="mt-2 text-xs text-slate-500" role="status">{demoMode ? 'Development preview · updates across tabs in this browser' : !user ? 'Log in for live replies and notifications' : liveStatus === 'live' ? 'Live discussion · replies update automatically' : 'Connecting to live updates…'}</p>
-            {imported && <p className="mt-2 text-sm text-slate-500">{answers.filter((a) => a.source === 'apify').length} source comments · {answers.filter((a) => a.source !== 'apify').length} VisaFlow replies</p>}
             <div className="divide-y divide-slate-200">
               {answers.map((answer) => (
                 <article key={answer.id} className={`flex gap-4 py-7 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
-                  {answer.source === 'apify' ? <ImportedScore score={answer.vote_score} /> : imported ? <MessageCircle className="w-11 shrink-0 text-teal-600" size={22} /> : <VoteRail score={answer.vote_score} accepted={answer.is_accepted} onVote={(value) => {
+                  {isImportedPost(answer) ? <ReadOnlyScore score={answer.vote_score} /> : imported ? <MessageCircle className="w-11 shrink-0 text-teal-600" size={22} /> : <VoteRail score={answer.vote_score} accepted={answer.is_accepted} onVote={(value) => {
                     if (!user) { window.location.href = `/login?next=/questions/${id}`; return; }
                     void voteAnswer(answer.id, user.id, value).then((score) => setAnswers((items) => items.map((item) => item.id === answer.id ? { ...item, vote_score: score } : item))).catch((reason: Error) => setError(reason.message));
                   }} />}
                   <div className="min-w-0 flex-1">
-                    {answer.source === 'apify' && <p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700"><MessageCircle size={12} /> Group comment</p>}
                     {answer.is_accepted && <p className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-700"><CheckCircle2 size={17} /> Accepted by the question author</p>}
                     <div className="whitespace-pre-wrap text-[16px] leading-8 text-slate-800">{answer.body}</div>
                     {answer.source !== 'apify' && <ReportButton kind={imported ? 'imported_answer' : 'answer'} target={answer.id} />}
                     <div className="mt-6 flex items-end justify-between gap-4">
-                      {answer.source_url ? <a href={answer.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:underline">View source <ExternalLink size={12} /></a> : owner && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline"><Check size={16} /> Accept this answer</button> : <span />}
-                      <div className="flex items-center gap-3"><Author username={answer.author_username} seed={answer.author_avatar_seed} createdAt={answer.created_at} />{answer.source !== 'apify' && user?.id !== answer.author_id && <Link href={`/messages?to=${answer.author_username}`} aria-label={`Message ${answer.author_username}`} className="text-slate-400 hover:text-teal-700"><MessageCircle size={18} /></Link>}</div>
+                      {!imported && !isImportedPost(answer) && owner && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline"><Check size={16} /> Accept this answer</button> : <span />}
+                      <div className="flex items-center gap-3"><Author username={answer.author_username} seed={answer.author_avatar_seed} createdAt={answer.created_at} />{canMessageAuthor(answer, user?.id) && <Link href={`/messages?to=${encodeURIComponent(answer.author_username)}`} aria-label={`Message ${answer.author_username}`} className="text-slate-400 hover:text-teal-700"><MessageCircle size={18} /></Link>}</div>
                     </div>
                   </div>
                 </article>
@@ -161,9 +158,9 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
           </section>
 
           <section className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-            <h2 className="text-xl font-black text-slate-950">{imported ? 'Add a VisaFlow answer' : 'Your answer'}</h2>
+            <h2 className="text-xl font-black text-slate-950">Your answer</h2>
             <SafetyNotice kind="publishing" />
-            <p className="mt-2 text-sm leading-6 text-slate-500">Related posts update as you write, using the topics in your reply.{imported ? ' Replies are posted to VisaFlow only.' : ''}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Related posts update as you write, using the topics in your reply.</p>
             {!user ? <p className="mt-3 text-sm text-slate-600"><Link href={`/login?next=/questions/${id}`} className="font-bold text-teal-700 underline">Log in</Link> to answer anonymously.</p> : (
               <form onSubmit={submitAnswer} className="mt-4"><textarea aria-label="Your reply" required minLength={20} maxLength={10000} rows={7} value={answerBody} onChange={(event) => setAnswerBody(event.target.value)} placeholder="Explain what worked, cite official guidance where possible, and avoid requesting personal documents." className="w-full rounded-xl border border-slate-300 p-4 leading-7 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100" /><button disabled={submitting} className="mt-3 rounded-lg bg-teal-700 px-5 py-3 font-bold text-white hover:bg-teal-800 disabled:opacity-50">{submitting ? 'Posting…' : 'Post answer'}</button></form>
             )}
