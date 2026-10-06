@@ -230,8 +230,8 @@ export function CommunityHome() {
             <p className="mt-3 text-sm leading-6 text-slate-600">Compare reactions and replies at a glance. Open a post for its full text, available comments, and questions with matching visa topics.</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2"><Users className="text-violet-600" size={19} /><h3 className="font-extrabold text-slate-900">Privacy-aware import</h3></div>
-            <p className="mt-3 text-sm leading-6 text-slate-600">Public discussion text is organized without copying profile photos or exposing account identifiers.</p>
+            <div className="flex items-center gap-2"><Users className="text-violet-600" size={19} /><h3 className="font-extrabold text-slate-900">Connect with the community</h3></div>
+            <p className="mt-3 text-sm leading-6 text-slate-600">Join a discussion or message a registered member. Keep personal documents and application numbers private.</p>
           </div>
           <p className="px-2 text-xs leading-5 text-slate-400">Community posts are personal experiences, not legal advice. Verify important decisions with an official source or qualified professional.</p>
         </aside>

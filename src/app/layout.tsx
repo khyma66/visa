@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import '../styles/globals.css';
 import { AuthProvider } from '@/components/AuthProvider';
 import { SiteHeader } from '@/components/SiteHeader';
+import { CommunityAddonsNavigation } from '@/components/CommunityAddonsNavigation';
 import Link from 'next/link';
 
 // A fresh CSP nonce must be attached to each request's streamed script tags.
@@ -35,6 +36,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
         <AuthProvider>
           <SiteHeader />
+          <CommunityAddonsNavigation />
           <div id="main-content" tabIndex={-1}>{children}</div>
           <footer className="site-shell border-t border-slate-200 bg-white py-6 text-xs leading-6 text-slate-500">
             VisaFlow is a peer community, not a government service or legal adviser. Public usernames are pseudonyms, not a guarantee of anonymity.{' '}

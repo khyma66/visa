@@ -7,6 +7,7 @@ export type Profile = {
 };
 
 export type Question = {
+  community_id?: string | null;
   id: string;
   author_id: string | null;
   author_username: string;
@@ -80,6 +81,7 @@ export type CommunityUser = {
 };
 
 export type NewQuestion = {
+  community_id?: string | null;
   title: string;
   body: string;
   destination_country: string;
