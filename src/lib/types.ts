@@ -28,7 +28,8 @@ export type Question = {
   source_url?: string | null;
   source_label?: string | null;
   source_group?: string | null;
-  post_kind?: 'question' | 'discussion' | 'promotion';
+  post_kind?: 'question' | 'discussion' | 'promotion' | 'experience';
+  experience_category?: string | null;
 };
 
 export type Answer = {
@@ -82,6 +83,8 @@ export type CommunityUser = {
 
 export type NewQuestion = {
   community_id?: string | null;
+  post_kind?: 'question' | 'experience';
+  experience_category?: string | null;
   title: string;
   body: string;
   destination_country: string;

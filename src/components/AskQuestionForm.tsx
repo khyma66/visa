@@ -9,11 +9,10 @@ import { createQuestion } from '@/lib/community';
 import { normalizeTags, suggestTags } from '@/lib/tagging';
 import { useAuth } from './AuthProvider';
 import { RelatedQuestions } from './RelatedQuestions';
-import { SafetyNotice } from './SafetyNotice';
 
 const VISA_TYPES = ['H-1B', 'B1/B2', 'F-1 / OPT', 'Schengen', 'Study permit', 'Work permit', 'Family / spouse', 'General'];
 
-export function AskQuestionForm() {
+export function AskQuestionForm({ experience = false }: { experience?: boolean }) {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
   const [title, setTitle] = useState('');
@@ -111,7 +110,9 @@ export function AskQuestionForm() {
     setError('');
     try {
       const id = await createQuestion(user.id, {
-        title: title.trim(), body: body.trim(), destination_country: country.trim(), visa_type: visaType, tags: normalizedTags, ...(communityId ? { community_id: communityId } : {}),
+        title: title.trim(), body: body.trim(), destination_country: country.trim(), visa_type: visaType, tags: normalizedTags,
+        ...(experience ? { post_kind: 'experience' as const, experience_category: 'visa-timeline' } : {}),
+        ...(communityId ? { community_id: communityId } : {}),
       });
       if (alive.current && currentActor.current === actor && submitLock.current === operation) router.push(`/questions/${id}`);
     } catch (reason) {
@@ -130,7 +131,6 @@ export function AskQuestionForm() {
         <p className="text-sm font-bold uppercase tracking-wider text-teal-700">Ask the community</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Share the details that make your case different</h1>
         <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your-random-handle'}</b>.</p>
-        <SafetyNotice kind="publishing" />
         {!user && <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mr-2 inline" size={17} /> <Link href={loginReturn} className="font-bold underline">Log in</Link> before publishing. Your email remains private.</div>}
         <form onSubmit={submit} className="mt-7 space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <label className="block"><span className="font-bold text-slate-900">Community</span>

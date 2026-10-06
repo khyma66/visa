@@ -13,7 +13,7 @@ import { RelatedQuestions } from './RelatedQuestions';
 const PAGE_SIZE = 20;
 type SortMode = 'newest' | 'activity' | 'unanswered' | 'score';
 
-export function CommunityHome() {
+export function CommunityHome({ experience = false }: { experience?: boolean }) {
   const { user, demoMode } = useAuth();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [search, setSearch] = useState('');
@@ -46,20 +46,20 @@ export function CommunityHome() {
   useEffect(() => {
     let active = true;
     const timer = setTimeout(() => {
-      void getQuestionPage({ search, tag, visaType, sort: sortMode })
+      void getQuestionPage({ search, tag, visaType, sort: sortMode, experience })
       .then((data) => { if (active) { setQuestions(data.questions); setMore(data.more); setCursor(data.cursor); setError(''); } })
       .catch((reason: Error) => { if (active) setError(reason.message); })
       .finally(() => { if (active) setLoading(false); });
     }, 200);
     return () => { active = false; clearTimeout(timer); };
-  }, [search, tag, visaType, sortMode, revision]);
+  }, [search, tag, visaType, sortMode, revision, experience]);
 
   async function loadOlder() {
     if (loadingOlder || !cursor) return;
     setLoadingOlder(true);
     const requestedFilter = filterKey;
     try {
-      const data = await getQuestionPage({ search, tag, visaType, sort: sortMode, before: cursor });
+      const data = await getQuestionPage({ search, tag, visaType, sort: sortMode, before: cursor, experience });
       if (filterRef.current !== requestedFilter) return;
       setQuestions((current) => [...current, ...data.questions.filter((q) => !current.some((item) => item.id === q.id))]);
       setMore(data.more); setCursor(data.cursor);

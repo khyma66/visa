@@ -7,8 +7,9 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "vinext dev --hostname 0.0.0.0 --port 3000",
-    "dev:next": "next dev --hostname 0.0.0.0 --port 3000",
+    "dev": "node scripts/dev-isolated.mjs",
+    "dev:demo": "node scripts/dev-isolated.mjs --demo",
+    "dev:next": "node scripts/dev-isolated.mjs --next",
     "build": "vinext build",
     "build:next": "NEXT_PUBLIC_APP_ENV=production next build",
     "typecheck": "tsc --noEmit",

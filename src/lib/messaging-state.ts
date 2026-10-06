@@ -14,8 +14,8 @@ export function normalizeMessageUsername(username: string): string {
 export function isMemberId(id: string): boolean { return MEMBER_ID.test(id); }
 
 /** Presentation guard only. The profile lookup and database RPC remain authoritative. */
-export function getMemberMessageHref(content: { id: string; author_id: string; author_username: string; source?: string }, currentUserId?: string): string | null {
-  if (content.source === 'apify' || !isMemberId(content.id) || !isMemberId(content.author_id)
+export function getMemberMessageHref(content: { id: string; author_id: string | null; author_username: string; source?: string }, currentUserId?: string): string | null {
+  if (content.source === 'apify' || !isMemberId(content.id) || !content.author_id || !isMemberId(content.author_id)
     || content.author_id === currentUserId || !USERNAME.test(content.author_username)) return null;
   return `/messages?to=${encodeURIComponent(content.author_username)}&member=${encodeURIComponent(content.author_id)}`;
 }

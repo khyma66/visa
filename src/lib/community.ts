@@ -425,6 +425,7 @@ export async function getMessageRecipient(username: string, expectedMemberId?: s
   if (!isSupabaseConfigured) {
     const known = readDemo().questions.find((item) => item.author_username === normalized && item.source !== 'apify');
     if (!known || (expectedMemberId && known.author_id !== expectedMemberId)) throw new Error('Choose a visible demo member.');
+    if (!known.author_id) throw new Error('Choose a registered member to message.');
     return { id: known.author_id, username: known.author_username, avatar_seed: known.author_avatar_seed };
   }
   const { data, error } = await getSupabase().from('profiles').select('id,username,avatar_seed').eq('username', normalized).maybeSingle();
