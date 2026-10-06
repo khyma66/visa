@@ -42,8 +42,6 @@ export function SiteHeader() {
         </Link>
         <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
           <Link href="/" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/')}`}>Questions</Link>
-          <Link href="/explore" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/explore')}`}>Explore</Link>
-          <Link href="/news" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/news')}`}>News</Link>
           <Link href="/tags" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/tags')}`}>Tags</Link>
           <Link href="/messages" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/messages')}`}>Messages</Link>
           <Link href="/experiences" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/experiences')}`}>Experience</Link>
@@ -88,8 +86,8 @@ export function SiteHeader() {
           <Link href="/login" className="rounded-lg px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100">Log in</Link>
         )}
       </div>
-      <nav aria-label="Mobile navigation" className="grid grid-cols-5 border-t border-slate-100 px-4 py-1 md:hidden">
-        {[['/', 'Questions'], ['/explore', 'Explore'], ['/news', 'News'], ['/tags', 'Tags'], ['/messages', 'Messages']].map(([path, label]) => <Link key={path} href={path} aria-current={pathname === path ? 'page' : undefined} className={`rounded-lg px-2 py-3 text-center text-xs font-bold ${active(path)}`}>{label}</Link>)}
+      <nav aria-label="Mobile navigation" className="grid grid-cols-3 border-t border-slate-100 px-4 py-1 md:hidden">
+        {[['/', 'Questions'], ['/tags', 'Tags'], ['/messages', 'Messages']].map(([path, label]) => <Link key={path} href={path} aria-current={pathname === path ? 'page' : undefined} className={`rounded-lg px-2 py-3 text-center text-xs font-bold ${active(path)}`}>{label}</Link>)}
       </nav>
     </header>
   );

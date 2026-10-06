@@ -697,3 +697,25 @@ test('community detail ignores a join completion after navigation to another com
     assert.equal(byText(h, 'button', 'Join community').props.disabled, false);
   } finally { h.close(); }
 });
+
+
+test('My communities route opens joined groups without first querying the public directory', async () => {
+  const h = exploreHarness();
+  h.handlers.listMyCommunitiesPage = async () => ({ communities: [group], nextCursor: null });
+  try {
+    h.render(ExploreCommunities, { initialTab: 'mine' }); await h.settle();
+    assert.equal(h.calls.filter((c) => c.name === 'listMyCommunitiesPage').length, 1);
+    assert.equal(h.calls.filter((c) => c.name === 'listCommunities').length, 0);
+    assert.equal(byText(h, 'button', 'My communities').props['aria-pressed'], true);
+    assert.match(textOf(h.tree), /H1B careers/);
+  } finally { h.close(); }
+});
+
+test('My communities guest entry preserves its login destination and makes no member request', async () => {
+  const h = exploreHarness(); h.auth.user = null;
+  try {
+    h.render(ExploreCommunities, { initialTab: 'mine' }); await h.settle();
+    assert(nodes(h.tree).some((n) => n.props?.href === '/login?next=%2Fmy-communities'));
+    assert.equal(h.calls.filter((c) => ['listMyCommunitiesPage', 'getMembershipsForCommunities'].includes(c.name)).length, 0);
+  } finally { h.close(); }
+});

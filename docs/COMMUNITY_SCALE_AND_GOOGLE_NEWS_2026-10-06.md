@@ -1,5 +1,36 @@
 # Community scale and Google News update — October 6, 2026
 
+## Additive UI integration update — October 6, morning
+
+The add-on entry points now live in CommunityAddonsNavigation, mounted once after
+SiteHeader in the application layout. This is an additional responsive navigation
+row: Explore communities, My communities, News, and Start a community. Join/Leave
+remain on the community cards and detail pages where the target group is explicit.
+
+PR #5 no longer changes SiteHeader relative to its PR #4 base. The new navigation
+links were also removed from the existing homepage sidebar to avoid duplicates.
+The earlier imported-label presentation correction is retained. The new
+/my-communities route opens the joined-groups view directly; guests retain that
+return destination through login. All existing site navigation stays host-owned.
+
+Safe integration into the current live source must retain its own header, account
+menu, Experience, country communities and privacy pages. Copy the new component,
+add its import and one render insertion to the current layout, and port the feature
+routes/services plus reviewed database migrations. Do not copy this checkout's old
+layout/header wholesale over the current source. Resolve conflicts by preserving
+current unrelated behavior. Capture the active deployment version before rollout.
+
+The source/access blocker persists: remote branches were refreshed again and still
+lack the newer deployed source. Wrangler reports unauthenticated. An add-on-only
+patch reduces merge conflicts; it does not establish that an unavailable deployment
+source has been merged or that the live site has changed.
+
+Morning verification: 222 tests passed (43 component/service tests), TypeScript and
+Worker build passed, and seven local Next HTTP routes returned 200 with exactly the
+four add-on destinations while retaining the original main-navigation destinations.
+These checks compare the accessible repository base, not the missing newer deployed
+source. No remote merge, database migration, or deployment was performed.
+
 ## Current conclusion
 
 Thousands of communities fit this shared-table design; a separate database, table,
