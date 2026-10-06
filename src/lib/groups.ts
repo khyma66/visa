@@ -17,6 +17,7 @@ export type Community = {
 };
 export type NewCommunity = Pick<Community, 'slug' | 'display_name' | 'description' | 'country' | 'category' | 'rules'>;
 export type CommunityMembership = { community_id: string; role: string; is_active: boolean };
+export type CommunityPageOptions = { search?: string; category?: string; country?: string; after?: string | null; limit?: number; signal?: AbortSignal };
 export type CommunityPageResult = { communities: Community[]; nextCursor: string | null };
 export type QuestionCursor = { created_at: string; id: string };
 export type CommunityQuestionPage = { questions: Question[]; nextCursor: QuestionCursor | null };
@@ -61,9 +62,9 @@ export function normalizeCommunitySearch(search = '') {
   return value.replace(/\s+/g, ' ');
 }
 
-export async function listCommunities(options: { search?: string; category?: string; country?: string; after?: string | null; limit?: number; signal?: AbortSignal } = {}): Promise<CommunityPageResult> {
+export async function listCommunities(options: CommunityPageOptions = {}): Promise<CommunityPageResult> {
   const search = normalizeCommunitySearch(options.search);
-  const limit = Math.max(1, Math.min(24, options.limit ?? 24));
+  const limit = boundedLimit(options.limit);
   let query = client().from('community_directory').select(FIELDS).order('slug', { ascending: true }).limit(limit + 1);
   if (search) query = query.or(`display_name.ilike.%${search}%,slug.ilike.%${search}%`);
   if (options.category) {
@@ -82,40 +83,45 @@ export async function listCommunities(options: { search?: string; category?: str
   return { communities: rows.slice(0, limit), nextCursor: rows.length > limit ? rows[limit - 1].slug : null };
 }
 
-export async function listMyMemberships(userId: string, signal?: AbortSignal): Promise<CommunityMembership[]> {
+function boundedLimit(value = 24) {
+  if (!Number.isFinite(value)) throw new Error('Invalid community page size.');
+  return Math.max(1, Math.min(24, Math.floor(value)));
+}
+
+/** Read only memberships for the current page, never a member's entire history. */
+export async function getMembershipsForCommunities(userId: string, communityIds: string[], signal?: AbortSignal): Promise<CommunityMembership[]> {
   requireId(userId);
-  const rows: CommunityMembership[] = [];
-  let after: string | null = null;
-  do {
-    let query = client().from('community_members').select('community_id,role,is_active').eq('user_id', userId).eq('is_active', true).order('community_id', { ascending: true }).limit(500);
-    if (after) query = query.gt('community_id', after);
-    if (signal) query = query.abortSignal(signal);
-    const { data, error } = await query;
-    if (error) throw apiError(error, 'Could not load your memberships. Please retry.');
-    const page = (data ?? []) as CommunityMembership[];
-    rows.push(...page);
-    after = page.length === 500 ? page[page.length - 1].community_id : null;
-  } while (after);
-  return rows;
+  const ids = [...new Set(communityIds)];
+  if (ids.length > 24) throw new Error('Membership lookups are limited to one page of communities.');
+  ids.forEach(requireId);
+  if (!ids.length) return [];
+  let query = client().from('community_members').select('community_id,role,is_active')
+    .eq('user_id', userId).eq('is_active', true).in('community_id', ids).limit(24);
+  if (signal) query = query.abortSignal(signal);
+  const { data, error } = await query;
+  if (error) throw apiError(error, 'Could not load your memberships. Please retry.');
+  return (data ?? []) as CommunityMembership[];
 }
 
-// Shared by the directory and the question form. Batched reads avoid one query
-// per card and keep URLs bounded even for accounts with many memberships.
-export async function communitiesForMemberships(memberships: CommunityMembership[], signal?: AbortSignal): Promise<Community[]> {
-  const ids = [...new Set(memberships.filter((row) => row.is_active).map((row) => row.community_id))];
-  const rows: Community[] = [];
-  for (let start = 0; start < ids.length; start += 100) {
-    let query = client().from('community_directory').select(FIELDS).in('id', ids.slice(start, start + 100));
-    if (signal) query = query.abortSignal(signal);
-    const { data, error } = await query;
-    if (error) throw apiError(error, 'Could not load your communities. Please retry.');
-    rows.push(...((data ?? []) as Community[]));
-  }
-  return rows.sort((a, b) => a.slug.localeCompare(b.slug));
+export async function getMembershipForCommunity(userId: string, communityId: string, signal?: AbortSignal): Promise<CommunityMembership | null> {
+  return (await getMembershipsForCommunities(userId, [communityId], signal))[0] ?? null;
 }
 
-export async function listMyCommunities(userId: string, signal?: AbortSignal) {
-  return communitiesForMemberships(await listMyMemberships(userId, signal), signal);
+/** Authentication and ownership come from the database session, not an input ID. */
+export async function listMyCommunitiesPage(options: CommunityPageOptions = {}): Promise<CommunityPageResult> {
+  const search = normalizeCommunitySearch(options.search);
+  const limit = boundedLimit(options.limit);
+  if (options.category && !COMMUNITY_CATEGORIES.includes(options.category as CommunityCategory)) throw new Error('Choose a community category.');
+  if (options.after && !SLUG.test(options.after)) throw new Error('Invalid community page.');
+  let query = client().rpc('my_community_directory_page', {
+    query_text: search, filter_category: options.category ?? '', filter_country: options.country?.trim().slice(0, 80) ?? '',
+    after_slug: options.after ?? null, result_limit: limit,
+  });
+  if (options.signal) query = query.abortSignal(options.signal);
+  const { data, error } = await query;
+  if (error) throw apiError(error, 'Could not load your communities. Please retry.');
+  const rows = (data ?? []) as Community[];
+  return { communities: rows.slice(0, limit), nextCursor: rows.length > limit ? rows[limit - 1].slug : null };
 }
 
 export async function getCommunityBySlug(slug: string, signal?: AbortSignal): Promise<Community | null> {
@@ -158,17 +164,15 @@ export async function leaveCommunity(id: string): Promise<void> {
 
 export async function listCommunityQuestions(id: string, options: { after?: QuestionCursor | null; tag?: string; signal?: AbortSignal } = {}): Promise<CommunityQuestionPage> {
   requireId(id);
-  let query = client().from('question_feed').select('*').eq('community_id', id).neq('status', 'archived').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(21);
-  if (options.tag) {
-    if (options.tag.length > 60) throw new Error('That tag is too long.');
-    query = query.contains('tags', [options.tag]);
-  }
+  if (options.tag && options.tag.length > 60) throw new Error('That tag is too long.');
   if (options.after) {
-    const { created_at, id: cursorId } = options.after;
-    requireId(cursorId);
-    if (!/^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})$/.test(created_at) || !Number.isFinite(Date.parse(created_at))) throw new Error('Invalid question page.');
-    query = query.or(`created_at.lt.${created_at},and(created_at.eq.${created_at},id.lt.${cursorId})`);
+    requireId(options.after.id);
+    if (!/^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})$/.test(options.after.created_at) || !Number.isFinite(Date.parse(options.after.created_at))) throw new Error('Invalid question page.');
   }
+  let query = client().rpc('community_group_question_page', {
+    target_community: id, before_time: options.after?.created_at ?? null,
+    before_id: options.after?.id ?? null, filter_tag: options.tag ?? '',
+  });
   if (options.signal) query = query.abortSignal(options.signal);
   const { data, error } = await query;
   if (error) throw apiError(error, 'Could not load community questions. Please retry.');

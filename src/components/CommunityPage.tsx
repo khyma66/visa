@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Users } from 'lucide-react';
-import { getCommunityBySlug, joinCommunity, leaveCommunity, listCommunityQuestions, listMyMemberships, type Community, type CommunityMembership, type QuestionCursor } from '@/lib/groups';
+import { getCommunityBySlug, getMembershipForCommunity, joinCommunity, leaveCommunity, listCommunityQuestions, type Community, type CommunityMembership, type QuestionCursor } from '@/lib/groups';
 import type { Question } from '@/lib/types';
 import { useAuth } from './AuthProvider';
 import { QuestionCard } from './QuestionCard';
@@ -16,7 +16,7 @@ export function CommunityPage({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
-  const [memberships, setMemberships] = useState<CommunityMembership[]>([]);
+  const [membership, setMembership] = useState<CommunityMembership | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(false);
   const [membershipError, setMembershipError] = useState('');
   const [membershipRetry, setMembershipRetry] = useState(0);
@@ -27,6 +27,9 @@ export function CommunityPage({ slug }: { slug: string }) {
   const [questionError, setQuestionError] = useState('');
   const [after, setAfter] = useState<QuestionCursor | null>(null);
   const [next, setNext] = useState<QuestionCursor | null>(null);
+  const [history, setHistory] = useState<(QuestionCursor | null)[]>([]);
+  const [pageNumber, setPageNumber] = useState(1);
+  const questionNavigationLock = useRef(false);
   const [questionRetry, setQuestionRetry] = useState(0);
   const [tag, setTag] = useState('');
   const actionLock = useRef<symbol | null>(null);
@@ -40,7 +43,7 @@ export function CommunityPage({ slug }: { slug: string }) {
   useEffect(() => { actionLock.current = null; setBusy(false); setActionError(''); }, [user?.id, slug]);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError(''); setCommunity(null); setAfter(null); setNext(null); setQuestions([]);
+    setLoading(true); setError(''); setCommunity(null); setAfter(null); setNext(null); setQuestions([]); setHistory([]); setPageNumber(1); setTag('');
     void getCommunityBySlug(slug, controller.signal).then((value) => { if (!controller.signal.aborted) setCommunity(value); })
       .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Could not load this community.'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -49,30 +52,28 @@ export function CommunityPage({ slug }: { slug: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    setMemberships([]); setMembershipError(''); setActionError('');
-    if (!user || authLoading) { setMembershipLoading(false); return () => controller.abort(); }
+    setMembership(null); setMembershipError(''); setActionError('');
+    if (!user || authLoading || !community) { setMembershipLoading(false); return () => controller.abort(); }
     setMembershipLoading(true);
-    void listMyMemberships(user.id, controller.signal).then((value) => { if (!controller.signal.aborted) setMemberships(value); })
+    void getMembershipForCommunity(user.id, community.id, controller.signal).then((value) => { if (!controller.signal.aborted) setMembership(value); })
       .catch((reason) => { if (!controller.signal.aborted) setMembershipError(reason instanceof Error ? reason.message : 'Could not load your membership.'); })
       .finally(() => { if (!controller.signal.aborted) setMembershipLoading(false); });
     return () => controller.abort();
-  }, [user?.id, authLoading, membershipRetry]);
+  }, [user?.id, authLoading, community?.id, membershipRetry]);
 
   useEffect(() => {
     const controller = new AbortController();
     if (!community) return;
-    setQuestionsLoading(true); setQuestionError('');
-    if (!after) setQuestions([]);
+    setQuestionsLoading(true); setQuestionError(''); setQuestions([]); setNext(null);
     void listCommunityQuestions(community.id, { after, tag, signal: controller.signal }).then((page) => {
       if (controller.signal.aborted) return;
-      setQuestions((current) => after ? [...current, ...page.questions.filter((row) => !current.some((item) => item.id === row.id))] : page.questions);
+      setQuestions(page.questions);
       setNext(page.nextCursor);
     }).catch((reason) => { if (!controller.signal.aborted) setQuestionError(reason instanceof Error ? reason.message : 'Could not load questions.'); })
-      .finally(() => { if (!controller.signal.aborted) setQuestionsLoading(false); });
+      .finally(() => { if (!controller.signal.aborted) { setQuestionsLoading(false); questionNavigationLock.current = false; } });
     return () => controller.abort();
   }, [community?.id, after, tag, questionRetry]);
 
-  const membership = memberships.find((row) => row.community_id === community?.id);
   async function changeMembership() {
     if (!community || actionLock.current || authLoading || membershipLoading || membershipError) return;
     if (!user) { router.push(`/login?next=${encodeURIComponent(`/c/${slug}`)}`); return; }
@@ -83,7 +84,7 @@ export function CommunityPage({ slug }: { slug: string }) {
     try {
       if (membership) await leaveCommunity(community.id); else await joinCommunity(community.id);
       if (!alive.current || currentActor.current !== actor || currentSlug.current !== slug || actionLock.current !== operation) return;
-      setMemberships((current) => membership ? current.filter((row) => row.community_id !== community.id) : [...current, { community_id: community.id, role: 'member', is_active: true }]);
+      setMembership(membership ? null : { community_id: community.id, role: 'member', is_active: true });
       const refreshed = await getCommunityBySlug(slug);
       if (alive.current && currentActor.current === actor && currentSlug.current === slug && actionLock.current === operation && refreshed) setCommunity(refreshed);
     } catch (reason) {
@@ -93,6 +94,19 @@ export function CommunityPage({ slug }: { slug: string }) {
         actionLock.current = null; if (alive.current) setBusy(false);
       }
     }
+  }
+
+  function resetQuestionPage() { setAfter(null); setHistory([]); setPageNumber(1); }
+  function nextQuestionPage() {
+    if (!next || questionsLoading || questionNavigationLock.current) return;
+    questionNavigationLock.current = true;
+    setHistory((current) => [...current, after].slice(-50));
+    setAfter(next); setPageNumber((value) => value + 1);
+  }
+  function previousQuestionPage() {
+    if (!history.length || questionsLoading || questionNavigationLock.current) return;
+    questionNavigationLock.current = true;
+    setAfter(history[history.length - 1]); setHistory((current) => current.slice(0, -1)); setPageNumber((value) => Math.max(1, value - 1));
   }
 
   if (loading) return <main className="mx-auto max-w-6xl px-4 py-10"><p role="status">Loading community…</p></main>;
@@ -107,13 +121,18 @@ export function CommunityPage({ slug }: { slug: string }) {
       {membershipError && <p role="alert" className="mt-4 text-sm text-amber-800">{membershipError} <button onClick={() => setMembershipRetry((n) => n + 1)} className="font-bold underline">Retry membership</button></p>}{actionError && <p role="alert" className="mt-4 text-sm text-rose-800">{actionError}</p>}
     </header>
     <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5"><h2 className="text-lg font-bold">Questions and answers</h2><div className="flex items-center gap-4"><button onClick={() => { setAfter(null); setQuestionRetry((n) => n + 1); }} disabled={questionsLoading} className="text-sm font-bold text-slate-600 underline disabled:opacity-50">Refresh</button>{membership ? <Link href={askHref} className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800">Ask a question</Link> : !user ? <Link href={`/login?next=${encodeURIComponent(askHref)}`} className="text-sm font-bold text-teal-700 underline">Log in to ask</Link> : <button onClick={() => void changeMembership()} disabled={busy || membershipLoading || !!membershipError} className="text-sm font-bold text-teal-700 underline disabled:opacity-50">Join to ask a question</button>}</div></div>
-        {tag && <p className="border-b bg-blue-50 p-4 text-sm text-blue-800">Tag: <strong>{tag}</strong> <button onClick={() => { setTag(''); setAfter(null); }} className="ml-3 underline">Clear filter</button></p>}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5"><h2 className="text-lg font-bold">Questions and answers</h2><div className="flex items-center gap-4"><button onClick={() => { resetQuestionPage(); setQuestionRetry((n) => n + 1); }} disabled={questionsLoading} className="text-sm font-bold text-slate-600 underline disabled:opacity-50">Refresh</button>{membership ? <Link href={askHref} className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800">Ask a question</Link> : !user ? <Link href={`/login?next=${encodeURIComponent(askHref)}`} className="text-sm font-bold text-teal-700 underline">Log in to ask</Link> : <button onClick={() => void changeMembership()} disabled={busy || membershipLoading || !!membershipError} className="text-sm font-bold text-teal-700 underline disabled:opacity-50">Join to ask a question</button>}</div></div>
+        {tag && <p className="border-b bg-blue-50 p-4 text-sm text-blue-800">Tag: <strong>{tag}</strong> <button onClick={() => { setTag(''); resetQuestionPage(); }} className="ml-3 underline">Clear filter</button></p>}
         {questionError && <p role="alert" className="m-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">{questionError} <button onClick={() => setQuestionRetry((n) => n + 1)} className="font-bold underline">Retry</button></p>}
-        {questions.map((question) => <QuestionCard key={question.id} question={question} onTagSelect={(value) => { setTag(value); setAfter(null); }} />)}
+        {questions.map((question) => <QuestionCard key={question.id} question={question} onTagSelect={(value) => { setTag(value); resetQuestionPage(); }} />)}
         {questionsLoading && <p role="status" className="p-6 text-sm text-slate-500">Loading questions…</p>}
         {!questionsLoading && !questionError && !questions.length && <div className="p-8"><h3 className="font-bold">{tag ? 'No questions with this tag yet' : 'Start the first conversation'}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{tag ? 'Try another tag or clear the filter to see all community questions.' : 'Ask a specific question with relevant tags, or share an experience others can learn from.'}</p></div>}
-        {next && <button onClick={() => setAfter(next)} disabled={questionsLoading} className="mx-auto my-5 block rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-bold disabled:opacity-50">Load more questions</button>}
+        {(next || after) && <nav aria-label="Question pages" className="my-5 flex flex-wrap items-center justify-center gap-3 px-4">
+          {after && <button onClick={resetQuestionPage} disabled={questionsLoading} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold disabled:opacity-50">First page</button>}
+          <button onClick={previousQuestionPage} disabled={questionsLoading || !history.length} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold disabled:opacity-50">Previous questions</button>
+          <span className="text-xs text-slate-500">Page {pageNumber}</span>
+          <button onClick={nextQuestionPage} disabled={questionsLoading || !next} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold disabled:opacity-50">Next questions</button>
+        </nav>}
       </section>
       <aside className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold">Community rules</h2>{community.rules.length ? <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm leading-6 text-slate-600">{community.rules.map((rule, index) => <li key={index}>{rule}</li>)}</ol> : <p className="mt-3 text-sm leading-6 text-slate-600">Be respectful, stay on topic, and keep personal information private.</p>}<Link href="/community-safety" className="mt-5 inline-block text-sm font-semibold text-teal-700 underline">Read sitewide community rules</Link>{membership?.role === 'owner' && <p className="mt-5 border-t pt-4 text-xs leading-5 text-slate-500">You own this community. Owners remain members so the community always has an accountable owner.</p>}</aside>
     </div>
