@@ -41,6 +41,8 @@ export function SiteHeader() {
         </Link>
         <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
           <Link href="/" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/')}`}>Questions</Link>
+          <Link href="/explore" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/explore')}`}>Explore</Link>
+          <Link href="/news" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/news')}`}>News</Link>
           <Link href="/tags" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/tags')}`}>Tags</Link>
           <Link href="/messages" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/messages')}`}>Messages</Link>
         </nav>
@@ -61,7 +63,8 @@ export function SiteHeader() {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Public pseudonym</p>
               <p className="mt-1 font-bold text-slate-900">{profile ? `u/${profile.username}` : 'Setting up your profile…'}</p>
               <p className="text-xs text-slate-500">{profile?.reputation ?? 0} reputation · email not displayed</p>
-              <Link href="/messages" className="mt-3 flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><MessageCircle size={16} /> Messages</Link>
+              <Link href="/communities/new" className="mt-3 block rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Start a community</Link>
+              <Link href="/messages" className="mt-1 flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><MessageCircle size={16} /> Messages</Link>
               {!demoMode && <button disabled={busy} onClick={() => void logout()} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><LogOut size={16} /> {busy ? 'Signing out…' : 'Sign out'}</button>}
               {error && <p role="alert" className="mt-2 text-xs text-rose-700">{error}</p>}
             </div>}
@@ -70,8 +73,8 @@ export function SiteHeader() {
           <Link href="/login" className="rounded-lg px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100">Log in</Link>
         )}
       </div>
-      <nav aria-label="Mobile navigation" className="grid grid-cols-3 border-t border-slate-100 px-4 py-1 md:hidden">
-        {[['/', 'Questions'], ['/tags', 'Tags'], ['/messages', 'Messages']].map(([path, label]) => <Link key={path} href={path} aria-current={pathname === path ? 'page' : undefined} className={`rounded-lg px-2 py-3 text-center text-xs font-bold ${active(path)}`}>{label}</Link>)}
+      <nav aria-label="Mobile navigation" className="grid grid-cols-5 border-t border-slate-100 px-4 py-1 md:hidden">
+        {[['/', 'Questions'], ['/explore', 'Explore'], ['/news', 'News'], ['/tags', 'Tags'], ['/messages', 'Messages']].map(([path, label]) => <Link key={path} href={path} aria-current={pathname === path ? 'page' : undefined} className={`rounded-lg px-2 py-3 text-center text-xs font-bold ${active(path)}`}>{label}</Link>)}
       </nav>
     </header>
   );
