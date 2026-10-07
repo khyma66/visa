@@ -11,7 +11,7 @@ let browserClient: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient {
   if (!isSupabaseConfigured || !url || !key) {
-    throw new Error('Supabase is not configured. The app is running in demo mode.');
+    throw new Error('VisaThreads sign-in is unavailable in this preview.');
   }
 
   browserClient ??= createClient(url, key, {
@@ -22,8 +22,18 @@ export function getSupabase(): SupabaseClient {
 
 export async function getAuthMethods(signal?: AbortSignal) {
   if (!url || !key) return { google: false };
-  const response = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: key }, signal });
-  if (!response.ok) throw new Error('Sign-in settings unavailable');
-  const settings = await response.json() as { external?: { google?: boolean; apple?: boolean } };
-  return { google: settings.external?.google === true };
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) controller.abort();
+  const timeout = setTimeout(abort, 8_000);
+  try {
+    const response = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: key }, signal: controller.signal });
+    if (!response.ok) throw new Error('Sign-in settings unavailable');
+    const settings = await response.json() as { external?: { google?: boolean } };
+    return { google: settings.external?.google === true };
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
+  }
 }

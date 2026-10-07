@@ -67,7 +67,7 @@ export function SiteHeader() {
             </div>}
           </div>
         ) : (
-          <Link href="/login" className="rounded-lg px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100">Log in</Link>
+          <a href="/login#sign-in" className="rounded-lg px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100">Log in</a>
         )}
       </div>
       <nav aria-label="Mobile navigation" className="grid grid-cols-3 border-t border-slate-100 px-4 py-1 md:hidden">
