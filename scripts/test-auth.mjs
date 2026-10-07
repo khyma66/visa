@@ -118,6 +118,8 @@ test('code template and screen keep branding and security boundaries', async () 
   assert(form.includes('setCooldown(60)'));
   assert(form.includes('safeAuthNext'));
   assert(template.includes('{{ .Token }}'));
+  assert(template.includes('VisaThreads'));
+  assert(!template.includes('VisaFlow'));
   assert(!template.includes('ConfirmationURL'));
   assert(client.includes("flowType: 'pkce'"));
 });

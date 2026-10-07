@@ -99,19 +99,8 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
 
   return (
     <main className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-5xl items-center gap-10 px-4 py-12 sm:px-6 md:grid-cols-2">
-      <section>
-        <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal-700">Your next step starts here</p>
-        <h1 className="mt-3 text-3xl font-normal text-slate-950">Visa questions.<br /><span className="text-teal-700">Shared experiences.</span><br />A clearer way forward.</h1>
-        <p className="mt-5 max-w-md text-base leading-7 text-slate-600">Find people navigating the same visa journey. Ask a question, compare experiences, and keep useful answers close.</p>
-        <div className="mt-8 space-y-5">
-          <div className="flex gap-3"><Search aria-hidden="true" className="mt-1 shrink-0 text-teal-700" /><div><b>Find similar cases</b><p className="mt-1 text-sm leading-6 text-slate-600">Explore past questions about appointments, processing times, and next steps.</p></div></div>
-          <div className="flex gap-3"><Tags aria-hidden="true" className="mt-1 shrink-0 text-teal-700" /><div><b>Explore the topics that matter</b><p className="mt-1 text-sm leading-6 text-slate-600">Browse by visa type, country, or stage in your application.</p></div></div>
-          <div className="flex gap-3"><MessagesSquare aria-hidden="true" className="mt-1 shrink-0 text-teal-700" /><div><b>Connect with the community</b><p className="mt-1 text-sm leading-6 text-slate-600">Join discussions and send message requests to other members.</p></div></div>
-        </div>
-        <Link href="/" className="mt-7 inline-flex items-center gap-2 text-sm font-bold text-teal-700 hover:underline">Just browsing? Explore questions <ArrowRight size={16} /></Link>
-      </section>
-      <section aria-label="Sign in to VisaThreads" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8">
-        {demoMode ? <><h2 className="text-2xl font-black">Explore the preview</h2><p className="my-4 text-sm text-slate-600">This preview uses a sample account. Real sign-in is not connected here.</p><button onClick={() => router.push('/')} className={buttonClass}>Explore questions</button></> : loading ? <div role="status" className="py-12 text-center"><h2 className="text-xl font-bold">Checking your session…</h2></div> : user ? <div className="space-y-5">
+      <section id="sign-in" tabIndex={-1} aria-label="Sign in to VisaThreads" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8">
+        {demoMode ? <><h2 className="text-2xl font-black">Explore the preview</h2><p className="my-4 text-sm text-slate-600">This preview uses a sample account. Real sign-in is not connected here.</p><button onClick={() => router.push('/')} className={buttonClass}>Explore questions</button></> : user ? <div className="space-y-5">
           <h2 className="text-2xl font-bold">You’re signed in</h2>
           <p className="text-slate-600">Your active account is <strong className="break-all text-slate-900">{user.email ?? 'your phone account'}</strong>.</p>
           <p className="text-xs text-slate-500">Only you can see your sign-in details here.</p>
@@ -120,8 +109,9 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
           <Link href="/account" className="block text-center font-bold text-teal-700">View my profile</Link>
           <button type="button" disabled={busy} onClick={() => void run(signOut)} className="w-full rounded-xl border border-slate-300 p-3 font-bold disabled:opacity-50">{busy ? 'Signing out…' : 'Use a different account'}</button>
         </div> : <>
+          {loading && <p role="status" className="mb-4 text-sm text-slate-600">Checking your session… You can still choose a sign-in method. <button type="button" onClick={() => window.location.reload()} className="underline">Reload</button></p>}
           <div className="mb-5 inline-flex rounded-xl bg-teal-50 p-3 text-teal-700"><Mail aria-hidden="true" size={24} /></div>
-          <h2 className="text-2xl font-black text-slate-950">{step === 'code' ? `Check your ${codeChannel === 'phone' ? 'phone' : 'email'}` : signup ? 'Join VisaThreads' : 'Welcome back'}</h2>
+          <h1 className="text-2xl font-black text-slate-950">{step === 'code' ? `Check your ${codeChannel === 'phone' ? 'phone' : 'email'}` : signup ? 'Join VisaThreads' : 'Welcome back'}</h1>
           <p className="mt-2 text-base text-slate-600">{step === 'code' ? <>Enter the one-time code sent to <strong className="break-all">{codeChannel === 'phone' ? phone.trim() : email.trim()}</strong>.</> : signup ? 'Verify your contact details to join the community.' : 'Log in to join discussions and connect with the community.'}</p>
           {step === 'email' && <>
             <div className="mt-6 grid gap-3">
@@ -154,6 +144,17 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
           {step === 'code' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm font-bold text-teal-700"><button type="button" disabled={busy || cooldown > 0} onClick={() => void run(sendCode)} className="disabled:text-slate-400">{cooldown ? `Resend in ${cooldown}s` : 'Resend code'}</button><button type="button" disabled={busy} onClick={() => { setStep('email'); setCode(''); setError(''); setMessage(''); }}>Use a different {codeChannel === 'phone' ? 'phone' : 'email'}</button></div>}
           <p className="mt-5 text-xs leading-5 text-slate-500">Your email is not shown on your public profile. A community username is created for you.</p>
         </>}
+      </section>
+      <section className="md:order-first">
+        <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal-700">Your next step starts here</p>
+        <h2 className="mt-3 text-3xl font-normal text-slate-950">Visa questions.<br /><span className="text-teal-700">Shared experiences.</span><br />A clearer way forward.</h2>
+        <p className="mt-5 max-w-md text-base leading-7 text-slate-600">Find people navigating the same visa journey. Ask a question, compare experiences, and keep useful answers close.</p>
+        <div className="mt-8 space-y-5">
+          <div className="flex gap-3"><Search aria-hidden="true" className="mt-1 shrink-0 text-teal-700" /><div><b>Find similar cases</b><p className="mt-1 text-sm leading-6 text-slate-600">Explore past questions about appointments, processing times, and next steps.</p></div></div>
+          <div className="flex gap-3"><Tags aria-hidden="true" className="mt-1 shrink-0 text-teal-700" /><div><b>Explore the topics that matter</b><p className="mt-1 text-sm leading-6 text-slate-600">Browse by visa type, country, or stage in your application.</p></div></div>
+          <div className="flex gap-3"><MessagesSquare aria-hidden="true" className="mt-1 shrink-0 text-teal-700" /><div><b>Connect with the community</b><p className="mt-1 text-sm leading-6 text-slate-600">Join discussions and send message requests to other members.</p></div></div>
+        </div>
+        <Link href="/" className="mt-7 inline-flex items-center gap-2 text-sm font-bold text-teal-700 hover:underline">Just browsing? Explore questions <ArrowRight size={16} /></Link>
       </section>
     </main>
   );

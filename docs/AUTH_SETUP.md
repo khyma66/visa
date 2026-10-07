@@ -1,5 +1,7 @@
 # VisaThreads sign-in setup
 
+Later login/branding guidance: [PR #6 execution guide](LOGIN_BRANDING_AND_DEPLOYMENT_2026-10-07.md). It reports Google enabled on the hosted preview; the October 4 details below are historical. Preserve owned-domain-only callbacks and the recovery template when following that guide.
+
 Current setup (October 4, 2026): `https://visathreads.com` is live. Supabase Site URL and the three allowed redirects (`/login`, `/login?**`, `/account/update-password`) use that exact host; old-domain redirects are removed. SMTP sender is `VisaThreads <noreply@visathreads.com>`; sign-in, signup and recovery email templates are rebranded. Resend DNS records are published, but provider verification is pending. An owner-authorized code request was rejected by Resend with `550` because the new domain was not verified; delivery and end-to-end sign-in remain unverified. Google and phone providers remain disabled. Follow [the migration record](DOMAIN_MIGRATION_2026-10-04.md); dated notes below describe the previous setup.
 
 ## Implemented in the app
