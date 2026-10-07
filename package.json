@@ -17,7 +17,7 @@
     "test:archive": "node --test scripts/test-archive.mjs",
     "test:notices": "node --test scripts/test-notices.mjs",
     "test:security": "node --test scripts/test-security.mjs",
-    "test:auth": "node --test scripts/test-auth.mjs",
+    "test:auth": "node --test scripts/test-auth.mjs scripts/test-auth-ui.mjs scripts/test-auth-settings.mjs",
     "test:database": "node --test tests/database/access.test.mjs",
     "test": "npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:presentation && npm run test:messaging && npm run test:news && npm run test:groups && npm run test:community-ui && npm run test:scale",
     "check:bundle": "node scripts/check-bundle.mjs",

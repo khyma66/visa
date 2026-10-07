@@ -1,4 +1,6 @@
-# VisaFlow sign-in setup
+# VisaThreads sign-in setup
+
+Current execution guide: [Login, branding and safe deployment — October 7](LOGIN_BRANDING_AND_DEPLOYMENT_2026-10-07.md). Google is enabled on the live preview, but its public sign-in screen still displays the project hostname. The latest guide distinguishes repository fixes from changes that must be published in Google/DNS/auth settings.
 
 ## Implemented in the app
 
@@ -10,10 +12,10 @@ Google checks the project's public auth settings and stays disabled when the pro
 
 Checked September 17, 2026 (Chicago): email enabled; Google and Apple disabled. Dashboard browser session was signed out, so email template, SMTP and redirect settings could not be verified or changed. End-to-end delivery and social login have not been validated.
 
-1. In Authentication → Emails → Templates, change **Magic Link** to the contents of `supabase/templates/sign-in-code.html`. Use subject **Your VisaFlow sign-in code**. Also apply the branded code template to **Confirm signup**, so new-account confirmation emails carry a code. Preserve other security email templates. Test both a new and an existing account: `signInWithOtp` otherwise defaults to an email link, not the requested visible code.
-2. Configure custom SMTP with a verified sender on an owned domain; sender display name **VisaFlow**. Enter credentials directly in the provider dashboard, never in browser/public environment variables or this repository. Default hosted email service has recipient/rate restrictions and is not a production mail solution.
+1. In Authentication → Emails → Templates, change **Magic Link** to the contents of `supabase/templates/sign-in-code.html`. Use subject **Your VisaThreads sign-in code**. Also apply the branded code template to **Confirm signup**, so new-account confirmation emails carry a code. Preserve other security email templates. Test both a new and an existing account: `signInWithOtp` otherwise defaults to an email link, not the requested visible code.
+2. Configure custom SMTP with a verified sender on an owned domain; sender display name **VisaThreads**. Enter credentials directly in the provider dashboard, never in browser/public environment variables or this repository. Default hosted email service has recipient/rate restrictions and is not a production mail solution.
 3. In URL Configuration, allow the dev/local login callbacks including query parameters: `https://visaflow-dev.varunchinna5966.workers.dev/login**` and `http://localhost:3000/login**`. Keep existing recovery URLs if still used. Set the appropriate site URL; avoid broad wildcard domains. In production, use its exact owned origin instead of development origins.
-4. In Google Cloud, configure a Web OAuth client and Google Auth Platform branding as **VisaFlow**, with verified owned domains/policy URLs and minimum identity scopes only. Add the authorized redirect URI `https://cycnichledvqbxevrwnt.supabase.co/auth/v1/callback`. Add the client ID and secret directly to Authentication → Sign In / Providers → Google, then enable it. A custom Supabase auth domain is needed to replace the `supabase.co` host shown in consent/redirect URLs; app copy alone cannot change that. Domain ownership and any paid changes require owner approval.
+4. In Google Cloud, configure a Web OAuth client and Google Auth Platform branding as **VisaThreads**, with verified owned domains/policy URLs and minimum identity scopes only. Add the authorized redirect URI `https://cycnichledvqbxevrwnt.supabase.co/auth/v1/callback`. Add the client ID and secret directly to Authentication → Sign In / Providers → Google, then enable it. A custom Supabase auth domain is needed to replace the `supabase.co` host shown in consent/redirect URLs; app copy alone cannot change that. Domain ownership and any paid changes require owner approval.
 5. Keep Apple disabled. Configure backend password policy, leaked-password protection where available, authentication rate limits, and a verified CAPTCHA integration before public signup. UI validation and cooldowns are not abuse prevention.
 
 ## Acceptance checks
