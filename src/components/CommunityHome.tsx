@@ -183,7 +183,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
           </section>
         </div>
 
-        <aside aria-label="Community discovery" className="min-w-0 space-y-5">
+        <aside aria-label="Community discovery" className="feed-discovery min-w-0 space-y-5">
           <section className="rounded-lg bg-slate-50 p-4">
             <h2 className="text-sm font-bold text-slate-900">Find your community</h2><p className="mt-2 text-sm leading-6 text-slate-600">Connect around a visa, destination, or stage of your journey.</p>
             <Link href="/explore" className="mt-3 flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"><span className="inline-flex items-center gap-2"><Compass size={17} aria-hidden="true" />Explore communities</span><ArrowUpRight size={16} aria-hidden="true" /></Link>

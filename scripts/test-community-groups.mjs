@@ -8,6 +8,42 @@ import { PGlite } from '@electric-sql/pglite';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 
 const migration = await readFile(new URL('../supabase/migrations/20261006045523_public_community_lifecycle.sql', import.meta.url), 'utf8');
+test('community upgrade preserves current policy, avatar and experience contracts', {timeout:60000}, async () => {
+  const db = await baseDatabase();
+  const owner = randomUUID();
+  try {
+    await db.exec("alter table auth.users add column raw_user_meta_data jsonb default '{}'::jsonb");
+    for (const name of ['20261004221850_policy_acceptance_receipts.sql', '20261006042952_public_avatar_initials.sql',
+      '20261006043113_avatar_name_policy_v2.sql', '20261006044132_visa_experiences.sql'])
+      await db.exec(await readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'));
+    await db.query('insert into auth.users(id,raw_user_meta_data) values($1,$2)', [owner, JSON.stringify({first_name:'Alice',last_name:'PrivateSurname'})]);
+    const guard = (await db.query("select pg_get_functiondef('private.community_write_guard()'::regprocedure) definition")).rows[0].definition;
+    await db.exec(migration);
+    await db.exec(await readFile(new URL('../supabase/migrations/20261006051458_bounded_community_reads.sql', import.meta.url), 'utf8'));
+    assert.equal((await db.query("select pg_get_functiondef('private.community_write_guard()'::regprocedure) definition")).rows[0].definition, guard);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)", [owner]);
+    await db.exec('set role authenticated');
+    const create = () => db.query("select public.create_public_community('preview-group','Preview group','A community with enough detail for a compatibility test.','United States','General') id");
+    await assert.rejects(create, /acknowledge/);
+    await db.query("insert into policy_acceptances(user_id,policy_version,market,terms_accepted,privacy_acknowledged,adult_confirmed) values($1,'2026-10-06-preview-v2','US',true,true,true)", [owner]);
+    const group = (await create()).rows[0].id;
+    const post = (await db.query("insert into questions(author_id,title,body,post_kind,experience_category,community_id) values($1,'My interview experience','An actual interview experience with sufficient detail for this test.','experience','Other',$2) returning id", [owner,group])).rows[0].id;
+    assert.equal((await db.query('select * from my_community_directory_page()')).rows[0].id, group);
+    await db.exec('reset role');
+    await db.query("select set_config('request.jwt.claim.sub','',false)");
+    await db.exec('set role anon');
+    const result = (await db.query("select * from community_post_page(filter_kind=>'experience')")).rows[0];
+    assert.equal(result.id, post); assert.equal(result.community_id, group); assert.equal(result.experience_category, 'Other');
+    assert.match(result.author_avatar_seed, /^initial:A:/); assert(!JSON.stringify(result).includes('PrivateSurname'));
+    assert.equal((await db.query('select * from community_question_page()')).rows.length, 0);
+    assert.equal((await db.query('select * from community_group_question_page($1)', [group])).rows[0].id, post);
+    await db.exec('reset role');
+    await db.query('update communities set is_public=false where id=$1', [group]);
+    await db.exec('set role anon');
+    assert.equal((await db.query("select * from community_post_page(filter_kind=>'experience')")).rows.length, 0);
+    assert.equal((await db.query('select * from community_group_question_page($1)', [group])).rows.length, 0);
+  } finally { await db.close(); }
+});
 async function baseDatabase() {
   const db = new PGlite({ extensions: { pg_trgm } });
   await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;

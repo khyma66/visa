@@ -15,7 +15,7 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
   const path = `/${question.post_kind === 'experience' ? 'experiences' : 'questions'}/${question.id}`;
   const imported = isImportedPost(question);
   return (
-    <article className="group min-w-0 border-b border-slate-200 bg-white px-3 py-4 transition hover:bg-slate-50/70 sm:px-4">
+    <article className="feed-card group min-w-0 border-b border-slate-200 bg-white px-3 py-4 transition hover:bg-slate-50/70 sm:px-4">
       <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
             {!imported && <Avatar seed={question.author_avatar_seed} size="sm" />}
