@@ -15,6 +15,7 @@ let backend;
 globalThis.__visaMessagingTestBackend = () => backend;
 let communitySource = transpile(await readFile(new URL('../src/lib/community.ts', import.meta.url), 'utf8'));
 const dependencies = {
+  './post-presentation': moduleUrl(transpile(await readFile(new URL('../src/lib/post-presentation.ts', import.meta.url), 'utf8'))),
   './demo-data': moduleUrl('export const DEMO_ANSWERS=[], DEMO_CONVERSATIONS=[], DEMO_MESSAGES=[], DEMO_QUESTIONS=[], DEMO_USER={};'),
   './supabase/client': moduleUrl('export const isSupabaseConfigured=true; export const getSupabase=()=>globalThis.__visaMessagingTestBackend();'),
   './tagging': moduleUrl('export const inferTags=()=>[], normalizeTags=()=>[];'),

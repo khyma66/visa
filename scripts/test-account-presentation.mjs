@@ -17,6 +17,7 @@ const dependencies = {
     export const usePathname=()=>'/account';export const useRouter=()=>({replace(path){globalThis.__accountPresentation.events.push(['redirect',path]);}});`),
   'lucide-react': import.meta.resolve('lucide-react'),
   './AuthProvider': asModule('export const useAuth=()=>globalThis.__accountPresentation.auth;'),
+  './CommunityNavigation': asModule('export const CommunityNavigation=()=>null;'),
   './Avatar': asModule(`import React from ${JSON.stringify(reactUrl)};export const Avatar=({name})=>React.createElement('span',{'data-public-avatar-name':name,'aria-hidden':true},'Avatar');`),
   '@/lib/supabase/client': asModule('export const getSupabase=()=>{throw new Error("Network prohibited in presentation tests");};'),
   '@/lib/account': asModule('const unavailable=()=>{throw new Error("Network prohibited in presentation tests")};export const getAccountActivity=unavailable,getAccountIdentity=unavailable,hasAccountPolicyAcceptance=unavailable,saveProfileBio=unavailable;'),
@@ -145,7 +146,7 @@ test('each profile-menu link points to its implemented destination', () => {
   assert.match(html, /visible only to you/);
   const signedOut = render(SiteHeader, { auth: { user: null, profile: null } });
   assert.doesNotMatch(signedOut, /Account options|private@example/);
-  assert(links(signedOut).some(link => link.href === '/login'));
+  assert(links(signedOut).some(link => link.href === '/login#sign-in'));
 });
 
 function elementText(element) {

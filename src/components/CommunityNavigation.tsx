@@ -14,6 +14,7 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
       { href: '/?sort=score', label: 'Popular', icon: TrendingUp, active: popular },
       { href: '/explore', label: 'Explore communities', icon: Compass },
       { href: '/news', label: 'News', icon: Newspaper },
+      { href: '/experiences', label: 'Experience', icon: MessageCircle },
       { href: '/tags', label: 'Tags', icon: Tags },
     ] },
     { name: 'Your communities', links: [

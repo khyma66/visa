@@ -20,7 +20,7 @@ const hooks = dataUrl(`
 const jsx = realModule('react/jsx-runtime');
 const links = dataUrl(`import {jsx} from ${JSON.stringify(jsx)}; export default function Link(props){ return jsx('a',props); }`);
 const navigation = dataUrl(`
-  export function useRouter(){throw new Error("Auth entry must not depend on the client router");}
+  export function useRouter(){return globalThis.__authHarness.router;}
   export function usePathname(){return globalThis.__authHarness.pathname ?? '/questions/example';}
   export function useSearchParams(){return new URLSearchParams(globalThis.__authHarness.search);}
   export function useParams(){return globalThis.__authHarness.params;}
@@ -135,6 +135,7 @@ function setup({ loading = false, user = null, search = '', signup = false } = {
   h.auth = { user, loading, profile: null, demoMode: false };
   for (const method of ['requestCode', 'verifyCode', 'login', 'signInWithProvider']) h.auth[method] = (...args) => h.invoke(method, args);
   h.handlers.getAuthMethods = async () => ({ google: true });
+  h.router = {replace: url => h.replacements.push(url)};
   h.replacements = []; h.cleanUrls = []; h.timers = new Map(); h.reloads = 0;
   let timerId = 0;
   globalThis.window = {
@@ -290,21 +291,21 @@ test('password is an available alternative and provider failure does not block i
   } finally { h.close(); }
 });
 
-test('an authenticated account returns even while its public profile is loading', async () => {
+test('a manual login visit retains explicit account choice', async () => {
   const h = setup({ loading: true, user: { id: 'fixture-user' }, search: '?next=%2Fmessages' });
-  try { await h.settle(); assert.deepEqual(h.replacements, ['/messages']); }
+  try { await h.settle(); assert.deepEqual(h.replacements, []); assert(textOf(h.tree).includes('Use a different account')); }
   finally { h.close(); }
 });
 
 test('authenticated redirects reject offsite return paths', async () => {
-  const h = setup({ user: { id: 'fixture-user' }, search: '?next=%2F%2Fevil.invalid' });
+  const h = setup({ user: { id: 'fixture-user' }, search: '?auth=callback&next=%2F%2Fevil.invalid' });
   try { await h.settle(); assert.deepEqual(h.replacements, ['/']); }
   finally { h.close(); }
 });
 
-test('signup still sends a verified user to password setup', async () => {
+test('signup does not force a password for a verified account', async () => {
   const h = setup({ signup: true, user: { id: 'fixture-user' } });
-  try { await h.settle(); assert.deepEqual(h.replacements, ['/account/update-password?setup=1']); }
+  try { await h.settle(); assert.deepEqual(h.replacements, []); assert(textOf(h.tree).includes('Continue to VisaThreads')); }
   finally { h.close(); }
 });
 

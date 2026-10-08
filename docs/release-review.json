@@ -3,9 +3,9 @@
   "databaseOrigin": "https://cycnichledvqbxevrwnt.supabase.co",
   "checks": {
     "database_access": {
-      "status": "verified",
-      "evidence": "October 3: after explicit owner approval, legacy hardening applied as hosted migration 20261003204619. All 22 old table row counts match, 500 posts/account/profile/storage object retained; browser table/column/sequence grants zero, four functions server-only with fixed search paths, posts bucket private. No public table lacks RLS; current community/Q&A/DM access unchanged. Eight dedicated regressions and 42 membership tests pass. Live read-only HTTP checks deny all 22 old browser APIs and anonymous private RPCs while the current archive/public APIs remain available. Remaining extension/GraphQL/password advisories and human security acceptance are tracked separately.",
-      "verifiedBy": "Codex hosted catalog, Supabase advisor, HTTP smoke and isolated PostgreSQL regression verification"
+      "status": "blocked",
+      "evidence": "October 3: after explicit owner approval, legacy hardening applied as hosted migration 20261003204619. All 22 old table row counts match, 500 posts/account/profile/storage object retained; browser table/column/sequence grants zero, four functions server-only with fixed search paths, posts bucket private. No public table lacks RLS; current community/Q&A/DM access unchanged. Eight dedicated regressions and 42 membership tests pass. Live read-only HTTP checks deny all 22 old browser APIs and anonymous private RPCs while the current archive/public APIs remain available. Remaining extension/GraphQL/password advisories and human security acceptance are tracked separately. October 8 read-only catalog check: create_public_community, join_public_community, leave_public_community, my_community_directory_page and community_group_question_page are absent. Existing community_post_page includes filter_kind and filter_category. Consolidated feature schema is not deployment-compatible until migration rehearsal and hosted verification.",
+      "verifiedBy": ""
     },
     "exposed_credentials_rotated": {
       "status": "blocked",
@@ -14,7 +14,7 @@
     },
     "email_signup_confirmation_recovery": {
       "status": "pending",
-      "evidence": "October 3 dashboard now accessible: Site URL remains localhost, redirect allowlist empty, built-in test email service in use. Owned-domain redirect/template changes await explicit approval. Custom SMTP, actual email delivery, recovery and Google credentials remain unverified.",
+      "evidence": "Historical October 3 setup is superseded by the domain migration. Owned-domain callbacks/templates are recorded; PR 6 reports Google enabled. Current end-to-end email, recovery and Google acceptance is still unverified by this consolidation.",
       "verifiedBy": ""
     },
     "moderator_assigned": {
@@ -94,7 +94,7 @@
     },
     "source_parity": {
       "status": "blocked",
-      "evidence": "Deployed Experience/account/policy source recovered locally and committed in bcb9c22; consolidation and live parity verification in progress.",
+      "evidence": "Experience, account, avatar and policy source recovered in bcb9c22; PRs 5–7 ported onto this branch. Exact old live build cannot be reconstructed from its missing commit metadata. Combined source requires browser and hosted compatibility acceptance before public release.",
       "verifiedBy": "",
       "sourceSha256": ""
     }

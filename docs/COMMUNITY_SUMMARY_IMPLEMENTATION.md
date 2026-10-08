@@ -1,28 +1,25 @@
-# Community interval summaries
+# Community interval summaries — prototype, disabled
 
-The summary endpoint is GET or POST at /api/communities/:id/summary?hours=6|12|24|72.
+The earlier implementation is not production ready. GET and POST at
+`/api/communities/:id/summary` return 503 with no database reads or AI calls.
+The model helper and unapplied artifact migration are retained for review, not
+as an instruction to activate the feature or provision privileged credentials.
 
-The endpoint rounds the cutoff down to the UTC hour, filters the community's
-authorized questions and replies, and stores one artifact per community,
-interval, cutoff and source fingerprint. Public communities can be read
-without logging in. Private communities require an active membership on every
-request.
+Required before activation:
 
-Generation uses two grounded calls:
+- Use the actual native question/answer schema and verified community membership rules.
+- Include replies to older questions inside the requested interval; detect and disclose
+  incomplete coverage instead of silently truncating posts or model input.
+- Validate evidence for every published claim, including the overview; valid citation
+  IDs alone do not establish factual support.
+- Add authenticated generation, durable deduplication/locking, per-user/community
+  rate limits, a global spending cap and model timeouts.
+- Use server-side Workers AI bindings and least-privilege data access, not a public
+  endpoint with broad service credentials.
+- Verify private-community isolation, cache invalidation after deletion/moderation,
+  prompt-injection resistance and representative accuracy evaluations.
+- Provide the interval selector and evidence links in the UI only after those tests.
 
-1. Granite 4.0 H Micro extracts claims, disagreements and unresolved points.
-2. Qwen3 30B A3B FP8 writes the final summary from those extracts.
-
-Every key point and disagreement must cite a source ID. Unsupported or
-malformed output is rejected and is never saved.
-
-Configure these as server-only deployment secrets:
-
-- SUPABASE_SERVICE_ROLE_KEY
-- CF_ACCOUNT_ID
-- CF_API_TOKEN with permission to run Workers AI
-
-Apply supabase/migrations/20261006053000_community_summary_artifacts.sql
-after the community lifecycle migrations. The service-role key is never sent
-to the browser. Summary artifacts are not exposed through the Supabase Data
-API; the route performs the membership check before reading them.
+No AI inference, paid account changes or hosted summary migration was executed
+during PR #7 consolidation. Automatic suggestion-to-code changes remain subject
+to owner review and are not implemented by this prototype.

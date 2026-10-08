@@ -138,3 +138,37 @@ These are owner decisions/access tasks, not a claim that all remaining engineeri
 Keep the consolidated branch under review; do not independently merge the old PR #2 app tree over it. Run `npm ci`, `npm run check`, the full audit, and actual hosted acceptance checks. Only then record real evidence in release-review.json, configure the production origin, and approve the production gate.
 
 Use the manual production workflow from the reviewed main commit. It does not automatically migrate the database. Record the deployed Worker version and known-good rollback version; application rollback does not undo SQL changes. Start with a limited pilot.
+# Consolidation update — October 8 UTC / October 7 Chicago
+
+Canonical repository: https://github.com/khyma66/visa (the older mohan6695 URL redirects here).
+Integration branch: `release/visaflow-consolidated-20261002`.
+
+Recovered local Experience, account, avatar and policy source was committed in
+`bcb9c22`. PR #5's final navigation change, PR #6's login fixes and PR #7's
+compact UI/build provenance are ported onto that source, preserving phone auth,
+explicit account switching, the single policy acknowledgement and Experience routes.
+The existing subscription branch remains separate; no payment/ad activation is included.
+
+Final resource mapping:
+
+- Site: https://visathreads.com and its www redirect.
+- Existing Cloudflare service: `visaflow-dev`, development-preview configuration.
+- Last verified live version: `05c08a98-2d11-4fdf-82fd-62f6f86081ec`.
+- Existing Supabase project: `cycnichledvqbxevrwnt`; do not migrate or reset user data.
+- Queued community migrations: `20261006045523_public_community_lifecycle.sql`
+  and `20261006051458_bounded_community_reads.sql`. These are NOT hosted.
+- AI summary endpoint: deliberately disabled pending the validation listed in
+  COMMUNITY_SUMMARY_IMPLEMENTATION.md. No paid model runs or summary migration.
+
+Deployment is blocked, not completed: the fresh audit reports 11 high and 2 moderate
+dependency findings. The highs trace to the braces advisory GHSA-vfj7-8cjw-p6xm;
+suggested automatic fixes involve major changes/downgrades, not a safe patch.
+Read-only hosted catalog checks also confirmed that create/join/leave community,
+my_community_directory_page and community_group_question_page do not exist yet.
+The existing hosted community_post_page retains its Experience filter arguments.
+Do not deploy the consolidated UI against that incompatible schema.
+
+Next release requires a staging rehearsal preserving policy, Experience and legacy
+containment, verified database compatibility, resolution of the dependency gate,
+and browser/auth acceptance. Public-launch gates remain closed. Old release records
+below are historical; they are not claims that this consolidated branch is live.

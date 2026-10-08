@@ -20,6 +20,7 @@ let backend;
 globalThis.__visaMessageEntryBackend=()=>backend;
 let communitySource=await load('../src/lib/community.ts');
 const dependencies={
+  './post-presentation':moduleUrl(await load('../src/lib/post-presentation.ts')),
   './demo-data':moduleUrl('export const DEMO_ANSWERS=[],DEMO_CONVERSATIONS=[],DEMO_MESSAGES=[],DEMO_QUESTIONS=[],DEMO_USER={};'),
   './supabase/client':moduleUrl('export const isSupabaseConfigured=true;export const getSupabase=()=>globalThis.__visaMessageEntryBackend();'),
   './tagging':moduleUrl('export const inferTags=()=>[],normalizeTags=()=>[];'),

@@ -31,9 +31,12 @@ test('one compact footer reminder preserves essential safety facts without a war
 test('safety and early-preview disclosures appear once in the footer, not above each page', async () => {
   const safety = await component('../src/components/SafetyNotice.tsx');
   const { default: Layout } = await component('../src/app/layout.tsx', {
+    react: pathToFileURL(require.resolve('react')).href,
     '@/components/SafetyNotice': safety.moduleUrl,
     '@/components/AuthProvider': url('export const AuthProvider=({children})=>children;'),
     '@/components/PolicyAcceptance': url('export const PolicyAcceptance=({children})=>children;'),
+    '@/components/CommunityAddonsNavigation': url('export const CommunityAddonsNavigation=()=>null;'),
+    '@/components/CommunityNavigation': url('export const CommunityNavigation=()=>null;'),
     '@/components/SiteHeader': url(`import {jsx} from ${JSON.stringify(jsx)};export const SiteHeader=()=>jsx('header',{children:'Header'});`),
   });
   const originalEnvironment = process.env.NEXT_PUBLIC_APP_ENV;

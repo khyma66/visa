@@ -60,7 +60,7 @@ test('OAuth errors take priority over a stored session and manual visits never s
       let cleaned='';
       globalThis.window={location:{search:query,hash:''},history:{replaceState(_state,_unused,path){cleaned=path;}}};
       renderToStaticMarkup(React.createElement(AuthForm));
-      state.effects[1]();
+      state.effects[2]();
       assert.deepEqual(state.redirects,expected);
       if(query.includes('error=') || query.includes('code=')) { assert.match(cleaned,/^\/login\?next=/); assert(!cleaned.includes('access_denied')); assert(!cleaned.includes('expired-test-code')); }
     }

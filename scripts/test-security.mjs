@@ -11,6 +11,17 @@ const { createAuthSessionSync } = await import(moduleUrl(await load('../src/lib/
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const user = (id) => ({ id, email: null });
 
+test('unreviewed summary prototype cannot access data or trigger paid inference', async t => {
+  t.mock.method(globalThis, 'fetch', () => { throw new Error('Disabled summaries must never contact a backend'); });
+  const route = await import(moduleUrl(await load('../src/app/api/communities/[id]/summary/route.ts')));
+  for (const method of ['GET', 'POST']) {
+    const response = await route[method]();
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.deepEqual(await response.json(), { error: 'Community summaries are not available yet.' });
+  }
+});
+
 test('legacy containment preserves rows and current-community grants while removing old browser access', async () => {
   const db=new PGlite();
   const legacy=['analytics_events','clusters','comment_likes','comments','communities','community_members','countries','group_members','group_message_likes','group_messages','groups','message_read_receipts','notifications','post_likes','post_reactions','post_tags','posts','tags','user_interactions','user_presence','user_sessions','users','visa_requirements','visa_types'];

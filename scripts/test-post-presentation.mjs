@@ -23,7 +23,7 @@ const dependencies = {
   'next/navigation': moduleUrl(`export function useParams(){return {id:'fixture-question'};}`),
   'lucide-react': icons,
   'date-fns': moduleUrl(`export function formatDistanceToNow(){return '2 days ago';}`),
-  '@/lib/community': moduleUrl(`const unused=()=>{throw new Error('Unexpected network call during render');}; export {unused as acceptAnswer,unused as createAnswer,unused as getQuestion,unused as listAnswers,unused as voteAnswer,unused as voteQuestion};`),
+  '@/lib/community': moduleUrl(`const unused=()=>{throw new Error('Unexpected network call during render');}; export {unused as acceptAnswer,unused as createAnswer,unused as getQuestion,unused as listAnswers,unused as getAnswerPage,unused as getDiscussionContext,unused as sortAnswers,unused as voteAnswer,unused as voteQuestion};`),
   '@/lib/realtime': moduleUrl(`export function subscribeLive(){throw new Error('Unexpected subscription during render');}`),
   './Avatar': moduleUrl(`export function Avatar(){return null;}`),
   './RelatedQuestions': moduleUrl(`export function RelatedQuestions(){return null;}`),
@@ -40,6 +40,8 @@ async function compile(relativePath) {
   });
   return moduleUrl(code);
 }
+dependencies['@/lib/messaging-state'] = await compile('../src/lib/messaging-state.ts');
+dependencies['@/lib/post-categories'] = await compile('../src/lib/post-categories.ts');
 dependencies['@/lib/post-presentation'] = await compile('../src/lib/post-presentation.ts');
 dependencies['./SafetyNotice'] = await compile('../src/components/SafetyNotice.tsx');
 const { QuestionCard } = await import(await compile('../src/components/QuestionCard.tsx'));
@@ -47,7 +49,7 @@ const { QuestionDetail } = await import(await compile('../src/components/Questio
 const { setUser } = await import(auth);
 
 const question = {
-  id: 'fixture-question', author_id: 'real-author', author_username: 'visa_tester',
+  id: '33333333-3333-4333-8333-333333333333', author_id: '11111111-1111-4111-8111-111111111111', author_username: 'visa-tester',
   author_avatar_seed: 'fixture-avatar', title: 'Documents for a visa interview',
   body: 'Which documents should I prepare for my upcoming visa interview?',
   destination_country: 'US', visa_type: 'F1', tags: ['interview', 'documents'],
@@ -56,8 +58,8 @@ const question = {
   source: 'visaflow',
 };
 const answer = {
-  id: 'fixture-answer', question_id: question.id, author_id: 'answer-author',
-  author_username: 'reply_tester', author_avatar_seed: 'reply-avatar',
+  id: '44444444-4444-4444-8444-444444444444', question_id: question.id, author_id: '22222222-2222-4222-8222-222222222222',
+  author_username: 'reply-tester', author_avatar_seed: 'reply-avatar',
   body: 'Check the official appointment instructions for your consulate.',
   vote_score: 3, is_accepted: false, status: 'active',
   created_at: question.created_at, updated_at: question.updated_at, source: 'visaflow',
@@ -79,11 +81,11 @@ function assertNoImportPresentation(html) {
 }
 function assertQuestionMessage(html, expected) {
   assert.equal(visibleText(html).includes('Message author'), expected);
-  assert.equal(/href="\/messages\?to=visa_tester"/.test(html), expected);
+  assert.equal(html.includes(`/messages?to=visa-tester&amp;member=${question.author_id}`), expected);
 }
 function assertReplyMessage(html, expected) {
-  assert.equal(accessibleLabels(html).includes('Message reply_tester'), expected);
-  assert.equal(/href="\/messages\?to=reply_tester"/.test(html), expected);
+  assert.equal(accessibleLabels(html).includes('Message reply-tester'), expected);
+  assert.equal(html.includes(`/messages?to=reply-tester&amp;member=${answer.author_id}`), expected);
 }
 
 for (const sourceUrl of [imported.source_url, null, undefined]) {
@@ -100,7 +102,7 @@ for (const sourceUrl of [imported.source_url, null, undefined]) {
   });
 }
 test('imported author ID cannot enable messaging, even when it looks like a real user', () => {
-  assertQuestionMessage(renderDetail({ ...imported, author_id: 'real-author' }), false);
+  assertQuestionMessage(renderDetail({ ...imported, author_id: '11111111-1111-4111-8111-111111111111' }), false);
 });
 for (const source of ['visaflow', undefined]) {
   test(`real user question (${String(source)}) offers messaging to another viewer and guests`, () => {
@@ -150,5 +152,5 @@ test('mixed discussion exposes messaging only for eligible native authors', () =
   const html = renderDetail(imported, replies);
   assertNoImportPresentation(html);
   const messageLabels = [...html.matchAll(/aria-label="Message ([^"]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(messageLabels, ['reply_tester']);
+  assert.deepEqual(messageLabels, ['reply-tester']);
 });

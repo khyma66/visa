@@ -125,6 +125,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const groupMethods = ['listCommunities', 'listMyCommunitiesPage', 'getMembershipForCommunity', 'getMembershipsForCommunities', 'getCommunityById', 'getCommunityBySlug', 'createCommunity', 'joinCommunity', 'leaveCommunity', 'listCommunityQuestions'];
 dependencies['@/lib/groups'] = dataUrl(groupMethods.map((name) => `export async function ${name}(...args){return globalThis.__communityHarness.invoke(${JSON.stringify(name)},args);}`).join('\n'));
 dependencies['@/lib/community'] = dataUrl('export async function createQuestion(...args){return globalThis.__communityHarness.invoke("createQuestion",args);}');
+dependencies['@/lib/post-categories'] = await compile('../src/lib/post-categories.ts');
 dependencies['@/lib/tagging'] = await compile('../src/lib/tagging.ts');
 dependencies['./SafetyNotice'] = await compile('../src/components/SafetyNotice.tsx');
 const { AskQuestionForm } = await import(await compile('../src/components/AskQuestionForm.tsx'));

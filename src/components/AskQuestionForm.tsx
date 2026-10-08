@@ -10,11 +10,12 @@ import { normalizeTags, suggestTags } from '@/lib/tagging';
 import { useAuth } from './AuthProvider';
 import { RelatedQuestions } from './RelatedQuestions';
 
-const VISA_TYPES = ['H-1B', 'B1/B2', 'F-1 / OPT', 'Schengen', 'Study permit', 'Work permit', 'Family / spouse', 'General'];
+import { VISA_TYPES, EXPERIENCE_CATEGORIES } from '@/lib/post-categories';
 
-export function AskQuestionForm({ experience = false }: { experience?: boolean }) {
+export function AskQuestionForm({ experience = false }: { experience?: boolean } = {}) {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
+  const [category, setCategory] = useState(EXPERIENCE_CATEGORIES[0]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [country, setCountry] = useState('United States');
@@ -72,7 +73,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
     return () => controller.abort();
   }, [user?.id, loading, communityId, communityRevision]);
   const selectedCommunity = selection?.userId === user?.id && selection?.id === communityId ? selection.community : null;
-  const loginReturn = `/login?next=${encodeURIComponent(`/ask${communityId ? `?community=${encodeURIComponent(communityId)}` : ''}`)}`;
+  const loginReturn = `/login?next=${encodeURIComponent(`${experience ? '/experiences/new' : '/ask'}${communityId ? `?community=${encodeURIComponent(communityId)}` : ''}`)}`;
 
   const suggestedTags = suggestTags(`${title}\n${body}`);
 
@@ -111,10 +112,10 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
     try {
       const id = await createQuestion(user.id, {
         title: title.trim(), body: body.trim(), destination_country: country.trim(), visa_type: visaType, tags: normalizedTags,
-        ...(experience ? { post_kind: 'experience' as const, experience_category: 'visa-timeline' } : {}),
+        ...(experience ? { post_kind: 'experience' as const, experience_category: category } : {}),
         ...(communityId ? { community_id: communityId } : {}),
       });
-      if (alive.current && currentActor.current === actor && submitLock.current === operation) router.push(`/questions/${id}`);
+      if (alive.current && currentActor.current === actor && submitLock.current === operation) router.push(`/${experience ? 'experiences' : 'questions'}/${id}`);
     } catch (reason) {
       if (alive.current && currentActor.current === actor && submitLock.current === operation) {
         setError(reason instanceof Error ? reason.message : 'Could not publish the question.');
@@ -128,8 +129,8 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
   return (
     <main className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section>
-        <p className="text-sm font-bold uppercase tracking-wider text-teal-700">Ask the community</p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Share the details that make your case different</h1>
+        <p className="text-sm font-bold uppercase tracking-wider text-teal-700">{experience ? 'Share a visa experience' : 'Ask the community'}</p>
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">{experience ? 'Help others learn from your visa journey' : 'Share the details that make your case different'}</h1>
         <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your-random-handle'}</b>.</p>
         {!user && <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mr-2 inline" size={17} /> <Link href={loginReturn} className="font-bold underline">Log in</Link> before publishing. Your email remains private.</div>}
         <form onSubmit={submit} className="mt-7 space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
@@ -150,7 +151,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
           {selectionError && <div role="alert" className="text-sm text-rose-700">{selectionError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline">Retry selection</button></div>}
           {communityError && <div role="alert" className="text-sm text-rose-700">{communityError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline">Retry</button></div>}
           <label className="block">
-            <span className="font-bold text-slate-900">Question title</span>
+            <span className="font-bold text-slate-900">{experience ? 'Experience title' : 'Question title'}</span>
             <span className="mt-1 block text-sm text-slate-500">Write the exact question another person might search.</span>
             <input required minLength={15} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Can I… / How should I…"
               className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100" />
@@ -159,6 +160,8 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
             <label><span className="font-bold text-slate-900">Destination country</span><input required maxLength={80} value={country} onChange={(event) => setCountry(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-teal-600" /></label>
             <label><span className="font-bold text-slate-900">Visa type</span><select value={visaType} onChange={(event) => setVisaType(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-teal-600">{VISA_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label>
           </div>
+          {visaType === 'Other' && <p className="text-sm text-slate-600">Please mention your visa type in the title or details below.</p>}
+          {experience && <label className="block"><span className="font-bold text-slate-900">Experience category</span><select required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
           <label className="block">
             <span className="font-bold text-slate-900">Situation and timeline</span>
             <span className="mt-1 block text-sm text-slate-500">Describe relevant dates, visa type and steps already taken. Do not paste documents or identifying numbers.</span>
@@ -175,7 +178,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
             <p className="mt-2 text-xs text-slate-500">Your selected tags are saved. Suggested tags are added automatically when you publish.</p>
           </div>
           {error && <p className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
-          <button disabled={submitting} className="rounded-lg bg-teal-700 px-5 py-3 font-bold text-white hover:bg-teal-800 disabled:opacity-60">{submitting ? 'Publishing…' : 'Publish question'}</button>
+          <button disabled={submitting} className="rounded-lg bg-teal-700 px-5 py-3 font-bold text-white hover:bg-teal-800 disabled:opacity-60">{submitting ? 'Publishing…' : experience ? 'Publish experience' : 'Publish question'}</button>
         </form>
       </section>
       <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">

@@ -39,7 +39,7 @@ function VoteRail({ score, onVote, accepted }: { score: number; onVote: (value: 
 
 function ImportedScore({ score }: { score: number }) {
   return (
-    <div className="flex w-11 shrink-0 flex-col items-center gap-1.5 text-blue-700" aria-label={`${score} source reactions`}>
+    <div className="flex w-11 shrink-0 flex-col items-center gap-1.5 text-blue-700" aria-label={`${score} reactions`}>
       <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-50"><ThumbsUp size={17} /></span>
       <b className="text-base text-slate-800">{score}</b>
       <span className="whitespace-nowrap text-xs font-bold text-slate-500">reactions</span>
@@ -169,10 +169,6 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                 <Author username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
               </div>
               {!imported && <ReportButton kind="question" target={question.id} />}
-              {imported && <div className="mt-5 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
-                <p>Originally shared in {question.source_group || 'a visa community group'}.{question.source_url && <> <a href={question.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 hover:underline">Original discussion <ExternalLink size={12} /></a></>}</p>
-                <p>Contributor labels are not VisaThreads accounts. Dates and context may be incomplete; new replies stay here. <Link href="/community-safety" className="underline">Source and privacy guidance</Link></p>
-              </div>}
             </div>
           </article>
 
@@ -196,7 +192,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                     <div className="whitespace-pre-wrap text-lg leading-normal text-slate-800">{answer.body}</div>
                     {!sourceOnly && <ReportButton kind={imported ? 'imported_answer' : 'answer'} target={answer.id} />}
                     <div className="mt-6 flex items-end justify-between gap-4">
-                      {sourceOnly && answer.source_url ? <a href={answer.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:underline">Original comment <ExternalLink size={12} /></a> : !imported && !experience && owner && canAnswer && !sourceOnly && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline"><Check size={16} /> Accept this answer</button> : <span />}
+                      {!imported && !experience && owner && canAnswer && !sourceOnly && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline"><Check size={16} /> Accept this answer</button> : <span />}
                       <div className="flex items-center gap-3"><Author username={answer.author_username} seed={answer.author_avatar_seed} createdAt={answer.created_at} sourceOnly={sourceOnly} />{messageHref && <Link href={messageHref} aria-label={`Message ${answer.author_username}`} className="text-slate-400 hover:text-teal-700"><MessageCircle size={18} /></Link>}</div>
                     </div>
                   </div>

@@ -17,6 +17,7 @@ const dependencies = {
   'next/link': dataUrl(`import {jsx} from ${JSON.stringify(jsx)}; export default function Link(props){return jsx('a',props);}`),
   'next/navigation': dataUrl('export function useSearchParams(){return new URLSearchParams(globalThis.__feedHarness.search);}'),
   'lucide-react': dataUrl(`function Icon(){return null;} export {${icons.map((name) => `Icon as ${name}`).join(',')}};`),
+  '@/lib/post-categories': dataUrl('export const EXPERIENCE_CATEGORIES=["Other"],VISA_TYPES=["H1B","Other"];'),
   '@/lib/community': dataUrl('export async function getCommunitySource(){return {};} export async function getQuestionPage(options){const h=globalThis.__feedHarness;h.calls.push(options);return h.getPage(options);}'),
   '@/lib/realtime': dataUrl('export function subscribeLive(){return ()=>{};}'),
   './AuthProvider': dataUrl('export function useAuth(){return {user:null,demoMode:true};}'),
@@ -27,6 +28,7 @@ const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.Scri
   assert(dependencies[name], `Unmapped dependency ${name}`);
   return prefix + JSON.stringify(dependencies[name]);
 });
+dependencies['@/lib/post-categories'] = dataUrl('export const EXPERIENCE_CATEGORIES=["Other"],VISA_TYPES=["H1B","Other"];');
 const { CommunityHome } = await import(dataUrl(compiled));
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const same = (a, b) => a && b && a.length === b.length && a.every((item, index) => Object.is(item, b[index]));
@@ -87,7 +89,7 @@ test('feed restores header search, tag, visa and sort from the URL', async () =>
   const h = new Harness('?q=documents&tag=documents&visa=H1B&sort=score');
   try {
     h.render(); await h.flush();
-    assert.deepEqual(h.calls.at(-1), { search: 'documents', tag: 'documents', visaType: 'H1B', sort: 'score' });
+    assert.deepEqual(h.calls.at(-1), { search: 'documents', tag: 'documents', visaType: 'H1B', sort: 'score', experience: false, category: '' });
     assert.equal(nodes(h.tree).find((node) => node.type === 'input').props.value, 'documents');
     assert.equal(button(h, 'Top').props['aria-pressed'], true);
   } finally { h.close(); }
@@ -103,7 +105,7 @@ test('feed controls publish clean framework-aware query state and clear filters'
     assert(h.writes.every((write) => write.state === null), 'Do not pass app-owned Next history state when changing query parameters');
     button(h, 'Clear filters').props.onClick(); h.render(); await h.flush();
     assert.equal(h.search, '');
-    assert.deepEqual(h.calls.at(-1), { search: '', tag: '', visaType: '', sort: 'newest' });
+    assert.deepEqual(h.calls.at(-1), { search: '', tag: '', visaType: '', sort: 'newest', experience: false, category: '' });
   } finally { h.close(); }
 });
 

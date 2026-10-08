@@ -18,7 +18,7 @@ const hooks = moduleUrl(`import * as React from ${JSON.stringify(reactUrl)};
     const index=state.index++; return React.useState(Object.hasOwn(state.values,index)?state.values[index]:initial);}`);
 const dependencies = {
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'), react: hooks,
-  'next/link': link, 'next/navigation': moduleUrl('export const useParams=()=>({id:globalThis.__presentation.question?.id});'),
+  'next/link': link, 'next/navigation': moduleUrl('export const useSearchParams=()=>new URLSearchParams();export const useParams=()=>({id:globalThis.__presentation.question?.id});'),
   'lucide-react': import.meta.resolve('lucide-react'), 'date-fns': import.meta.resolve('date-fns'),
   '@/lib/community': moduleUrl('export const acceptAnswer=()=>{},createAnswer=()=>{},getAnswerPage=()=>{},getDiscussionContext=()=>{},getQuestion=()=>{},sortAnswers=x=>x,voteAnswer=()=>{},voteQuestion=()=>{},getCommunitySource=()=>{},getQuestionPage=()=>{},discoverQuestions=()=>{};'),
   '@/lib/realtime': moduleUrl('export const subscribeLive=()=>()=>{};'),
@@ -32,6 +32,7 @@ const dependencies = {
 };
 dependencies['@/lib/messaging-state'] = moduleUrl(transpile(await readFile(new URL('../src/lib/messaging-state.ts',import.meta.url),'utf8')));
 dependencies['@/lib/post-categories'] = moduleUrl(transpile(await readFile(new URL('../src/lib/post-categories.ts',import.meta.url),'utf8')));
+dependencies['@/lib/post-presentation'] = moduleUrl(transpile(await readFile(new URL('../src/lib/post-presentation.ts',import.meta.url),'utf8')));
 async function component(name) {
   let code = transpile(await readFile(new URL(`../src/components/${name}.tsx`,import.meta.url),'utf8'));
   for(const [specifier,replacement] of Object.entries(dependencies)) {
@@ -67,7 +68,7 @@ test('source question cards use normal discussion layout without fake member ide
   const html=render(QuestionCard,{question:source});
   noPipelineLabels(html);
   assert(html.includes(source.title));assert(html.includes(source.body));
-  assert(html.includes('reactions'));assert(html.includes('comments'));assert(html.includes('shares'));
+  assert(html.includes('reactions'));assert(html.includes('replies'));assert(!html.includes('views'));
   assert(html.includes('Community contributor'));assert(!html.includes(source.author_username));assert(!html.includes('Member avatar'));
   assert(!html.includes(source.source_url));assert(!html.includes('/messages?'));
 });
@@ -93,9 +94,9 @@ test('experience feed excludes questions, includes Other, and defaults to newest
   assert(html.includes('All experience categories')); assert(html.includes('Other</option>'));
   assert(html.indexOf('/experiences/newer') < html.indexOf('/experiences/older'));
   assert(!html.includes(`/questions/${native.id}`));
-  assert.match(html,/aria-pressed="true"[^>]*>Newest/);
+  assert.match(html,/aria-pressed="true"[^>]*>New/);
   const filtered=render(CommunityHome,{experience:true},{values:{0:[older,newer],3:false,15:'Visa interview'}});
-  assert(filtered.includes('No close match yet')); assert(!filtered.includes('/experiences/newer'));
+  assert(filtered.includes('No matching questions')); assert(!filtered.includes('/experiences/newer'));
 });
 test('discussion and promotion labels describe content rather than where it came from',()=>{
   for(const sourceKind of ['apify','visaflow']) {
@@ -103,11 +104,11 @@ test('discussion and promotion labels describe content rather than where it came
     assert(render(QuestionCard,{question:{...native,source:sourceKind,post_kind:'promotion'}}).includes('Promotional post'));
   }
 });
-test('source detail preserves genuine attribution but has no source author messaging or voting affordance',()=>{
+test('source detail uses neutral presentation with no source-author messaging or voting affordance',()=>{
   const html=render(QuestionDetail,{initialQuestion:source},{user:{id:bob}});
-  noPipelineLabels(html);assert(html.includes('Originally shared in Visa experience group.'));
-  assert(html.includes(source.source_url));assert(html.includes('Contributor labels are not VisaThreads accounts.'));
-  assert(html.includes('Join the discussion'));assert(html.includes('new replies stay here'));
+  noPipelineLabels(html);assert(!html.includes('Originally shared in'));
+  assert(!html.includes(source.source_url));assert(html.includes('Community contributor'));
+  assert(html.includes('Join the discussion'));assert(!html.includes('Original discussion'));
   assert(!html.includes('Message author'));assert(!html.includes('/messages?'));assert(!html.includes('aria-label="Upvote"'));
   assert(!html.includes(source.author_username));assert(!html.includes('Peer experiences, not legal advice'));
 });
@@ -115,7 +116,7 @@ test('an apify ID remains source-only even when its source flag/link are absent 
   const malformed={...source,source:undefined,source_url:null,author_id:alice,author_username:'alice-test'};
   const html=render(QuestionDetail,{initialQuestion:malformed},{user:{id:bob}});
   assert(!html.includes('/messages?'));assert(!html.includes('u/alice-test'));assert(!html.includes('aria-label="Upvote"'));
-  assert(html.includes('Originally shared in'));
+  assert(html.includes('Community contributor'));
 });
 test('native post messaging binds both public username and registered profile ID for guests and other members',()=>{
   for(const user of [null,{id:bob}]) {
@@ -128,7 +129,7 @@ test('native post messaging binds both public username and registered profile ID
 test('source comments cannot become member identities or message targets through missing provenance or matching handles',()=>{
   const comment={...reply,id:'apify-comment-fixture',source:undefined,author_username:'bob-test',source_url:source.source_url};
   const html=render(QuestionDetail,{initialQuestion:source,initialAnswers:[comment]},{user:{id:alice}});
-  noPipelineLabels(html);assert(html.includes('Original comment'));assert(html.includes(comment.body));
+  noPipelineLabels(html);assert(!html.includes('Original comment'));assert(html.includes(comment.body));
   assert(!html.includes('u/bob-test'));assert(!html.includes('/messages?'));assert(!html.includes('aria-label="Upvote"'));
 });
 test('registered member replies on source discussions retain their own message action',()=>{
@@ -139,8 +140,8 @@ test('registered member replies on source discussions retain their own message a
 });
 test('home renders community-first copy and no ingestion diagnostics while preserving filters and post text',()=>{
   const html=render(CommunityHome,{}, {values:{0:[source,native],3:false}});
-  noPipelineLabels(html);assert(html.includes('All community posts'));assert(html.includes('Browse all tags'));
-  assert(html.includes(source.title));assert(html.includes('Highest score'));assert(html.includes('Ask your question'));
+  noPipelineLabels(html);assert(html.includes('All post types'));assert(html.includes('All tags'));
+  assert(html.includes(source.title));assert(html.includes('Top'));assert(html.includes('Ask a question'));
   assert(!html.includes('Privacy-aware import'));
 });
 test('partial feed failures remain visible without exposing ingestion diagnostics',()=>{
