@@ -1,5 +1,5 @@
 import { SaxesParser } from 'saxes';
-import { cleanText, safeNewsUrl, GOOGLE_NEWS_RSS_URL, NEWS_CACHE_MS, NEWS_LIMIT, NEWS_MAX_BYTES, NEWS_TIMEOUT_MS } from './news-shared';
+import { cleanText, safeNewsUrl, GOOGLE_NEWS_RSS_URL, NEWS_CACHE_MS, NEWS_FAILURE_BACKOFF_MS, NEWS_LIMIT, NEWS_MAX_BYTES, NEWS_TIMEOUT_MS } from './news-shared';
 import type { NewsArticle, NewsFeedData } from './news-shared';
 
 const WEEK_MS = 7 * 86_400_000;
@@ -119,9 +119,11 @@ async function readBoundedXml(response: Response): Promise<string> {
 export function createNewsService(fetcher: typeof fetch = fetch, now: () => number = Date.now, timeoutMs = NEWS_TIMEOUT_MS) {
   let cached: { expiresAt: number; data: NewsFeedData } | null = null;
   let pending: Promise<NewsFeedData> | null = null;
+  let retryAt = 0;
   return async function getNews(): Promise<NewsFeedData> {
     if (cached && cached.expiresAt > now()) return cached.data;
     if (pending) return pending;
+    if (retryAt > now()) throw new Error('News source is temporarily unavailable');
     const task = (async () => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -132,7 +134,13 @@ export function createNewsService(fetcher: typeof fetch = fetch, now: () => numb
         const articles = await parseGoogleNewsRss(await readBoundedXml(response), now());
         const data: NewsFeedData = { status: 'ok', source: 'Google News', articles, retrievedAt: new Date(now()).toISOString(), limit: NEWS_LIMIT };
         cached = { expiresAt: now() + NEWS_CACHE_MS, data };
+        retryAt = 0;
         return data;
+      } catch (error) {
+        // Coalescing only protects simultaneous reads. Back off sequential reads
+        // too, including when the shared edge cache is unavailable.
+        retryAt = now() + NEWS_FAILURE_BACKOFF_MS;
+        throw error;
       } finally { clearTimeout(timer); }
     })();
     pending = task;

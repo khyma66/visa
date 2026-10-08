@@ -20,4 +20,11 @@ jobs:
       - run: npm ci
       - run: npm run check:secrets
       - run: npm run check
+      - name: Preserve checked build provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: checked-build-provenance-${{ github.sha }}
+          path: .cache/visaflow/build-provenance.json
+          include-hidden-files: true
+          if-no-files-found: error
       - run: npm audit --audit-level=high

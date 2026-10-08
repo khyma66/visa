@@ -15,7 +15,7 @@ const fileModule = (name) => pathToFileURL(require.resolve(name)).href;
 const jsx = fileModule('react/jsx-runtime');
 const link = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)}; export default function Link(props) { return jsx('a',{...props}); }`);
 const auth = moduleUrl(`let user=null; export function setUser(value){user=value;} export function useAuth(){return {user,demoMode:false};}`);
-const icons = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)}; function Icon({size,...props}){return jsx('svg',props);} export {Icon as ArrowDown,Icon as ArrowUp,Icon as Check,Icon as CheckCircle2,Icon as ExternalLink,Icon as Eye,Icon as MessageCircle,Icon as Share2,Icon as ThumbsUp};`);
+const icons = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)}; function Icon({size,...props}){return jsx('svg',props);} export {Icon as ArrowDown,Icon as ArrowUp,Icon as Check,Icon as CheckCircle2,Icon as ExternalLink,Icon as Eye,Icon as GitFork,Icon as MessageCircle,Icon as Share2,Icon as ThumbsUp};`);
 const dependencies = {
   'react/jsx-runtime': jsx,
   react: fileModule('react'),

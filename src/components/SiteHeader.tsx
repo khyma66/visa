@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { CircleHelp, LogOut, MessageCircle, Plus, ShieldCheck } from 'lucide-react';
+import { CircleHelp, LogOut, Menu, MessageCircle, Plus, Search, ShieldCheck } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
+import { CommunityNavigation } from './CommunityNavigation';
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -15,6 +16,7 @@ export function SiteHeader() {
   const [error, setError] = useState('');
   const accountRef = useRef<HTMLDivElement>(null);
   const accountButton = useRef<HTMLButtonElement>(null);
+  const mobileMenu = useRef<HTMLDetailsElement>(null);
   useEffect(() => { setOpen(false); }, [pathname, user?.id]);
   useEffect(() => {
     if (!open) return;
@@ -29,27 +31,37 @@ export function SiteHeader() {
     try { await signOut(); setOpen(false); } catch { setError('Sign out failed. Please try again.'); }
     finally { setBusy(false); }
   }
-  const active = (path: string) => pathname === path ? 'text-slate-950 bg-slate-100' : 'text-slate-600 hover:text-slate-950 hover:bg-slate-50';
+  useEffect(() => { if (mobileMenu.current) mobileMenu.current.open = false; }, [pathname]);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-t-[3px] border-b-slate-200 border-t-orange-500 bg-white/95 backdrop-blur">
+    <header className="site-header">
       <a href="#main-content" className="skip-link">Skip to content</a>
-      <div className="site-shell flex h-16 items-center gap-2 sm:gap-3">
-        <Link href="/" className="mr-auto flex items-center gap-2 text-lg font-extrabold tracking-tight text-slate-950">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-teal-700 text-white"><CircleHelp size={21} /></span>
+      <div className="header-content">
+        <details ref={mobileMenu} className="mobile-menu" onKeyDown={(event) => {
+          if (event.key === 'Escape' && mobileMenu.current) {
+            mobileMenu.current.open = false;
+            mobileMenu.current.querySelector('summary')?.focus();
+          }
+        }}>
+          <summary className="icon-control" aria-label="Open navigation" title="Navigation"><Menu size={22}/></summary>
+          <div className="mobile-menu-panel"><CommunityNavigation mobile onNavigate={() => { if (mobileMenu.current) mobileMenu.current.open = false; }}/></div>
+        </details>
+        <Link href="/" className="site-brand">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal-700 text-white"><CircleHelp size={21} /></span>
           <span>Visa<span className="text-teal-700">Flow</span></span>
         </Link>
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
-          <Link href="/" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/')}`}>Questions</Link>
-          <Link href="/tags" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/tags')}`}>Tags</Link>
-          <Link href="/messages" className={`rounded-lg px-3 py-2 text-sm font-semibold ${active('/messages')}`}>Messages</Link>
-        </nav>
+        <form action="/" method="get" role="search" className="header-search">
+          <Search size={19} aria-hidden="true"/>
+          <label className="sr-only" htmlFor="site-search">Search VisaFlow</label>
+          <input id="site-search" name="q" type="search" placeholder="Search visa questions" maxLength={200}/>
+          <button type="submit" className="icon-control" aria-label="Search" title="Search"><Search size={18}/></button>
+        </form>
         {demoMode && (
           <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 sm:flex">
             <ShieldCheck size={13} /> Local profile
           </span>
         )}
-        <Link href="/ask" aria-label="Ask a question" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-teal-800">
+        <Link href="/ask" aria-label="Ask a question" title="Ask a question" className="header-ask">
           <Plus size={16} /> <span className="hidden sm:inline">Ask</span>
         </Link>
         {user ? (
@@ -57,7 +69,7 @@ export function SiteHeader() {
             <button ref={accountButton} onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="account-panel" className="flex min-h-10 items-center gap-2 rounded-full p-1 hover:bg-slate-100" aria-label={`Account: ${profile?.username ?? 'Signed in'}`}>
               <Avatar seed={profile?.avatar_seed ?? user.id} />
             </button>
-            {open && <div id="account-panel" className="absolute right-0 top-12 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+            {open && <div id="account-panel" className="absolute right-0 top-12 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Public pseudonym</p>
               <p className="mt-1 font-bold text-slate-900">{profile ? `u/${profile.username}` : 'Setting up your profile…'}</p>
               <p className="text-xs text-slate-500">{profile?.reputation ?? 0} reputation · email not displayed</p>
@@ -67,12 +79,9 @@ export function SiteHeader() {
             </div>}
           </div>
         ) : (
-          <a href="/login#sign-in" className="rounded-lg px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100">Log in</a>
+          <a href="/login#sign-in" className="header-login">Log in</a>
         )}
       </div>
-      <nav aria-label="Mobile navigation" className="grid grid-cols-3 border-t border-slate-100 px-4 py-1 md:hidden">
-        {[['/', 'Questions'], ['/tags', 'Tags'], ['/messages', 'Messages']].map(([path, label]) => <Link key={path} href={path} aria-current={pathname === path ? 'page' : undefined} className={`rounded-lg px-2 py-3 text-center text-xs font-bold ${active(path)}`}>{label}</Link>)}
-      </nav>
     </header>
   );
 }
