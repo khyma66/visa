@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Search, MessageCircle } from 'lucide-react';
+import { Search, GitFork } from 'lucide-react';
 import { discoverQuestions } from '@/lib/community';
 import { contextTags, type DiscoveryContext } from '@/lib/discovery';
 import { subscribeLive } from '@/lib/realtime';
@@ -25,29 +25,29 @@ export function RelatedQuestions({ context, drafting = false }: { context: Disco
 
   useEffect(() => {
     let current = true;
-    if (!hasContext) { setItems([]); setLoading(false); return; }
-    setLoading(true);
+    if (!hasContext) { setItems([]); setLoading(false); setError(''); return; }
+    setLoading(true); setError(''); setItems([]);
     const timer = setTimeout(() => {
       void discoverQuestions(JSON.parse(key) as DiscoveryContext)
         .then((rows) => { if (current) { setItems(rows); setError(''); } })
-        .catch(() => { if (current) setError('Matches could not be updated. Keep writing; we will retry.'); })
+        .catch(() => { if (current) setError('Related questions could not be loaded.'); })
         .finally(() => { if (current) setLoading(false); });
     }, 200);
     return () => { current = false; clearTimeout(timer); };
   }, [key, revision, hasContext]);
 
-  return <section aria-label="Related questions" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <div className="border-b border-slate-200 p-5">
-      <div className="flex items-center justify-between gap-2"><h2 className="font-black text-slate-900">{drafting ? 'Related to your draft' : 'Related questions'}</h2><MessageCircle size={15} className="text-teal-600" /></div>
-      <p className="mt-2 text-xs leading-5 text-slate-500">{drafting ? 'Suggestions update as you type. Your draft is not published.' : 'Explore similar questions, shared tags, and relevant replies.'}</p>
-      {tags.length > 0 && <div className="mt-3 flex flex-wrap gap-1">{tags.slice(0, 8).map((tag) => <span key={tag} className="rounded bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">{tag}</span>)}</div>}
-      <p aria-live="polite" className="mt-2 text-xs text-slate-500">{loading ? 'Updating matches…' : error || `${items.length} related posts`}</p>
+  return <section aria-label="Related questions" aria-busy={loading} className="min-w-0 border-b border-slate-200 bg-white pb-3">
+    <div className="px-2 pb-2">
+      <div className="flex items-center gap-2"><GitFork size={17} className="text-slate-500" aria-hidden="true" /><h2 className="text-sm font-bold text-slate-900">{drafting ? 'Related to your draft' : 'Related questions'}</h2></div>
+      {drafting && <p className="mt-2 text-xs leading-5 text-slate-500">Suggestions update as you type. Your draft is not published.</p>}
+      <p aria-live="polite" className="mt-2 text-xs text-slate-500">{loading ? 'Finding related questions...' : error || `${items.length} related posts`}</p>
+      {error && <button onClick={() => setRevision((value) => value + 1)} className="mt-2 text-xs font-semibold text-blue-700 underline">Retry related questions</button>}
     </div>
-    <div className="divide-y divide-slate-100">{items.map((item) => <Link key={item.id} href={`/questions/${item.id}`} className="block p-4 hover:bg-slate-50">
-      <div className="flex gap-3"><span aria-label={`${item.answer_count} replies`} title={`${item.answer_count} replies`} className="mt-0.5 h-fit min-w-7 rounded bg-emerald-50 p-1 text-center text-xs font-bold text-emerald-800">{item.answer_count}</span><p className="text-sm font-semibold leading-5 text-blue-800">{item.title}</p></div>
-      <p className="mt-2 text-xs text-slate-500">{item.match_reason ?? (item.matched_tags?.length ? `Shared topics: ${item.matched_tags.slice(0, 3).join(', ')}` : 'Similar wording')}</p>
-      <div className="mt-2 flex flex-wrap gap-1">{item.tags.slice(0, 3).map((tag) => <span key={tag} className={`rounded px-1.5 py-0.5 text-xs font-bold ${item.matched_tags?.includes(tag) ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{tag}</span>)}</div>
+    <div>{items.map((item) => <Link key={item.id} href={`/questions/${item.id}`} className="block rounded-lg px-2 py-3 hover:bg-slate-50">
+      <p className="break-words text-sm font-semibold leading-5 text-slate-800">{item.title}</p>
+      <div className="mt-2 flex flex-wrap gap-1">{item.tags.slice(0, 3).map((tag) => <span key={tag} className={`max-w-full break-words rounded px-1.5 py-0.5 text-[11px] font-medium ${item.matched_tags?.includes(tag) ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{tag}</span>)}</div>
+      <p className="mt-2 text-xs text-slate-500">{item.vote_score} score · {item.answer_count} replies</p>
     </Link>)}</div>
-    {!items.length && !loading && <div className="p-5 text-sm leading-6 text-slate-500"><Search size={20} className="mb-2 text-slate-400" />{hasContext ? 'No close match yet. Add more detail or publish your question.' : 'Describe your situation to find previous discussions.'}</div>}
+    {!items.length && !loading && !error && <div className="px-2 py-3 text-xs leading-5 text-slate-500"><Search size={18} className="mb-2 text-slate-400" aria-hidden="true" />{hasContext ? (drafting ? 'No close match yet. Add more detail or publish your question.' : 'No related questions found yet.') : 'Search a visa topic to find related discussions.'}</div>}
   </section>;
 }

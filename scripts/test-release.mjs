@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { releaseProblems, requiredReviews } from './release-check.mjs';
+import { releaseProblems as releaseProblemsWithSource, requiredReviews } from './release-check.mjs';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import { archiveSource } from './archive-source.mjs';
@@ -16,7 +16,9 @@ const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source)
 const transpile = (source) => ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
 
 const env = { NEXT_PUBLIC_SUPABASE_URL:'https://fixture.supabase.co', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:`sb_publishable_${'x'.repeat(30)}`, NEXT_PUBLIC_APP_ENV:'production', NEXT_PUBLIC_SITE_URL:'https://visaflow.example.org' };
-const review = { siteOrigin:env.NEXT_PUBLIC_SITE_URL, databaseOrigin:env.NEXT_PUBLIC_SUPABASE_URL, checks:Object.fromEntries(requiredReviews.map((name) => [name,{status:'verified',evidence:'Test fixture only',verifiedBy:'Test'}])) };
+const source = { gitSha: 'a'.repeat(40), gitTree: 'b'.repeat(40), sourceSha256: 'c'.repeat(64), dirty: false };
+const releaseProblems = (env, review, config) => releaseProblemsWithSource(env, review, config, source);
+const review = { siteOrigin:env.NEXT_PUBLIC_SITE_URL, databaseOrigin:env.NEXT_PUBLIC_SUPABASE_URL, checks:Object.fromEntries(requiredReviews.map((name) => [name,{status:'verified',evidence:'Test fixture only',verifiedBy:'Test', ...(name === 'source_parity' ? { sourceSha256: source.sourceSha256 } : {})}])) };
 const config = { env:{production:{vars:{APP_ENV:'production',PUBLIC_LAUNCH_APPROVED:'true',IMPORTED_CONTENT_APPROVED:'false'}}} };
 test('release accepts an explicitly reviewed matching configuration', () => assert.deepEqual(releaseProblems(env,review,config),[]));
 test('release rejects missing config, service role keys, mismatched evidence and unsafe public variables', () => {

@@ -18,7 +18,7 @@
     "test:message-entry": "node --test --test-timeout=60000 scripts/test-message-entry.mjs scripts/test-messages-presentation.mjs",
     "test:presentation": "node --test --test-timeout=60000 scripts/test-community-presentation.mjs scripts/test-avatar.mjs scripts/test-post-presentation.mjs",
     "test:tags": "node --test --test-timeout=60000 scripts/test-tag-directory.mjs",
-    "test:release": "node --test scripts/test-release.mjs",
+    "test:release": "node --test scripts/test-release.mjs scripts/test-provenance.mjs",
     "test:archive": "node --test scripts/test-archive.mjs",
     "test:notices": "node --test scripts/test-notices.mjs scripts/test-policy.mjs",
     "test:security": "node --test scripts/test-security.mjs",
@@ -29,7 +29,7 @@
     "test:groups": "node --test --test-timeout=60000 scripts/test-community-groups.mjs",
     "test:community-ui": "node --test scripts/test-community-ui.mjs",
     "test:scale": "node --test --test-timeout=120000 scripts/test-community-scale.mjs",
-    "test": "npm run test:isolation && npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:messaging && npm run test:message-entry && npm run test:presentation && npm run test:tags && npm run test:news && npm run test:groups && npm run test:community-ui && npm run test:scale",
+    "test": "npm run test:isolation && npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:messaging && npm run test:message-entry && npm run test:presentation && npm run test:tags && npm run test:news && npm run test:groups && npm run test:community-ui && npm run test:scale && npm run test:feed-ui",
     "check:bundle": "node scripts/check-bundle.mjs",
     "check:archive-bundle": "node scripts/check-archive-bundle.mjs",
     "check:secrets": "node scripts/check-repository-secrets.mjs",
@@ -44,7 +44,8 @@
     "build:prod": "npm run check:release && CLOUDFLARE_ENV=production NEXT_PUBLIC_APP_ENV=production vinext build && NEXT_PUBLIC_APP_ENV=production npm run check:archive-bundle && npm run check:bundle",
     "deploy:prod": "npm run check:secrets && npm test && npm run typecheck && npm audit --audit-level=high && npm run build:prod && vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build",
     "build:dev": "CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development vinext build && CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development npm run check:archive-bundle",
-    "deploy:dev": "vinext-cloudflare deploy --config wrangler.jsonc --env development"
+    "deploy:dev": "vinext-cloudflare deploy --config wrangler.jsonc --env development",
+    "test:feed-ui": "node --test scripts/test-feed-ui.mjs"
   },
   "keywords": [
     "visa",
@@ -89,6 +90,8 @@
     "brace-expansion@^2": "2.1.7",
     "fast-uri@^3": "3.1.8",
     "browserslist": "4.28.9",
+    "sharp": "0.35.5",
+    "source-map-js": "1.2.2",
     "yaml": "2.9.0",
     "anymatch": {
       "picomatch": "2.3.2"

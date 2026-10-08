@@ -1,5 +1,5 @@
 import { createNewsService } from '@/lib/news';
-import { isNewsFeedData, NEWS_CACHE_MS } from '@/lib/news-shared';
+import { isNewsFeedData, NEWS_CACHE_MS, NEWS_FAILURE_BACKOFF_MS } from '@/lib/news-shared';
 import type { NewsFeedData } from '@/lib/news-shared';
 
 export const runtime = 'edge';
@@ -11,6 +11,19 @@ function newsResponse(data: NewsFeedData) {
   return Response.json(data, {
     headers: { 'Cache-Control': `public, max-age=${Math.min(60, secondsRemaining)}, s-maxage=${secondsRemaining}`, 'X-Content-Type-Options': 'nosniff' },
   });
+}
+
+function unavailableResponse(retryAfter = NEWS_FAILURE_BACKOFF_MS / 1_000) {
+  return Response.json({ status: 'unavailable', error: 'News headlines are temporarily unavailable. Try again or read the latest visa news on Google News.' }, {
+    status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': String(retryAfter), 'X-Content-Type-Options': 'nosniff' },
+  });
+}
+
+function cachedBackoffSeconds(value: unknown): number | null {
+  if (!value || typeof value !== 'object' || !('status' in value) || value.status !== 'backoff'
+    || !('retryAt' in value) || typeof value.retryAt !== 'number' || !Number.isFinite(value.retryAt)) return null;
+  const remaining = value.retryAt - Date.now();
+  return remaining > 0 && remaining <= NEWS_FAILURE_BACKOFF_MS ? Math.ceil(remaining / 1_000) : null;
 }
 
 export async function GET(request: Request) {
@@ -30,6 +43,8 @@ export async function GET(request: Request) {
       const cached = await edgeCache.match(cacheKey);
       if (cached?.ok) {
         const data: unknown = await cached.json();
+        const retryAfter = cachedBackoffSeconds(data);
+        if (retryAfter !== null) return unavailableResponse(retryAfter);
         if (isNewsFeedData(data)) {
           const age = Date.now() - Date.parse(data.retrievedAt);
           if (age >= 0 && age < NEWS_CACHE_MS) return newsResponse(data);
@@ -44,8 +59,15 @@ export async function GET(request: Request) {
     }
     return response;
   } catch {
-    return Response.json({ status: 'unavailable', error: 'News headlines are temporarily unavailable. Try again or read the latest visa news on Google News.' }, {
-      status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '60' },
-    });
+    if (edgeCache) {
+      try {
+        // Cache an internal marker, never the browser-facing error response.
+        // A bounded failure window protects the upstream across warm isolates.
+        await edgeCache.put(cacheKey, Response.json({ status: 'backoff', retryAt: Date.now() + NEWS_FAILURE_BACKOFF_MS }, {
+          headers: { 'Cache-Control': `public, max-age=${NEWS_FAILURE_BACKOFF_MS / 1_000}` },
+        }));
+      } catch { /* The per-instance backoff still limits requests without Cache API. */ }
+    }
+    return unavailableResponse();
   }
 }

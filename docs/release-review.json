@@ -2,23 +2,101 @@
   "siteOrigin": "https://visathreads.com",
   "databaseOrigin": "https://cycnichledvqbxevrwnt.supabase.co",
   "checks": {
-    "database_access": { "status": "verified", "evidence": "October 3: after explicit owner approval, legacy hardening applied as hosted migration 20261003204619. All 22 old table row counts match, 500 posts/account/profile/storage object retained; browser table/column/sequence grants zero, four functions server-only with fixed search paths, posts bucket private. No public table lacks RLS; current community/Q&A/DM access unchanged. Eight dedicated regressions and 42 membership tests pass. Live read-only HTTP checks deny all 22 old browser APIs and anonymous private RPCs while the current archive/public APIs remain available. Remaining extension/GraphQL/password advisories and human security acceptance are tracked separately.", "verifiedBy": "Codex hosted catalog, Supabase advisor, HTTP smoke and isolated PostgreSQL regression verification" },
-    "exposed_credentials_rotated": { "status": "blocked", "evidence": "September 11 UTC read-only pattern scan: 246 working files had no matching privileged keys; full reachable Git patch history contains service-role JWTs in 7 file paths. No values printed. Rotation/revocation has not been verified.", "verifiedBy": "" },
-    "email_signup_confirmation_recovery": { "status": "pending", "evidence": "October 3 dashboard now accessible: Site URL remains localhost, redirect allowlist empty, built-in test email service in use. Owned-domain redirect/template changes await explicit approval. Custom SMTP, actual email delivery, recovery and Google credentials remain unverified.", "verifiedBy": "" },
-    "moderator_assigned": { "status": "pending", "evidence": "Moderation tools implemented; operator must designate a real account.", "verifiedBy": "" },
-    "privacy_terms_and_support": { "status": "pending", "evidence": "October 4: expanded early-access privacy/terms, collection notice, storage notice, privacy choices and removal/appeal instructions deployed. User-approved temporary Gmail contact published. Legal operator/address, staffed response procedures, retention/deletion operations and counsel signoff remain unresolved; not a finalized production policy.", "verifiedBy": "" },
-    "versioned_policy_acceptance": { "status": "pending", "evidence": "October 4: version 2026-10-04-preview-v1 signup notices and post-auth acknowledgement deployed. Hosted receipt table has own-account RLS, current-version insert policy, server timestamp, no member update/delete/timestamp grants. Publication guard checks receipts. Nine isolated database tests pass. Human authenticated signup/email acceptance remains unverified; direct Auth identity creation is not prevented by this participation gate.", "verifiedBy": "" },
-    "all_us_jurisdictions_reviewed": { "status": "pending", "evidence": "Issue-spotting plan and 50-state plus DC register created in US_LEGAL_AND_EXPANSION_PLAN.md and us-jurisdiction-review.json. Every state remains pending actual business-specific counsel applicability review; no claim of all-state compliance.", "verifiedBy": "" },
-    "backup_restore": { "status": "pending", "evidence": "Backup and restore drill not performed.", "verifiedBy": "" },
-    "pilot_load_and_cost": { "status": "pending", "evidence": "Correctness tests are not capacity or cost verification.", "verifiedBy": "" },
-    "imported_content_rights": { "status": "verified", "evidence": "October 3, 2026: project owner explicitly confirmed permission to republish the imported posts and comments on visa-central.com in this task. This does not create registered accounts for imported authors. Production import remains gated on a reviewed import and separate takedown/retention controls.", "verifiedBy": "Project owner, explicit in-task confirmation" },
-    "bot_and_auth_abuse": { "status": "pending", "evidence": "Auth CAPTCHA/server verification, password policy and direct-API abuse tests not verified.", "verifiedBy": "" },
-    "privacy_requests_and_retention": { "status": "pending", "evidence": "Deletion/export, session revocation, retention and backup exceptions require implementation and a real request drill.", "verifiedBy": "" },
-    "public_takedown_intake": { "status": "pending", "evidence": "No monitored no-account copyright/privacy/intimate-content intake, imported suppression or staffed escalation process.", "verifiedBy": "" },
-    "age_and_us_legal_review": { "status": "pending", "evidence": "Operator, state, audience and age policy unresolved; counsel must assess current federal/state requirements.", "verifiedBy": "" },
-    "human_cross_account_tests": { "status": "pending", "evidence": "October 3 automated cross-account PostgreSQL policy tests and hosted anonymous-denial checks pass; actual authenticated browser/two-device acceptance needs approved disposable accounts/test inbox. No real account passwords or messages were created in this pass.", "verifiedBy": "" },
-    "accessibility_review": { "status": "pending", "evidence": "Keyboard, screen reader, zoom, mobile and accessible abuse-intake tests required.", "verifiedBy": "" },
-    "dependency_and_security_review": { "status": "blocked", "evidence": "October 3: 231 automated tests, typecheck, development Worker build and 157-file known-secret bundle scan pass; final display-only corrections additionally reran 31 relevant tests. Owner-approved legacy isolation is applied and hosted denial checks pass. Last dependency audit still reports 11 high findings via braces; audit gate retained. Historical credential revocation, actual authenticated two-account browser tests and full human/security review remain unresolved.", "verifiedBy": "" },
-    "incident_response_and_alerts": { "status": "pending", "evidence": "Need named on-call owner, alert delivery, breach/legal escalation drill, scoped admin access and safe log retention.", "verifiedBy": "" }
+    "database_access": {
+      "status": "verified",
+      "evidence": "October 3: after explicit owner approval, legacy hardening applied as hosted migration 20261003204619. All 22 old table row counts match, 500 posts/account/profile/storage object retained; browser table/column/sequence grants zero, four functions server-only with fixed search paths, posts bucket private. No public table lacks RLS; current community/Q&A/DM access unchanged. Eight dedicated regressions and 42 membership tests pass. Live read-only HTTP checks deny all 22 old browser APIs and anonymous private RPCs while the current archive/public APIs remain available. Remaining extension/GraphQL/password advisories and human security acceptance are tracked separately.",
+      "verifiedBy": "Codex hosted catalog, Supabase advisor, HTTP smoke and isolated PostgreSQL regression verification"
+    },
+    "exposed_credentials_rotated": {
+      "status": "blocked",
+      "evidence": "September 11 UTC read-only pattern scan: 246 working files had no matching privileged keys; full reachable Git patch history contains service-role JWTs in 7 file paths. No values printed. Rotation/revocation has not been verified.",
+      "verifiedBy": ""
+    },
+    "email_signup_confirmation_recovery": {
+      "status": "pending",
+      "evidence": "October 3 dashboard now accessible: Site URL remains localhost, redirect allowlist empty, built-in test email service in use. Owned-domain redirect/template changes await explicit approval. Custom SMTP, actual email delivery, recovery and Google credentials remain unverified.",
+      "verifiedBy": ""
+    },
+    "moderator_assigned": {
+      "status": "pending",
+      "evidence": "Moderation tools implemented; operator must designate a real account.",
+      "verifiedBy": ""
+    },
+    "privacy_terms_and_support": {
+      "status": "pending",
+      "evidence": "October 4: expanded early-access privacy/terms, collection notice, storage notice, privacy choices and removal/appeal instructions deployed. User-approved temporary Gmail contact published. Legal operator/address, staffed response procedures, retention/deletion operations and counsel signoff remain unresolved; not a finalized production policy.",
+      "verifiedBy": ""
+    },
+    "versioned_policy_acceptance": {
+      "status": "pending",
+      "evidence": "October 4: version 2026-10-04-preview-v1 signup notices and post-auth acknowledgement deployed. Hosted receipt table has own-account RLS, current-version insert policy, server timestamp, no member update/delete/timestamp grants. Publication guard checks receipts. Nine isolated database tests pass. Human authenticated signup/email acceptance remains unverified; direct Auth identity creation is not prevented by this participation gate.",
+      "verifiedBy": ""
+    },
+    "all_us_jurisdictions_reviewed": {
+      "status": "pending",
+      "evidence": "Issue-spotting plan and 50-state plus DC register created in US_LEGAL_AND_EXPANSION_PLAN.md and us-jurisdiction-review.json. Every state remains pending actual business-specific counsel applicability review; no claim of all-state compliance.",
+      "verifiedBy": ""
+    },
+    "backup_restore": {
+      "status": "pending",
+      "evidence": "Backup and restore drill not performed.",
+      "verifiedBy": ""
+    },
+    "pilot_load_and_cost": {
+      "status": "pending",
+      "evidence": "Correctness tests are not capacity or cost verification.",
+      "verifiedBy": ""
+    },
+    "imported_content_rights": {
+      "status": "verified",
+      "evidence": "October 3, 2026: project owner explicitly confirmed permission to republish the imported posts and comments on visa-central.com in this task. This does not create registered accounts for imported authors. Production import remains gated on a reviewed import and separate takedown/retention controls.",
+      "verifiedBy": "Project owner, explicit in-task confirmation"
+    },
+    "bot_and_auth_abuse": {
+      "status": "pending",
+      "evidence": "Auth CAPTCHA/server verification, password policy and direct-API abuse tests not verified.",
+      "verifiedBy": ""
+    },
+    "privacy_requests_and_retention": {
+      "status": "pending",
+      "evidence": "Deletion/export, session revocation, retention and backup exceptions require implementation and a real request drill.",
+      "verifiedBy": ""
+    },
+    "public_takedown_intake": {
+      "status": "pending",
+      "evidence": "No monitored no-account copyright/privacy/intimate-content intake, imported suppression or staffed escalation process.",
+      "verifiedBy": ""
+    },
+    "age_and_us_legal_review": {
+      "status": "pending",
+      "evidence": "Operator, state, audience and age policy unresolved; counsel must assess current federal/state requirements.",
+      "verifiedBy": ""
+    },
+    "human_cross_account_tests": {
+      "status": "pending",
+      "evidence": "October 3 automated cross-account PostgreSQL policy tests and hosted anonymous-denial checks pass; actual authenticated browser/two-device acceptance needs approved disposable accounts/test inbox. No real account passwords or messages were created in this pass.",
+      "verifiedBy": ""
+    },
+    "accessibility_review": {
+      "status": "pending",
+      "evidence": "Keyboard, screen reader, zoom, mobile and accessible abuse-intake tests required.",
+      "verifiedBy": ""
+    },
+    "dependency_and_security_review": {
+      "status": "blocked",
+      "evidence": "October 8 UTC: compatible sharp 0.35.5 and source-map-js 1.2.2 overrides reduced npm audit from 16 high/2 moderate to 11 high/2 moderate. Remaining highs trace to unpatched braces; audit gate retained. Historic credential rotation and independent/human security review remain unresolved. This supersedes the September audit result.",
+      "verifiedBy": ""
+    },
+    "incident_response_and_alerts": {
+      "status": "pending",
+      "evidence": "Need named on-call owner, alert delivery, breach/legal escalation drill, scoped admin access and safe log retention.",
+      "verifiedBy": ""
+    },
+    "source_parity": {
+      "status": "blocked",
+      "evidence": "Deployed Experience/account/policy source recovered locally and committed in bcb9c22; consolidation and live parity verification in progress.",
+      "verifiedBy": "",
+      "sourceSha256": ""
+    }
   }
 }

@@ -21,7 +21,7 @@ const jsx = realModule('react/jsx-runtime');
 const links = dataUrl(`import {jsx} from ${JSON.stringify(jsx)}; export default function Link(props){ return jsx('a',props); }`);
 const navigation = dataUrl(`
   export function useRouter(){throw new Error("Auth entry must not depend on the client router");}
-  export function usePathname(){return '/questions/example';}
+  export function usePathname(){return globalThis.__authHarness.pathname ?? '/questions/example';}
   export function useSearchParams(){return new URLSearchParams(globalThis.__authHarness.search);}
   export function useParams(){return globalThis.__authHarness.params;}
 `);
@@ -127,6 +127,8 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 dependencies['@/lib/auth-flow'] = await compile('../src/lib/auth-flow.ts');
 dependencies['@/lib/supabase/client'] = dataUrl('export function getAuthMethods(...args){return globalThis.__authHarness.invoke("getAuthMethods", args);}');
 const { AuthForm } = await import(await compile('../src/components/AuthForm.tsx'));
+dependencies['./CommunityNavigation'] = await compile('../src/components/CommunityNavigation.tsx');
+const { CommunityNavigation } = await import(dependencies['./CommunityNavigation']);
 const { SiteHeader } = await import(await compile('../src/components/SiteHeader.tsx'));
 function setup({ loading = false, user = null, search = '', signup = false } = {}) {
   const h = new Harness();
@@ -153,6 +155,59 @@ test('header Log in is a document link directly to the sign-in section', async (
     assert.equal(link.props.href, '/login#sign-in');
     assert.equal(link.props.onClick, undefined);
   } finally { h.close(); }
+});
+
+test('header search is a bounded native GET form, and mobile menu has an accessible label', () => {
+  const h = setup();
+  try {
+    h.render(SiteHeader);
+    const form = nodes(h.tree).find(n => n.type === 'form' && n.props.role === 'search');
+    assert.equal(form.props.action, '/');
+    assert.equal(form.props.method, 'get');
+    const input = nodes(form).find(n => n.type === 'input');
+    assert.equal(input.props.name, 'q');
+    assert.equal(input.props.maxLength, 200);
+    assert(nodes(h.tree).some(n => n.type === 'summary' && n.props['aria-label'] === 'Open navigation'));
+  } finally { h.close(); }
+});
+
+test('shared navigation retains working community, feed, tags and messaging destinations', () => {
+  const h = setup();
+  try {
+    h.render(CommunityNavigation, {});
+    const hrefs = nodes(h.tree).map(n => n.props?.href).filter(Boolean);
+    for (const href of ['/', '/?sort=score', '/explore', '/news', '/tags', '/messages', '/my-communities', '/communities/new']) {
+      assert(hrefs.includes(href), `Missing navigation to ${href}`);
+    }
+    assert.equal(nodes(h.tree).find(n => n.type === 'nav').props['aria-label'], 'Main navigation');
+    h.render(CommunityNavigation, { mobile: true });
+    assert.equal(nodes(h.tree).find(n => n.type === 'nav').props['aria-label'], 'Mobile navigation');
+  } finally { h.close(); }
+});
+
+test('Popular selection reflects URL sort and mobile Escape restores the navigation trigger', () => {
+  const h = setup();
+  try {
+    h.pathname = '/'; h.search = '?sort=score';
+    h.render(CommunityNavigation, {});
+    let selected = nodes(h.tree).filter(n => n.props?.['aria-current'] === 'page');
+    assert.equal(selected.length, 1);
+    assert.equal(selected[0].props.href, '/?sort=score');
+    h.search = ''; h.render();
+    selected = nodes(h.tree).filter(n => n.props?.['aria-current'] === 'page');
+    assert.equal(selected[0].props.href, '/');
+  } finally { h.close(); }
+  const header = setup();
+  try {
+    header.slots = []; header.effects = [];
+    header.render(SiteHeader);
+    const menu = nodes(header.tree).find(n => n.type === 'details');
+    let focused = false;
+    menu.props.ref.current = { open: true, querySelector: () => ({ focus: () => { focused = true; } }) };
+    menu.props.onKeyDown({ key: 'Escape' });
+    assert.equal(menu.props.ref.current.open, false);
+    assert.equal(focused, true);
+  } finally { header.close(); }
 });
 
 test('initial session loading still renders Google and email before the introduction', async () => {
