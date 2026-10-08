@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, CheckCircle2, Plus, Search, X } from 'lucide-react';
 import { getCommunityById, getMembershipForCommunity, listMyCommunitiesPage, type Community } from '@/lib/groups';
 import { createQuestion } from '@/lib/community';
+import { topicLabel } from '@/lib/post-presentation';
 import { normalizeTags, suggestTags } from '@/lib/tagging';
 import { useAuth } from './AuthProvider';
 import { RelatedQuestions } from './RelatedQuestions';
@@ -18,7 +19,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
   const [category, setCategory] = useState(EXPERIENCE_CATEGORIES[0]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [country, setCountry] = useState('United States');
+  const country = 'United States';
   const [visaType, setVisaType] = useState('H-1B');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
@@ -53,9 +54,9 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
     if (!user || loading) { setCommunitiesLoading(false); communityNavigation.current = false; return () => controller.abort(); }
     setCommunitiesLoading(true);
     const timer = setTimeout(() => {
-      void listMyCommunitiesPage({ search: communitySearch, after: communityAfter, signal: controller.signal }).then((page) => {
+      void listMyCommunitiesPage({ country, search: communitySearch, after: communityAfter, signal: controller.signal }).then((page) => {
         if (!controller.signal.aborted) { setCommunities(page.communities); setCommunityNext(page.nextCursor); }
-      }).catch(() => { if (!controller.signal.aborted) setCommunityError('Your communities could not be loaded. Retry or change the search.'); })
+      }).catch(() => { if (!controller.signal.aborted) setCommunityError('Your Communities could not be loaded. Retry or change the search.'); })
         .finally(() => { if (!controller.signal.aborted) { setCommunitiesLoading(false); communityNavigation.current = false; } });
     }, communitySearch ? 250 : 0);
     return () => { controller.abort(); clearTimeout(timer); };
@@ -101,7 +102,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
     if (submitLock.current || loading) return;
     if (!user) { router.push(loginReturn); return; }
     if (communityId && (selectionLoading || selectionError || selection?.id !== communityId || selection?.userId !== user.id || !selection.active)) {
-      setError('Join this community before posting, or choose General questions.'); return;
+      setError('Join this community before posting, or choose General Questions.'); return;
     }
     const operation = Symbol();
     const actor = user.id;
@@ -129,18 +130,18 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
   return (
     <main className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section>
-        <p className="text-sm font-bold uppercase tracking-wider text-teal-700">{experience ? 'Share a visa experience' : 'Ask the community'}</p>
+        <p className="text-sm font-bold tracking-wider text-blue-700">{experience ? 'Share a Visa Experience' : 'Ask the Community'}</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">{experience ? 'Help others learn from your visa journey' : 'Share the details that make your case different'}</h1>
         <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your-random-handle'}</b>.</p>
-        {!user && <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mr-2 inline" size={17} /> <Link href={loginReturn} className="font-bold underline">Log in</Link> before publishing. Your email remains private.</div>}
+        {!user && <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mr-2 inline" size={17} /> <Link href={loginReturn} className="font-bold underline">Log In</Link> before publishing. Your email remains private.</div>}
         <form onSubmit={submit} className="mt-7 space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <label className="block"><span className="font-bold text-slate-900">Community</span>
             <select aria-label="Community" value={communityId} onChange={(event) => setCommunityId(event.target.value)} disabled={submitting} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">
-              <option value="">General questions</option>
+              <option value="">General Questions</option>
               {communityId && !communities.some((community) => community.id === communityId) && <option value={communityId}>{selectedCommunity?.display_name ?? (selectionLoading ? 'Checking community…' : 'Join this community before posting')}</option>}
               {communities.map((community) => <option key={community.id} value={community.id}>{community.display_name}</option>)}
             </select>
-            <span className="mt-2 block text-sm text-slate-500">Choose a community you joined, or ask the whole community. <Link href="/explore" className="font-bold text-teal-700 underline">Find a community</Link></span>
+            <span className="mt-2 block text-sm text-slate-500">Choose a community you joined, or ask the whole community. <Link href="/explore" className="font-bold text-blue-700 underline">Find a community</Link></span>
           </label>
           {user && <div className="space-y-3">
             <label className="block text-sm font-semibold">Search your communities<input maxLength={80} value={communitySearch} onChange={(event) => { setCommunitySearch(event.target.value); resetCommunityPage(); }} placeholder="Find a community you joined" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
@@ -151,39 +152,39 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
           {selectionError && <div role="alert" className="text-sm text-rose-700">{selectionError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline">Retry selection</button></div>}
           {communityError && <div role="alert" className="text-sm text-rose-700">{communityError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline">Retry</button></div>}
           <label className="block">
-            <span className="font-bold text-slate-900">{experience ? 'Experience title' : 'Question title'}</span>
+            <span className="font-bold text-slate-900">{experience ? 'Experience Title' : 'Question Title'}</span>
             <span className="mt-1 block text-sm text-slate-500">Write the exact question another person might search.</span>
             <input required minLength={15} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Can I… / How should I…"
-              className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100" />
+              className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
           </label>
           <div className="grid gap-5 sm:grid-cols-2">
-            <label><span className="font-bold text-slate-900">Destination country</span><input required maxLength={80} value={country} onChange={(event) => setCountry(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-teal-600" /></label>
-            <label><span className="font-bold text-slate-900">Visa type</span><select value={visaType} onChange={(event) => setVisaType(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-teal-600">{VISA_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label>
+            <label><span className="font-bold text-slate-900">Destination Country</span><input readOnly value={country} className="mt-2 w-full rounded-lg border border-slate-200 bg-blue-50 px-4 py-3 text-blue-900" /><span className="mt-1 block text-xs text-slate-500">U.S. visa topics only for now.</span></label>
+            <label><span className="font-bold text-slate-900">Visa Type</span><select value={visaType} onChange={(event) => setVisaType(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600">{VISA_TYPES.map((type) => <option key={type} value={type}>{type === 'Family / spouse' ? 'Family / Spouse' : type}</option>)}</select></label>
           </div>
           {visaType === 'Other' && <p className="text-sm text-slate-600">Please mention your visa type in the title or details below.</p>}
-          {experience && <label className="block"><span className="font-bold text-slate-900">Experience category</span><select required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
+          {experience && <label className="block"><span className="font-bold text-slate-900">Experience Category</span><select required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
           <label className="block">
-            <span className="font-bold text-slate-900">Situation and timeline</span>
+            <span className="font-bold text-slate-900">Situation and Timeline</span>
             <span className="mt-1 block text-sm text-slate-500">Describe relevant dates, visa type and steps already taken. Do not paste documents or identifying numbers.</span>
-            <textarea required minLength={30} maxLength={10000} rows={9} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100" />
+            <textarea required minLength={30} maxLength={10000} rows={9} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
           </label>
           <div className="block">
             <span className="font-bold text-slate-900">Tags</span>
             <span className="mt-1 block text-sm text-slate-500">Tags are suggested from your title and situation as you type. Add up to five.</span>
-            <div className="mt-3 flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 focus-within:border-teal-600 focus-within:ring-4 focus-within:ring-teal-100">
-              {selectedTags.map((tag) => <span key={tag} className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1.5 text-sm font-bold text-blue-700">{tag}<button type="button" aria-label={`Remove ${tag}`} onClick={() => setSelectedTags((current) => current.filter((item) => item !== tag))} className="rounded p-0.5 hover:bg-blue-100"><X size={13} /></button></span>)}
+            <div className="mt-3 flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 focus-within:border-blue-600 focus-within:ring-4 focus-within:ring-blue-100">
+              {selectedTags.map((tag) => <span key={topicLabel(tag)} className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1.5 text-sm font-bold text-blue-700">{topicLabel(tag)}<button type="button" aria-label={`Remove ${topicLabel(tag)}`} onClick={() => setSelectedTags((current) => current.filter((item) => item !== tag))} className="rounded p-0.5 hover:bg-blue-100"><X size={13} /></button></span>)}
               <input value={tagInput} onChange={(event) => setTagInput(event.target.value)} onKeyDown={(event) => { if (event.key === ',' || event.key === 'Enter' || event.key === 'Tab') { if (tagInput.trim()) { event.preventDefault(); addTag(tagInput); } } }} placeholder={selectedTags.length ? 'Add another tag' : 'h1b, transfer, premium-processing'} className="min-w-48 flex-1 border-0 p-1 outline-none" />
             </div>
-            {suggestedTags.length > 0 && <div className="mt-3 rounded-lg bg-slate-50 p-3"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500"><Check size={14} /> Suggested from your post</div><div className="mt-2 flex flex-wrap gap-2">{suggestedTags.map((tag) => selectedTags.includes(tag) ? <span key={tag} className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700"><Check size={12} /> {tag}</span> : <button key={tag} type="button" onClick={() => addTag(tag)} disabled={selectedTags.length >= 5} className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-blue-700 shadow-sm ring-1 ring-slate-200 hover:bg-blue-50 disabled:opacity-40"><Plus size={12} /> {tag}</button>)}</div></div>}
+            {suggestedTags.length > 0 && <div className="mt-3 rounded-lg bg-slate-50 p-3"><div className="flex items-center gap-2 text-xs font-bold tracking-wide text-slate-500"><Check size={14} /> Suggested from Your Post</div><div className="mt-2 flex flex-wrap gap-2">{suggestedTags.map((tag) => selectedTags.includes(tag) ? <span key={topicLabel(tag)} className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700"><Check size={12} /> {topicLabel(tag)}</span> : <button key={topicLabel(tag)} type="button" onClick={() => addTag(tag)} disabled={selectedTags.length >= 5} className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-blue-700 shadow-sm ring-1 ring-slate-200 hover:bg-blue-50 disabled:opacity-40"><Plus size={12} /> {topicLabel(tag)}</button>)}</div></div>}
             <p className="mt-2 text-xs text-slate-500">Your selected tags are saved. Suggested tags are added automatically when you publish.</p>
           </div>
           {error && <p className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
-          <button disabled={submitting} className="rounded-lg bg-teal-700 px-5 py-3 font-bold text-white hover:bg-teal-800 disabled:opacity-60">{submitting ? 'Publishing…' : experience ? 'Publish experience' : 'Publish question'}</button>
+          <button disabled={submitting} className="rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-60">{submitting ? 'Publishing…' : experience ? 'Publish Experience' : 'Publish Question'}</button>
         </form>
       </section>
       <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
         <RelatedQuestions drafting context={{ title, body, tags: normalizeTags([...selectedTags, tagInput, ...suggestedTags]), visa_type: visaType, destination_country: country }} />
-        {['Search first and review close matches.', 'Use a specific title with the visa type.', 'Remove names, case numbers, emails, and addresses.', 'Return to accept the answer that solved your question.'].map((tip) => <div key={tip} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600"><CheckCircle2 className="mt-0.5 shrink-0 text-teal-600" size={18} />{tip}</div>)}
+        {['Search first and review close matches.', 'Use a specific title with the visa type.', 'Remove names, case numbers, emails, and addresses.', 'Return to accept the answer that solved your question.'].map((tip) => <div key={tip} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600"><CheckCircle2 className="mt-0.5 shrink-0 text-blue-600" size={18} />{tip}</div>)}
       </aside>
     </main>
   );

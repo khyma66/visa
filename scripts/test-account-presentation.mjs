@@ -51,7 +51,7 @@ const links = html => [...html.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)
 test('signed-out account tabs require login and preserve only a recognized return destination', () => {
   for (const tab of ['profile', 'activity', 'settings', '//evil.invalid']) {
     const html = render(AccountClient, { query: `tab=${tab}`, auth: { user: null, profile: null } });
-    const login = links(html).find(link => link.label === 'Log in');
+    const login = links(html).find(link => link.label === 'Log In');
     assert.equal(new URL(login.href, 'https://visathreads.com').searchParams.get('next'), `/account?tab=${tab.startsWith('//') ? 'profile' : tab}`);
     assert.doesNotMatch(html, /private@example|calm-heron|Account email|Save profile/);
   }

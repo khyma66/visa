@@ -11,7 +11,9 @@ const jsx = pathToFileURL(require.resolve('react/jsx-runtime')).href;
 const hooks = dataUrl(['useState', 'useEffect', 'useMemo', 'useRef'].map((name) => `export function ${name}(...args){return globalThis.__feedHarness.${name}(...args);}`).join('\n'));
 const source = await readFile(new URL('../src/components/CommunityHome.tsx', import.meta.url), 'utf8');
 const icons = source.match(/import\s*\{([^}]+)\}\s*from\s*'lucide-react'/)[1].split(',').map((name) => name.trim());
+const presentationSource = ts.transpileModule(await readFile(new URL('../src/lib/post-presentation.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const dependencies = {
+  '@/lib/post-presentation': dataUrl(presentationSource),
   react: hooks,
   'react/jsx-runtime': jsx,
   'next/link': dataUrl(`import {jsx} from ${JSON.stringify(jsx)}; export default function Link(props){return jsx('a',props);}`),
@@ -103,7 +105,7 @@ test('feed controls publish clean framework-aware query state and clear filters'
     assert.equal(new URLSearchParams(h.search).get('q'), 'documents');
     assert.equal(new URLSearchParams(h.search).get('sort'), 'score');
     assert(h.writes.every((write) => write.state === null), 'Do not pass app-owned Next history state when changing query parameters');
-    button(h, 'Clear filters').props.onClick(); h.render(); await h.flush();
+    button(h, 'Clear Filters').props.onClick(); h.render(); await h.flush();
     assert.equal(h.search, '');
     assert.deepEqual(h.calls.at(-1), { search: '', tag: '', visaType: '', sort: 'newest', experience: false, category: '' });
   } finally { h.close(); }

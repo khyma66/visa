@@ -148,11 +148,11 @@ function setup({ loading = false, user = null, search = '', signup = false } = {
   return h;
 }
 
-test('header Log in is a document link directly to the sign-in section', async () => {
+test('header Log In is a document link directly to the sign-in section', async () => {
   const h = setup();
   try {
     h.render(SiteHeader);
-    const link = byText(h, 'a', 'Log in');
+    const link = byText(h, 'a', 'Log In');
     assert.equal(link.props.href, '/login#sign-in');
     assert.equal(link.props.onClick, undefined);
   } finally { h.close(); }
@@ -216,7 +216,7 @@ test('initial session loading still renders Google and email before the introduc
   try {
     assert.equal(nodes(h.tree).find(n => n.type === 'section').props.id, 'sign-in');
     assert.equal(byText(h, 'button', 'Continue with Google').props.disabled, true);
-    assert.equal(field(h, 'Email address').props.disabled, true);
+    assert.equal(field(h, 'Email Address').props.disabled, true);
     await h.settle();
     assert.equal(h.calls.filter(c => c.name === 'requestCode').length, 0);
     byText(h, 'button', 'Continue with Google').props.onClick();
@@ -227,7 +227,7 @@ test('initial session loading still renders Google and email before the introduc
     assert.equal(h.reloads, 1);
     h.auth.loading = false; h.render(); await h.settle();
     assert.equal(byText(h, 'button', 'Continue with Google').props.disabled, false);
-    assert.equal(field(h, 'Email address').props.disabled, false);
+    assert.equal(field(h, 'Email Address').props.disabled, false);
     assert(!textOf(h.tree).includes('longer than expected'));
   } finally { h.close(); }
 });
@@ -238,7 +238,7 @@ test('failed provider settings leave email usable and Retry recovers Google', as
   try {
     await h.settle();
     assert.equal(byText(h, 'button', 'Continue with Google').props.disabled, true);
-    assert.equal(field(h, 'Email address').props.disabled, false);
+    assert.equal(field(h, 'Email Address').props.disabled, false);
     assert(!textOf(h.tree).includes('private provider'));
     h.handlers.getAuthMethods = async () => ({ google: true });
     byText(h, 'button', 'Retry').props.onClick(); h.render(); await h.settle();
@@ -269,7 +269,7 @@ test('Google receives the safe callback and repeated clicks start only one flow'
 test('email code flow shows VisaThreads and retains its return destination', async () => {
   const h = setup({ search: '?next=%2Fmy-communities' });
   try {
-    await h.settle(); change(h, 'Email address', 'fixture@example.invalid');
+    await h.settle(); change(h, 'Email Address', 'fixture@example.invalid');
     nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
     const call = h.calls.find(c => c.name === 'requestCode');
     assert.equal(new URL(call.args[1]).searchParams.get('next'), '/my-communities');
@@ -284,7 +284,7 @@ test('password is an available alternative and provider failure does not block i
   h.handlers.getAuthMethods = async () => { throw new Error('offline'); };
   try {
     await h.settle(); byText(h, 'button', 'Use a password instead').props.onClick(); h.render();
-    change(h, 'Email address', 'fixture@example.invalid'); change(h, 'Password', 'fixture-only-password');
+    change(h, 'Email Address', 'fixture@example.invalid'); change(h, 'Password', 'fixture-only-password');
     nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
     assert.equal(h.calls.filter(c => c.name === 'login').length, 1);
     assert.equal(field(h, 'Password').props.value, '');

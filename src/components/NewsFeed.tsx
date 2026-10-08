@@ -18,7 +18,7 @@ export function NewsResults({ feed }: { feed: NewsFeedData }) {
           <span className="font-semibold text-slate-700">{article.publisher}</span>
           <time dateTime={article.publishedAt}>{dateLabel(article.publishedAt)}</time>
         </div>
-        <h2 className="text-lg font-semibold leading-7"><a href={article.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-slate-900 hover:text-teal-700 hover:underline">{article.title}<span className="sr-only"> (opens on Google News in a new tab)</span></a></h2>
+        <h2 className="text-lg font-semibold leading-7"><a href={article.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-slate-900 hover:text-blue-700 hover:underline">{article.title}<span className="sr-only"> (opens on Google News in a new tab)</span></a></h2>
         <p className="mt-3 text-xs text-slate-500">Via Google News</p>
       </article>)}</div>}
     <p className="mt-5 text-xs leading-5 text-slate-500">Recent visa and immigration headlines, newest first. Open a headline to read the publisher’s report.</p>
@@ -30,7 +30,7 @@ export function NewsUnavailable({ retry }: { retry: () => void }) {
 }
 
 export function NewsExternal() {
-  return <section aria-label="Visa news" className="rounded-lg border border-slate-200 bg-white p-6"><p className="text-sm leading-6 text-slate-600">Follow the latest visa and immigration coverage directly on Google News.</p></section>;
+  return <section aria-label="U.S. Visa News" className="rounded-lg border border-slate-200 bg-white p-6"><p className="text-sm leading-6 text-slate-600">Follow the latest U.S. visa and immigration coverage directly on Google News.</p></section>;
 }
 
 export function NewsFeed({ initialFeed = null }: { initialFeed?: NewsFeedData | null }) {
@@ -61,10 +61,10 @@ export function NewsFeed({ initialFeed = null }: { initialFeed?: NewsFeedData | 
   }, [attempt]);
 
   return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-    <Link href="/explore" className="text-sm text-teal-700 hover:underline">← Explore communities</Link>
+    <Link href="/explore" className="text-sm text-blue-700 hover:underline">← Explore Communities</Link>
     <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-3xl font-semibold">News</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Visa and immigration coverage from Google News.</p></div>
-      <a href={GOOGLE_NEWS_SEARCH_URL} target="_blank" rel="noopener noreferrer" className="rounded-full bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800">Open Google News<span className="sr-only"> (opens in a new tab)</span></a>
+      <div><h1 className="text-3xl font-semibold">News</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">U.S. visa and immigration coverage from Google News.</p></div>
+      <a href={GOOGLE_NEWS_SEARCH_URL} target="_blank" rel="noopener noreferrer" className="rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">Open Google News<span className="sr-only"> (opens in a new tab)</span></a>
     </div>
     <div className="mt-6">{external ? <NewsExternal/> : error ? <NewsUnavailable retry={() => setAttempt((value) => value + 1)}/>
       : !feed ? <p role="status" aria-live="polite" className="rounded-lg border bg-white p-6 text-slate-600">Loading latest headlines…</p>

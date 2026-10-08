@@ -125,6 +125,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const groupMethods = ['listCommunities', 'listMyCommunitiesPage', 'getMembershipForCommunity', 'getMembershipsForCommunities', 'getCommunityById', 'getCommunityBySlug', 'createCommunity', 'joinCommunity', 'leaveCommunity', 'listCommunityQuestions'];
 dependencies['@/lib/groups'] = dataUrl(groupMethods.map((name) => `export async function ${name}(...args){return globalThis.__communityHarness.invoke(${JSON.stringify(name)},args);}`).join('\n'));
 dependencies['@/lib/community'] = dataUrl('export async function createQuestion(...args){return globalThis.__communityHarness.invoke("createQuestion",args);}');
+dependencies['@/lib/post-presentation'] = await compile('../src/lib/post-presentation.ts');
 dependencies['@/lib/post-categories'] = await compile('../src/lib/post-categories.ts');
 dependencies['@/lib/tagging'] = await compile('../src/lib/tagging.ts');
 dependencies['./SafetyNotice'] = await compile('../src/components/SafetyNotice.tsx');
@@ -142,8 +143,8 @@ function createHarness(search = '') {
 }
 const publish = (h) => nodes(h.tree).find((n) => n.type === 'form').props.onSubmit(event());
 function fillQuestion(h) {
-  change(h, 'Question title', ' What documents for my H1B transfer? ');
-  change(h, 'Situation and timeline', ' I am changing employers and need to understand the required transfer documents. ');
+  change(h, 'Question Title', ' What documents for my H1B transfer? ');
+  change(h, 'Situation and Timeline', ' I am changing employers and need to understand the required transfer documents. ');
 }
 
 test('question form preserves the selected community, real actor and suggested tags on publish', async () => {
@@ -160,7 +161,7 @@ test('question form preserves the selected community, real actor and suggested t
     assert.deepEqual(h.pushes, ['/questions/created-question']);
   } finally { h.close(); }
 });
-test('General questions omit community_id and are available without membership', async () => {
+test('General Questions omit community_id and are available without membership', async () => {
   const h = createHarness(); h.handlers.listMyCommunitiesPage = async () => ({ communities: [], nextCursor: null });
   try {
     h.render(AskQuestionForm); await h.settle(); fillQuestion(h); await publish(h);
@@ -278,7 +279,7 @@ test('an old account publishing result cannot redirect the newly signed-in accou
     h.auth = { ...h.auth, user: { id: 'member-b' } }; h.render(); await h.settle();
     pending.resolve('old-account-question'); await submission; await h.settle();
     assert.deepEqual(h.pushes, []);
-    assert.equal(byText(h, 'button', 'Publish question').props.disabled, false);
+    assert.equal(byText(h, 'button', 'Publish Question').props.disabled, false);
   } finally { h.close(); }
 });
 
@@ -462,11 +463,11 @@ test('Explore failed joins show an error without claiming membership and allow a
     assert(buttonLabel(h, 'Leave H1B careers')); assert.doesNotMatch(textOf(h.tree), /Join request failed/);
   } finally { h.close(); }
 });
-test('Explore My communities uses active memberships and the empty state returns to browsing', async () => {
+test('Explore My Communities uses active memberships and the empty state returns to browsing', async () => {
   const h = exploreHarness();
   try {
     h.render(ExploreCommunities); await h.settle();
-    byText(h, 'button', 'My communities').props.onClick(); h.render(); await h.settle();
+    byText(h, 'button', 'My Communities').props.onClick(); h.render(); await h.settle();
     assert.match(textOf(h.tree), /Find your first community/);
     assert.equal(h.calls.filter((c) => c.name === 'listMyCommunitiesPage').length, 1);
     byText(h, 'button', 'Explore all communities').props.onClick(); h.render(); await h.settle();
@@ -506,11 +507,11 @@ test('Explore holds one page of cards and reads only visible memberships across 
     assert.match(textOf(h.tree), /Community 0\s/);
   } finally { h.close(); }
 });
-test('Explore My communities passes category filters to its bounded page endpoint', async () => {
+test('Explore My Communities passes category filters to its bounded page endpoint', async () => {
   const h = exploreHarness();
   try {
     h.render(ExploreCommunities); await h.settle();
-    byText(h, 'button', 'My communities').props.onClick(); h.render(); await h.settle();
+    byText(h, 'button', 'My Communities').props.onClick(); h.render(); await h.settle();
     const category = nodes(h.tree).find(n => n.type === 'select' && n.props['aria-label'] === 'Community category');
     category.props.onChange({ target: { value: 'Study' } }); h.render(); await h.settle();
     const request = h.calls.filter(c => c.name === 'listMyCommunitiesPage').at(-1);
@@ -528,19 +529,19 @@ function newCommunityHarness() {
   return h;
 }
 function fillCommunity(h) {
-  change(h, 'Community name', 'Canada study permits');
+  change(h, 'Community Name', 'Canada study permits');
   change(h, 'Description', 'Ask questions about Canadian study permits and share the steps that helped you.');
 }
-test('Start a community normalizes the address, preserves rules and navigates after successful creation', async () => {
+test('Start a Community normalizes the address, preserves rules and navigates after successful creation', async () => {
   const h = newCommunityHarness();
   try {
     h.render(CreateCommunity); await h.settle(); fillCommunity(h);
-    assert.equal(field(h, 'Community address').props.value, 'canada-study-permits');
+    assert.equal(field(h, 'Community Address').props.value, 'canada-study-permits');
     await publish(h); await h.settle();
     const creation = h.calls.find((c) => c.name === 'createCommunity');
     assert.equal(creation.args[0].slug, 'canada-study-permits');
     assert.equal(creation.args[0].display_name, 'Canada study permits');
-    assert.equal(creation.args[0].country, 'Worldwide');
+    assert.equal(creation.args[0].country, 'United States');
     assert.equal(creation.args[0].rules.length, 2);
     assert.deepEqual(h.pushes, ['/c/canada-study-permits']);
   } finally { h.close(); }
@@ -552,14 +553,14 @@ test('an existing exact community address exposes the join destination and never
     assert.equal(h.calls.filter((c) => c.name === 'createCommunity').length, 0);
     assert.match(textOf(h.tree), /address already exists/);
     assert(nodes(h.tree).some((n) => n.props?.href === '/c/canada-study-permits'));
-    assert.equal(byText(h, 'button', 'Create community').props.disabled, false);
+    assert.equal(byText(h, 'button', 'Create Community').props.disabled, false);
   } finally { h.close(); }
 });
 test('community validation rejects an invalid draft before any create request', async () => {
   const h = newCommunityHarness();
   try {
     h.render(CreateCommunity); await h.settle();
-    change(h, 'Community name', 'ab');
+    change(h, 'Community Name', 'ab');
     await publish(h); h.render();
     assert.equal(h.calls.filter((c) => ['createCommunity', 'getCommunityBySlug'].includes(c.name)).length, 0);
     assert.match(textOf(h.tree), /3–40/);
@@ -600,8 +601,8 @@ test('failed community creation preserves the draft and permits retry', async ()
   try {
     h.render(CreateCommunity); await h.settle(); fillCommunity(h); await publish(h); h.render();
     assert.match(textOf(h.tree), /Creation failed/);
-    assert.equal(field(h, 'Community name').props.value, 'Canada study permits');
-    assert.equal(byText(h, 'button', 'Create community').props.disabled, false);
+    assert.equal(field(h, 'Community Name').props.value, 'Canada study permits');
+    assert.equal(byText(h, 'button', 'Create Community').props.disabled, false);
     h.handlers.createCommunity = async () => realId; await publish(h);
     assert.equal(h.calls.filter((c) => c.name === 'createCommunity').length, 2);
     assert.deepEqual(h.pushes, ['/c/canada-study-permits']);
@@ -615,7 +616,7 @@ test('an unconfigured environment disables community creation and rejects direct
   try {
     h.render(DisconnectedCreate); await h.settle();
     assert.match(textOf(h.tree), /Community creation is disabled here/);
-    assert.equal(byText(h, 'button', 'Create community').props.disabled, true);
+    assert.equal(byText(h, 'button', 'Create Community').props.disabled, true);
     await publish(h); h.render();
     assert.equal(h.calls.length, 0);
     await assert.rejects(() => unavailableGroups.createCommunity(draft), /service is connected/);
@@ -700,19 +701,19 @@ test('community detail ignores a join completion after navigation to another com
 });
 
 
-test('My communities route opens joined groups without first querying the public directory', async () => {
+test('My Communities route opens joined groups without first querying the public directory', async () => {
   const h = exploreHarness();
   h.handlers.listMyCommunitiesPage = async () => ({ communities: [group], nextCursor: null });
   try {
     h.render(ExploreCommunities, { initialTab: 'mine' }); await h.settle();
     assert.equal(h.calls.filter((c) => c.name === 'listMyCommunitiesPage').length, 1);
     assert.equal(h.calls.filter((c) => c.name === 'listCommunities').length, 0);
-    assert.equal(byText(h, 'button', 'My communities').props['aria-pressed'], true);
+    assert.equal(byText(h, 'button', 'My Communities').props['aria-pressed'], true);
     assert.match(textOf(h.tree), /H1B careers/);
   } finally { h.close(); }
 });
 
-test('My communities guest entry preserves its login destination and makes no member request', async () => {
+test('My Communities guest entry preserves its login destination and makes no member request', async () => {
   const h = exploreHarness(); h.auth.user = null;
   try {
     h.render(ExploreCommunities, { initialTab: 'mine' }); await h.settle();

@@ -14,19 +14,19 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://visathreads.com'),
-  title: { default: 'VisaThreads — Visa questions, answered', template: '%s · VisaThreads' },
+  title: { default: 'VisaThreads — U.S. Visa Questions, Answered', template: '%s · VisaThreads' },
   description: 'Ask visa questions with a public pseudonym, find similar cases, share experiences, and message other community members.',
   icons: { icon: '/favicon.svg' },
   keywords: 'visa questions, immigration community, pseudonymous visa discussions, visa answers',
   authors: [{ name: 'VisaThreads' }],
   openGraph: {
     type: 'website',
-    title: 'VisaThreads — Visa questions, answered',
+    title: 'VisaThreads — U.S. Visa Questions, Answered',
     description: 'Pseudonymous visa Q&A and access-controlled community messaging.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'VisaThreads — Visa questions, answered',
+    title: 'VisaThreads — U.S. Visa Questions, Answered',
     description: 'Pseudonymous visa Q&A and access-controlled community messaging.',
   },
 };
@@ -50,12 +50,12 @@ export default function RootLayout({
             {process.env.NEXT_PUBLIC_APP_ENV !== 'production' && <p role="note" className="mb-2 font-semibold text-slate-700">Early preview · Not open for general public signup.</p>}
             <SafetyNotice />
             <nav aria-label="Policies and support" className="mt-2 flex flex-wrap gap-x-4">
-              <Link href="/privacy" className="underline">Preview privacy notice</Link>
-              <Link href="/terms" className="underline">Community rules</Link>
-              <Link href="/cookies" className="underline">Cookies and storage</Link>
-              <Link href="/privacy-choices" className="underline">Your privacy choices</Link>
-              <Link href="/countries" className="underline">Country communities</Link>
-              <Link href="/contact" className="underline">Reporting and privacy requests</Link>
+              <Link href="/privacy" className="underline">Preview Privacy Notice</Link>
+              <Link href="/terms" className="underline">Community Rules</Link>
+              <Link href="/cookies" className="underline">Cookies and Storage</Link>
+              <Link href="/privacy-choices" className="underline">Your Privacy Choices</Link>
+              <Link href="/countries" className="underline">U.S. Community</Link>
+              <Link href="/contact" className="underline">Reporting and Privacy Requests</Link>
             </nav>
           </footer>
           </div>

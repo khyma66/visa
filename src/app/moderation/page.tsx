@@ -33,7 +33,7 @@ export default function ModerationPage() {
   return <main className="mx-auto max-w-4xl px-4 py-10">
     <h1 className="text-3xl font-black">Moderation queue</h1>
     <p className="mt-3 text-sm text-slate-600">Restricted to operator-approved moderators. Review reports individually; reporting does not automatically remove content.</p>
-    {loading ? <p>Loading…</p> : !user || demoMode ? <p className="mt-5">Log in with an approved moderator account.</p> : allowed && <>
+    {loading ? <p>Loading…</p> : !user || demoMode ? <p className="mt-5">Log In with an approved moderator account.</p> : allowed && <>
       <button disabled={busy} onClick={() => void load().catch(() => setError('Could not refresh reports.'))} className="my-5 rounded border px-4 py-2">Refresh reports</button>
       {!reports.length && <p>No pending reports.</p>}
       {reports.map((report) => <article key={report.id} className="mb-5 rounded-xl border bg-white p-5">

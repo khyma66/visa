@@ -69,13 +69,13 @@ test('source question cards use normal discussion layout without fake member ide
   noPipelineLabels(html);
   assert(html.includes(source.title));assert(html.includes(source.body));
   assert(html.includes('reactions'));assert(html.includes('replies'));assert(!html.includes('views'));
-  assert(html.includes('Community contributor'));assert(!html.includes(source.author_username));assert(!html.includes('Member avatar'));
+  assert(html.includes('Community Contributor'));assert(!html.includes(source.author_username));assert(!html.includes('Member avatar'));
   assert(!html.includes(source.source_url));assert(!html.includes('/messages?'));
 });
 test('native cards preserve public usernames, member avatars, votes and normal question links',()=>{
   const html=render(QuestionCard,{question:native});
   assert(html.includes('u/alice-test'));assert(html.includes('Member avatar'));assert(html.includes('votes'));
-  assert(html.includes(`/questions/${native.id}`));assert(!html.includes('Community contributor'));
+  assert(html.includes(`/questions/${native.id}`));assert(!html.includes('Community Contributor'));
 });
 test('experience cards and details expose category and discussion actions without answer acceptance',()=>{
   const experience={...native,post_kind:'experience',experience_category:'Other',visa_type:'Other'};
@@ -90,7 +90,7 @@ test('experience feed excludes questions, includes Other, and defaults to newest
   const older={...native,id:'older',post_kind:'experience',experience_category:'Other',created_at:'2026-09-01T00:00:00Z'};
   const newer={...older,id:'newer',title:'A newer visa experience',created_at:'2026-10-01T00:00:00Z'};
   const html=render(CommunityHome,{experience:true},{values:{0:[older,native,newer],3:false}});
-  assert(html.includes('Share your experience')); assert(html.includes('/experiences/new'));
+  assert(html.includes('Share Your Experience')); assert(html.includes('/experiences/new'));
   assert(html.includes('All experience categories')); assert(html.includes('Other</option>'));
   assert(html.indexOf('/experiences/newer') < html.indexOf('/experiences/older'));
   assert(!html.includes(`/questions/${native.id}`));
@@ -107,7 +107,7 @@ test('discussion and promotion labels describe content rather than where it came
 test('source detail uses neutral presentation with no source-author messaging or voting affordance',()=>{
   const html=render(QuestionDetail,{initialQuestion:source},{user:{id:bob}});
   noPipelineLabels(html);assert(!html.includes('Originally shared in'));
-  assert(!html.includes(source.source_url));assert(html.includes('Community contributor'));
+  assert(!html.includes(source.source_url));assert(html.includes('Community Contributor'));
   assert(html.includes('Join the discussion'));assert(!html.includes('Original discussion'));
   assert(!html.includes('Message author'));assert(!html.includes('/messages?'));assert(!html.includes('aria-label="Upvote"'));
   assert(!html.includes(source.author_username));assert(!html.includes('Peer experiences, not legal advice'));
@@ -116,7 +116,7 @@ test('an apify ID remains source-only even when its source flag/link are absent 
   const malformed={...source,source:undefined,source_url:null,author_id:alice,author_username:'alice-test'};
   const html=render(QuestionDetail,{initialQuestion:malformed},{user:{id:bob}});
   assert(!html.includes('/messages?'));assert(!html.includes('u/alice-test'));assert(!html.includes('aria-label="Upvote"'));
-  assert(html.includes('Community contributor'));
+  assert(html.includes('Community Contributor'));
 });
 test('native post messaging binds both public username and registered profile ID for guests and other members',()=>{
   for(const user of [null,{id:bob}]) {
@@ -140,8 +140,8 @@ test('registered member replies on source discussions retain their own message a
 });
 test('home renders community-first copy and no ingestion diagnostics while preserving filters and post text',()=>{
   const html=render(CommunityHome,{}, {values:{0:[source,native],3:false}});
-  noPipelineLabels(html);assert(html.includes('All post types'));assert(html.includes('All tags'));
-  assert(html.includes(source.title));assert(html.includes('Top'));assert(html.includes('Ask a question'));
+  noPipelineLabels(html);assert(html.includes('All Post Types'));assert(html.includes('All Tags'));
+  assert(html.includes(source.title));assert(html.includes('Top'));assert(html.includes('Ask a Question'));
   assert(!html.includes('Privacy-aware import'));
 });
 test('partial feed failures remain visible without exposing ingestion diagnostics',()=>{

@@ -1,6 +1,6 @@
 'use client';
 
-import { canMessageAuthor } from './post-presentation';
+import { canMessageAuthor, usVisaPost } from './post-presentation';
 import { DEMO_ANSWERS, DEMO_CONVERSATIONS, DEMO_MESSAGES, DEMO_QUESTIONS, DEMO_USER } from './demo-data';
 import { getSupabase, isSupabaseConfigured } from './supabase/client';
 import { inferTags, normalizeTags } from './tagging';
@@ -71,7 +71,8 @@ async function loadImportedFeed(): Promise<CommunityFeed> {
   importedFeedPromise ??= fetch('/api/community', { headers: { Accept: 'application/json' } })
     .then(async (response) => {
       if (!response.ok) throw new Error('Live community data is unavailable.');
-      return response.json() as Promise<CommunityFeed>;
+      const feed = await response.json() as CommunityFeed;
+      return { ...feed, questions: feed.questions.flatMap(question => { const scoped = usVisaPost(question); return scoped ? [scoped] : []; }) };
     })
     .catch((error) => {
       importedFeedPromise = null;
@@ -114,7 +115,7 @@ async function importedFeedOrNull(): Promise<CommunityFeed | null> {
 
 function matchesQuestion(question: Question, search: string, visaType: string): boolean {
   const query = search.trim().toLowerCase();
-  return (!visaType || question.visa_type === visaType)
+  return Boolean(usVisaPost(question)) && (!visaType || question.visa_type === visaType)
     && (!query || [question.title, question.body, question.visa_type, question.destination_country, ...question.tags]
       .some((value) => value.toLowerCase().includes(query)));
 }
@@ -161,10 +162,10 @@ export async function getQuestion(id: string): Promise<Question | null> {
     throwIfError(error);
     return { ...question, answer_count: question.answer_count + (count ?? 0) };
   }
-  if (!isSupabaseConfigured) return readDemo().questions.find((question) => question.id === id) ?? null;
+  if (!isSupabaseConfigured) { const question = readDemo().questions.find((question) => question.id === id); return question ? usVisaPost(question) : null; }
   const { data, error } = await getSupabase().from('question_feed').select('*').eq('id', id).maybeSingle();
   throwIfError(error);
-  return data as Question | null;
+  return data ? usVisaPost(data as Question) : null;
 }
 
 export type QuestionPageOptions = { search?: string; tag?: string; visaType?: string; sort?: string; before?: Question; experience?: boolean; category?: string };
@@ -180,10 +181,11 @@ export async function getQuestionPage(options: QuestionPageOptions = {}): Promis
   throwIfError(error);
   const rows = (data ?? []) as Question[];
   const imported = before || options.experience ? [] : (await importedFeedOrNull())?.questions ?? [];
-  return { questions: [...rows, ...imported], more: rows.length === 50, cursor: rows.at(-1) };
+  return { questions: [...rows, ...imported].flatMap(question => { const scoped = usVisaPost(question); return scoped ? [scoped] : []; }), more: rows.length === 50, cursor: rows.at(-1) };
 }
 
 export async function createQuestion(authorId: string, input: NewQuestion): Promise<string> {
+  if (input.destination_country !== 'United States' || !usVisaPost(input)) throw new Error('This community currently supports U.S. visa topics only.');
   if (input.community_id && !isSupabaseConfigured) throw new Error('Connect the community service before posting to a group.');
   const tags = normalizeTags([...input.tags, ...inferTags(`${input.title}\n${input.body}`)]);
   const normalizedInput = { ...input, tags };
@@ -304,7 +306,7 @@ export async function discoverQuestions(context: DiscoveryContext): Promise<Rela
     }
     const localQuestions = isSupabaseConfigured ? [] : feed
       ? state.questions.filter((q) => !DEMO_QUESTION_IDS.has(q.id)) : state.questions;
-    discoveryCache = { feed, local, index: createDiscoveryIndex([...localQuestions, ...(feed?.questions ?? [])], comments) };
+    discoveryCache = { feed, local, index: createDiscoveryIndex([...localQuestions, ...(feed?.questions ?? [])].filter(question => usVisaPost(question)), comments) };
   }
   const index = discoveryCache.index;
   let imported = index.search(context);
@@ -317,7 +319,7 @@ export async function discoverQuestions(context: DiscoveryContext): Promise<Rela
   });
   throwIfError(error);
   imported = index.search(context,5,data?.imported_topics ?? {});
-  const native = (data?.native ?? []) as RelatedQuestion[];
+  const native = ((data?.native ?? []) as RelatedQuestion[]).filter(question => usVisaPost(question));
   // Combine the two ranked sources without comparing incompatible numeric scores.
   const merged: RelatedQuestion[] = [];
   for (let i = 0; i < 5; i++) {

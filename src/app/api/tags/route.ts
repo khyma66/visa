@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import archive from '@visa/archive';
 import { summarizeArchiveTags } from '@/lib/tag-directory';
+import { usVisaPost } from '@/lib/post-presentation';
 import type { Question } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -16,7 +17,8 @@ export function GET() {
       status: 503, headers: { 'Cache-Control': 'no-store' },
     });
   }
-  return NextResponse.json({ tags: summarizeArchiveTags(archive.questions as Pick<Question, 'tags' | 'title' | 'status'>[]) }, {
+  const questions = (archive.questions as Question[]).filter(question => usVisaPost(question));
+  return NextResponse.json({ tags: summarizeArchiveTags(questions) }, {
     headers: { 'Cache-Control': 'public, max-age=60, s-maxage=300', 'X-Content-Type-Options': 'nosniff' },
   });
 }

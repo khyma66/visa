@@ -42,16 +42,16 @@ export function PolicyAcceptance({ children }: { children: React.ReactNode }) {
   }
   return <main className="mx-auto max-w-2xl space-y-5 px-4 py-12">
     <h1 className="text-3xl font-bold">Join the discussion</h1>
-    {loading || status === 'loading' ? <p role="status">Checking your policy acknowledgement…</p> : status === 'error' ? <><p role="alert">We could not check your policy acknowledgement. Your account has not been deleted.</p><button className="rounded-lg border px-4 py-2" onClick={() => setRetry(value => value + 1)}>Try again</button></> : <>
+    {loading || status === 'loading' ? <p role="status">Checking your policy acknowledgement…</p> : status === 'error' ? <><p role="alert">We could not check your policy acknowledgement. Your Account has not been deleted.</p><button className="rounded-lg border px-4 py-2" onClick={() => setRetry(value => value + 1)}>Try again</button></> : <>
       <p className="text-slate-600">One confirmation to start posting, replying and messaging. We’ll remember it for your account.</p>
       <form onSubmit={event => { event.preventDefault(); void accept(); }} className="space-y-4">
-        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4"><input className="mt-1 h-5 w-5 shrink-0 accent-teal-700" type="checkbox" required checked={acknowledged} disabled={busy} onChange={event => setAcknowledged(event.target.checked)} /><span>I am at least 18 and legally able to agree where I live. I agree to the <Link href="/terms" target="_blank" rel="noopener" className="text-teal-700 underline">Terms and community rules</Link> and acknowledge the <Link href="/privacy" target="_blank" rel="noopener" className="text-teal-700 underline">Privacy notice</Link>.</span></label>
+        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4"><input className="mt-1 h-5 w-5 shrink-0 accent-blue-700" type="checkbox" required checked={acknowledged} disabled={busy} onChange={event => setAcknowledged(event.target.checked)} /><span>I am at least 18 and legally able to agree where I live. I agree to the <Link href="/terms" target="_blank" rel="noopener" className="text-blue-700 underline">Terms and community rules</Link> and acknowledge the <Link href="/privacy" target="_blank" rel="noopener" className="text-blue-700 underline">Privacy notice</Link>.</span></label>
         <p className="text-xs leading-5 text-slate-500">Policy links open in a new tab. This does not include consent to advertising, marketing or payments, or waive privacy rights. <Link href="/cookies" target="_blank" rel="noopener" className="underline">Cookie and storage notice</Link>.</p>
         {error && <p role="alert" className="text-rose-700">{error}</p>}
-        <button disabled={busy || !acknowledged} className="rounded-xl bg-teal-700 px-5 py-3 font-bold text-white disabled:opacity-50">{busy ? 'Saving…' : 'Agree and continue'}</button>
+        <button disabled={busy || !acknowledged} className="rounded-xl bg-blue-700 px-5 py-3 font-bold text-white disabled:opacity-50">{busy ? 'Saving…' : 'Agree and continue'}</button>
       </form>
-      <p className="text-xs text-slate-500">You can leave without accepting by signing out from your account menu, or <Link className="text-teal-700 underline" href="/contact">request account help</Link>.</p>
+      <p className="text-xs text-slate-500">You can leave without accepting by signing out from your account menu, or <Link className="text-blue-700 underline" href="/contact">request account help</Link>.</p>
     </>}
-    <p><Link className="text-teal-700 underline" href="/privacy-choices">Privacy choices and requests</Link></p>
+    <p><Link className="text-blue-700 underline" href="/privacy-choices">Privacy choices and requests</Link></p>
   </main>;
 }

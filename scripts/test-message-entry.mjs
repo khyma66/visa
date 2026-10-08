@@ -131,7 +131,7 @@ const {MessagesClient}=await import(moduleUrl(ui));
 test('signed-out inbox renders a login link retaining the selected native author',()=>{
   const html=renderToStaticMarkup(React.createElement(MessagesClient,{recipientUsername:'bob-test',recipientMemberId:bob}));
   assert(html.includes(messageLoginHref('bob-test',bob)));
-  assert(html.includes('Log in to see conversations for your account.'));
+  assert(html.includes('Log In to see conversations for your account.'));
 });
 
 test('background inbox invalidation does not change the manually selected folder',async()=>{

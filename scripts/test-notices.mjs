@@ -44,8 +44,8 @@ test('safety and early-preview disclosures appear once in the footer, not above 
     for (const environment of ['development', 'production']) {
       process.env.NEXT_PUBLIC_APP_ENV = environment;
       const html = renderToStaticMarkup(createElement(Layout, null, createElement('main', null, 'Page content')));
-      assert.equal((html.match(/Community safety reminders/g) ?? []).length, 1);
-      assert(html.indexOf('<footer') < html.indexOf('Community safety reminders'));
+      assert.equal((html.match(/Community Safety reminders/g) ?? []).length, 1);
+      assert(html.indexOf('<footer') < html.indexOf('Community Safety reminders'));
       assert(html.includes('href="/contact"'));
       assert(html.includes('href="/privacy"'));
       if (environment === 'production') assert(!html.includes('Early preview'));

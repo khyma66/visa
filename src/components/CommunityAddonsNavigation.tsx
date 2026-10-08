@@ -8,18 +8,18 @@ import { Compass, Newspaper, Plus, Users } from 'lucide-react';
 export function CommunityAddonsNavigation() {
   const pathname = usePathname();
   const links = [
-    ['/explore', 'Explore communities', Compass],
-    ['/my-communities', 'My communities', Users],
+    ['/explore', 'Explore Communities', Compass],
+    ['/my-communities', 'My Communities', Users],
     ['/news', 'News', Newspaper],
-    ['/communities/new', 'Start a community', Plus],
+    ['/communities/new', 'Start a Community', Plus],
   ] as const;
   return <div className="community-shortcuts">
     <nav aria-label="Community tools" className="flex flex-wrap items-center gap-2 px-4 py-2">
       {links.map(([href, label, Icon]) => <Link key={href} href={href} prefetch={false}
         aria-current={pathname === href ? 'page' : undefined}
-        className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${href === '/communities/new'
-          ? 'border-teal-700 bg-teal-700 text-white hover:bg-teal-800'
-          : pathname === href ? 'border-teal-200 bg-teal-50 text-teal-900' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
+        className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${href === '/communities/new'
+          ? 'border-blue-700 bg-blue-700 text-white hover:bg-blue-800'
+          : pathname === href ? 'border-blue-200 bg-blue-50 text-blue-900' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
         <Icon size={16} className="mr-2 shrink-0" aria-hidden="true"/>{label}
       </Link>)}
     </nav>

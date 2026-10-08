@@ -38,7 +38,9 @@ const makeFeed=async(articles)=>({status:'ok',source:'Google News',articles:arti
 test('the fixed Google search covers immigration, avoids payment-company terms and has no user URL',()=>{
   const url=new URL(news.GOOGLE_NEWS_RSS_URL);
   assert.equal(url.origin,'https://news.google.com');assert.equal(url.pathname,'/rss/search');
-  assert.match(url.searchParams.get('q'),/visa OR immigration/);assert.match(url.searchParams.get('q'),/-"Visa Inc"/);
+  assert.match(url.searchParams.get('q'),/USCIS OR "U\.S\. visa" OR "US visa" OR H-1B OR "U\.S\. immigration"/);
+  assert.doesNotMatch(url.searchParams.get('q'),/Schengen|Canada|visa OR immigration/);
+  assert.match(url.searchParams.get('q'),/-"Visa Inc"/);
   assert.match(url.searchParams.get('q'),/when:7d/);assert.equal(url.searchParams.get('hl'),'en-US');
   assert.equal(new URL(news.GOOGLE_NEWS_SEARCH_URL).pathname,'/search');
 });

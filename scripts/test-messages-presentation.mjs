@@ -72,10 +72,10 @@ test('messages waits for auth and signed-out accounts cannot see cached conversa
   assert.match(loading, /Loading messages/);
   assert.doesNotMatch(loading, /private-secret|accepted-member/);
   const signedOut = render(fixture(cached, { user: null }), { recipientUsername: 'bob-member', recipientMemberId: bob }).html;
-  assert.match(signedOut, /Log in to see conversations for your account/);
+  assert.match(signedOut, /Log In to see conversations for your account/);
   assert.match(signedOut, /href="\/login\?next=%2Fmessages%3Fto%3Dbob-member%26member%3D22222222/);
-  assert.doesNotMatch(signedOut, /private-secret|accepted-member|New chat request/);
-  assert.doesNotMatch(signedOut, /Protect yourself in messages|Community safety reminders/);
+  assert.doesNotMatch(signedOut, /private-secret|accepted-member|New Chat Request/);
+  assert.doesNotMatch(signedOut, /Protect yourself in messages|Community Safety reminders/);
 });
 
 test('initial inbox waits for results rather than showing a false empty folder', () => {

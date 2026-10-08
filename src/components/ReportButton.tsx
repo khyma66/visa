@@ -24,7 +24,7 @@ export function ReportButton({ kind, target }: { kind: 'question' | 'answer' | '
   if (demoMode) return null;
   return <div className="text-xs text-slate-600">
     <button onClick={() => setOpen(!open)} aria-expanded={open} className="rounded px-1 py-1 underline hover:text-rose-700">Report</button>
-    {open && (!user ? <p><Link href="/login" className="text-teal-700 underline">Log in to report content</Link></p> :
+    {open && (!user ? <p><Link href="/login" className="text-blue-700 underline">Log In to report content</Link></p> :
       <form onSubmit={submit} className="mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 text-slate-800 shadow-sm">
         <label className="block font-bold">Reason<select value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 w-full rounded border p-2">
           <option value="spam">Spam</option><option value="harassment">Harassment</option><option value="personal-information">Exposed personal information</option><option value="scam">Scam or impersonation</option><option value="other">Other</option>

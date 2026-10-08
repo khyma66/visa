@@ -2,6 +2,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { parseEnv } from 'node:util';
+import ts from 'typescript';
+
+const presentation = ts.transpileModule(await readFile(new URL('../src/lib/post-presentation.ts',import.meta.url),'utf8'), {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+const { usVisaPost } = await import(`data:text/javascript;base64,${Buffer.from(presentation).toString('base64')}`);
 
 const origin = process.argv[2] ?? 'https://visathreads.com';
 assert(['https://visathreads.com','https://visaflow-dev.varunchinna5966.workers.dev'].includes(origin), 'Use an approved preview origin.');
@@ -24,10 +28,10 @@ assert.deepEqual(feed.questions.map(row=>row.id),snapshot.questions.map(row=>row
 assert.equal(Object.values(feed.answersByQuestionId).flat().length,snapshot.source.commentCount);
 assert.equal(feed.source.runId,snapshot.source.runId);
 for (const row of summary.tags) {
-  assert.equal(row.count,feed.questions.filter(question=>question.status!=='archived' && question.tags.includes(row.tag)).length);
+  assert.equal(row.count,feed.questions.filter(question=>usVisaPost(question) && question.status!=='archived' && question.tags.includes(row.tag)).length);
   assert.deepEqual(Object.keys(row).sort(),['count','example','tag']);
 }
-console.log(`PASS archive: ${feed.questions.length} posts, ${snapshot.source.commentCount} comments, ${summary.tags.length} tags; latest source ${feed.source.newestRunAt}`);
+console.log(`PASS archive: ${feed.questions.length} preserved posts, ${snapshot.source.commentCount} comments; U.S. view: ${feed.questions.filter(usVisaPost).length} posts, ${summary.tags.length} tags; latest source ${feed.source.newestRunAt}`);
 
 async function rpc(name,args={}) {
   return fetch(new URL(`/rest/v1/rpc/${name}`,database),{

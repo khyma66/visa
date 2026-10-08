@@ -6,6 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 const transpile = (source) => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
+const presentationUrl = moduleUrl(transpile(await readFile(new URL('../src/lib/post-presentation.ts', import.meta.url), 'utf8')));
 const helperUrl = moduleUrl(transpile(await readFile(new URL('../src/lib/tag-directory.ts', import.meta.url), 'utf8')));
 const { summarizeArchiveTags, archiveDirectoryPage, directoryPage } = await import(helperUrl);
 const fixtures = [
@@ -53,7 +54,7 @@ test('archive tag endpoint preserves production approval and snapshot gates', as
   const nextUrl = moduleUrl('export const NextResponse={json:(data,init)=>Response.json(data,init)};');
   const archiveUrl = moduleUrl(`export default ${JSON.stringify({ questions: fixtures })};`);
   const source = transpile(await readFile(new URL('../src/app/api/tags/route.ts', import.meta.url), 'utf8'))
-    .replace("'next/server'", JSON.stringify(nextUrl)).replace("'@visa/archive'", JSON.stringify(archiveUrl)).replace("'@/lib/tag-directory'", JSON.stringify(helperUrl));
+    .replace("'next/server'", JSON.stringify(nextUrl)).replace("'@visa/archive'", JSON.stringify(archiveUrl)).replace("'@/lib/tag-directory'", JSON.stringify(helperUrl)).replace("'@/lib/post-presentation'", JSON.stringify(presentationUrl));
   const { GET } = await import(moduleUrl(source));
   try {
     process.env.APP_ENV = 'production'; process.env.IMPORTED_CONTENT_APPROVED = 'false'; process.env.COMMUNITY_SOURCE_MODE = 'snapshot';
