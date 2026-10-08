@@ -157,7 +157,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
         <p className="mt-5 max-w-md text-base leading-7 text-slate-600">Find people navigating the same visa journey. Ask a Question, compare experiences, and keep useful answers close.</p>
         <div className="mt-8 space-y-5">
           <div className="flex gap-3"><Search aria-hidden="true" className="mt-1 shrink-0 text-blue-700" /><div><b>Find similar cases</b><p className="mt-1 text-sm leading-6 text-slate-600">Explore past questions about appointments, processing times, and next steps.</p></div></div>
-          <div className="flex gap-3"><Tags aria-hidden="true" className="mt-1 shrink-0 text-blue-700" /><div><b>Explore the topics that matter</b><p className="mt-1 text-sm leading-6 text-slate-600">Browse by visa type, country, or stage in your application.</p></div></div>
+          <div className="flex gap-3"><Tags aria-hidden="true" className="mt-1 shrink-0 text-blue-700" /><div><b>Explore the topics that matter</b><p className="mt-1 text-sm leading-6 text-slate-600">Browse by U.S. visa type or stage in your application.</p></div></div>
           <div className="flex gap-3"><MessagesSquare aria-hidden="true" className="mt-1 shrink-0 text-blue-700" /><div><b>Connect with the community</b><p className="mt-1 text-sm leading-6 text-slate-600">Join discussions and send message requests to other members.</p></div></div>
         </div>
         <Link href="/" className="mt-7 inline-flex items-center gap-2 text-sm font-bold text-blue-700 hover:underline">Just browsing? Explore questions <ArrowRight size={16} /></Link>

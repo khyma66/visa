@@ -25,7 +25,7 @@ approval. Repository, database, release branch, and domain remain unchanged.
   projected as U.S. discussions. One Canadian work-visa post and one ambiguous
   stamping post are omitted from this view.
 - Original archive remains 563 posts and 628 comments. The current projected
-  feed has 561 posts and 20 tags. No content is deleted. Generic discussions in
+  feed has 561 posts and 21 tags. No content is deleted. Generic discussions in
   the existing U.S. archive remain; this is not an automated semantic moderation
   guarantee. Suppress the old generic “Global” badge instead of inventing a country.
 
