@@ -29,6 +29,8 @@ The uploaded Reddit design summary and HTML snapshot were used as layout referen
 6. **Visual and hosted acceptance:** local browser preview access was blocked in this session. Component/database tests and a Worker build are not a substitute for desktop/mobile browser inspection or hosted account tests.
 7. **Capacity:** 10,000-community/100,000-question fixtures prove bounded query behavior only. They do not prove the design target of 10 million registered users, 1 million monthly active users, or 50,000 concurrent users. Hot-group membership counters, imported-feed delivery and Realtime quotas still need traffic-model testing.
 
+The current hosted advisor check supersedes the old September legacy-RLS warning: it returned no ERROR-level findings and now reports RLS-enabled/no-policy legacy tables. It still warns that leaked-password protection is disabled and identifies public-schema extension/GraphQL discoverability concerns. Exact deployed function/view compatibility was not verified because that metadata query was cancelled. See `HOSTED_COMPATIBILITY_2026-10-08.md`; do not treat absence of advisor errors as complete security acceptance.
+
 ## Ordered PR and release process
 
 1. In the original VisaFlow implementation chat/workspace, commit the actual deployed source and push a recovery branch to `khyma66/visa`. Keep credentials and real imported archives out of Git. Record the current Worker version and rollback version. Compare Experience, cookies/privacy choices, country communities, policy receipts, avatars and current RPC calls.
