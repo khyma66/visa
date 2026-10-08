@@ -60,8 +60,30 @@ content rights, provider branding and end-to-end email/SMS delivery remain disti
 launch tasks. Browser checks of provider handoff do not prove delivery or successful
 account login. Never promise complete protection from attacks or all-state compliance.
 
-## Deployment verification
+## Deployment verification — completed October 8, 03:45 UTC
 
-Publish only the tested clean commit, then compare `/api/health` build provenance
-with its Git SHA and inspect the real domain in desktop and mobile browsers.
-Record the deployed version and verification results in the handoff after deployment.
+- Live application commit: `fab04160750697a38b3778349a1d78d26834637b`.
+- Worker version: `70b72768-ce1c-4c73-80fc-b5dcd64fa4dc`.
+- Live health matches clean source digest `e3007d1fa17005ee59c1a5d44ddfcf25c4217ee36a71dd2bcd2ac97afdcf43a1`.
+- 522 tests passed in one uninterrupted run; typecheck/build passed.
+- Working-tree known-secret scan: 369 files; bundle scan: 220 files; no matches.
+- 21 live page requests returned 200 with CSP and preview noindex headers.
+- www redirects to the apex with 308. Live smoke confirms 563 posts, 628 comments,
+  21 tags; public read RPCs work and all 22 retired legacy tables deny anonymous access.
+- Desktop redesign visible on the real domain. Mobile navigation opens/closes and
+  reaches News without overflow. Header search for passport returns 46 matches.
+- Explore displays a valid empty community directory, not a schema error.
+  No hosted fixture communities created. News currently links out to Google News;
+  in-site headline republication remains permission-gated.
+- Login preserves the active account. Google/email enabled; phone disabled.
+  No fresh OAuth completion, email or SMS delivery claimed. A separate guest
+  browser attempt could not attach.
+- Local migration `20261006045523` maps to hosted `20261008034145`;
+  local `20261006051458` maps to hosted `20261008034201`. Do not blindly replay db push.
+
+Post-migration advisor: no ERROR findings. Remaining warnings include
+[public vector extension](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public),
+[GraphQL schema visibility](https://supabase.com/docs/guides/database/database-linter?lint=0026_pg_graphql_anon_table_exposed)
+(not itself proof of row leakage), and
+[disabled leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+Intentionally closed legacy tables retain policy-free RLS.

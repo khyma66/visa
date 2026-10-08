@@ -1,5 +1,24 @@
 # VisaFlow release handoff — October 2, 2026 (America/Chicago)
 
+## Current status — October 8, 2026 UTC
+
+**The Reddit-inspired consolidated preview is deployed at https://visathreads.com.**
+Application commit `fab04160750697a38b3778349a1d78d26834637b`, Worker version
+`70b72768-ce1c-4c73-80fc-b5dcd64fa4dc`, branch
+`release/visaflow-consolidated-20261002` in `khyma66/visa` (PR #3).
+Live health confirms the clean source commit. Documentation-only commits may be
+newer than the deployed application commit.
+
+See [the current UI release record](UI_PREVIEW_RELEASE_2026-10-08.md) for PR #2–#7
+reconciliation, applied community migrations, 522 passing tests, live checks and
+remaining gates. Google/email are enabled; phone is disabled; fresh end-to-end
+sign-in delivery is not verified. AI summaries and automatic feedback-to-change
+processing are not live; payments and ads remain off. Public-launch reviews are
+not approved.
+
+**Entries below are historical and superseded where they conflict, including old
+domains, deployment IDs and pending migrations.**
+
 ## October 3 approved containment and member-post experience — latest update
 
 **Published:** https://visa-central.com, preview Worker version `b2297cd3-6fa1-472c-aefd-07680f8f5d79`. Public-launch gates remain closed. Previous preview `dc3cf6b9-f0fc-447b-9104-135675451654` remains a rollback reference; rolling back the UI does not roll back database permissions.

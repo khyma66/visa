@@ -4,7 +4,7 @@
   "checks": {
     "database_access": {
       "status": "blocked",
-      "evidence": "October 3: after explicit owner approval, legacy hardening applied as hosted migration 20261003204619. All 22 old table row counts match, 500 posts/account/profile/storage object retained; browser table/column/sequence grants zero, four functions server-only with fixed search paths, posts bucket private. No public table lacks RLS; current community/Q&A/DM access unchanged. Eight dedicated regressions and 42 membership tests pass. Live read-only HTTP checks deny all 22 old browser APIs and anonymous private RPCs while the current archive/public APIs remain available. Remaining extension/GraphQL/password advisories and human security acceptance are tracked separately. October 8 read-only catalog check: create_public_community, join_public_community, leave_public_community, my_community_directory_page and community_group_question_page are absent. Existing community_post_page includes filter_kind and filter_category. Consolidated feature schema is not deployment-compatible until migration rehearsal and hosted verification.",
+      "evidence": "October 3: after explicit owner approval, legacy hardening applied as hosted migration 20261003204619. All 22 old table row counts match, 500 posts/account/profile/storage object retained; browser table/column/sequence grants zero, four functions server-only with fixed search paths, posts bucket private. No public table lacks RLS; current community/Q&A/DM access unchanged. Eight dedicated regressions and 42 membership tests pass. Live read-only HTTP checks deny all 22 old browser APIs and anonymous private RPCs while the current archive/public APIs remain available. Remaining extension/GraphQL/password advisories and human security acceptance are tracked separately. October 8 read-only catalog check: create_public_community, join_public_community, leave_public_community, my_community_directory_page and community_group_question_page are absent. Existing community_post_page includes filter_kind and filter_category. Consolidated feature schema is not deployment-compatible until migration rehearsal and hosted verification. October 8 03:42 UTC update supersedes the missing-RPC blocker: current-policy/avatar/experience compatibility tested; applied lifecycle 20261008034145 and bounded reads 20261008034201. Public reads pass; anonymous creation/member reads and authenticated direct membership writes deny access. Advisor has no ERROR findings; other security acceptance remains pending.",
       "verifiedBy": ""
     },
     "exposed_credentials_rotated": {
@@ -14,7 +14,7 @@
     },
     "email_signup_confirmation_recovery": {
       "status": "pending",
-      "evidence": "Historical October 3 setup is superseded by the domain migration. Owned-domain callbacks/templates are recorded; PR 6 reports Google enabled. Current end-to-end email, recovery and Google acceptance is still unverified by this consolidation.",
+      "evidence": "Historical October 3 setup is superseded by the domain migration. Owned-domain callbacks/templates are recorded; PR 6 reports Google enabled. Current end-to-end email, recovery and Google acceptance is still unverified by this consolidation. October 8 live settings: Google/email enabled, phone disabled. Existing signed-in account preserved; no fresh OAuth/OTP delivery test completed.",
       "verifiedBy": ""
     },
     "moderator_assigned": {
@@ -94,7 +94,7 @@
     },
     "source_parity": {
       "status": "blocked",
-      "evidence": "Experience, account, avatar and policy source recovered in bcb9c22; PRs 5–7 ported onto this branch. Exact old live build cannot be reconstructed from its missing commit metadata. Combined source requires browser and hosted compatibility acceptance before public release.",
+      "evidence": "Experience, account, avatar and policy source recovered in bcb9c22; PRs 5–7 ported onto this branch. Exact old live build cannot be reconstructed from its missing commit metadata. Combined source requires browser and hosted compatibility acceptance before public release. October 8 03:45 UTC: clean application commit fab04160750697a38b3778349a1d78d26834637b deployed to preview version 70b72768-ce1c-4c73-80fc-b5dcd64fa4dc; live health matches. 522 tests pass uninterrupted; 21 live pages, archive/access smoke, desktop/mobile navigation and header search checked. Human production acceptance remains pending.",
       "verifiedBy": "",
       "sourceSha256": ""
     }
