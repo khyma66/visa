@@ -105,10 +105,14 @@ for(const [label,response] of [
   ['malformed RSS',()=>xmlResponse('<rss>')],
   ['oversized declared body',()=>new Response('<rss/>',{headers:{'Content-Type':'application/xml','Content-Length':String(news.NEWS_MAX_BYTES+1)}})],
   ['oversized streamed body',()=>xmlResponse(' '.repeat(news.NEWS_MAX_BYTES+1))],
-]) test(`${label} fails explicitly, is not cached and permits recovery`,async()=>{
-  let fail=true,calls=0;
-  const service=news.createNewsService(async()=>{calls++;return fail?response():xmlResponse(rss(item()));},()=>now);
-  await assert.rejects(service());fail=false;assert.equal((await service()).articles.length,1);assert.equal(calls,2);
+]) test(`${label} fails explicitly, backs off repeated reads and permits recovery`,async()=>{
+  let fail=true,calls=0,clock=now;
+  const service=news.createNewsService(async()=>{calls++;return fail?response():xmlResponse(rss(item()));},()=>clock);
+  await assert.rejects(service());fail=false;
+  await assert.rejects(service(),/temporarily unavailable/);assert.equal(calls,1);
+  clock+=news.NEWS_FAILURE_BACKOFF_MS;
+  assert.equal((await service()).articles.length,1);assert.equal(calls,2);
+  await service();assert.equal(calls,2);
 });
 
 test('timeout aborts both initial fetch and response body reads',async()=>{
@@ -169,6 +173,63 @@ test('actual route is disabled by default before fetch/cache, shares canonical e
     const failing=await import(await compile('../src/app/api/news/route.ts','failure-route'));
     const failed=await failing.GET(new Request('https://app.example/api/news'));assert.equal(failed.status,503);
     assert.equal(failed.headers.get('cache-control'),'no-store');assert.doesNotMatch(await failed.text(),/sentinel/);
+  } finally {
+    globalThis.fetch=originalFetch;globalThis.caches=originalCaches;
+    if(originalFlag===undefined)delete process.env.GOOGLE_NEWS_RSS_ENABLED;else process.env.GOOGLE_NEWS_RSS_ENABLED=originalFlag;
+  }
+});
+
+test('shared edge failure markers back off fresh isolates, expire, and never leak to clients',async()=>{
+  const originalFetch=globalThis.fetch,originalCaches=globalThis.caches,originalFlag=process.env.GOOGLE_NEWS_RSS_ENABLED,originalNow=Date.now;
+  let clock=now,calls=0,reads=0,fail=true,cached;
+  Date.now=()=>clock;
+  globalThis.fetch=async()=>{
+    calls++;
+    if(fail)throw new Error('provider-secret-sentinel');
+    return xmlResponse(rss(item({pubDate:new Date(clock-60_000).toUTCString()})));
+  };
+  globalThis.caches={default:{
+    async match(){reads++;return cached?.clone();},
+    async put(_key,response){cached=response;},
+  }};
+  process.env.GOOGLE_NEWS_RSS_ENABLED='true';
+  try {
+    const first=await import(await compile('../src/app/api/news/route.ts','backoff-first-isolate'));
+    const next=await import(await compile('../src/app/api/news/route.ts','backoff-next-isolate'));
+    const request=()=>new Request('https://app.example/api/news');
+    const failed=await first.GET(request());
+    assert.equal(failed.status,503);assert.equal(failed.headers.get('cache-control'),'no-store');assert.equal(calls,1);
+    assert.equal(cached.headers.get('cache-control'),'public, max-age=60');
+    assert.deepEqual(await cached.clone().json(),{status:'backoff',retryAt:clock+news.NEWS_FAILURE_BACKOFF_MS});
+    clock+=15_000;
+    const backedOff=await next.GET(request());assert.equal(backedOff.status,503);assert.equal(calls,1);
+    assert.equal(backedOff.headers.get('retry-after'),'45');assert.equal(backedOff.headers.get('x-content-type-options'),'nosniff');
+    assert.doesNotMatch(await backedOff.text(),/provider-secret-sentinel|retryAt|backoff/);
+    process.env.GOOGLE_NEWS_RSS_ENABLED='false';
+    const oldReads=reads;assert.deepEqual(await(await next.GET(request())).json(),{status:'external'});assert.equal(reads,oldReads);
+    process.env.GOOGLE_NEWS_RSS_ENABLED='true';
+    clock+=news.NEWS_FAILURE_BACKOFF_MS;fail=false;
+    const recovered=await next.GET(request());assert.equal(recovered.status,200);assert.equal(calls,2);
+    assert.equal((await recovered.json()).status,'ok');
+  } finally {
+    globalThis.fetch=originalFetch;globalThis.caches=originalCaches;Date.now=originalNow;
+    if(originalFlag===undefined)delete process.env.GOOGLE_NEWS_RSS_ENABLED;else process.env.GOOGLE_NEWS_RSS_ENABLED=originalFlag;
+  }
+});
+
+test('malformed or overlong edge failure windows cannot suppress fresh news',async()=>{
+  const originalFetch=globalThis.fetch,originalCaches=globalThis.caches,originalFlag=process.env.GOOGLE_NEWS_RSS_ENABLED;
+  let calls=0;
+  globalThis.fetch=async()=>{calls++;return xmlResponse(rss(item({pubDate:new Date(Date.now()-60_000).toUTCString()})));};
+  process.env.GOOGLE_NEWS_RSS_ENABLED='true';
+  try {
+    const markers=[null,[],{status:'backoff',retryAt:'tomorrow'},{status:'backoff',retryAt:Date.now()+86_400_000},{status:'backoff',retryAt:Date.now()-1}];
+    for(const [index,marker]of markers.entries()) {
+      globalThis.caches={default:{async match(){return Response.json(marker);},async put(){}}};
+      const route=await import(await compile('../src/app/api/news/route.ts',`bad-backoff-${index}`));
+      assert.equal((await route.GET(new Request('https://app.example/api/news'))).status,200);
+    }
+    assert.equal(calls,markers.length);
   } finally {
     globalThis.fetch=originalFetch;globalThis.caches=originalCaches;
     if(originalFlag===undefined)delete process.env.GOOGLE_NEWS_RSS_ENABLED;else process.env.GOOGLE_NEWS_RSS_ENABLED=originalFlag;

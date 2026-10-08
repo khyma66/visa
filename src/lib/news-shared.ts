@@ -15,6 +15,7 @@ export type NewsFeedData = {
 
 export const NEWS_LIMIT = 24;
 export const NEWS_CACHE_MS = 5 * 60_000;
+export const NEWS_FAILURE_BACKOFF_MS = 60_000;
 export const NEWS_TIMEOUT_MS = 8_000;
 export const NEWS_MAX_BYTES = 512 * 1024;
 export const NEWS_QUERY = '(visa OR immigration OR H-1B OR USCIS) -"Visa Inc" -Mastercard -"credit card" -"debit card" -NYSE when:7d';

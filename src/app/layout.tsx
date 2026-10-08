@@ -4,6 +4,8 @@ import { AuthProvider } from '@/components/AuthProvider';
 import { SiteHeader } from '@/components/SiteHeader';
 import { CommunityAddonsNavigation } from '@/components/CommunityAddonsNavigation';
 import Link from 'next/link';
+import { Suspense } from 'react';
+import { CommunityNavigation } from '@/components/CommunityNavigation';
 
 // A fresh CSP nonce must be attached to each request's streamed script tags.
 export const dynamic = 'force-dynamic';
@@ -33,9 +35,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+      <body className="min-h-screen bg-white text-slate-900 antialiased">
         <AuthProvider>
-          <SiteHeader />
+          <Suspense><SiteHeader /></Suspense>
+          <div className="app-layout">
+          <aside className="desktop-sidebar"><Suspense><CommunityNavigation /></Suspense></aside>
+          <div className="app-content">
           <CommunityAddonsNavigation />
           <div id="main-content" tabIndex={-1}>{children}</div>
           <footer className="site-shell border-t border-slate-200 bg-white py-6 text-xs leading-6 text-slate-500">
@@ -47,6 +52,8 @@ export default function RootLayout({
               <Link href="/contact" className="underline">Reporting and privacy requests</Link>
             </nav>
           </footer>
+          </div>
+          </div>
         </AuthProvider>
       </body>
     </html>

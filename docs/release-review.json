@@ -2,6 +2,7 @@
   "siteOrigin": "",
   "databaseOrigin": "https://cycnichledvqbxevrwnt.supabase.co",
   "checks": {
+    "source_parity": { "status": "blocked", "evidence": "October 8 UTC: seven accessible GitHub branches and local recovery checks lack the deployed Experience, avatar and policy/privacy implementations. The hosted ledger confirms 22 migrations through visa_experiences. See SOURCE_RECOVERY_2026-10-08.md. Recover and compare exact live source before approving this build.", "verifiedBy": "", "sourceSha256": "" },
     "database_access": { "status": "blocked", "evidence": "September 11 UTC live check: 15 legacy public tables lack RLS and have anonymous read/write grants; public posts storage bucket also needs review. Compatibility and owner approval needed.", "verifiedBy": "" },
     "exposed_credentials_rotated": { "status": "blocked", "evidence": "September 11 UTC read-only pattern scan: 246 working files had no matching privileged keys; full reachable Git patch history contains service-role JWTs in 7 file paths. No values printed. Rotation/revocation has not been verified.", "verifiedBy": "" },
     "email_signup_confirmation_recovery": { "status": "pending", "evidence": "Real SMTP, confirmation and recovery delivery not verified.", "verifiedBy": "" },
@@ -16,7 +17,7 @@
     "age_and_us_legal_review": { "status": "pending", "evidence": "Operator, state, audience and age policy unresolved; counsel must assess current federal/state requirements.", "verifiedBy": "" },
     "human_cross_account_tests": { "status": "pending", "evidence": "Execute HUMAN_ACCEPTANCE_TESTS.md with isolated accounts and record outcomes; browser policy blocked agent visual testing.", "verifiedBy": "" },
     "accessibility_review": { "status": "pending", "evidence": "Keyboard, screen reader, zoom, mobile and accessible abuse-intake tests required.", "verifiedBy": "" },
-    "dependency_and_security_review": { "status": "pending", "evidence": "September 11 UTC: full npm audit 0 after compatible lockfile/tooling updates; 20 automated tests, typecheck, Worker build and 149-file bundle scan passed. Account-switch isolation, script nonces and bounded upstream reads implemented. Community write-guard gaps migration applied as 20260911051823. Legacy lockdown, historic credential rotation and independent/human security review remain unresolved.", "verifiedBy": "" },
+    "dependency_and_security_review": { "status": "blocked", "evidence": "October 8 UTC: compatible sharp 0.35.5 and source-map-js 1.2.2 overrides reduced npm audit from 16 high/2 moderate to 11 high/2 moderate. Remaining highs trace to unpatched braces; audit gate retained. Historic credential rotation and independent/human security review remain unresolved. This supersedes the September audit result.", "verifiedBy": "" },
     "incident_response_and_alerts": { "status": "pending", "evidence": "Need named on-call owner, alert delivery, breach/legal escalation drill, scoped admin access and safe log retention.", "verifiedBy": "" }
   }
 }

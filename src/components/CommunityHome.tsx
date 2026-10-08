@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Search, SlidersHorizontal, Sparkles, Tags, TrendingUp, Users, MessageCircle, CircleHelp } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { ArrowUpRight, CircleHelp, Compass, MessageSquare, Plus, Search, SlidersHorizontal, Tags, X } from 'lucide-react';
 import { getCommunitySource, getQuestionPage } from '@/lib/community';
 import type { Question } from '@/lib/types';
 import { subscribeLive } from '@/lib/realtime';
@@ -11,10 +12,14 @@ import { useAuth } from './AuthProvider';
 import { RelatedQuestions } from './RelatedQuestions';
 
 const PAGE_SIZE = 20;
-type SortMode = 'newest' | 'activity' | 'unanswered' | 'score';
+const SORTS = [['newest', 'New'], ['activity', 'Active'], ['score', 'Top'], ['unanswered', 'Unanswered']] as const;
+type SortMode = typeof SORTS[number][0];
+type PostKind = '' | 'question' | 'discussion' | 'promotion';
 
-export function CommunityHome() {
+export function CommunityHome({ initialKind = '' }: { initialKind?: PostKind } = {}) {
   const { user, demoMode } = useAuth();
+  const searchParams = useSearchParams();
+  const queryString = searchParams.toString();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [search, setSearch] = useState('');
   const [visaType, setVisaType] = useState('');
@@ -22,7 +27,7 @@ export function CommunityHome() {
   const [error, setError] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [tag, setTag] = useState('');
-  const [kind, setKind] = useState('');
+  const [kind, setKind] = useState<PostKind>(initialKind);
   const [page, setPage] = useState(1);
   const [feedUnavailable, setFeedUnavailable] = useState(false);
   const [more, setMore] = useState(false);
@@ -30,51 +35,75 @@ export function CommunityHome() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [revision, setRevision] = useState(0);
   const [related, setRelated] = useState<Question | null>(null);
-  const filterKey = JSON.stringify([search,tag,visaType,sortMode]);
+  const olderLock = useRef<symbol | null>(null);
+  const alive = useRef(true);
+  const filterKey = JSON.stringify([search, tag, visaType, sortMode, revision]);
   const filterRef = useRef(filterKey);
   filterRef.current = filterKey;
 
   useEffect(() => {
-    let active = true;
-    const restoreTag = () => { setTag(new URLSearchParams(window.location.search).get('tag') ?? ''); setPage(1); };
-    restoreTag();
-    window.addEventListener('popstate', restoreTag);
-    getCommunitySource().then((metadata) => { if (active) setFeedUnavailable(!metadata); }).catch(() => { if (active) setFeedUnavailable(true); });
-    return () => { active = false; window.removeEventListener('popstate', restoreTag); };
+    const params = new URLSearchParams(queryString);
+    const sort = params.get('sort');
+    const postKind = params.get('type');
+    setSearch(params.get('q')?.slice(0, 200) ?? '');
+    setTag(params.get('tag')?.slice(0, 60) ?? '');
+    setVisaType(params.get('visa')?.slice(0, 80) ?? '');
+    setSortMode(SORTS.some(([value]) => value === sort) ? sort as SortMode : 'newest');
+    setKind(postKind === 'question' || postKind === 'discussion' || postKind === 'promotion' ? postKind : initialKind);
+    setPage(1);
+  }, [queryString, initialKind]);
+
+  useEffect(() => {
+    alive.current = true;
+    getCommunitySource().then((metadata) => { if (alive.current) setFeedUnavailable(!metadata); }).catch(() => { if (alive.current) setFeedUnavailable(true); });
+    return () => { alive.current = false; };
   }, []);
 
   useEffect(() => {
     let active = true;
+    setLoading(true); setError(''); setMore(false); setCursor(undefined);
+    olderLock.current = null; setLoadingOlder(false);
     const timer = setTimeout(() => {
       void getQuestionPage({ search, tag, visaType, sort: sortMode })
-      .then((data) => { if (active) { setQuestions(data.questions); setMore(data.more); setCursor(data.cursor); setError(''); } })
-      .catch((reason: Error) => { if (active) setError(reason.message); })
-      .finally(() => { if (active) setLoading(false); });
+        .then((data) => { if (active) { setQuestions(data.questions); setMore(data.more); setCursor(data.cursor); } })
+        .catch(() => { if (active) { setQuestions([]); setError('Questions could not be loaded. Please try again.'); } })
+        .finally(() => { if (active) setLoading(false); });
     }, 200);
     return () => { active = false; clearTimeout(timer); };
   }, [search, tag, visaType, sortMode, revision]);
 
   async function loadOlder() {
-    if (loadingOlder || !cursor) return;
-    setLoadingOlder(true);
+    if (loading || olderLock.current || !cursor) return;
+    const operation = Symbol();
+    olderLock.current = operation; setLoadingOlder(true);
     const requestedFilter = filterKey;
     try {
       const data = await getQuestionPage({ search, tag, visaType, sort: sortMode, before: cursor });
-      if (filterRef.current !== requestedFilter) return;
-      setQuestions((current) => [...current, ...data.questions.filter((q) => !current.some((item) => item.id === q.id))]);
-      setMore(data.more); setCursor(data.cursor);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load older questions.'); }
-    finally { setLoadingOlder(false); }
+      if (!alive.current || filterRef.current !== requestedFilter) return;
+      setQuestions((current) => [...current, ...data.questions.filter((question) => !current.some((item) => item.id === question.id))]);
+      setMore(data.more); setCursor(data.cursor); setError('');
+    } catch {
+      if (alive.current && filterRef.current === requestedFilter) setError('More questions could not be loaded. Please try again.');
+    } finally {
+      if (olderLock.current === operation) {
+        olderLock.current = null;
+        if (alive.current) setLoadingOlder(false);
+      }
+    }
   }
 
-  function selectTag(value: string) {
-    setTag(value);
-    setPage(1);
+  function updateQuery(updates: Record<string, string>) {
     const url = new URL(window.location.href);
-    if (value) url.searchParams.set('tag', value); else url.searchParams.delete('tag');
-    window.history.replaceState(window.history.state, '', url);
+    Object.entries(updates).forEach(([key, value]) => { if (value) url.searchParams.set(key, value); else url.searchParams.delete(key); });
+    window.history.replaceState(null, '', url);
+    setPage(1); setRelated(null);
   }
 
+  function selectTag(value: string) { setTag(value); updateQuery({ tag: value }); }
+  function resetFilters() {
+    setSearch(''); setVisaType(''); setTag(''); setKind(initialKind); setSortMode('newest');
+    updateQuery({ q: '', visa: '', tag: '', type: '', sort: '' });
+  }
   function goToPage(value: number) {
     setPage(value);
     document.getElementById('question-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -89,153 +118,77 @@ export function CommunityHome() {
         && (sortMode !== 'unanswered' || question.answer_count === 0)
         && ((!demoMode && question.source !== 'apify') || terms.every((term) => haystack.includes(term)));
     });
-    return items.sort((a, b) => sortMode === 'activity'
-      ? (b.vote_score + b.answer_count * 2) - (a.vote_score + a.answer_count * 2)
-      : sortMode === 'score' ? b.vote_score - a.vote_score : Date.parse(b.created_at) - Date.parse(a.created_at));
+    return items.sort((a, b) => {
+      const score = sortMode === 'activity' ? (b.vote_score + b.answer_count * 2) - (a.vote_score + a.answer_count * 2)
+        : sortMode === 'score' ? b.vote_score - a.vote_score : 0;
+      return score || Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id);
+    });
   }, [questions, sortMode, search, visaType, tag, kind, demoMode]);
   const pageCount = Math.max(1, Math.ceil(visibleQuestions.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const pageQuestions = visibleQuestions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const pageNumbers = Array.from({ length: pageCount }, (_, index) => index + 1)
     .filter((value) => value === 1 || value === pageCount || Math.abs(value - currentPage) <= 2);
-  const visaTypes = [...new Set(questions.map((question) => question.visa_type))].sort();
-
+  const visaTypes = [...new Set([...questions.map((question) => question.visa_type), visaType].filter(Boolean))].sort();
+  const filtered = Boolean(search || visaType || tag || kind !== initialKind || sortMode !== 'newest');
   const popularTags = useMemo(() => {
     const counts = new Map<string, number>();
-    questions.forEach((question) => question.tags.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1)));
-    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12);
+    questions.forEach((question) => question.tags.forEach((name) => counts.set(name, (counts.get(name) ?? 0) + 1)));
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 10);
   }, [questions]);
 
   const liveTopics = tag || popularTags.slice(0, 5).map(([name]) => name).join('|');
-  useEffect(() => {
-    let active = true;
-    const stop = subscribeLive(liveTopics.split('|').filter(Boolean).map((name) => `discovery:${name}`), () => {
-      if (active) setRevision((value) => value + 1);
-    });
-    return () => { active = false; stop(); };
-  }, [liveTopics, user?.id]);
-
+  useEffect(() => subscribeLive(liveTopics.split('|').filter(Boolean).map((name) => `discovery:${name}`),
+    () => setRevision((value) => value + 1)), [liveTopics, user?.id]);
 
   return (
-    <main className="mx-auto grid max-w-[1500px] md:grid-cols-[155px_minmax(0,1fr)]">
-      <nav aria-label="Community sections" className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 p-3 text-sm md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:flex-col md:gap-2 md:border-b-0 md:border-r md:pt-7">
-        <Link href="/" aria-current="page" className="flex items-center gap-2 rounded bg-orange-100 px-3 py-2 font-bold text-slate-900"><CircleHelp size={16} /> Questions</Link>
-        <Link href="/tags" className="flex items-center gap-2 rounded px-3 py-2 text-slate-600 hover:bg-slate-200"><Tags size={16} /> Tags</Link>
-        <Link href="/messages" className="flex items-center gap-2 rounded px-3 py-2 text-slate-600 hover:bg-slate-200"><MessageCircle size={16} /> Messages</Link>
-        <p className="mt-7 hidden px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 md:block">VisaFlow community</p>
-        <p className="hidden px-3 text-xs leading-5 text-slate-500 md:block">Real questions.<br />Shared experience.<br />Public pseudonyms.</p>
-      </nav>
-      <div className="min-w-0">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="px-4 py-6 sm:px-6">
-          <div className="max-w-3xl">
-            <p className="mb-2 text-xs font-bold uppercase tracking-widest text-orange-700">Questions · Answers · Community</p>
-            <h1 className="text-3xl font-medium tracking-tight text-slate-950">All visa questions</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Explore discussions, browse topics, and find cases like yours.</p>
-          </div>
-          <div className="mt-5 flex max-w-4xl flex-col gap-3 sm:flex-row">
-            <label className="relative flex-1">
-              <span className="sr-only">Search visa questions</span>
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-              <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search all posts: H-1B transfer, DS-160, proof of funds…"
-                className="h-14 w-full rounded-xl border border-slate-300 bg-white pl-12 pr-4 text-base shadow-sm outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-100" />
-            </label>
-            <Link href="/ask" className="grid h-14 place-items-center rounded-xl bg-teal-700 px-6 font-bold text-white shadow-sm hover:bg-teal-800">Ask your question</Link>
-          </div>
-        </div>
-      </section>
+    <main className="mx-auto w-full max-w-[1180px] px-3 py-5 sm:px-6">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="min-w-0">
+          <header className="flex flex-wrap items-center justify-between gap-3 px-1 pb-4">
+            <div><h1 className="text-2xl font-bold text-slate-950">{initialKind === 'discussion' ? 'Discussions & experiences' : 'Visa questions'}</h1><p className="mt-1 text-sm text-slate-500">Questions, answers, and experiences from the community.</p></div>
+            <Link href="/ask" className="inline-flex items-center gap-1.5 rounded-full bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"><Plus size={17} aria-hidden="true" />Ask a question</Link>
+          </header>
 
-      <div className="grid gap-5 px-3 py-5 sm:px-5 xl:grid-cols-[minmax(0,1fr)_290px]">
-        <section id="question-list" className="scroll-mt-20 overflow-hidden rounded border border-slate-200 bg-white">
-          <div className="flex flex-col gap-4 border-b border-slate-200 p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div>
-              <h2 className="text-xl font-extrabold text-slate-950">{tag ? `Posts tagged [${tag}]` : 'All community posts'}</h2>
-              <p className="mt-1 text-sm text-slate-500" aria-live="polite">{loading ? 'Loading questions…' : `${visibleQuestions.length} posts · ${visibleQuestions.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–${Math.min(currentPage * PAGE_SIZE, visibleQuestions.length)} shown`}</p>
-            </div>
-            <label className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3">
-              <SlidersHorizontal size={15} className="text-slate-500" />
-              <select aria-label="Visa type" value={visaType} onChange={(event) => { setVisaType(event.target.value); setPage(1); }} className="h-10 bg-transparent text-sm font-semibold text-slate-700 outline-none">
-                {['', ...visaTypes].map((type) => <option key={type || 'all'} value={type}>{type || 'All visa types'}</option>)}
-              </select>
-            </label>
-            </div>
-            <div className="flex flex-wrap items-center gap-2" aria-label="Sort questions">
-              {([
-                ['newest', 'Newest'], ['activity', 'Most active'], ['score', 'Top score'], ['unanswered', 'No replies'],
-              ] as const).map(([value, label]) => (
-                <button key={value} onClick={() => { setSortMode(value); setPage(1); }} aria-pressed={sortMode === value}
-                  className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${sortMode === value ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select aria-label="Post type" value={kind} onChange={(event) => { setKind(event.target.value); setPage(1); }} className="rounded-lg border border-slate-200 p-2 text-sm">
-                <option value="">All post types</option><option value="question">Questions</option><option value="discussion">Discussions & experiences</option><option value="promotion">Promotional posts</option>
-              </select>
-              {tag && <button onClick={() => selectTag('')} className="rounded bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">[{tag}] × Clear tag</button>}
-              {(search || visaType || tag || kind || sortMode !== 'newest') && <button onClick={() => { setSearch(''); setVisaType(''); setKind(''); setSortMode('newest'); selectTag(''); }} className="text-xs font-bold text-slate-600 underline">Reset filters</button>}
-            </div>
-            {!loading && feedUnavailable && <p className="text-sm text-amber-800">Some discussions are temporarily unavailable. Please try again later.</p>}
-          </div>
-          {error && <p className="m-5 rounded-lg bg-rose-50 p-4 text-sm text-rose-700">{error}</p>}
-          {!loading && visibleQuestions.length === 0 && (
-            <div className="px-6 py-16 text-center">
-              <Search className="mx-auto text-slate-300" size={36} />
-              <h3 className="mt-3 font-bold text-slate-900">No close match yet</h3>
-              <p className="mt-1 text-sm text-slate-500">Try fewer terms or ask the community.</p>
-            </div>
-          )}
-          {pageQuestions.map((question) => <QuestionCard key={question.id} question={question} onTagSelect={selectTag} onRelated={(q) => { setRelated(q); document.getElementById('feed-related')?.scrollIntoView({behavior:'smooth',block:'nearest'}); }} />)}
-          {!loading && visibleQuestions.length > 0 && <nav aria-label="Post pagination" className="flex flex-wrap items-center gap-2 p-5">
-            <button disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} className="rounded border px-3 py-2 text-sm disabled:opacity-40">Previous</button>
-            {pageNumbers.map((value, index) => <span key={value} className="inline-flex items-center gap-2">
-              {index > 0 && value > pageNumbers[index - 1] + 1 && <span aria-hidden="true">…</span>}
-              <button aria-label={`Page ${value}`} aria-current={currentPage === value ? 'page' : undefined} onClick={() => goToPage(value)} className={`rounded border px-3 py-2 text-sm ${currentPage === value ? 'border-teal-700 bg-teal-700 text-white' : 'hover:bg-slate-50'}`}>{value}</button>
-            </span>)}
-            <button disabled={currentPage === pageCount} onClick={() => goToPage(currentPage + 1)} className="rounded border px-3 py-2 text-sm disabled:opacity-40">Next</button>
-            <span className="ml-auto text-xs text-slate-500">{PAGE_SIZE} per page · Page {currentPage} of {pageCount}</span>
-          </nav>}
-          {loading && <div className="space-y-5 p-6">{[1, 2, 3].map((item) => <div key={item} className="h-28 animate-pulse rounded-xl bg-slate-100" />)}</div>}
-          {more && <div className="border-t p-5"><button onClick={() => void loadOlder()} disabled={loadingOlder} className="rounded-lg border border-teal-200 px-4 py-2 text-sm font-bold text-teal-700 disabled:opacity-50">{loadingOlder ? 'Loading…' : 'Load more questions'}</button></div>}
-        </section>
+          <label className="relative mb-4 block">
+            <span className="sr-only">Search visa questions</span><Search className="absolute left-3.5 top-3 text-slate-500" size={18} aria-hidden="true" />
+            <input value={search} maxLength={200} onChange={(event) => { setSearch(event.target.value); updateQuery({ q: event.target.value }); }} placeholder="Search questions, visa types, and tags" className="h-11 w-full rounded-full border border-slate-200 bg-slate-100 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100" />
+          </label>
 
-        <aside className="space-y-5">
-          {(related || search || tag || pageQuestions[0]) && <div id="feed-related" className="scroll-mt-24">
-            {related && <div className="mb-2 flex items-start justify-between gap-2 text-xs text-slate-600"><span>Similar to: <b>{related.title}</b></span><button onClick={() => setRelated(null)} aria-label="Clear related question selection">×</button></div>}
-            <RelatedQuestions context={related ?? (search || tag ? {title:search,tags:tag ? [tag] : []} : pageQuestions[0])} />
-          </div>}
-          {popularTags.length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2"><Tags className="text-blue-600" size={19} /><h3 className="font-extrabold text-slate-900">Popular tags</h3></div>
-              <p className="mt-2 text-sm leading-6 text-slate-500">Jump into the topics appearing across current group conversations.</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {popularTags.map(([tag, count]) => (
-                  <button key={tag} onClick={() => selectTag(tag)} className="rounded-md bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100">
-                    {tag} <span className="text-blue-400">×{count}</span>
-                  </button>
-                ))}
+          <section id="question-list" aria-label="Community questions" aria-busy={loading} className="min-w-0 scroll-mt-24">
+            <div className="border-b border-slate-200 pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-1" aria-label="Sort questions">{SORTS.map(([value, label]) => <button key={value} onClick={() => { setSortMode(value); updateQuery({ sort: value === 'newest' ? '' : value }); }} aria-pressed={sortMode === value} className={`rounded-full px-3 py-2 text-sm font-semibold ${sortMode === value ? 'bg-slate-200 text-slate-950' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}</div>
+                <label className="flex min-w-0 items-center gap-1.5 text-sm text-slate-600"><SlidersHorizontal size={15} aria-hidden="true" /><select aria-label="Visa type" value={visaType} onChange={(event) => { setVisaType(event.target.value); updateQuery({ visa: event.target.value }); }} className="max-w-[180px] rounded bg-transparent py-2 font-medium focus:outline-blue-600"><option value="">All visa types</option>{visaTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
               </div>
-              <Link href="/tags" className="mt-4 inline-block text-xs font-bold text-blue-700 underline">Browse all tags →</Link>
+              <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
+                <select aria-label="Post type" value={kind} onChange={(event) => { const value = event.target.value as PostKind; setKind(value); updateQuery({ type: value }); }} className="max-w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600"><option value="">All post types</option><option value="question">Questions</option><option value="discussion">Discussions & experiences</option><option value="promotion">Promotional posts</option></select>
+                {tag && <button onClick={() => selectTag('')} className="inline-flex max-w-full items-center gap-1 break-words rounded bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-700">{tag}<X size={13} aria-hidden="true" /><span className="sr-only">Clear tag</span></button>}
+                {filtered && <button onClick={resetFilters} className="text-xs font-semibold text-blue-700 hover:underline">Clear filters</button>}
+                <span aria-live="polite" className="ml-auto text-xs text-slate-500">{loading ? 'Loading questions...' : `${visibleQuestions.length}${more ? '+' : ''} matches loaded`}</span>
+              </div>
             </div>
-          )}
-          <div className="rounded-2xl border border-teal-100 bg-teal-50 p-5">
-            <Sparkles className="text-teal-700" size={22} />
-            <h3 className="mt-3 font-extrabold text-slate-900">Better questions get better answers</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Include the country, visa type, timeline, and what you have already tried. Remove names, receipt numbers, and passport details.</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2"><TrendingUp className="text-indigo-600" size={19} /><h3 className="font-extrabold text-slate-900">Useful signal first</h3></div>
-            <p className="mt-3 text-sm leading-6 text-slate-600">Compare reactions and replies at a glance. Open a post for its full text, available comments, and questions with matching visa topics.</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2"><Users className="text-violet-600" size={19} /><h3 className="font-extrabold text-slate-900">Connect with the community</h3></div>
-            <p className="mt-3 text-sm leading-6 text-slate-600">Join a discussion or message a registered member. Keep personal documents and application numbers private.</p>
-          </div>
-          <p className="px-2 text-xs leading-5 text-slate-400">Community posts are personal experiences, not legal advice. Verify important decisions with an official source or qualified professional.</p>
+            {!loading && feedUnavailable && <p className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">Some discussions are temporarily unavailable. Please try again later.</p>}
+            {error && <div role="alert" className="my-3 rounded-lg bg-rose-50 p-4 text-sm text-rose-800">{error} <button onClick={() => setRevision((value) => value + 1)} className="font-semibold underline">Retry</button></div>}
+            {loading ? <div role="status" aria-label="Loading questions" className="divide-y divide-slate-100">{[1, 2, 3, 4].map((item) => <div key={item} className="space-y-3 py-5"><div className="h-5 w-2/5 animate-pulse rounded bg-slate-100" /><div className="h-6 w-4/5 animate-pulse rounded bg-slate-100" /><div className="h-10 animate-pulse rounded bg-slate-100" /></div>)}</div> : <>
+              {!error && visibleQuestions.length === 0 && <div className="px-6 py-12 text-center"><Search className="mx-auto text-slate-400" size={28} aria-hidden="true" /><h2 className="mt-3 font-semibold text-slate-900">No matching questions</h2><p className="mt-1 text-sm text-slate-500">{more ? 'Load more questions or adjust your filters.' : 'Try another search or ask the community.'}</p><Link href="/ask" className="mt-4 inline-block text-sm font-semibold text-blue-700 hover:underline">Ask a question</Link></div>}
+              {pageQuestions.map((question) => <QuestionCard key={question.id} question={question} onTagSelect={selectTag} onRelated={(value) => { setRelated(value); document.getElementById('feed-related')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }} />)}
+              {pageCount > 1 && <nav aria-label="Post pagination" className="flex flex-wrap items-center justify-center gap-2 py-5"><button disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} className="rounded-full px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40">Previous</button>{pageNumbers.map((value, index) => <span key={value} className="inline-flex items-center gap-2">{index > 0 && value > pageNumbers[index - 1] + 1 && <span aria-hidden="true">...</span>}<button aria-label={`Page ${value}`} aria-current={currentPage === value ? 'page' : undefined} onClick={() => goToPage(value)} className={`min-w-9 rounded-full px-3 py-2 text-sm ${currentPage === value ? 'bg-blue-700 text-white' : 'hover:bg-slate-100'}`}>{value}</button></span>)}<button disabled={currentPage === pageCount} onClick={() => goToPage(currentPage + 1)} className="rounded-full px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40">Next</button></nav>}
+              {more && <div className="py-4 text-center"><button onClick={() => void loadOlder()} disabled={loadingOlder} className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">{loadingOlder ? 'Loading...' : 'Load more questions'}</button></div>}
+            </>}
+          </section>
+        </div>
+
+        <aside aria-label="Community discovery" className="min-w-0 space-y-5">
+          <section className="rounded-lg bg-slate-50 p-4">
+            <h2 className="text-sm font-bold text-slate-900">Find your community</h2><p className="mt-2 text-sm leading-6 text-slate-600">Connect around a visa, destination, or stage of your journey.</p>
+            <Link href="/explore" className="mt-3 flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"><span className="inline-flex items-center gap-2"><Compass size={17} aria-hidden="true" />Explore communities</span><ArrowUpRight size={16} aria-hidden="true" /></Link>
+            <Link href="/communities/new" className="mt-2 flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:text-blue-700"><Plus size={17} aria-hidden="true" />Start a community</Link>
+          </section>
+          {popularTags.length > 0 && <section className="border-b border-slate-200 px-2 pb-5"><div className="flex items-center gap-2"><Tags size={17} className="text-slate-500" aria-hidden="true" /><h2 className="text-sm font-bold text-slate-900">Topics in this feed</h2></div><div className="mt-3 flex flex-wrap gap-2">{popularTags.map(([name, count]) => <button key={name} onClick={() => selectTag(name)} className="max-w-full break-words rounded bg-blue-50 px-2 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100">{name}<span className="ml-1.5 text-blue-500">{count}</span></button>)}</div><Link href="/tags" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">All tags<ArrowUpRight size={13} aria-hidden="true" /></Link></section>}
+          {(related || search || tag || pageQuestions[0]) && <div id="feed-related" className="scroll-mt-24">{related && <div className="mb-2 flex items-start justify-between gap-2 px-2 text-xs text-slate-500"><span className="line-clamp-2">Similar to: {related.title}</span><button onClick={() => setRelated(null)} title="Clear related question selection" aria-label="Clear related question selection" className="shrink-0 rounded p-1 hover:bg-slate-100"><X size={14} /></button></div>}<RelatedQuestions context={related ?? (search || tag ? { title: search, tags: tag ? [tag] : [] } : pageQuestions[0])} /></div>}
+          <div className="space-y-3 px-2 text-xs leading-5 text-slate-500"><p className="flex items-start gap-2"><CircleHelp size={16} className="mt-0.5 shrink-0" aria-hidden="true" />Community experiences are not legal advice. Verify important decisions with official sources.</p><p className="flex items-start gap-2"><MessageSquare size={16} className="mt-0.5 shrink-0" aria-hidden="true" />Keep passport details and application numbers private.</p></div>
         </aside>
-      </div>
       </div>
     </main>
   );

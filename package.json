@@ -13,13 +13,13 @@
     "build:next": "NEXT_PUBLIC_APP_ENV=production next build",
     "typecheck": "tsc --noEmit",
     "test:realtime": "node --test --test-timeout=60000 scripts/test-realtime.mjs",
-    "test:release": "node --test scripts/test-release.mjs",
+    "test:release": "node --test scripts/test-release.mjs scripts/test-provenance.mjs",
     "test:archive": "node --test scripts/test-archive.mjs",
     "test:notices": "node --test scripts/test-notices.mjs",
     "test:security": "node --test scripts/test-security.mjs",
     "test:auth": "node --test scripts/test-auth.mjs scripts/test-auth-ui.mjs scripts/test-auth-settings.mjs",
     "test:database": "node --test tests/database/access.test.mjs",
-    "test": "npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:presentation && npm run test:messaging && npm run test:news && npm run test:groups && npm run test:community-ui && npm run test:scale",
+    "test": "npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:presentation && npm run test:messaging && npm run test:news && npm run test:groups && npm run test:community-ui && npm run test:feed-ui && npm run test:scale",
     "check:bundle": "node scripts/check-bundle.mjs",
     "check:archive-bundle": "node scripts/check-archive-bundle.mjs",
     "check:secrets": "node scripts/check-repository-secrets.mjs",
@@ -40,7 +40,8 @@
     "test:news": "node --test scripts/test-news.mjs",
     "test:groups": "node --test --test-timeout=60000 scripts/test-community-groups.mjs",
     "test:community-ui": "node --test scripts/test-community-ui.mjs",
-    "test:scale": "node --test --test-timeout=120000 scripts/test-community-scale.mjs"
+    "test:scale": "node --test --test-timeout=120000 scripts/test-community-scale.mjs",
+    "test:feed-ui": "node --test scripts/test-feed-ui.mjs"
   },
   "keywords": [
     "visa",
@@ -85,6 +86,8 @@
     "brace-expansion@^2": "2.1.7",
     "fast-uri@^3": "3.1.8",
     "browserslist": "4.28.9",
+    "sharp": "0.35.5",
+    "source-map-js": "1.2.2",
     "yaml": "2.9.0",
     "anymatch": {
       "picomatch": "2.3.2"
