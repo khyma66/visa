@@ -40,3 +40,24 @@ Run typecheck, full regressions, known-secret scan, preview build and bundle sca
 Check desktop/mobile feed, populated-only filters and read-only country inputs.
 After publishing, verify the build commit on the real domain and run archive,
 public-read and denied-access smoke tests. Record the exact deployed version below.
+
+## Verified deployment — October 8, 04:46 UTC
+
+- Application commit: `facc2d5c276bd308cf80f4b9ea0c00fad6baa9cd`.
+- Worker version: `1f0b0c4e-a4cd-499a-834b-b2a9632f27b2` (`visaflow-dev`).
+- Live health reports a clean build and source digest
+  `40ce328bdc7961cef61d3878b9346822fb187e529ff660d88579b4e41954dcf6`.
+- Full suite: 529 tests passed; final sign-in copy-only correction rechecked with
+  all 53 auth tests, typecheck, preview build and 220-file bundle secret scan.
+- Live smoke verifies all original archive IDs/comments, 561 projected posts,
+  21 tags, successful public reads, denied private messaging/voting access and
+  denied anonymous access to all 22 retired legacy tables. No hosted writes.
+- Local desktop/mobile visual checks pass; no mobile horizontal overflow.
+  Live guest view shows orange/blue branding and the six populated visa choices.
+  H-1B filtering returns 294 matching posts; Clear Filters works.
+- Live login entry opens correctly and Google/email controls enable. No fresh
+  OAuth completion, email/SMS delivery, or policy acceptance performed.
+- Existing signed-in browser displayed its account's policy acknowledgement;
+  left it untouched and verified the public view in a separate guest browser.
+- Consolidation PR #3 references this deployment. Existing preview/launch,
+  dependency-audit and legal/operational limitations remain unchanged.
