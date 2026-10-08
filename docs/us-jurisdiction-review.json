@@ -1,0 +1,427 @@
+{
+  "asOf": "2026-10-04",
+  "scope": "50 states plus DC. Issue-spotting and launch-review register, NOT completed legal opinions or a representation of compliance.",
+  "baselineReview": [
+    "Business identity, state qualification and consumer-protection rules",
+    "Privacy notice, data inventory, provider agreements, sensitive data and threshold applicability",
+    "Consumer and authorized-agent requests, appeals, opt-out signals and statutory deadlines",
+    "Security, incident response and state breach-notification requirements",
+    "Age eligibility, children/teen rules, contract capacity and accessibility",
+    "User content, copyright, safety removal and immigration-advice boundaries",
+    "Future subscription/renewal/cancellation/refund rules, tax nexus and advertising"
+  ],
+  "sources": {
+    "legislation": "https://www.ncsl.org/technology-and-communication/consumer-privacy-legislation-database",
+    "breach": "https://www.ncsl.org/technology-and-communication/security-breach-notification-laws"
+  },
+  "jurisdictions": [
+    {
+      "code": "AL",
+      "name": "Alabama",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "AK",
+      "name": "Alaska",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "AZ",
+      "name": "Arizona",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "AR",
+      "name": "Arkansas",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "CA",
+      "name": "California",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "CO",
+      "name": "Colorado",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "CT",
+      "name": "Connecticut",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "DE",
+      "name": "Delaware",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "FL",
+      "name": "Florida",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "GA",
+      "name": "Georgia",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "HI",
+      "name": "Hawaii",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "ID",
+      "name": "Idaho",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "IL",
+      "name": "Illinois",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "IN",
+      "name": "Indiana",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "IA",
+      "name": "Iowa",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "KS",
+      "name": "Kansas",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "KY",
+      "name": "Kentucky",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "LA",
+      "name": "Louisiana",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "ME",
+      "name": "Maine",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "MD",
+      "name": "Maryland",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "MA",
+      "name": "Massachusetts",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "MI",
+      "name": "Michigan",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "MN",
+      "name": "Minnesota",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "MS",
+      "name": "Mississippi",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "MO",
+      "name": "Missouri",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "MT",
+      "name": "Montana",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "NE",
+      "name": "Nebraska",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "NV",
+      "name": "Nevada",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "NH",
+      "name": "New Hampshire",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "NJ",
+      "name": "New Jersey",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "NM",
+      "name": "New Mexico",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "NY",
+      "name": "New York",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "NC",
+      "name": "North Carolina",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "ND",
+      "name": "North Dakota",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "OH",
+      "name": "Ohio",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "OK",
+      "name": "Oklahoma",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "OR",
+      "name": "Oregon",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "PA",
+      "name": "Pennsylvania",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "RI",
+      "name": "Rhode Island",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "SC",
+      "name": "South Carolina",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "SD",
+      "name": "South Dakota",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "TN",
+      "name": "Tennessee",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "TX",
+      "name": "Texas",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "UT",
+      "name": "Utah",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "VT",
+      "name": "Vermont",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "VA",
+      "name": "Virginia",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "WA",
+      "name": "Washington",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "WV",
+      "name": "West Virginia",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "WI",
+      "name": "Wisconsin",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "WY",
+      "name": "Wyoming",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    },
+    {
+      "code": "DC",
+      "name": "District of Columbia",
+      "status": "pending_counsel_review",
+      "applicability": "not_determined",
+      "reviewer": null,
+      "evidence": null
+    }
+  ]
+}
