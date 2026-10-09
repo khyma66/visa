@@ -120,6 +120,17 @@ test('same-page query navigation restores controls and invalid sorts fall back t
     assert.equal(nodes(h.tree).find((node) => node.type === 'input').props.value, 'interview');
   } finally { h.close(); }
 });
+test('experience category links restore filters without incompatible question-type controls', async () => {
+  const h = new Harness('?category=Other&type=question');
+  h.getPage = async () => ({ questions: [question('story', {post_kind:'experience',experience_category:'Other'}), question('normal')], more:false });
+  try {
+    h.render({experience:true}); await h.flush();
+    assert.equal(h.calls.at(-1).category, 'Other'); assert.deepEqual(ids(h), ['story']);
+    assert(!nodes(h.tree).some(node => node.props?.['aria-label'] === 'Post type'));
+    button(h, 'Clear Filters').props.onClick(); h.render(); await h.flush();
+    assert.equal(h.search, ''); assert.equal(h.calls.at(-1).category, '');
+  } finally { h.close(); }
+});
 
 test('feed service errors hide provider details and expose a working retry', async () => {
   const h = new Harness(); h.getPage = async () => { throw new Error('Supabase internal secret sentinel'); };

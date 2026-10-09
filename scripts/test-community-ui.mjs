@@ -29,6 +29,7 @@ const dependencies = {
   'react/jsx-runtime': jsx, react: hooks, 'next/link': links, 'next/navigation': navigation,
   './AuthProvider': auth, '@/components/AuthProvider': auth,
   './RelatedQuestions': dataUrl('export function RelatedQuestions(){return null;}'),
+  './TopicCollections': dataUrl('export function TopicCollections(){return null;}'),
   './QuestionCard': dataUrl(`import {jsx} from ${JSON.stringify(jsx)}; export function QuestionCard({question}){return jsx('article',{'data-question-id':question.id,children:question.title});}`),
   '@/lib/realtime': dataUrl('export function subscribeLive(){return ()=>{};}'),
 };

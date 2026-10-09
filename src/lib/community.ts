@@ -1,6 +1,6 @@
 'use client';
 
-import { canMessageAuthor, usVisaPost } from './post-presentation';
+import { canMessageAuthor, selectedExperiences, usVisaPost } from './post-presentation';
 import { DEMO_ANSWERS, DEMO_CONVERSATIONS, DEMO_MESSAGES, DEMO_QUESTIONS, DEMO_USER } from './demo-data';
 import { getSupabase, isSupabaseConfigured } from './supabase/client';
 import { inferTags, normalizeTags } from './tagging';
@@ -170,7 +170,10 @@ export async function getQuestion(id: string): Promise<Question | null> {
 
 export type QuestionPageOptions = { search?: string; tag?: string; visaType?: string; sort?: string; before?: Question; experience?: boolean; category?: string };
 export async function getQuestionPage(options: QuestionPageOptions = {}): Promise<{ questions: Question[]; more: boolean; cursor?: Question }> {
-  if (!isSupabaseConfigured) return { questions: (await listQuestions()).filter(q => options.experience ? q.post_kind === 'experience' : q.post_kind !== 'experience'), more: false };
+  if (!isSupabaseConfigured) {
+    const questions = await listQuestions();
+    return { questions: options.experience ? [...questions.filter(q => q.post_kind === 'experience'), ...selectedExperiences(questions)] : questions.filter(q => q.post_kind !== 'experience'), more: false };
+  }
   const before = options.before;
   const { data, error } = await getSupabase().rpc('community_post_page', {
     filter_kind: options.experience ? 'experience' : 'question', filter_category: options.category ?? '',
@@ -180,7 +183,8 @@ export async function getQuestionPage(options: QuestionPageOptions = {}): Promis
   });
   throwIfError(error);
   const rows = (data ?? []) as Question[];
-  const imported = before || options.experience ? [] : (await importedFeedOrNull())?.questions ?? [];
+  const archive = before ? [] : (await importedFeedOrNull())?.questions ?? [];
+  const imported = options.experience ? selectedExperiences(archive) : archive;
   return { questions: [...rows, ...imported].flatMap(question => { const scoped = usVisaPost(question); return scoped ? [scoped] : []; }), more: rows.length === 50, cursor: rows.at(-1) };
 }
 

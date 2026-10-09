@@ -1,0 +1,46 @@
+{
+  "site": "https://visathreads.com",
+  "environment": "Existing development preview; public-launch gates unchanged",
+  "branch": "release/visaflow-consolidated-20261002",
+  "changes": {
+    "explore": "Six U.S. topic collections use actual archive tag counts and working feed filters. Clearly separate from member-created groups; no fabricated memberships.",
+    "experiences": "Four manually reviewed first-person posts selected as a view only. Original archive, dates, body, replies and canonical question URLs retained. Category links work; incompatible question-type filters no longer hide stories.",
+    "news": "Federal Register public JSON API, no API key or paid news service. Original titles, agency attribution, publication dates and document-type labels. Proposed rules explicitly marked; no generated legal interpretation or copied article bodies.",
+    "resources": "USCIS newsroom, State Department Visa Bulletin and appointment wait times, USCIS processing times.",
+    "logo": "Interpreted Applewood as warm brown #795548 and muted blue #334e68. Both pass 4.5:1 contrast against white. Existing orange/blue action colors retained. No Figma dependency needed."
+  },
+  "newsControls": {
+    "sourceDocumentation": "https://www.federalregister.gov/reader-aids/developer-resources/rest-api",
+    "maxUpstreamRows": 60,
+    "maxVisibleNotices": 24,
+    "maxAgeDays": 180,
+    "cacheMinutes": 15,
+    "failureBackoffSeconds": 60,
+    "timeoutSeconds": 8,
+    "maxResponseBytes": 524288,
+    "security": "Fixed upstream query, no user data or credentials forwarded, redirects rejected, exact source URL/date/ID validation, bounded parsing, escaped React text, shared edge cache, request-local I/O promises. Google RSS remains permission-gated and is not enabled.",
+    "limitation": "Filtered notices from the latest 60 results for visa, not exhaustive news coverage. Source outages show an explicit retry state and durable official resource links. No paid provider or AI model added; existing hosting usage limits still apply."
+  },
+  "data": {
+    "originalPosts": 563,
+    "originalComments": 628,
+    "usVisiblePosts": 561,
+    "selectedExperiences": 4,
+    "topicCounts": { "h1b": 377, "h4": 126, "f1": 21, "ead": 60, "stamping": 86, "timeline": 109 },
+    "note": "Topic counts overlap because a discussion may have several tags. Existing posts retain their old dates, not presented as fresh activity."
+  },
+  "verification": {
+    "localRoutes": "30 public navigation, topic-filter and selected-story URLs return 200; selected IDs exist; topic counts and government feed validated.",
+    "browser": "Explore has six populated cards. Experiences has four posts and two interview-category matches even with a legacy type=question URL. Selected story opens with original replies. News displays 15 dated notices and four source resources.",
+    "responsive": "News, Explore and filtered Experiences have 390px content width at a 390px viewport; no horizontal overflow.",
+    "externalSources": "Federal Register API and USCIS newsroom fetched successfully. State Department resource content verified through web retrieval. USCIS processing tool displays its own security verification in the automated browser; not bypassed.",
+    "tests": "Final complete npm test run passed: 546 tests, zero failures, cancellations or skips. TypeScript, diff whitespace and repository secret-pattern checks passed. Initial database tests intermittently timed out at 60 seconds; complete rerun with local preview stopped passed."
+  },
+  "notClaimed": [
+    "Fresh hosted Google/email/SMS sign-in or private messaging delivery",
+    "Government verification of contributor stories or legal compliance in every jurisdiction",
+    "Public launch readiness, completed credential rotation, or absence of every security vulnerability",
+    "Real group memberships or private messages where none exist"
+  ],
+  "deployment": "Pending"
+}

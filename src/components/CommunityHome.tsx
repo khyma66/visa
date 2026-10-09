@@ -54,10 +54,12 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     setTag(params.get('tag')?.slice(0, 60) ?? '');
     const visa = params.get('visa')?.slice(0, 80) ?? '';
     setVisaType(VISA_TYPES.includes(visa) ? visa : '');
+    const experienceCategory = params.get('category') ?? '';
+    setCategory(experience && EXPERIENCE_CATEGORIES.includes(experienceCategory) ? experienceCategory : '');
     setSortMode(SORTS.some(([value]) => value === sort) ? sort as SortMode : 'newest');
-    setKind(postKind === 'question' || postKind === 'discussion' || postKind === 'promotion' ? postKind : initialKind);
+    setKind(experience ? '' : postKind === 'question' || postKind === 'discussion' || postKind === 'promotion' ? postKind : initialKind);
     setPage(1);
-  }, [queryString, initialKind]);
+  }, [queryString, initialKind, experience]);
 
   useEffect(() => {
     alive.current = true;
@@ -108,7 +110,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   function selectTag(value: string) { setTag(value); updateQuery({ tag: value }); }
   function resetFilters() {
     setCategory(''); setSearch(''); setVisaType(''); setTag(''); setKind(initialKind); setSortMode('newest');
-    updateQuery({ q: '', visa: '', tag: '', type: '', sort: '' });
+    updateQuery({ q: '', visa: '', tag: '', type: '', sort: '', category: '' });
   }
   function goToPage(value: number) {
     setPage(value);
@@ -120,7 +122,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     const items = questions.filter((question) => {
       const haystack = [question.title, question.body, question.visa_type, question.destination_country, ...question.tags].join(' ').toLowerCase();
       return (experience ? question.post_kind === 'experience' : question.post_kind !== 'experience') && (!category || question.experience_category === category) && (!visaType || question.visa_type === visaType) && (!tag || question.tags.includes(tag))
-        && (!kind || (question.post_kind ?? 'question') === kind)
+        && (experience || !kind || (question.post_kind ?? 'question') === kind)
         && (sortMode !== 'unanswered' || question.answer_count === 0)
         && ((!demoMode && question.source !== 'apify') || terms.every((term) => haystack.includes(term)));
     });
@@ -152,7 +154,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="min-w-0">
           <header className="flex flex-wrap items-center justify-between gap-3 px-1 pb-4">
-            <div><h1 className="text-2xl font-bold text-slate-950">{experience ? 'U.S. Visa Experiences' : initialKind === 'discussion' ? 'U.S. Visa Discussions' : 'U.S. Visa Questions'}</h1><p className="mt-1 text-sm text-slate-500">Questions, answers, and experiences about U.S. visas.</p></div>
+            <div><h1 className="text-2xl font-bold text-slate-950">{experience ? 'U.S. Visa Experiences' : initialKind === 'discussion' ? 'U.S. Visa Discussions' : 'U.S. Visa Questions'}</h1><p className="mt-1 max-w-xl text-sm leading-6 text-slate-500">{experience ? 'First-hand stories selected from existing discussions, alongside experiences shared here. Original dates and replies are preserved. Personal accounts are not verified outcomes or legal advice.' : 'Questions, answers, and experiences about U.S. visas.'}</p></div>
             <Link href={experience ? "/experiences/new" : "/ask"} className="inline-flex items-center gap-1.5 rounded-full bg-orange-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-800"><Plus size={17} aria-hidden="true" />{experience ? "Share Your Experience" : "Ask a Question"}</Link>
           </header>
 
@@ -161,7 +163,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
             <input value={search} maxLength={200} onChange={(event) => { setSearch(event.target.value); updateQuery({ q: event.target.value }); }} placeholder="Search questions, visa types, and tags" className="h-11 w-full rounded-full border border-slate-200 bg-slate-100 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100" />
           </label>
 
-          {experience && <label className="mb-4 block text-sm">Experience Category<select value={category} onChange={event => { setCategory(event.target.value); setPage(1); }} className="ml-2 rounded border px-3 py-2"><option value="">All experience categories</option>{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
+          {experience && <label className="mb-4 flex flex-wrap items-center gap-2 text-sm">Experience Category<select value={category} onChange={event => { setCategory(event.target.value); updateQuery({ category: event.target.value }); }} className="rounded border px-3 py-2"><option value="">All Experience Categories</option>{EXPERIENCE_CATEGORIES.map(value => <option key={value} value={value}>{value.replace(/\b\w/g, letter => letter.toUpperCase())}</option>)}</select></label>}
           <section id="question-list" aria-label="Community questions" aria-busy={loading} className="min-w-0 scroll-mt-24">
             <div className="border-b border-slate-200 pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -169,7 +171,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
                 <label className="flex min-w-0 items-center gap-1.5 text-sm text-slate-600"><SlidersHorizontal size={15} aria-hidden="true" /><select aria-label="Visa Type" value={visaType} onChange={(event) => { setVisaType(event.target.value); updateQuery({ visa: event.target.value }); }} className="max-w-[180px] rounded bg-transparent py-2 font-medium focus:outline-blue-600"><option value="">All U.S. Visa Types</option>{visaTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
-                <select aria-label="Post type" value={kind} onChange={(event) => { const value = event.target.value as PostKind; setKind(value); updateQuery({ type: value }); }} className="max-w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600"><option value="">All Post Types</option><option value="question">Questions</option><option value="discussion">Discussions & experiences</option><option value="promotion">Promotional posts</option></select>
+                {!experience && <select aria-label="Post type" value={kind} onChange={(event) => { const value = event.target.value as PostKind; setKind(value); updateQuery({ type: value }); }} className="max-w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600"><option value="">All Post Types</option><option value="question">Questions</option><option value="discussion">Discussions & experiences</option><option value="promotion">Promotional posts</option></select>}
                 {tag && <button onClick={() => selectTag('')} className="inline-flex max-w-full items-center gap-1 break-words rounded bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-700">{topicLabel(tag)}<X size={13} aria-hidden="true" /><span className="sr-only">Clear tag</span></button>}
                 {filtered && <button onClick={resetFilters} className="text-xs font-semibold text-blue-700 hover:underline">Clear Filters</button>}
                 <span aria-live="polite" className="ml-auto text-xs text-slate-500">{loading ? 'Loading questions...' : `${visibleQuestions.length}${more ? '+' : ''} matches loaded`}</span>
@@ -178,7 +180,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
             {!loading && feedUnavailable && <p className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">Some discussions are temporarily unavailable. Please try again later.</p>}
             {error && <div role="alert" className="my-3 rounded-lg bg-rose-50 p-4 text-sm text-rose-800">{error} <button onClick={() => setRevision((value) => value + 1)} className="font-semibold underline">Retry</button></div>}
             {loading ? <div role="status" aria-label="Loading questions" className="divide-y divide-slate-100">{[1, 2, 3, 4].map((item) => <div key={item} className="space-y-3 py-5"><div className="h-5 w-2/5 animate-pulse rounded bg-slate-100" /><div className="h-6 w-4/5 animate-pulse rounded bg-slate-100" /><div className="h-10 animate-pulse rounded bg-slate-100" /></div>)}</div> : <>
-              {!error && visibleQuestions.length === 0 && <div className="px-6 py-12 text-center"><Search className="mx-auto text-slate-400" size={28} aria-hidden="true" /><h2 className="mt-3 font-semibold text-slate-900">No matching questions</h2><p className="mt-1 text-sm text-slate-500">{more ? 'Load more questions or adjust your filters.' : 'Try another search or ask the community.'}</p><Link href="/ask" className="mt-4 inline-block text-sm font-semibold text-blue-700 hover:underline">Ask a Question</Link></div>}
+              {!error && visibleQuestions.length === 0 && <div className="px-6 py-12 text-center"><Search className="mx-auto text-slate-400" size={28} aria-hidden="true" /><h2 className="mt-3 font-semibold text-slate-900">{experience ? 'No matching experiences' : 'No matching questions'}</h2><p className="mt-1 text-sm text-slate-500">{more ? 'Load more posts or adjust your filters.' : experience ? 'Try another filter or share your own first-hand story.' : 'Try another search or ask the community.'}</p><Link href={experience ? '/experiences/new' : '/ask'} className="mt-4 inline-block text-sm font-semibold text-blue-700 hover:underline">{experience ? 'Share Your Experience' : 'Ask a Question'}</Link></div>}
               {pageQuestions.map((question) => <QuestionCard key={question.id} question={question} onTagSelect={selectTag} onRelated={(value) => { setRelated(value); document.getElementById('feed-related')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }} />)}
               {pageCount > 1 && <nav aria-label="Post pagination" className="flex flex-wrap items-center justify-center gap-2 py-5"><button disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} className="rounded-full px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40">Previous</button>{pageNumbers.map((value, index) => <span key={value} className="inline-flex items-center gap-2">{index > 0 && value > pageNumbers[index - 1] + 1 && <span aria-hidden="true">...</span>}<button aria-label={`Page ${value}`} aria-current={currentPage === value ? 'page' : undefined} onClick={() => goToPage(value)} className={`min-w-9 rounded-full px-3 py-2 text-sm ${currentPage === value ? 'bg-blue-700 text-white' : 'hover:bg-slate-100'}`}>{value}</button></span>)}<button disabled={currentPage === pageCount} onClick={() => goToPage(currentPage + 1)} className="rounded-full px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40">Next</button></nav>}
               {more && <div className="py-4 text-center"><button onClick={() => void loadOlder()} disabled={loadingOlder} className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">{loadingOlder ? 'Loading...' : 'Load more questions'}</button></div>}

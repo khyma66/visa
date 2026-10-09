@@ -102,6 +102,9 @@
   .header-login { display: inline-flex; min-height: 42px; flex-shrink: 0; align-items: center; border-radius: 999px; background: #c2410c; padding: 8px 20px; font-size: 14px; font-weight: 700; color: #fff; }
   .header-login:hover { background: #9a3412; }
   .brand-wordmark { text-transform: none; letter-spacing: -0.5px; }
+  .brand-mark { background: #795548; }
+  .brand-wood { color: #795548; }
+  .brand-ink { color: #334e68; }
   .app-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); margin-inline: auto; }
   .app-content { min-width: 0; }
   .desktop-sidebar { position: sticky; top: 65px; height: calc(100dvh - 65px); overflow-y: auto; border-right: 1px solid #e2e8f0; }

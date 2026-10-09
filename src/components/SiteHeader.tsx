@@ -48,8 +48,8 @@ export function SiteHeader() {
           <div className="mobile-menu-panel"><CommunityNavigation mobile onNavigate={() => { if (mobileMenu.current) mobileMenu.current.open = false; }}/></div>
         </details>
         <Link href="/" className="site-brand">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-orange-700 text-white"><CircleHelp size={21} /></span>
-          <span className="brand-wordmark"><span className="text-orange-700">Visa</span><span className="text-blue-700">Threads</span></span>
+          <span className="brand-mark grid h-9 w-9 place-items-center rounded-lg text-white"><CircleHelp size={21} aria-hidden="true" /></span>
+          <span className="brand-wordmark"><span className="brand-wood">Visa</span><span className="brand-ink">Threads</span></span>
         </Link>
         <form action="/" method="get" role="search" className="header-search">
           <Search size={19} aria-hidden="true"/>

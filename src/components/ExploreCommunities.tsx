@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight, BriefcaseBusiness, Compass, GraduationCap, Heart, House, MapPin, MessagesSquare, Plane, Plus, Search, Users, X } from 'lucide-react';
 import { COMMUNITY_CATEGORIES, getCommunityById, getMembershipsForCommunities, joinCommunity, leaveCommunity, listCommunities, listMyCommunitiesPage, type Community, type CommunityMembership } from '@/lib/groups';
 import { useAuth } from './AuthProvider';
+import { TopicCollections } from './TopicCollections';
 
 const CATEGORY_ICONS = { 'Work visas': BriefcaseBusiness, Study: GraduationCap, Family: Heart, Travel: Plane, Settlement: House, General: MessagesSquare };
 
@@ -122,6 +123,7 @@ export function ExploreCommunities({ initialTab = 'all' }: { initialTab?: 'all' 
       <Link href="/news" className="ml-auto rounded-full px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">U.S. Visa News</Link>
       <Link href="/tags" className="rounded-full px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Browse Tags</Link>
     </nav>
+    {tab === 'all' && <><TopicCollections /><h2 className="mt-8 text-lg font-bold text-slate-950">Member Communities</h2><p className="mt-1 text-sm text-slate-600">Create or join a dedicated group. Member counts reflect actual memberships.</p></>}
     <div aria-label="Browse community categories" className="mt-5 flex flex-wrap gap-2">
       {COMMUNITY_CATEGORIES.map((item) => { const Icon = CATEGORY_ICONS[item]; return <button key={item} onClick={() => { setCategory(category === item ? '' : item); resetPage(); }} aria-pressed={category === item} className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium ${category === item ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}><Icon size={16} aria-hidden="true" />{item === 'Work visas' ? 'Work Visas' : item}</button>; })}
     </div>

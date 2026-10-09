@@ -12,8 +12,8 @@ function compact(value: number) {
 }
 
 export function QuestionCard({ question, onTagSelect, onRelated }: { question: Question; onTagSelect?: (tag: string) => void; onRelated?: (question: Question) => void }) {
-  const path = `/${question.post_kind === 'experience' ? 'experiences' : 'questions'}/${question.id}`;
   const imported = isImportedPost(question);
+  const path = `/${question.post_kind === 'experience' && !imported ? 'experiences' : 'questions'}/${question.id}`;
   return (
     <article className="feed-card group min-w-0 border-b border-slate-200 bg-white px-3 py-4 transition hover:bg-slate-50/70 sm:px-4">
       <div className="min-w-0">

@@ -77,6 +77,11 @@ test('native cards preserve public usernames, member avatars, votes and normal q
   assert(html.includes('u/alice-test'));assert(html.includes('Member avatar'));assert(html.includes('votes'));
   assert(html.includes(`/questions/${native.id}`));assert(!html.includes('Community Contributor'));
 });
+test('selected archive experiences retain their working canonical question links',()=>{
+  const html=render(QuestionCard,{question:{...source,post_kind:'experience',experience_category:'Visa interview'}});
+  assert(html.includes(`/questions/${source.id}`)); assert(!html.includes(`/experiences/${source.id}`));
+  assert(html.includes('Experience · Visa interview')); assert(html.includes('Community Contributor'));
+});
 test('experience cards and details expose category and discussion actions without answer acceptance',()=>{
   const experience={...native,post_kind:'experience',experience_category:'Other',visa_type:'Other'};
   const card=render(QuestionCard,{question:experience});
@@ -91,12 +96,12 @@ test('experience feed excludes questions, includes Other, and defaults to newest
   const newer={...older,id:'newer',title:'A newer visa experience',created_at:'2026-10-01T00:00:00Z'};
   const html=render(CommunityHome,{experience:true},{values:{0:[older,native,newer],3:false}});
   assert(html.includes('Share Your Experience')); assert(html.includes('/experiences/new'));
-  assert(html.includes('All experience categories')); assert(html.includes('Other</option>'));
+  assert(html.includes('All Experience Categories')); assert(html.includes('Other</option>'));
   assert(html.indexOf('/experiences/newer') < html.indexOf('/experiences/older'));
   assert(!html.includes(`/questions/${native.id}`));
   assert.match(html,/aria-pressed="true"[^>]*>New/);
   const filtered=render(CommunityHome,{experience:true},{values:{0:[older,newer],3:false,15:'Visa interview'}});
-  assert(filtered.includes('No matching questions')); assert(!filtered.includes('/experiences/newer'));
+  assert(filtered.includes('No matching experiences')); assert(!filtered.includes('/experiences/newer'));
 });
 test('discussion and promotion labels describe content rather than where it came from',()=>{
   for(const sourceKind of ['apify','visaflow']) {
