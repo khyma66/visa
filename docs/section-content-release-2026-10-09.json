@@ -33,8 +33,13 @@
     "localRoutes": "30 public navigation, topic-filter and selected-story URLs return 200; selected IDs exist; topic counts and government feed validated.",
     "browser": "Explore has six populated cards. Experiences has four posts and two interview-category matches even with a legacy type=question URL. Selected story opens with original replies. News displays 15 dated notices and four source resources.",
     "responsive": "News, Explore and filtered Experiences have 390px content width at a 390px viewport; no horizontal overflow.",
-    "externalSources": "Federal Register API and USCIS newsroom fetched successfully. State Department resource content verified through web retrieval. USCIS processing tool displays its own security verification in the automated browser; not bypassed.",
-    "tests": "Final complete npm test run passed: 546 tests, zero failures, cancellations or skips. TypeScript, diff whitespace and repository secret-pattern checks passed. Initial database tests intermittently timed out at 60 seconds; complete rerun with local preview stopped passed."
+    "externalSources": "Federal Register API and USCIS newsroom fetched successfully. State Department resource content verified through web retrieval. USCIS processing tool initially displayed its own security verification, then loaded Case Processing Times normally; no challenge bypass performed.",
+    "tests": "Final complete npm test run passed: 547 tests, zero failures, cancellations or skips. Includes a real workerd request/parsing regression. TypeScript, diff whitespace, repository secret-pattern and built-bundle checks passed. Initial database tests intermittently timed out at 60 seconds; complete rerun with local preview stopped passed.",
+    "runtimeFix": "Live verification caught workerd rejecting redirect:error. Reproduced in the actual runtime, replaced with manual redirects plus rejection of every 3xx, and added a regression test. All final live news checks pass.",
+    "livePages": "30 navigation, topic-filter and selected-story URLs return 200 with preview noindex and frame protections. Live browser confirms Explore's six populated collections, four experiences, 21 tags, Popular Top sorting, login gates for Messages/My Communities/community creation, and the approved temporary support mailto link.",
+    "liveNews": "15 official notices with source links visible after a fresh page load; retry works. Different edge cache partitions may return different valid snapshots, all within 15 minutes. Canonical cache key and failure backoff verified in automated tests.",
+    "liveDataSafety": "563 original posts and 628 comments preserved; U.S. projection 561 posts and 21 tags. Public read APIs pass. Anonymous private messaging/voting denied; all 22 retired legacy tables deny anonymous access. No hosted records written.",
+    "browserLogNote": "One React hydration error was recorded during navigation across a deployment. Fresh reload rendered normally and produced no new error in the inspected log. This is not a claim of exhaustive cross-browser coverage."
   },
   "notClaimed": [
     "Fresh hosted Google/email/SMS sign-in or private messaging delivery",
@@ -42,5 +47,14 @@
     "Public launch readiness, completed credential rotation, or absence of every security vulnerability",
     "Real group memberships or private messages where none exist"
   ],
-  "deployment": "Pending"
+  "deployment": {
+    "verifiedAtUtc": "2026-10-09T03:26:06Z",
+    "worker": "visaflow-dev",
+    "workerVersion": "bda8adea-9768-4fd7-8601-2376c9645497",
+    "buildCommit": "9219bca0d93f2713aadb06ce48ac90feca6a0c92",
+    "sourceSha256": "3430abc46539c09e3ff27d18a2d7e5b563c7d9283dfd5732cdf6957230ba118e",
+    "cleanBuild": true,
+    "domains": ["visathreads.com", "www.visathreads.com"],
+    "note": "Subsequent verification-report and smoke-test-only commits do not require an application redeploy. The live health endpoint reports the exact bundled application commit above."
+  }
 }

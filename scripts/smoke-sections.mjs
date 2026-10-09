@@ -26,5 +26,14 @@ const newsResponse = await fetch(`${origin}/api/official-news`, { signal: AbortS
 assert.equal(newsResponse.status, 200, 'Official news feed');
 const news = await newsResponse.json(); assert.equal(news.source, 'Federal Register'); assert(news.articles.length > 0 && news.articles.length <= 24);
 for (const article of news.articles) assert.equal(new URL(article.url).origin, 'https://www.federalregister.gov');
-if (origin.startsWith('https:')) assert.equal((await (await fetch(`${origin}/api/official-news?ignored=1`)).json()).retrievedAt, news.retrievedAt, 'Public cached feed');
+if (origin.startsWith('https:')) {
+  // Edge cache partitions may return different valid snapshots. The unit test
+  // checks the canonical key; live checks require bounded freshness, not strong consistency.
+  const next = await (await fetch(`${origin}/api/official-news?ignored=1`)).json();
+  assert.equal(next.source, 'Federal Register'); assert(next.articles?.length > 0);
+  for (const feed of [news, next]) {
+    const age = Date.now() - Date.parse(feed.retrievedAt);
+    assert(age >= -5000 && age <= 15 * 60_000, 'Public news freshness bound');
+  }
+}
 console.log(JSON.stringify({ checkedAt: new Date().toISOString(), origin, pages: results, topics, selectedExperiences: experiences.length, notices: news.articles.length, newestNotice: news.articles[0].publishedOn, archivePosts: archive.questions.length, note: 'HTTP/data checks; authenticated flows require separate browser verification.' }, null, 2));
