@@ -19,8 +19,9 @@ export function createOfficialNewsService(fetcher: typeof fetch = fetch, now = D
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await fetcher(OFFICIAL_NEWS_URL, { signal: controller.signal, redirect: 'error', credentials: 'omit', headers: { Accept: 'application/json' } });
+        const response = await fetcher(OFFICIAL_NEWS_URL, { signal: controller.signal, redirect: 'error', credentials: 'omit', headers: { Accept: 'application/json', 'User-Agent': 'VisaThreads/1.0 (+https://visathreads.com/contact)' } });
         if (!response.ok || !response.body || !/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') || Number(response.headers.get('content-length')) > MAX_BYTES) {
+          console.warn('Official visa news upstream rejected', { status: response.status, contentType: response.headers.get('content-type')?.slice(0, 80) });
           await response.body?.cancel(); throw new Error('Invalid upstream response');
         }
         const reader = response.body.getReader();
@@ -39,7 +40,7 @@ export function createOfficialNewsService(fetcher: typeof fetch = fetch, now = D
         cached = parseOfficialNews(JSON.parse(body), now());
         retryAt = 0;
         return cached;
-      } catch { retryAt = now() + OFFICIAL_NEWS_BACKOFF; throw new Error('News temporarily unavailable'); }
+      } catch (error) { console.warn('Official visa news refresh failed', { kind: error instanceof Error ? error.name : 'Unknown' }); retryAt = now() + OFFICIAL_NEWS_BACKOFF; throw new Error('News temporarily unavailable'); }
       finally { clearTimeout(timer); pending = undefined; }
     })();
     return pending;
