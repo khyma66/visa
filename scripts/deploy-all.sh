@@ -1,5 +1,10 @@
 #!/bin/bash
 
+echo "Retired legacy deployment: no action taken. Use the reviewed npm run deploy:dev or npm run deploy:prod workflow; see docs/ENVIRONMENT_ISOLATION.md." >&2
+exit 1
+
+# Historical implementation retained below for reference only. Do not re-enable.
+
 echo "🚀 Deploying Full Stack AI Stack Overflow..."
 
 # Backend

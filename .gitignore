@@ -4,6 +4,10 @@
 .env.production
 .env.development
 .env.staging
+.env.*.local
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 
 # Python
 __pycache__/
@@ -18,6 +22,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+!src/lib/
+!src/lib/**
 lib64/
 parts/
 sdist/
@@ -159,3 +165,14 @@ dump.rdb
 # Local development
 .local/
 *.local
+
+# Supabase CLI machine-specific state
+.supabase/
+supabase/.temp/
+.vinext/
+.wrangler/
+
+# Imported community data stays local, never in the public source repository.
+src/data/api-archive.json
+src/data/api-archive.json.tmp
+artifacts/

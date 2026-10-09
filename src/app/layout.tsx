@@ -1,20 +1,33 @@
 import type { Metadata } from 'next';
 import '../styles/globals.css';
+import { AuthProvider } from '@/components/AuthProvider';
+import { SiteHeader } from '@/components/SiteHeader';
+import { CommunityAddonsNavigation } from '@/components/CommunityAddonsNavigation';
+import Link from 'next/link';
+import { PolicyAcceptance } from '@/components/PolicyAcceptance';
+import { SafetyNotice } from '@/components/SafetyNotice';
+import { Suspense } from 'react';
+import { CommunityNavigation } from '@/components/CommunityNavigation';
+
+// A fresh CSP nonce must be attached to each request's streamed script tags.
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Visa Platform - Your Gateway to Global Travel',
-  description: 'Comprehensive visa information, community discussions, and AI-powered assistance for travelers worldwide.',
-  keywords: 'visa, travel, immigration, embassy, passport, country information, visa requirements',
-  authors: [{ name: 'Visa Platform Team' }],
+  metadataBase: new URL('https://visathreads.com'),
+  title: { default: 'VisaThreads — U.S. Visa Questions, Answered', template: '%s · VisaThreads' },
+  description: 'Ask visa questions with a public pseudonym, find similar cases, share experiences, and message other community members.',
+  icons: { icon: '/favicon.svg' },
+  keywords: 'visa questions, immigration community, pseudonymous visa discussions, visa answers',
+  authors: [{ name: 'VisaThreads' }],
   openGraph: {
     type: 'website',
-    title: 'Visa Platform - Your Gateway to Global Travel',
-    description: 'Comprehensive visa information, community discussions, and AI-powered assistance for travelers worldwide.',
+    title: 'VisaThreads — U.S. Visa Questions, Answered',
+    description: 'Pseudonymous visa Q&A and access-controlled community messaging.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Visa Platform - Your Gateway to Global Travel',
-    description: 'Comprehensive visa information, community discussions, and AI-powered assistance for travelers worldwide.',
+    title: 'VisaThreads — U.S. Visa Questions, Answered',
+    description: 'Pseudonymous visa Q&A and access-controlled community messaging.',
   },
 };
 
@@ -25,18 +38,29 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta httpEquiv="X-Content-Type-Options" content="nosniff" />
-        <meta httpEquiv="X-Frame-Options" content="SAMEORIGIN" />
-        <meta httpEquiv="X-XSS-Protection" content="1; mode=block" />
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-YOUR_PUBLISHER_ID" crossOrigin="anonymous"></script>
-      </head>
-      <body className="min-h-screen bg-gray-50">
-        {children}
+      <body className="min-h-screen bg-white text-slate-900 antialiased">
+        <AuthProvider>
+          <Suspense><SiteHeader /></Suspense>
+          <div className="app-layout">
+          <aside className="desktop-sidebar"><Suspense><CommunityNavigation /></Suspense></aside>
+          <div className="app-content">
+          <CommunityAddonsNavigation />
+          <div id="main-content" tabIndex={-1}><PolicyAcceptance>{children}</PolicyAcceptance></div>
+          <footer className="site-shell border-t border-slate-200 bg-white py-6 text-xs leading-6 text-slate-500">
+            {process.env.NEXT_PUBLIC_APP_ENV !== 'production' && <p role="note" className="mb-2 font-semibold text-slate-700">Early preview · Not open for general public signup.</p>}
+            <SafetyNotice />
+            <nav aria-label="Policies and support" className="mt-2 flex flex-wrap gap-x-4">
+              <Link href="/privacy" className="underline">Preview Privacy Notice</Link>
+              <Link href="/terms" className="underline">Community Rules</Link>
+              <Link href="/cookies" className="underline">Cookies and Storage</Link>
+              <Link href="/privacy-choices" className="underline">Your Privacy Choices</Link>
+              <Link href="/countries" className="underline">U.S. Community</Link>
+              <Link href="/contact" className="underline">Reporting and Privacy Requests</Link>
+            </nav>
+          </footer>
+          </div>
+          </div>
+        </AuthProvider>
       </body>
     </html>
   );
