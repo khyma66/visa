@@ -65,7 +65,7 @@ test('client validation rejects tampered cache values', () => {
 });
 test('public news requests coalesce and expire; no user credentials are forwarded', async () => {
   let calls = 0, clock = now;
-  const service = createOfficialNewsService(async (url, options) => { calls++; assert.equal(url, OFFICIAL_NEWS_URL); assert.equal(options.credentials, 'omit'); assert.equal(options.redirect, 'error'); return response(); }, () => clock);
+  const service = createOfficialNewsService(async (url, options) => { calls++; assert.equal(url, OFFICIAL_NEWS_URL); assert(!options.headers.Cookie); assert(!options.headers.Authorization); assert.equal(options.redirect, 'manual'); return response(); }, () => clock);
   const [a, b] = await Promise.all([service(), service()]); assert.deepEqual(a, b); assert.equal(calls, 1);
   await service(); assert.equal(calls, 1); clock += shared.OFFICIAL_NEWS_TTL; await service(); assert.equal(calls, 2);
 });
@@ -76,7 +76,7 @@ test('upstream errors back off, then recover', async () => {
   clock += shared.OFFICIAL_NEWS_BACKOFF; assert.equal((await service()).articles.length, 1); assert.equal(calls, 2);
 });
 test('news rejects wrong content, declared and streamed oversized bodies', async () => {
-  const factories = [() => new Response('{}', { headers: { 'Content-Type': 'text/html' } }), () => new Response('{}', { headers: { 'Content-Type': 'application/json', 'Content-Length': '999999' } }), () => new Response(' '.repeat(524289), { headers: { 'Content-Type': 'application/json' } }), () => Response.json({ error: 'bad' }), () => new Response('', { status: 503 })];
+  const factories = [() => new Response('{}', { headers: { 'Content-Type': 'text/html' } }), () => new Response('{}', { headers: { 'Content-Type': 'application/json', 'Content-Length': '999999' } }), () => new Response(' '.repeat(524289), { headers: { 'Content-Type': 'application/json' } }), () => Response.json({ error: 'bad' }), () => new Response('', { status: 503 }), () => new Response('', { status: 302, headers: { Location: 'https://evil.test/' } })];
   for (const factory of factories) await assert.rejects(createOfficialNewsService(async () => factory(), () => now)(), /News temporarily unavailable/);
 });
 test('news timeout aborts upstream work', async () => {

@@ -19,7 +19,9 @@ export function createOfficialNewsService(fetcher: typeof fetch = fetch, now = D
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await fetcher(OFFICIAL_NEWS_URL, { signal: controller.signal, redirect: 'error', credentials: 'omit', headers: { Accept: 'application/json', 'User-Agent': 'VisaThreads/1.0 (+https://visathreads.com/contact)' } });
+        // workerd supports manual/follow, not redirect:error. Reject every 3xx
+        // below rather than following a redirect to an unreviewed destination.
+        const response = await fetcher(OFFICIAL_NEWS_URL, { signal: controller.signal, redirect: 'manual', headers: { Accept: 'application/json', 'User-Agent': 'VisaThreads/1.0 (+https://visathreads.com/contact)' } });
         if (!response.ok || !response.body || !/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') || Number(response.headers.get('content-length')) > MAX_BYTES) {
           console.warn('Official visa news upstream rejected', { status: response.status, contentType: response.headers.get('content-type')?.slice(0, 80) });
           await response.body?.cancel(); throw new Error('Invalid upstream response');

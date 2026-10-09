@@ -25,7 +25,7 @@
     "test:auth": "node --test scripts/test-auth.mjs scripts/test-auth-presentation.mjs scripts/test-auth-settings.mjs scripts/test-account.mjs scripts/test-account-presentation.mjs scripts/test-auth-ui.mjs",
     "test:isolation": "node --test scripts/test-isolation.mjs",
     "test:database": "node --test --test-concurrency=1 --test-timeout=60000 tests/database/*.test.mjs",
-    "test:news": "node --test scripts/test-news.mjs scripts/test-section-content.mjs",
+    "test:news": "node --test scripts/test-news.mjs scripts/test-section-content.mjs scripts/test-news-edge.mjs",
     "test:groups": "node --test --test-timeout=60000 scripts/test-community-groups.mjs",
     "test:community-ui": "node --test scripts/test-community-ui.mjs",
     "test:scale": "node --test --test-timeout=120000 scripts/test-community-scale.mjs",
