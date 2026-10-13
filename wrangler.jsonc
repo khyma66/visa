@@ -30,6 +30,23 @@
   "cache": { "enabled": true },
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "env": {
+    "assistant": {
+      "name": "visathreads-ai-dev",
+      "workers_dev": true,
+      "routes": [],
+      "ai": { "binding": "ASSISTANT_AI" },
+      "vars": {
+        "APP_ENV": "development",
+        "COMMUNITY_SOURCE_MODE": "snapshot",
+        "APIFY_LIVE_FETCH_ENABLED": "false",
+        "ASSISTANT_ENABLED": "true",
+        "ASSISTANT_COMMUNITIES_ENABLED": "false",
+        "ASSISTANT_CATCHUP_ENABLED": "false",
+        "ASSISTANT_PROVIDER": "workers-ai",
+        "ASSISTANT_PROJECT_REF": "ppdwysmeistjxzjpmxyk"
+      },
+      "version_metadata": { "binding": "CF_VERSION_METADATA" }
+    },
     "development": {
       "name": "visaflow-dev",
       "workers_dev": true,

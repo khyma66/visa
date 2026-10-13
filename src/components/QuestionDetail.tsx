@@ -18,6 +18,7 @@ import { RelatedQuestions } from './RelatedQuestions';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 import { ReportButton } from './ReportButton';
+import { AssistantPanel } from './AssistantPanel';
 
 function Author({ username, seed, createdAt, sourceOnly = false }: { username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
   return (
@@ -174,6 +175,8 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             </div>
           </article>
 
+          <AssistantPanel scope={{ kind: 'post', id: question.id }} />
+
           <section className="mt-4 border-t border-slate-200 pt-7">
             <h2 className="text-2xl font-black text-slate-950">{experience ? `${question.answer_count} ${question.answer_count === 1 ? 'reply' : 'replies'}` : imported ? `${question.answer_count} ${question.answer_count === 1 ? 'comment' : 'comments'}` : `${question.answer_count} ${question.answer_count === 1 ? 'answer' : 'answers'}`}</h2>
             <p className="mt-2 text-xs text-slate-500">{answers.length} shown{!imported && (experience ? ' · Highest votes first' : ' · Accepted answers and highest votes first')}</p>
@@ -184,7 +187,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                 const sourceOnly = answer.source === 'apify' || answer.id.startsWith('apify-');
                 const messageHref = getMemberMessageHref(answer, user?.id);
                 return (
-                <article key={answer.id} className={`flex gap-4 py-7 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
+                <article key={answer.id} id={`answer-${answer.id}`} className={`flex scroll-mt-24 gap-4 py-7 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
                   {sourceOnly ? <ImportedScore score={answer.vote_score} /> : imported ? <MessageCircle className="w-11 shrink-0 text-blue-600" size={22} /> : <VoteRail score={answer.vote_score} accepted={answer.is_accepted} onVote={(value) => {
                     if (!user) { window.location.href = `/login?next=${threadPath}`; return; }
                     void voteAnswer(answer.id, user.id, value).then(load).catch((reason: Error) => setError(reason.message));

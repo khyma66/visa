@@ -8,6 +8,7 @@ import { getCommunityBySlug, getMembershipForCommunity, joinCommunity, leaveComm
 import type { Question } from '@/lib/types';
 import { useAuth } from './AuthProvider';
 import { QuestionCard } from './QuestionCard';
+import { AssistantPanel } from './AssistantPanel';
 
 export function CommunityPage({ slug }: { slug: string }) {
   const { user, loading: authLoading } = useAuth();
@@ -120,6 +121,7 @@ export function CommunityPage({ slug }: { slug: string }) {
       <p className="mt-5 max-w-3xl whitespace-pre-line text-sm leading-6 text-slate-600">{community.description}</p><p className="mt-4 flex items-center gap-2 text-xs text-slate-500"><Users size={16} />{Number(community.member_count).toLocaleString()} {Number(community.member_count) === 1 ? 'member' : 'members'} · Public community</p>
       {membershipError && <p role="alert" className="mt-4 text-sm text-amber-800">{membershipError} <button onClick={() => setMembershipRetry((n) => n + 1)} className="font-bold underline">Retry membership</button></p>}{actionError && <p role="alert" className="mt-4 text-sm text-rose-800">{actionError}</p>}
     </header>
+    <AssistantPanel scope={{ kind: 'community', id: community.id }} />
     <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5"><h2 className="text-lg font-bold">Questions and answers</h2><div className="flex items-center gap-4"><button onClick={() => { resetQuestionPage(); setQuestionRetry((n) => n + 1); }} disabled={questionsLoading} className="text-sm font-bold text-slate-600 underline disabled:opacity-50">Refresh</button>{membership ? <Link href={askHref} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Ask a Question</Link> : !user ? <Link href={`/login?next=${encodeURIComponent(askHref)}`} className="text-sm font-bold text-blue-700 underline">Log In to ask</Link> : <button onClick={() => void changeMembership()} disabled={busy || membershipLoading || !!membershipError} className="text-sm font-bold text-blue-700 underline disabled:opacity-50">Join to ask a question</button>}</div></div>
         {tag && <p className="border-b bg-blue-50 p-4 text-sm text-blue-800">Tag: <strong>{tag}</strong> <button onClick={() => { setTag(''); resetQuestionPage(); }} className="ml-3 underline">Clear filter</button></p>}

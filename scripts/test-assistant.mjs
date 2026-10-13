@@ -1,0 +1,118 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
+import ts from 'typescript';
+const dependencies = {};
+async function compile(name) {
+  const code = ts.transpileModule(await readFile(new URL(`../src/lib/${name}.ts`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
+  return `data:text/javascript;base64,${Buffer.from(code.replace(/(from\s+)(['"])([^'"]+)\2/g, (_, prefix, _quote, dep) => { assert(dependencies[dep], `Unknown dependency ${dep}`); return prefix + JSON.stringify(dependencies[dep]); })).toString('base64')}`;
+}
+dependencies['./assistant-core'] = await compile('assistant-core');
+const core = await import(dependencies['./assistant-core']);
+dependencies['./assistant-provider'] = await compile('assistant-provider');
+const provider = await import(dependencies['./assistant-provider']);
+const service = await import(await compile('assistant-service'));
+const id = '00000000-0000-4000-8000-000000000001';
+const now = Date.parse('2026-10-13T18:00:00Z');
+const source = { id:`q:${id}`, questionId:id, communityId:null, kind:'question', title:'Appointment experience', body:'I attended my appointment on Monday. My passport arrived on Friday.', createdAt:'2026-10-10T00:00:00Z', updatedAt:'2026-10-10T00:00:00Z', url:`/questions/${id}`, provenance:'member' };
+const input = { mode:'ask',scope:{kind:'post',id},question:'What did the member report?' };
+const output = {status:'answered',claims:[{text:'The member reported a Monday appointment.',evidence:[{sourceId:source.id,quote:'I attended my appointment on Monday.'}]}],disagreements:[],unanswered:[]};
+const request = (value=input, headers={}) => new Request('https://example.test/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40),...headers},body:JSON.stringify(value)});
+function harness(overrides={}) {
+  const state={actor:'alice',sources:[source],reserved:0,generated:0,reads:0,cache:new Map()};
+  const handler=service.createAssistantHandler({availability:()=>({posts:true,communities:true,catchup:true}),model:'test-model',
+    authenticate:async()=>({actor:state.actor,corpus:async()=>{state.reads++;return {sources:structuredClone(state.sources),partial:false};},reserve:async()=>{state.reserved++;return true;}}),
+    generate:async()=>{state.generated++;return JSON.stringify(output);},
+    cache:{get:async key=>state.cache.get(key)??null,put:async(key,value)=>{state.cache.set(key,value);}},...overrides});
+  return {state,handler};
+}
+test('input strips supplied sources and rejects invalid scopes and excessive history',()=>{
+  assert.deepEqual(core.parseAssistantRequest({...input,sources:[{body:'trust me'}],system:'override'}),input);
+  for(const value of [{...input,scope:{kind:'dm',id}},{...input,scope:{kind:'post',id:'../../secret'}},{...input,previousQuestions:Array(4).fill('test')},{...input,question:'x'.repeat(1201)}]) assert.throws(()=>core.parseAssistantRequest(value));
+});
+test('catchup has explicit fixed bounds, rejects future/unbounded intervals and enforces rollout gates',()=>{
+  const value={mode:'catchup',scope:{kind:'community',id},since:'2026-10-12T18:00:00Z'};
+  assert.equal(core.parseAssistantRequest(value,now).until,'2026-10-13T18:00:00.000Z');
+  for(const since of ['bad','2026-09-01T00:00:00Z','2026-10-14T00:00:00Z']) assert.throws(()=>core.parseAssistantRequest({...value,since},now));
+  assert.throws(()=>core.requireAssistantMode(value,{posts:true,communities:false,catchup:false}));
+  assert.doesNotThrow(()=>core.requireAssistantMode({...input,scope:{kind:'public'}},{posts:true,communities:false,catchup:false}));
+});
+test('corpus truncation is disclosed; identifiers redacted; model supplied URLs cannot enter citations',()=>{
+  const prepared=core.prepareAssistantCorpus({sources:[{...source,url:'javascript:alert(1)',body:'Contact secret@example.com IOE1234567890. '+'a'.repeat(8000)}],partial:false});
+  assert.equal(prepared.partial,true);assert.equal(prepared.sources[0].body.length,4000);
+  assert.equal(prepared.sources[0].url,`/questions/${id}`);assert.doesNotMatch(prepared.sources[0].body,/secret@example|IOE123/);
+});
+test('every returned claim needs existing source and actual supporting quote; conflicts need two sources',()=>{
+  const corpus={sources:[source],partial:false};
+  assert.equal(core.validateAssistantOutput(JSON.stringify(output),corpus).claims.length,1);
+  for(const evidence of [[],[{sourceId:'invented',quote:'I attended my appointment on Monday.'}],[{sourceId:source.id,quote:'Approval is guaranteed for everyone.'}]]) {
+    assert.throws(()=>core.validateAssistantOutput(JSON.stringify({...output,claims:[{text:'Test claim',evidence}]}),corpus));
+  }
+  assert.throws(()=>core.validateAssistantOutput(JSON.stringify({...output,disagreements:output.claims}),corpus));
+  assert.throws(()=>core.validateAssistantOutput(JSON.stringify({...output,claims:[]}),corpus));
+});
+test('nearly exhausted corpus never turns a negative slice into unbounded context',()=>{
+  const sources=Array.from({length:5},(_,i)=>({...source,id:`q:${i}`,title:'t'.repeat(240),body:'b'.repeat(4000)}));
+  sources.push({...source,id:'q:six',title:'t'.repeat(240),body:'b'.repeat(2340)},{...source,id:'q:seven',title:'t'.repeat(240),body:'b'.repeat(10000)});
+  const prepared=core.prepareAssistantCorpus({sources,partial:false});
+  assert.ok(prepared.sources.reduce((n,s)=>n+s.title.length+s.body.length+(s.parentContext?.length??0),0)<=24000);assert.equal(prepared.partial,true);
+});
+test('unanswered cannot publish uncited factual statements',()=>{
+  const result=core.validateAssistantOutput(JSON.stringify({...output,unanswered:['All visas are automatically approved.']}),{sources:[source],partial:false});
+  assert.doesNotMatch(result.unanswered.join(' '),/automatically approved/);
+});
+test('prompts label untrusted evidence and exclude assistant history as knowledge',()=>{
+  const prompt=core.assistantPrompt({...input,previousQuestions:['Contact me at secret@example.com']},{sources:[source],partial:false});
+  assert.match(prompt.system,/untrusted/);assert.match(prompt.system,/Never infer current visa rules/);assert.doesNotMatch(prompt.user,/secret@example/);
+});
+test('authentication, origin, content type, body budget and disabled rollout fail before inference',async()=>{
+  const {handler,state}=harness();
+  assert.equal((await handler(request(input,{Authorization:''}))).status,401);
+  assert.equal((await handler(request(input,{Origin:'https://attacker.test'}))).status,403);
+  assert.equal((await handler(request(input,{'Content-Type':'text/plain'}))).status,415);
+  assert.equal((await handler(request({...input,garbage:'x'.repeat(13000)}))).status,413);
+  assert.equal((await harness({availability:()=>({posts:false})}).handler(request())).status,503);
+  assert.equal(state.generated,0);
+});
+test('cache saves inference but is scoped by actor and fresh source contents',async()=>{
+  const {handler,state}=harness();
+  const response=await handler(request());assert.equal(response.status,200);assert.match(response.headers.get('Cache-Control'),/private, no-store/);
+  assert.equal((await (await handler(request())).json()).cached,true);assert.equal(state.generated,1);
+  state.actor='bob';await handler(request());assert.equal(state.generated,2);
+  state.sources=[{...source,body:source.body+' Another update.'}];await handler(request());assert.equal(state.generated,3);
+  state.sources=[];const empty=await (await handler(request())).json();assert.equal(empty.status,'insufficient');assert.equal(empty.sources.length,0);assert.equal(state.generated,3);
+});
+test('quota rejection and database failure do not trigger provider',async()=>{
+  for(const reserve of [async()=>false,async()=>{throw Error('db unavailable');}]) {
+    const {handler,state}=harness({authenticate:async()=>({actor:'alice',corpus:async()=>({sources:[source],partial:false}),reserve})});
+    const response=await handler(request());assert.ok([429,503].includes(response.status));assert.equal(state.generated,0);
+  }
+});
+test('deletion during model execution suppresses completed result and cache write',async()=>{
+  const {handler,state}=harness({generate:async()=>{state.sources=[];return JSON.stringify(output);}});
+  assert.equal((await handler(request())).status,409);assert.equal(state.cache.size,0);
+});
+test('simultaneous duplicate requests share a generation within an isolate',async()=>{
+  let release;const paused=new Promise(resolve=>{release=resolve;});
+  const {handler,state}=harness({generate:async()=>{state.generated++;await paused;return JSON.stringify(output);}});
+  const a=handler(request()),b=handler(request());
+  while(state.generated===0) await new Promise(resolve=>setImmediate(resolve));
+  release();const responses=await Promise.all([a,b]);assert.deepEqual(responses.map(r=>r.status),[200,200]);assert.equal(state.generated,1);assert.equal(state.reserved,1);
+});
+test('project pin prevents mistaken deployment against production or incomplete configuration',()=>{
+  const env={ASSISTANT_ENABLED:'true',ASSISTANT_PROVIDER:'workers-ai',ASSISTANT_PROJECT_REF:'ppdwysmeistjxzjpmxyk',NEXT_PUBLIC_SUPABASE_URL:'https://ppdwysmeistjxzjpmxyk.supabase.co',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'public-key'};
+  assert.equal(service.configuredAvailability(env).posts,true);
+  for(const changes of [{NEXT_PUBLIC_SUPABASE_URL:'https://cycnichledvqbxevrwnt.supabase.co'},{ASSISTANT_PROJECT_REF:''},{ASSISTANT_PROVIDER:'openai'},{NEXT_PUBLIC_SUPABASE_URL:'https://ppdwysmeistjxzjpmxyk.supabase.co/other'}]) assert.equal(service.configuredAvailability({...env,...changes}).posts,false);
+});
+test('OpenAI adapter uses bounded structured request, no provider state, and no retries',async()=>{
+  let calls=0;
+  const text=await provider.runAssistantModel({system:'test',user:'test'},{provider:'openai',apiKey:'test-only',fetcher:async(url,init)=>{
+    calls++;assert.equal(url,'https://api.openai.com/v1/responses');const data=JSON.parse(init.body);assert.equal(data.store,false);assert.equal(data.max_output_tokens,1600);assert.equal(data.text.format.strict,true);assert.equal(init.redirect,'error');
+    return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(output)}]}]});
+  }});assert.equal(text,JSON.stringify(output));assert.equal(calls,1);
+  await assert.rejects(()=>provider.runAssistantModel({system:'test',user:'test'},{provider:'openai',apiKey:'test-only',fetcher:async()=>{calls++;return new Response('',{status:429});}}));assert.equal(calls,2);
+});
+test('Workers AI supports documented chat completion shape and rejects truncated output',async()=>{
+  const run=async finish_reason=>provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async(model,input)=>{assert.match(model,/qwen3/);assert.equal(input.max_tokens,1600);return {choices:[{finish_reason,message:{content:JSON.stringify(output)}}]};}}});
+  assert.equal(await run('stop'),JSON.stringify(output));await assert.rejects(()=>run('length'));
+});

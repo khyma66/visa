@@ -29,6 +29,7 @@ const dependencies = {
   './Avatar': moduleUrl(`import React from ${JSON.stringify(reactUrl)};export const Avatar=()=>React.createElement('span',{'aria-label':'Member avatar'});`),
   './ReportButton': moduleUrl('export const ReportButton=()=>null;'),
   './RelatedQuestions': moduleUrl('export const RelatedQuestions=()=>null;'),
+  './AssistantPanel': moduleUrl('export const AssistantPanel=()=>null;'),
 };
 dependencies['@/lib/messaging-state'] = moduleUrl(transpile(await readFile(new URL('../src/lib/messaging-state.ts',import.meta.url),'utf8')));
 dependencies['@/lib/post-categories'] = moduleUrl(transpile(await readFile(new URL('../src/lib/post-categories.ts',import.meta.url),'utf8')));

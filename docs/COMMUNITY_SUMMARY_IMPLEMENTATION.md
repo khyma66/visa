@@ -1,3 +1,5 @@
+> Current status: [VisaThreads discussion assistant rollout, 2026-10-13](ASSISTANT_ROLLOUT_2026-10-13.md). New development uses `/api/assistant` with separate post, community, and catch-up gates. The older route described below remains disabled.
+
 # Community interval summaries — prototype, disabled
 
 The earlier implementation is not production ready. GET and POST at

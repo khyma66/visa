@@ -27,6 +27,7 @@ const dependencies = {
   '@/lib/realtime': moduleUrl(`export function subscribeLive(){throw new Error('Unexpected subscription during render');}`),
   './Avatar': moduleUrl(`export function Avatar(){return null;}`),
   './RelatedQuestions': moduleUrl(`export function RelatedQuestions(){return null;}`),
+  './AssistantPanel': moduleUrl(`export function AssistantPanel(){return null;}`),
   './AuthProvider': auth,
   './ReportButton': moduleUrl(`export function ReportButton(){return null;}`),
 };

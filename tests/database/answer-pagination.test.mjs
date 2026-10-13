@@ -218,7 +218,7 @@ const dependencies = {
   '@/lib/messaging-state':moduleUrl(transpile(await readFile(new URL('../../src/lib/messaging-state.ts', import.meta.url), 'utf8'))),
   './AuthProvider':moduleUrl('export const useAuth=()=>({user:globalThis.__answerUi.user,demoMode:false});'),
 };
-for (const name of ['RelatedQuestions','Avatar','ReportButton','SafetyNotice']) dependencies[`./${name}`] = moduleUrl(`export const ${name}=()=>null;`);
+for (const name of ['RelatedQuestions','Avatar','ReportButton','SafetyNotice','AssistantPanel']) dependencies[`./${name}`] = moduleUrl(`export const ${name}=()=>null;`);
 for (const [name,replacement] of Object.entries(dependencies)) {
   detailSource = detailSource.replaceAll(`from '${name}'`,`from ${JSON.stringify(replacement)}`).replaceAll(`from "${name}"`,`from ${JSON.stringify(replacement)}`);
 }

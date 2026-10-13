@@ -29,7 +29,7 @@
     "test:groups": "node --test --test-timeout=60000 scripts/test-community-groups.mjs",
     "test:community-ui": "node --test scripts/test-community-ui.mjs",
     "test:scale": "node --test --test-timeout=120000 scripts/test-community-scale.mjs",
-    "test": "npm run test:isolation && npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:messaging && npm run test:message-entry && npm run test:presentation && npm run test:tags && npm run test:news && npm run test:groups && npm run test:community-ui && npm run test:scale && npm run test:feed-ui",
+    "test": "npm run test:isolation && npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:messaging && npm run test:message-entry && npm run test:presentation && npm run test:tags && npm run test:news && npm run test:groups && npm run test:community-ui && npm run test:scale && npm run test:feed-ui && npm run test:assistant",
     "check:bundle": "node scripts/check-bundle.mjs",
     "check:archive-bundle": "node scripts/check-archive-bundle.mjs",
     "check:secrets": "node scripts/check-repository-secrets.mjs",
@@ -45,7 +45,10 @@
     "deploy:prod": "npm run check:secrets && npm test && npm run typecheck && npm audit --audit-level=high && npm run build:prod && vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build",
     "build:dev": "CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development vinext build && CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development npm run check:archive-bundle",
     "deploy:dev": "vinext-cloudflare deploy --config wrangler.jsonc --env development",
-    "test:feed-ui": "node --test scripts/test-feed-ui.mjs"
+    "test:feed-ui": "node --test scripts/test-feed-ui.mjs",
+    "test:assistant": "node --test scripts/test-assistant.mjs scripts/test-assistant-ui.mjs scripts/test-assistant-deploy.mjs scripts/test-assistant-data.mjs",
+    "build:assistant": "node scripts/assistant-dev.mjs",
+    "deploy:assistant": "node scripts/assistant-dev.mjs --deploy"
   },
   "keywords": [
     "visa",
