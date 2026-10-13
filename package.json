@@ -13,7 +13,7 @@
     "build": "vinext build",
     "build:next": "NEXT_PUBLIC_APP_ENV=production next build",
     "typecheck": "tsc --noEmit",
-    "test:realtime": "node --test --test-timeout=60000 scripts/test-realtime.mjs",
+    "test:realtime": "node --test --test-timeout=60000 scripts/test-realtime.mjs scripts/test-realtime-database.mjs",
     "test:messaging": "node --test --test-timeout=60000 scripts/test-messaging.mjs scripts/test-messaging-ten-users.mjs",
     "test:message-entry": "node --test --test-timeout=60000 scripts/test-message-entry.mjs scripts/test-messages-presentation.mjs",
     "test:presentation": "node --test --test-timeout=60000 scripts/test-community-presentation.mjs scripts/test-avatar.mjs scripts/test-post-presentation.mjs scripts/test-us-market.mjs",

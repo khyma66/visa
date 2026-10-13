@@ -57,7 +57,7 @@
     "bundleSecretScan": "passed; pattern-based, not an assurance about repository history",
     "feedbackTests": 49,
     "localBrowser": ["Header entry", "Native modal focus and Escape return", "Sign-in fallback in component test", "Form limits", "Local-only receipt", "Owner sample inbox", "Empty status filter", "390px and 320px mobile layout"],
-    "fullSuite": "634 tests passed across 17 groups with zero failures or cancellations; includes the pre-existing working-tree changes. Initial runs required header test-harness updates, a retry after stopping local preview, and permission for an existing edge-runtime localhost listener.",
+    "fullSuite": "The previous implementation suite passed 634 tests across 17 groups. Release retesting exposed a pre-existing real-time fixture timeout when PGlite shared a process with mocked browser globals. The database fixture was moved to a separate test file/process without changing its assertions; the isolated real-time group passes all three tests. Final full-suite results are recorded in release evidence after this commit.",
     "hostedWrites": "Applied only the feedback migration and inserted the explicitly confirmed singleton owner. No live feedback items or review events were created for testing.",
     "hostedAccessChecks": ["Exactly one owner", "RLS enabled on all three private feedback tables", "No direct client table access", "No anonymous RPC execute grants", "Confirmed owner can read the empty inbox in a read-only role simulation", "Non-owner inbox/history calls denied, including forged owner/email user metadata"],
     "hostedSecurityAdvisors": {
