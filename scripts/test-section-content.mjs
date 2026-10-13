@@ -129,17 +129,44 @@ test('edge failure backoff prevents repeated source requests without exposing in
     await GET(new Request('https://visathreads.com/api/official-news')); assert.equal(requests, 2, 'An invalid long backoff cannot suppress refresh');
   } finally { globalThis.fetch = originalFetch; globalThis.caches = originalCaches; }
 });
-test('experience selection uses four reviewed real posts without mutating originals', async () => {
-  const archive = JSON.parse(await readFile(new URL('../src/data/api-archive.json', import.meta.url), 'utf8'));
-  const before = JSON.stringify(archive.questions); const selected = selectedExperiences(archive.questions);
-  assert.equal(selected.length, 4); assert.equal(JSON.stringify(archive.questions), before);
+// These IDs are already public selection configuration. All text and metadata
+// below are synthetic: public CI must not require or copy the private archive.
+const reviewedExperienceIds = ['apify-2284772032337912', 'apify-2270233223791793', 'apify-2258283714986744', 'apify-2257123705102745'];
+const experienceFixture = (id, index = 0, overrides = {}) => ({
+  id, title: `Synthetic visa experience ${index + 1}`, body: `Synthetic account ${index + 1}: I attended a U.S. visa interview and recorded my timeline.`,
+  source: 'apify', author_id: `apify-fixture-${index}`, author_username: `fixture-member-${index}`, author_avatar_seed: `fixture-${index}`,
+  destination_country: 'United States', visa_type: 'H-1B', tags: ['h1b', 'interview'], status: 'open', post_kind: 'discussion',
+  created_at: `2026-09-0${index + 1}T12:00:00.000Z`, updated_at: `2026-09-0${index + 1}T12:00:00.000Z`,
+  answer_count: index + 2, vote_score: index, view_count: 0, accepted_answer_id: null,
+  source_url: `https://example.test/synthetic-discussion/${index}`, ...overrides,
+});
+test('experience selection applies reviewed categories without changing source content, dates or ownership', () => {
+  const questions = reviewedExperienceIds.map((id, index) => experienceFixture(id, index));
+  const before = JSON.stringify(questions); const selected = selectedExperiences(questions);
+  assert.deepEqual(selected.map(post => post.id), reviewedExperienceIds);
+  assert.equal(JSON.stringify(questions), before);
+  assert.deepEqual(selected.map(post => post.experience_category), ['Visa interview', 'Travel & arrival', 'Visa interview', 'Approval & timeline']);
+  assert.equal(selected[1].title, questions[1].title); assert.equal(selected[3].title, questions[3].title);
   for (const post of selected) {
-    const original = archive.questions.find(q => q.id === post.id); assert(original); assert(usVisaPost(post));
-    assert.equal(post.body, original.body); assert.equal(post.created_at, original.created_at); assert.equal(post.answer_count, original.answer_count);
+    const original = questions.find(q => q.id === post.id); assert(original); assert(usVisaPost(post)); assert.notStrictEqual(post, original);
+    for (const field of ['body', 'created_at', 'updated_at', 'answer_count', 'author_id', 'author_username', 'source', 'source_url'])
+      assert.equal(post[field], original[field], field);
+    assert.deepEqual(post.tags, original.tags);
     assert.equal(post.post_kind, 'experience'); assert(post.experience_category);
   }
-  assert.equal(selectedExperiences(selected.map(p => ({ ...p, status: 'archived' }))).length, 0);
-  assert.equal(selectedExperiences([{ ...selected[0], id: 'apify-unreviewed', body: 'Can anyone share their experience?' }]).length, 0);
+});
+test('experience selection rejects archived, unreviewed, native and unrelated-market posts', () => {
+  const reviewed = reviewedExperienceIds[0];
+  const rejected = [
+    experienceFixture(reviewed, 0, { status: 'archived' }),
+    experienceFixture('apify-unreviewed', 0, { body: 'Can anyone share their experience?' }),
+    experienceFixture('11111111-1111-4111-8111-111111111111', 0, { source: 'visaflow' }),
+    experienceFixture(reviewed, 0, { destination_country: 'Canada', visa_type: 'Canada work permit' }),
+    experienceFixture(reviewed, 0, { destination_country: 'France', visa_type: 'Schengen' }),
+    experienceFixture(reviewed, 0, { destination_country: 'Canada', visa_type: 'General', title: 'Synthetic unrelated experience', body: 'Synthetic account of a Canadian visitor permit.' }),
+  ];
+  assert.deepEqual(selectedExperiences(rejected), []);
+  assert.deepEqual(selectedExperiences([]), []);
 });
 test('Applewood logo colors meet WCAG normal text contrast on white', async () => {
   const css = await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8');

@@ -79,10 +79,10 @@ Start with the first column. Verify real sign-in, native/imported discussions, r
 Confirmed by the coordinator: `npm run build:assistant` succeeded using a synthetic publishable key for build validation; typecheck and repository secret scan passed. That key cannot authenticate to the dev project. A local Wrangler runtime smoke test could not start because of `uv_interface_addresses: Unknown system error 1`; runtime behavior and model inference remain unverified.
 
 - `npm run test:assistant`: 43/43 passed; the new migration also passed 17 PostgreSQL/PGlite tests (60 assistant-specific checks total).
-- The full `npm test` run recorded 455 passing checks before stopping at one existing news/experience test requiring the ignored private `src/data/api-archive.json` snapshot. That file is absent in this checkout. The test was not removed or weakened.
+- The initial full `npm test` run recorded 455 passing checks before stopping at an existing news/experience test requiring the ignored private `src/data/api-archive.json` snapshot. Public CI now uses synthetic selection fixtures. The real-data invariants remain mandatory through `check:private-experiences` in `check:release`; the private snapshot remains absent here.
 - Remaining suites were then executed separately: groups, community UI, scale, feed UI, and assistant all passed. Scale fixtures are not a million-user capacity certification.
 - TypeScript, isolated Worker build, archive-bundle check, bundle credential scan, and repository credential scan passed. Build validation used synthetic data and a synthetic public key; no deployment was executed.
 
-Local deterministic tests and a successful build do not constitute a hosted end-to-end or model-quality pass. Restore the authorized private snapshot to run the full existing release suite, then complete the staged hosted checks above before promotion.
+Local deterministic tests and a successful build do not constitute a hosted end-to-end or model-quality pass. Restore the authorized private snapshot for the production release check, then complete the staged hosted checks above before promotion.
 
 Not established or implemented: live model accuracy, production deployment, vector/embedding retrieval, background indexing, durable incremental summaries, scheduled digests/notifications, direct-message or group-chat summaries, and million-user capacity. The bounded archive scan is transitional, not a large-corpus indexing solution. No paid plan, account, or billing changes were made.

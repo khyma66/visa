@@ -5,6 +5,19 @@ import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import { archiveSource } from './archive-source.mjs';
 import { resolve } from 'node:path';
+import { checkPrivateExperiences } from './check-private-experiences.mjs';
+
+test('private experience release check fails closed without the reviewed source archive', async () => {
+  await assert.rejects(() => checkPrivateExperiences(new URL('../src/data/required-private-archive-not-provisioned.json', import.meta.url)), /Required private experience archive is missing/);
+  await assert.rejects(() => checkPrivateExperiences(new URL('../src/data/archive-fixture.json', import.meta.url)), /all four reviewed/);
+});
+
+test('production release and build retain the required real-archive integration gate', async () => {
+  const { scripts } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(scripts['check:private-experiences'], 'node scripts/check-private-experiences.mjs');
+  assert(scripts['check:release'].startsWith('npm run check:private-experiences && '));
+  assert(scripts['build:prod'].startsWith('npm run check:release && '));
+});
 
 test('CI and production never include the private development archive', () => {
   for (const environment of [{ CI: 'true' }, { NEXT_PUBLIC_APP_ENV: 'production' }, { CLOUDFLARE_ENV: 'production' }]) {
