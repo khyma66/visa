@@ -11,6 +11,47 @@ const transpile=(source)=>ts.transpileModule(source,{compilerOptions:{target:ts.
 const tags=moduleUrl(transpile(await readFile(new URL('../src/lib/tagging.ts',import.meta.url),'utf8')));
 const discovery=transpile(await readFile(new URL('../src/lib/discovery.ts',import.meta.url),'utf8')).replace("'./tagging'",JSON.stringify(tags));
 const {createDiscoveryIndex}=await import(moduleUrl(discovery));
+const presentation=moduleUrl(transpile(await readFile(new URL('../src/lib/post-presentation.ts',import.meta.url),'utf8')));
+const normalization=transpile(await readFile(new URL('../src/lib/archive-presentation.ts',import.meta.url),'utf8')).replace("'./post-presentation'",JSON.stringify(presentation));
+const {normalizeArchiveFeed}=await import(moduleUrl(normalization));
+
+test('public archive reply counts equal captured unique active replies, retaining upstream totals separately',()=>{
+  const before=structuredClone(archive);
+  const normalized=normalizeArchiveFeed(archive);
+  for(const question of normalized.questions) {
+    const original=archive.questions.find((row)=>row.id===question.id);
+    const replies=normalized.answersByQuestionId[question.id];
+    assert.equal(question.answer_count,replies.length);
+    assert.equal(new Set(replies.map((row)=>row.id)).size,replies.length);
+    assert.equal(question.source_comment_count,original.source_comment_count??original.answer_count);
+    assert(replies.every((row)=>row.status==='active'&&row.question_id===question.id));
+    assert.deepEqual(question.tags,original.tags);
+  }
+  assert.deepEqual(archive,before,'Presentation normalization must not rewrite reviewed records');
+  assert.deepEqual(normalizeArchiveFeed(normalized),normalized,'Repeat normalization must not lose the upstream total');
+});
+
+test('reply normalization removes duplicate, archived and wrong-parent rows without inventing missing comments',()=>{
+  const question={id:'apify-normalize',source:'apify',answer_count:99,tags:['h1b']};
+  const reply={id:'apify-comment-one',question_id:question.id,status:'active',body:'Captured reply'};
+  const native={id:'member-post',source:'visaflow',answer_count:7};
+  const feed={questions:[question,native],answersByQuestionId:{[question.id]:[
+    reply,{...reply,body:'Latest captured revision'},
+    {...reply,id:'archived',status:'archived'},
+    {...reply,id:'wrong-parent',question_id:'apify-another'},
+  ]},source:{}};
+  const normalized=normalizeArchiveFeed(feed);
+  assert.equal(normalized.questions[0].answer_count,1);
+  assert.equal(normalized.questions[0].source_comment_count,99);
+  assert.equal(normalized.answersByQuestionId[question.id][0].body,'Latest captured revision');
+  assert.equal(normalized.questions[1],native,'Native stored counts are outside the archive normalizer');
+  assert.equal(feed.answersByQuestionId[question.id].length,4);
+  const missing=normalizeArchiveFeed({...feed,answersByQuestionId:{}});
+  assert.equal(missing.questions[0].answer_count,0);
+  assert.deepEqual(missing.answersByQuestionId[question.id],[]);
+  const updated=normalizeArchiveFeed({...feed,questions:[{...question,source_comment_count:0}]});
+  assert.equal(updated.questions[0].source_comment_count,0,'An explicit upstream zero is not replaced by an older displayed count');
+});
 
 test('collected runs reconcile exactly with the published unique archive',()=>{
   const {source,questions,answersByQuestionId}=archive;

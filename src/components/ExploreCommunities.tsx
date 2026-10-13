@@ -112,7 +112,7 @@ export function ExploreCommunities({ initialTab = 'all' }: { initialTab?: 'all' 
     navigationLock.current = true;
     setAfter(history[history.length - 1]); setHistory((current) => current.slice(0, -1)); setPageNumber((value) => Math.max(1, value - 1));
   }
-  return <main className="mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-6">
+  return <main className="page-shell">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div><div className="flex items-center gap-2"><Compass className="text-blue-700" size={23} aria-hidden="true" /><h1 className="text-2xl font-bold text-slate-950">Explore Communities</h1></div><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Find your people by U.S. visa type or next step.</p></div>
       <Link href={user ? '/communities/new' : '/login?next=%2Fcommunities%2Fnew'} className="inline-flex items-center gap-1.5 rounded-full bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"><Plus size={17} aria-hidden="true" />Start a Community</Link>

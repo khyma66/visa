@@ -54,10 +54,13 @@ assert(inventory.sourceRows<=50000,'Archive exceeds development export capacity;
 const moduleUrl=(code)=>`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
 const transpile=(source)=>ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
 const tags=moduleUrl(transpile(await readFile(new URL('src/lib/tagging.ts',root),'utf8')));
+const presentation=moduleUrl(transpile(await readFile(new URL('src/lib/post-presentation.ts',root),'utf8')));
+const normalization=moduleUrl(transpile(await readFile(new URL('src/lib/archive-presentation.ts',root),'utf8')).replace("'./post-presentation'",JSON.stringify(presentation)));
 // Reuse the exact sanitization/normalization used by the live endpoint.
 let code=transpile((await readFile(new URL('src/app/api/community/route.ts',root),'utf8'))+'\nexport { normalizePost };');
 code=code.replace("'next/server'",JSON.stringify(moduleUrl('export class NextResponse extends Response {}')))
   .replace("'@/lib/tagging'",JSON.stringify(tags))
+  .replace("'@/lib/archive-presentation'",JSON.stringify(normalization))
 .replace("'@visa/archive'",JSON.stringify(moduleUrl('export default {questions:[],answersByQuestionId:{},source:{}};')));
 const {normalizePost}=await import(moduleUrl(code));
 const questions=new Map(),comments=new Map(); let fetched=0,empty=0,duplicates=0;

@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { Lock, MessageCircle, Plus, Send } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
-  getConversation, getMessageEntry, getMessageRecipient, listConversations, listMessages, markConversationRead, refreshConversations, refreshMessages, respondToConversation, sendMessage, startConversation,
+  getConversation, getConversationCounts, getConversationMessageCount, getMessageEntry, getMessageRecipient, listConversationFolder, listMessages, markConversationRead, refreshMessages, respondToConversation, sendMessage, startConversation,
   type MessageRecipient,
 } from '@/lib/community';
-import { canSendToConversation, conversationFolder, messageLoginHref, sortConversations, sortMessages } from '@/lib/messaging-state';
+import { canSendToConversation, conversationFolder, messageLoginHref, sortConversations, sortMessages, type ConversationCounts, type ConversationFolder } from '@/lib/messaging-state';
 import type { Conversation, DirectMessage } from '@/lib/types';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
@@ -29,7 +29,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
   const [acting, setActing] = useState(false);
-  const [tab, setTab] = useState<'chats' | 'requests' | 'closed'>('chats');
+  const [tab, setTab] = useState<ConversationFolder>('chats');
   const [live, setLive] = useState<LiveStatus>('connecting');
   const [hasOlder, setHasOlder] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -40,6 +40,10 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   const [inboxNotice, setInboxNotice] = useState('');
   const [inboxLoading, setInboxLoading] = useState(true);
   const [inboxError, setInboxError] = useState('');
+  const [folderCounts, setFolderCounts] = useState<ConversationCounts | null>(null);
+  const [messageTotal, setMessageTotal] = useState<number | null>(null);
+  const folderRef = useRef(tab);
+  folderRef.current = tab;
   const inboxRef = useRef(conversations);
   inboxRef.current = conversations;
   const messageRef = useRef(messages);
@@ -59,37 +63,43 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
     if (activeRef.current !== conversation.id) {
       ++messageGeneration.current;
       messageRef.current = [];
-      setMessages([]); setBody(''); setHasOlder(false); setMessagesLoading(true);
+      setMessages([]); setBody(''); setHasOlder(false); setMessagesLoading(true); setMessageTotal(null);
     }
     activeRef.current = conversation.id;
     setSelectedConversation(conversation);
     setActiveId(conversation.id);
     if (selectFolder) {
       ++navigationGeneration.current;
-      setTab(conversationFolder(conversation, user?.id ?? ''));
+      const next = conversationFolder(conversation, user?.id ?? '');
+      if (folderRef.current !== next) { inboxRef.current = []; setConversations([]); setInboxHasOlder(false); }
+      folderRef.current = next;
+      setTab(next);
     }
   }, [user?.id]);
 
   const loadInbox = useCallback(async (selectedId = activeRef.current) => {
+    if (!user) return;
     const generation = ++inboxGeneration.current;
+    const folder = folderRef.current;
     setInboxLoading(true); setInboxError('');
     try {
       const previous = inboxRef.current;
-      const result = await refreshConversations(previous);
+      const [result, counts] = await Promise.all([listConversationFolder(folder, user.id), getConversationCounts(user.id)]);
       const selected = selectedId ? result.conversations.find((row) => row.id === selectedId) ?? await getConversation(selectedId) : null;
       if (generation !== inboxGeneration.current) return;
       const rows = result.conversations;
       inboxRef.current = rows;
       setConversations(rows);
+      setFolderCounts(counts);
       if (activeRef.current === selectedId) setSelectedConversation(selected);
       if (previous.length > 50) setInboxNotice('Inbox updated. Load earlier conversations to see more; your open chat is unchanged.');
-      if (result.reset) setInboxHasOlder(result.hasOlder);
+      setInboxHasOlder(result.hasOlder);
       if (!activeRef.current) {
         const first = rows.find((r) => !r.request_status || r.request_status === 'accepted');
         if (first) openConversation(first, false);
       }
     } catch {
-      if (generation === inboxGeneration.current) setInboxError('We couldn’t load your conversations. Please try again.');
+      if (generation === inboxGeneration.current) { setFolderCounts(null); setInboxError('We couldn’t load your conversations. Please try again.'); }
     } finally {
       if (generation === inboxGeneration.current) setInboxLoading(false);
     }
@@ -99,7 +109,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
     if (!user) return;
     void loadInbox();
     return subscribeLive([`inbox:${user.id}`], () => { void loadInbox(); });
-  }, [loadInbox, user]);
+  }, [loadInbox, user, tab]);
 
   useEffect(() => {
     if (!user || !recipientUsername) return;
@@ -127,24 +137,35 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
     let valid = true;
     messageGeneration.current++;
     messageRef.current = [];
-    setMessages([]); setBody(''); setHasOlder(false); setMessagesLoading(true); setHistoryNotice('');
+    setMessages([]); setBody(''); setHasOlder(false); setMessagesLoading(true); setMessageTotal(null); setHistoryNotice('');
     const reload = async () => {
       const current = ++messageGeneration.current;
       try {
         const previous = messageRef.current;
-        const result = await refreshMessages(activeId, previous);
+        const [result, total] = await Promise.all([refreshMessages(activeId, previous), getConversationMessageCount(activeId)]);
         if (!valid || current !== messageGeneration.current) return;
         messageRef.current = result.messages;
         setMessages(result.messages);
+        setMessageTotal(total);
         if (result.reset) {
-          setHasOlder(result.hasOlder);
+          setHasOlder(result.hasOlder && result.messages.length < total);
           if (previous.length && result.hasOlder) setHistoryNotice('You have newer messages. Load earlier messages to continue through the full history.');
         }
         if (document.visibilityState === 'visible' && result.messages.some((m) => m.sender_id !== user.id && !m.read_at)) {
-          await markConversationRead(activeId, user.id, result.messages);
-          if (valid) await loadInbox();
+          // A receipt write is independent of the successfully fetched history
+          // and count. Its failure must not turn that count into an unknown one.
+          const receiptError = 'Messages loaded, but read receipts could not be updated. They will retry when the conversation refreshes.';
+          try {
+            await markConversationRead(activeId, user.id, result.messages);
+            if (valid && current === messageGeneration.current) {
+              setError(previous => previous === receiptError ? '' : previous);
+              await loadInbox();
+            }
+          } catch {
+            if (valid && current === messageGeneration.current) setError(receiptError);
+          }
         }
-      } catch (reason) { if (valid) setError(reason instanceof Error ? reason.message : 'Could not load messages.'); }
+      } catch (reason) { if (valid && current === messageGeneration.current) { setMessageTotal(null); setError(reason instanceof Error ? reason.message : 'Could not load messages.'); } }
       finally { if (valid && current === messageGeneration.current) setMessagesLoading(false); }
     };
     void reload();
@@ -187,11 +208,12 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
       if (activeRef.current === conversation) {
         setBody('');
         const generation = ++messageGeneration.current;
-        const result = await refreshMessages(conversation, messageRef.current);
+        const [result, total] = await Promise.all([refreshMessages(conversation, messageRef.current), getConversationMessageCount(conversation)]);
         if (activeRef.current === conversation && generation === messageGeneration.current) {
           messageRef.current = result.messages;
           setMessages(result.messages);
-          if (result.reset) setHasOlder(result.hasOlder);
+          setMessageTotal(total);
+          if (result.reset) setHasOlder(result.hasOlder && result.messages.length < total);
         }
       }
       await loadInbox();
@@ -223,23 +245,26 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
       const merged = sortMessages([...rows, ...messageRef.current]);
       messageRef.current = merged;
       setMessages(merged);
-      setHasOlder(rows.length === 50);
-      if (user && document.visibilityState === 'visible') await markConversationRead(conversation, user.id, rows);
+      setHasOlder(rows.length === 50 && (messageTotal === null || merged.length < messageTotal));
+      if (user && document.visibilityState === 'visible') {
+        await markConversationRead(conversation, user.id, rows);
+        if (activeRef.current === conversation && generation === messageGeneration.current) await loadInbox();
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load older messages.'); }
     finally { setOlderLoading(false); if (activeRef.current === conversation) setMessagesLoading(false); }
   }
 
   async function olderConversations() {
-    if (inboxLoading || inboxOlderLoading || !conversations.length) return;
+    if (!user || inboxLoading || inboxOlderLoading || !conversations.length) return;
     const generation = ++inboxGeneration.current;
     setInboxOlderLoading(true);
     try {
-      const rows = await listConversations(conversations.at(-1));
+      const result = await listConversationFolder(folderRef.current, user.id, conversations.at(-1));
       if (generation !== inboxGeneration.current) return;
-      const merged = sortConversations([...inboxRef.current, ...rows]);
+      const merged = sortConversations([...inboxRef.current, ...result.conversations]);
       inboxRef.current = merged;
       setConversations(merged);
-      setInboxHasOlder(rows.length === 50);
+      setInboxHasOlder(result.hasOlder);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load earlier conversations.'); }
     finally { setInboxOlderLoading(false); }
   }
@@ -258,7 +283,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
     closed: { title: 'No closed conversations', description: 'Declined or blocked conversations appear here.' },
   }[tab];
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+    <main className="page-shell py-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-bold tracking-wider text-blue-700">Private Conversations</p><h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">Messages</h1></div><p className="flex items-center gap-1.5 text-xs text-slate-500"><Lock size={13} /> Participant-only inbox · Not end-to-end encrypted.</p></div>
       {demoMode && <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Development preview: sample conversations are saved in this browser. Real accounts across devices require the community database.</p>}
       <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:h-[700px] md:grid-cols-[330px_minmax(0,1fr)]">
@@ -268,11 +293,12 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
             <div className="mt-2 flex gap-2"><input aria-label="Recipient public username" value={recipient} onChange={(event) => { setRecipient(event.target.value); setLinkedRecipientId(''); setResolvedRecipient(null); setError(''); }} disabled={acting || resolvingRecipient} maxLength={34} required placeholder="public username" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-600 disabled:bg-slate-100" /><button disabled={acting || resolvingRecipient || !recipient.trim()} className="grid w-10 place-items-center rounded-lg bg-slate-900 text-white disabled:opacity-40" aria-label={acting ? 'Opening conversation' : 'Start conversation'}><Plus size={17} /></button></div>
             <p role="status" className="mt-2 text-xs text-slate-500">{resolvingRecipient ? 'Finding this community member…' : resolvedRecipient ? `Member found: u/${resolvedRecipient.username}. Start a request or continue your existing conversation.` : 'Enter a member’s public username. They decide whether to accept your request.'}</p>
           </form>
-          <nav aria-label="Message folders" className="flex gap-2 border-b p-3">{(['chats', 'requests', 'closed'] as const).map((item) => <button key={item} onClick={() => { ++navigationGeneration.current; setTab(item); }} aria-pressed={tab === item} className={`rounded-full px-3 py-2 text-xs font-bold capitalize ${tab === item ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{item}{item === 'requests' ? ` (${conversations.filter(incoming).length}${inboxHasOlder ? '+' : ''})` : ''}</button>)}</nav>
+          <nav aria-label="Message folders" className="flex gap-1 border-b p-3">{(['chats', 'requests', 'closed'] as const).map((item) => <button key={item} onClick={() => { ++navigationGeneration.current; if (item === tab) return; ++inboxGeneration.current; folderRef.current = item; inboxRef.current = []; setConversations([]); setInboxHasOlder(false); setInboxLoading(true); setTab(item); }} aria-label={item} aria-pressed={tab === item} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold capitalize ${tab === item ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{item}<span aria-label={`${item} conversation count`} className="tabular-nums">{folderCounts ? folderCounts[item] : '—'}</span></button>)}</nav>
+          {!inboxLoading && !inboxError && <p role="status" className="border-b border-slate-100 px-4 py-2 text-xs text-slate-500">{visible.length} of {folderCounts?.[tab] ?? '—'} {tab === 'requests' ? 'requests' : 'conversations'} shown</p>}
           <div aria-busy={inboxLoading} className="max-h-[530px] overflow-y-auto">{inboxLoading && <p role="status" className="p-4 text-center text-sm text-slate-500">{conversations.length ? 'Updating inbox…' : 'Loading conversations…'}</p>}{inboxError && <div role="alert" className="p-4 text-sm text-rose-700"><p>{inboxError}</p><button onClick={() => void loadInbox()} disabled={inboxLoading} className="mt-2 font-bold underline disabled:opacity-50">Retry inbox</button></div>}{visible.map((conversation) => (
             <button key={conversation.id} onClick={() => openConversation(conversation)} className={`flex w-full gap-3 border-b border-slate-100 p-4 text-left transition ${activeId === conversation.id ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
               <Avatar seed={conversation.other_avatar_seed} />
-              <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><b className="truncate text-sm text-slate-900">u/{conversation.other_username}</b>{conversation.unread_count > 0 && <span className="ml-auto rounded-full bg-blue-700 px-2 py-0.5 text-xs font-bold text-white">{conversation.unread_count}</span>}</span><span className="mt-1 block truncate text-xs text-slate-500">{conversation.last_message ?? 'Start the conversation'}</span></span>
+              <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><b className="truncate text-sm text-slate-900">u/{conversation.other_username}</b>{conversation.unread_count > 0 && <span aria-label={`${conversation.unread_count} unread messages`} title="Unread messages in this conversation, including earlier history" className="ml-auto shrink-0 rounded-full bg-blue-700 px-2 py-0.5 text-xs font-bold text-white">{conversation.unread_count} unread</span>}</span><span className="mt-1 block truncate text-xs text-slate-500">{conversation.last_message ?? 'Start the conversation'}</span></span>
             </button>
           ))}{!inboxLoading && !inboxError && visible.length === 0 && <div className="p-6 text-center text-sm text-slate-500"><p className="font-semibold">{inboxHasOlder ? `No ${tab === 'requests' ? 'message requests' : tab === 'closed' ? 'closed conversations' : 'chats'} on this page` : emptyFolder.title}</p><p className="mt-1 text-xs">{inboxHasOlder ? 'Load earlier conversations to check this folder’s older history.' : emptyFolder.description}</p></div>}
           {inboxNotice && <p role="status" className="px-4 pt-3 text-xs text-slate-500">{inboxNotice}</p>}
@@ -281,6 +307,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
         <section className="flex h-[600px] min-h-0 flex-col md:h-auto">
           {active ? <>
             <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4"><Avatar seed={active.other_avatar_seed} /><div><b className="text-sm text-slate-900">u/{active.other_username}</b><p role="status" className="text-xs text-slate-500">{demoMode ? 'Browser preview' : live === 'live' ? 'Connected · live messages' : 'Reconnecting · checking for missed messages'}</p></div>{!closed(active) && <button disabled={acting} onClick={() => void respond('blocked')} className="ml-auto text-xs text-slate-500 hover:text-rose-700">Block</button>}</div>
+            {!messagesLoading && <p role="status" className="border-b border-slate-100 px-5 py-2 text-xs text-slate-500">{messages.length} of {messageTotal ?? '—'} messages shown{hasOlder ? ' · Earlier messages available' : ''}</p>}
             <div aria-label="Conversation messages" className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50/60 p-5">
               {historyNotice && <p role="status" className="text-center text-xs text-slate-500">{historyNotice}</p>}
               {hasOlder && <button onClick={() => void older()} disabled={olderLoading} className="mx-auto block text-xs font-bold text-blue-700">{olderLoading ? 'Loading…' : 'Load earlier messages'}</button>}

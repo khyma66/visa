@@ -91,6 +91,58 @@ test('official news UI has source links, proposal warnings and durable resource 
   assert.match(shell, /Loading recent visa notices/); assert.match(shell, /publication does not establish an effective date/);
   for (const resource of VISA_RESOURCES) assert(shell.includes(resource.url));
 });
+test('official lead, secondary cards and remaining notices preserve all dates, agencies, titles and source links', () => {
+  const types = ['Proposed Rule', 'Rule', 'Notice', 'Presidential Document'];
+  const feed = parse(Array.from({ length: 24 }, (_, index) => row({
+    title: `Visa notice fixture ${String(index).padStart(2, '0')}`,
+    document_number: `2026-${20000 + index}`,
+    html_url: row().html_url.replace('2026-20660', `2026-${20000 + index}`),
+    type: types[index % types.length],
+  })));
+  const html = renderToStaticMarkup(createElement(OfficialNewsResults, { feed }));
+  const rendered = [...html.matchAll(/<article\b[^>]*>[\s\S]*?<\/article>/g)].map(match => match[0]);
+  assert.equal(rendered.length, feed.articles.length);
+  assert.equal((html.match(/Latest notice/g) ?? []).length, 1);
+  assert.match(html, /aria-label="More official notices"/);
+  assert.doesNotMatch(html, /<img\b|<script\b/);
+  feed.articles.forEach((article, index) => {
+    const card = rendered[index];
+    assert.equal(html.split(article.title).length - 1, 1, `Notice ${index} must not be duplicated`);
+    assert(card.includes(article.title), `Notice ${index} must keep the upstream order`);
+    assert(card.includes(`dateTime="${article.publishedOn}"`));
+    assert(card.includes(article.type));
+    assert(card.includes(article.agencies.join(' · ')));
+    assert.equal(card.split(`href="${article.url}"`).length - 1, 2);
+    assert.equal((card.match(/target="_blank" rel="noopener noreferrer"/g) ?? []).length, 2);
+    assert.match(card, /focus-visible:outline/);
+    assert.equal(card.includes('Proposal, not a final rule.'), article.type === 'Proposed Rule');
+  });
+});
+test('official single and empty result states leave the source resources available', () => {
+  const single = renderToStaticMarkup(createElement(OfficialNewsResults, { feed: parse([row()]) }));
+  assert.equal((single.match(/<article\b/g) ?? []).length, 1);
+  assert.match(single, /Latest notice/);
+  assert.doesNotMatch(single, /More from the Federal Register|aria-label="More official notices"/);
+  const empty = renderToStaticMarkup(createElement(OfficialNewsResults, { feed: parse([]) }));
+  assert.match(empty, /No matching recent notices/);
+  assert.doesNotMatch(empty, /<article\b|Latest notice/);
+  const shell = renderToStaticMarkup(createElement(OfficialNewsFeed));
+  assert.match(shell, /<main class="page-shell /);
+  assert.match(shell, /href="#visa-official-resources"/);
+  assert.match(shell, /id="visa-official-resources"/);
+  for (const resource of VISA_RESOURCES) assert(shell.includes(`href="${resource.url}"`));
+});
+test('official resource index numbers cannot shrink or wrap inside the narrow sidebar', () => {
+  const html = renderToStaticMarkup(createElement(OfficialNewsFeed));
+  const numbers = [...html.matchAll(/<span aria-hidden="true" class="([^"]*)">(0[1-4])<\/span>/g)];
+  assert.equal(numbers.length, VISA_RESOURCES.length);
+  numbers.forEach(([, className, label], index) => {
+    assert.equal(label, String(index + 1).padStart(2, '0'));
+    const classes = new Set(className.split(/\s+/));
+    assert(classes.has('shrink-0'), `${label} must retain its width beside long resource descriptions`);
+    assert(classes.has('whitespace-nowrap'), `${label} must remain on one line`);
+  });
+});
 test('edge cache is public, canonical, time bounded, and never trusts an arbitrary cached link', async () => {
   const originalFetch = globalThis.fetch, originalCaches = globalThis.caches;
   let requests = 0; const entries = new Map();

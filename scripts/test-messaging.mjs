@@ -9,7 +9,7 @@ import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 const transpile = (source) => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const stateUrl = moduleUrl(transpile(await readFile(new URL('../src/lib/messaging-state.ts', import.meta.url), 'utf8')));
-const { displayedUnreadIds, hasMessageOverlap, sortMessages } = await import(stateUrl);
+const { conversationCursorFilter, conversationFolderFilter, displayedUnreadIds, hasMessageOverlap, sortMessages } = await import(stateUrl);
 const message = (n, extra = {}) => ({ id: `message-${String(n).padStart(4, '0')}`, conversation_id: 'conversation-a', sender_id: 'alice', body: `Message ${n}`, created_at: `2026-10-01T12:00:00.000Z`, read_at: null, ...extra });
 let backend;
 globalThis.__visaMessagingTestBackend = () => backend;
@@ -23,7 +23,71 @@ const dependencies = {
   './messaging-state': stateUrl,
 };
 for (const [name, replacement] of Object.entries(dependencies)) communitySource = communitySource.replace(`'${name}'`, JSON.stringify(replacement));
-const { refreshMessages, refreshConversations, markConversationRead } = await import(moduleUrl(communitySource));
+const { getConversationCounts, getConversationMessageCount, listConversationFolder, refreshMessages, refreshConversations, markConversationRead } = await import(moduleUrl(communitySource));
+
+const aliceCountUser = '11111111-1111-4111-8111-111111111111';
+function countBackend(responder) {
+  const calls = [];
+  backend = { from(table) {
+    const call = { table, filters: [], orders: [] }; calls.push(call);
+    const query = {
+      select(columns, options) { call.columns = columns; call.options = options; return query; },
+      or(predicate) { call.filters.push(predicate); return query; },
+      eq(column, value) { call.eq = [column, value]; return query; },
+      order(column, options) { call.orders.push([column, options]); return query; },
+      limit(limit) { call.limit = limit; return query; },
+      abortSignal(signal) { assert(signal instanceof AbortSignal); return Promise.resolve(responder(call)); },
+    };
+    return query;
+  } };
+  return calls;
+}
+
+test('exact folder counts use unbounded HEAD counts and identical RLS-view predicates to pages', async () => {
+  const totals = { chats: 253, requests: 72, closed: 19 };
+  const calls = countBackend(call => {
+    assert.equal(call.table, 'conversation_inbox');
+    const folder = Object.keys(totals).find(folder => call.filters[0] === conversationFolderFilter(folder, aliceCountUser));
+    assert(folder);
+    if (call.options?.head) return { count: totals[folder], error: null };
+    return { data: Array.from({ length: 51 }, (_, index) => ({ id: `${folder}-${index}` })), error: null };
+  });
+  assert.deepEqual(await getConversationCounts(aliceCountUser), totals);
+  assert(calls.every(call => call.columns === 'id' && call.options.count === 'exact' && call.options.head === true && call.limit === undefined));
+  const page = await listConversationFolder('requests', aliceCountUser);
+  assert.equal(page.conversations.length, 50); assert.equal(page.hasOlder, true);
+  const query = calls.at(-1);
+  assert.equal(query.limit, 51);
+  assert.deepEqual(query.orders, [['last_message_at', { ascending: false }], ['id', { ascending: false }]]);
+  assert.equal(query.filters[0], calls[1].filters[0]);
+});
+
+test('conversation cursor preserves microseconds and rejects raw filter injection', async () => {
+  const cursor = { id: '22222222-2222-4222-8222-222222222222', last_message_at: '2026-10-13T12:00:00.123456+00:00' };
+  const calls = countBackend(() => ({ data: [], error: null }));
+  const page = await listConversationFolder('closed', aliceCountUser, cursor);
+  assert.equal(page.hasOlder, false);
+  assert.equal(calls[0].filters.length, 1);
+  assert.equal(calls[0].filters[0], `and(or(${conversationFolderFilter('closed', aliceCountUser)}),or(${conversationCursorFilter(cursor)}))`);
+  assert(calls[0].filters[0].includes('.123456+00:00'));
+  assert.throws(() => conversationCursorFilter({ ...cursor, id: 'anything),id.neq.null' }), /Invalid/);
+  assert.throws(() => conversationCursorFilter({ ...cursor, last_message_at: '2026-10-13T12:00:00Z),id.neq.null' }), /Invalid/);
+  assert.throws(() => conversationFolderFilter('chats', 'not-an-account'), /signed-in/);
+});
+
+test('thread message totals count only the requested conversation and missing counts never become zero', async () => {
+  const id = '22222222-2222-4222-8222-222222222222';
+  const calls = countBackend(() => ({ count: 152, error: null }));
+  assert.equal(await getConversationMessageCount(id), 152);
+  assert.equal(calls[0].table, 'direct_messages');
+  assert.deepEqual(calls[0].eq, ['conversation_id', id]);
+  assert.deepEqual(calls[0].options, { count: 'exact', head: true });
+  countBackend(() => ({ count: null, error: null }));
+  await assert.rejects(() => getConversationMessageCount(id), /unavailable/);
+  await assert.rejects(() => getConversationCounts(aliceCountUser), /unavailable/);
+  countBackend(() => ({ count: null, error: { message: 'permission denied' } }));
+  await assert.rejects(() => getConversationMessageCount(id), /permission denied/);
+});
 
 test('message ordering, deduplication and displayed unread receipt selection', () => {
   assert.deepEqual(sortMessages([message(2), message(1), message(2, { body: 'Updated' })]).map((row) => row.body), ['Message 1', 'Updated']);
@@ -140,8 +204,17 @@ test('Postgres enforces private inbox cursors, scoped read receipts, redaction i
     const second = (await db.query('select * from public.conversation_page($1,$2)', [last.last_message_at, last.id])).rows;
     assert.equal(first.length, 50); assert.equal(second.length, 11);
     assert.equal(new Set([...first, ...second].map((row) => row.id)).size, 61);
+    assert.equal(await scalar('select count(*)::integer from public.conversation_inbox'), 61, 'Exact counts exceed the page size');
+    await asUser('');
+    await db.query("update public.direct_conversations set request_status='pending',requested_by=$1,last_message_at='2020-01-01' where $1 in (user_one_id,user_two_id)", [outsiders[0]]);
+    await asUser(alice);
+    assert.equal(await scalar("select count(*)::integer from public.conversation_inbox where request_status='pending' and (requested_by is null or requested_by<>$1)", [alice]), 1);
+    assert.equal((await db.query("select * from public.conversation_inbox where request_status='pending' and (requested_by is null or requested_by<>$1) order by last_message_at desc,id desc limit 51", [alice])).rows.length, 1, 'An old request remains visible even beyond the first fifty global rows');
+    assert.equal(await scalar('select count(*)::integer from public.direct_messages where conversation_id=$1', [conversation]), 61);
     await asUser(eve);
     assert.equal(await scalar('select count(*)::integer from public.conversation_page()'), 0);
+    assert.equal(await scalar('select count(*)::integer from public.conversation_inbox'), 0, 'Outsiders cannot count private inbox rows');
+    assert.equal(await scalar('select count(*)::integer from public.direct_messages where conversation_id=$1', [conversation]), 0, 'Outsiders cannot count private messages');
     await db.query('select public.mark_direct_messages_read($1,$2)', [conversation, messageIds]);
     await assert.rejects(() => db.query('select public.send_direct_message($1,$2,$3)', [conversation, 'Outsider', randomUUID()]), /unavailable/);
     await asUser(bob);

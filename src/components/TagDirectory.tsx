@@ -85,7 +85,7 @@ export function TagDirectory() {
     finally { if (current === generation.current) setLoadingMore(false); }
   }
 
-  return <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+  return <main className="page-shell">
     <Link href="/" className="text-sm text-blue-700 hover:underline">← All questions</Link>
     <div className="mt-5 flex items-center gap-3"><Tags className="text-orange-600" /><h1 className="text-3xl font-medium">Tags</h1></div>
     <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Find your topic, explore similar experiences, and join the discussion. Choose a tag to see matching questions and posts.</p>

@@ -120,7 +120,7 @@ export function AccountClient() {
     catch { setProfileError('Your profile could not be loaded. Please try again.'); }
     finally { setRetrying(false); }
   }
-  return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
+  return <main className="page-shell">
     <header className="flex items-center gap-4"><Avatar seed={profile?.avatar_seed ?? user.id} size="lg" /><div><p className="text-xs font-semibold tracking-wider text-slate-500">Your Account</p><h1 className="mt-1 break-all text-2xl font-bold text-slate-950">{profile ? profile.username : 'Your community profile'}</h1><p className="mt-1 text-sm text-slate-500">Manage your profile, contributions and sign-in.</p></div></header>
     <nav aria-label="Account sections" className="mb-6 mt-8 flex gap-1 overflow-x-auto border-b border-slate-200">{tabs.map(({ id, label, Icon }) => <Link key={id} href={`/account?tab=${id}`} aria-current={tab === id ? 'page' : undefined} className={`inline-flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold ${tab === id ? 'border-orange-500 text-slate-950' : 'border-transparent text-slate-500 hover:text-slate-950'}`}><Icon size={17} />{label}</Link>)}</nav>
     {!profile && <div role="status" className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p>{profileLoading ? 'Loading your community profile…' : 'Your sign-in is active, but your community profile could not be loaded.'}</p>{!profileLoading && <button type="button" disabled={retrying} onClick={() => void retryProfile()} className={`${control} mt-3`}>{retrying ? 'Loading…' : 'Retry profile'}</button>}{profileError && <p role="alert" className="mt-2">{profileError}</p>}</div>}

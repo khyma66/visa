@@ -1,11 +1,11 @@
 'use client';
 
-import { canMessageAuthor, selectedExperiences, usVisaPost } from './post-presentation';
+import { canMessageAuthor, isImportedPost, selectedExperiences, usVisaPost } from './post-presentation';
 import { DEMO_ANSWERS, DEMO_CONVERSATIONS, DEMO_MESSAGES, DEMO_QUESTIONS, DEMO_USER } from './demo-data';
 import { getSupabase, isSupabaseConfigured } from './supabase/client';
 import { inferTags, normalizeTags } from './tagging';
 import { contextTags, createDiscoveryIndex, searchTerms, type DiscoveryContext } from './discovery';
-import { displayedUnreadIds, hasMessageOverlap, isMemberId, MESSAGE_PAGE_SIZE, normalizeMessageUsername, sortConversations, sortMessages } from './messaging-state';
+import { conversationCursorFilter, conversationFolder, conversationFolderFilter, displayedUnreadIds, hasMessageOverlap, isMemberId, MESSAGE_PAGE_SIZE, normalizeMessageUsername, sortConversations, sortMessages, type ConversationCounts, type ConversationFolder } from './messaging-state';
 import type {
   Answer, CommunityFeed, Conversation, DirectMessage, NewQuestion, Question, RelatedQuestion,
 } from './types';
@@ -86,12 +86,15 @@ export async function getCommunitySource(): Promise<CommunityFeed['source'] | nu
 }
 
 function applyLocalActivity(feed: CommunityFeed, state: DemoState): CommunityFeed {
+  const localCounts = new Map<string, number>();
+  // Use the same active-row filtering and ID deduplication as getAnswerPage.
+  const localAnswers = sortAnswers(state.answers.filter(answer => answer.status === 'active' && answer.source !== 'apify'));
+  for (const answer of localAnswers) localCounts.set(answer.question_id, (localCounts.get(answer.question_id) ?? 0) + 1);
   const questions = feed.questions.map((question) => {
-    const localAnswerCount = state.answers.filter((answer) => answer.question_id === question.id && answer.source !== 'apify').length;
     return {
       ...question,
       vote_score: question.vote_score + (state.externalQuestionVotes[question.id] ?? 0),
-      answer_count: question.answer_count + localAnswerCount,
+      answer_count: question.answer_count + (localCounts.get(question.id) ?? 0),
     };
   });
   const answersByQuestionId = Object.fromEntries(Object.entries(feed.answersByQuestionId).map(([questionId, answers]) => [
@@ -120,6 +123,32 @@ function matchesQuestion(question: Question, search: string, visaType: string): 
       .some((value) => value.toLowerCase().includes(query)));
 }
 
+export async function withMemberReplyCounts<T extends Pick<Question, 'id' | 'source' | 'answer_count'>>(questions: T[]): Promise<T[]> {
+  const ids = [...new Set(questions.filter(isImportedPost).map(question => question.id))];
+  if (!ids.length || !isSupabaseConfigured) return questions;
+  const counts = new Map<string, number>();
+  // Each row is an aggregate, not a downloaded message. Keep URLs bounded and
+  // never confuse a failed count read with zero replies.
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const { data, error } = await getSupabase().from('imported_reply_counts')
+      .select('question_id,answer_count').in('question_id', ids.slice(offset, offset + 100))
+      .abortSignal(AbortSignal.timeout(8000));
+    throwIfError(error);
+    if (!Array.isArray(data)) throw new Error('Reply counts are temporarily unavailable.');
+    for (const row of data) {
+      if (typeof row.answer_count !== 'number' && !(typeof row.answer_count === 'string' && /^\d+$/.test(row.answer_count))) {
+        throw new Error('Reply counts are temporarily unavailable.');
+      }
+      const count = Number(row.answer_count);
+      if (!Number.isSafeInteger(count) || count < 0) throw new Error('Reply counts are temporarily unavailable.');
+      counts.set(row.question_id, count);
+    }
+  }
+  // Always enrich a copy of the normalized archive, never its cached records.
+  return questions.map(question => isImportedPost(question)
+    ? { ...question, answer_count: question.answer_count + (counts.get(question.id) ?? 0) } : question);
+}
+
 export async function listQuestions(search = '', visaType = ''): Promise<Question[]> {
   if (!isSupabaseConfigured) {
     const state = readDemo();
@@ -138,9 +167,9 @@ export async function listQuestions(search = '', visaType = ''): Promise<Questio
     });
     throwIfError(error);
     const imported = await importedFeedOrNull();
-    return [...((data ?? []) as Question[]), ...(imported?.questions ?? [])]
+    return withMemberReplyCounts([...((data ?? []) as Question[]), ...(imported?.questions ?? [])]
       .filter((question) => matchesQuestion(question, search, visaType))
-      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)));
   }
 
   let query = supabase.from('question_feed').select('*').order('created_at', { ascending: false }).limit(50);
@@ -148,9 +177,9 @@ export async function listQuestions(search = '', visaType = ''): Promise<Questio
   const { data, error } = await query;
   throwIfError(error);
   const imported = await importedFeedOrNull();
-  return [...((data ?? []) as Question[]), ...(imported?.questions ?? [])]
+  return withMemberReplyCounts([...((data ?? []) as Question[]), ...(imported?.questions ?? [])]
     .filter((question) => matchesQuestion(question, search, visaType))
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)));
 }
 
 export async function getQuestion(id: string): Promise<Question | null> {
@@ -158,9 +187,7 @@ export async function getQuestion(id: string): Promise<Question | null> {
     const imported = await importedFeedOrNull();
     const question = imported?.questions.find((question) => question.id === id) ?? null;
     if (!question || !isSupabaseConfigured) return question;
-    const { count, error } = await getSupabase().from('imported_answers').select('id', { count: 'exact', head: true }).eq('question_id',id);
-    throwIfError(error);
-    return { ...question, answer_count: question.answer_count + (count ?? 0) };
+    return (await withMemberReplyCounts([question]))[0];
   }
   if (!isSupabaseConfigured) { const question = readDemo().questions.find((question) => question.id === id); return question ? usVisaPost(question) : null; }
   const { data, error } = await getSupabase().from('question_feed').select('*').eq('id', id).maybeSingle();
@@ -168,11 +195,17 @@ export async function getQuestion(id: string): Promise<Question | null> {
   return data ? usVisaPost(data as Question) : null;
 }
 
-export type QuestionPageOptions = { search?: string; tag?: string; visaType?: string; sort?: string; before?: Question; experience?: boolean; category?: string };
+export type QuestionPageOptions = { search?: string; tag?: string; visaType?: string; sort?: string; before?: Question; experience?: boolean; category?: string; origin?: 'member' | 'archive' };
 export async function getQuestionPage(options: QuestionPageOptions = {}): Promise<{ questions: Question[]; more: boolean; cursor?: Question }> {
   if (!isSupabaseConfigured) {
     const questions = await listQuestions();
     return { questions: options.experience ? [...questions.filter(q => q.post_kind === 'experience'), ...selectedExperiences(questions)] : questions.filter(q => q.post_kind !== 'experience'), more: false };
+  }
+  // Origin is distinct from topic tags. Archive-only browsing needs no native
+  // pagination; member-only browsing never downloads the archive here.
+  if (options.origin === 'archive') {
+    const archive = (await importedFeedOrNull())?.questions ?? [];
+    return { questions: await withMemberReplyCounts(options.experience ? selectedExperiences(archive) : archive), more: false };
   }
   const before = options.before;
   const { data, error } = await getSupabase().rpc('community_post_page', {
@@ -183,9 +216,9 @@ export async function getQuestionPage(options: QuestionPageOptions = {}): Promis
   });
   throwIfError(error);
   const rows = (data ?? []) as Question[];
-  const archive = before ? [] : (await importedFeedOrNull())?.questions ?? [];
+  const archive = before || options.origin === 'member' ? [] : (await importedFeedOrNull())?.questions ?? [];
   const imported = options.experience ? selectedExperiences(archive) : archive;
-  return { questions: [...rows, ...imported].flatMap(question => { const scoped = usVisaPost(question); return scoped ? [scoped] : []; }), more: rows.length === 50, cursor: rows.at(-1) };
+  return { questions: await withMemberReplyCounts([...rows, ...imported].flatMap(question => { const scoped = usVisaPost(question); return scoped ? [scoped] : []; })), more: rows.length === 50, cursor: rows.at(-1) };
 }
 
 export async function createQuestion(authorId: string, input: NewQuestion): Promise<string> {
@@ -303,6 +336,7 @@ export async function discoverQuestions(context: DiscoveryContext): Promise<Rela
   const local = isSupabaseConfigured ? '' : window.localStorage.getItem(DEMO_KEY) ?? '';
   if (!discoveryCache || discoveryCache.feed !== feed || discoveryCache.local !== local) {
     const state = readDemo();
+    const indexedFeed = !isSupabaseConfigured && feed ? applyLocalActivity(feed, state) : feed;
     const comments: Record<string, string> = {};
     for (const answer of [...Object.values(feed?.answersByQuestionId ?? {}).flat(), ...(!isSupabaseConfigured ? state.answers : [])]) {
       if (answer.status !== 'active') continue;
@@ -310,7 +344,7 @@ export async function discoverQuestions(context: DiscoveryContext): Promise<Rela
     }
     const localQuestions = isSupabaseConfigured ? [] : feed
       ? state.questions.filter((q) => !DEMO_QUESTION_IDS.has(q.id)) : state.questions;
-    discoveryCache = { feed, local, index: createDiscoveryIndex([...localQuestions, ...(feed?.questions ?? [])].filter(question => usVisaPost(question)), comments) };
+    discoveryCache = { feed, local, index: createDiscoveryIndex([...localQuestions, ...(indexedFeed?.questions ?? [])].filter(question => usVisaPost(question)), comments) };
   }
   const index = discoveryCache.index;
   let imported = index.search(context);
@@ -331,7 +365,7 @@ export async function discoverQuestions(context: DiscoveryContext): Promise<Rela
       if (row && !merged.some((item) => item.id === row.id)) merged.push(row);
     }
   }
-  return merged.slice(0, 5);
+  return withMemberReplyCounts(merged.slice(0, 5));
 }
 
 export async function relatedQuestions(question: Question, commentText = ''): Promise<RelatedQuestion[]> {
@@ -408,6 +442,51 @@ export async function listConversations(before?: Conversation): Promise<Conversa
   });
   throwIfError(error);
   return (data ?? []) as Conversation[];
+}
+
+/** Exact counts use the same invoker view and folder predicates as the rows. */
+export async function getConversationCounts(userId: string): Promise<ConversationCounts> {
+  const folders = ['chats', 'requests', 'closed'] as const;
+  if (!isSupabaseConfigured) {
+    const counts: ConversationCounts = { chats: 0, requests: 0, closed: 0 };
+    for (const row of readDemo().conversations) counts[conversationFolder(row, userId)]++;
+    return counts;
+  }
+  const entries = await Promise.all(folders.map(async (folder) => {
+    const { count, error } = await getSupabase().from('conversation_inbox').select('id', { count: 'exact', head: true })
+      .or(conversationFolderFilter(folder, userId)).abortSignal(AbortSignal.timeout(8000));
+    throwIfError(error);
+    if (count === null || !Number.isSafeInteger(count) || count < 0) throw new Error('Conversation counts are unavailable.');
+    return [folder, count] as const;
+  }));
+  return Object.fromEntries(entries) as ConversationCounts;
+}
+
+/** Filter before paging, so an old request is reachable without loading unrelated chats. */
+export async function listConversationFolder(folder: ConversationFolder, userId: string, before?: Conversation): Promise<{ conversations: Conversation[]; hasOlder: boolean }> {
+  let rows: Conversation[];
+  if (!isSupabaseConfigured) rows = sortConversations(readDemo().conversations).filter((row) => conversationFolder(row, userId) === folder
+    && (!before || row.last_message_at < before.last_message_at || (row.last_message_at === before.last_message_at && row.id < before.id))).slice(0, MESSAGE_PAGE_SIZE + 1);
+  else {
+    const predicate = conversationFolderFilter(folder, userId);
+    const filter = before ? `and(or(${predicate}),or(${conversationCursorFilter(before)}))` : predicate;
+    const query = getSupabase().from('conversation_inbox').select('*').or(filter)
+      .order('last_message_at', { ascending: false }).order('id', { ascending: false }).limit(MESSAGE_PAGE_SIZE + 1);
+    const { data, error } = await query.abortSignal(AbortSignal.timeout(8000));
+    throwIfError(error);
+    rows = (data ?? []) as Conversation[];
+  }
+  return { conversations: rows.slice(0, MESSAGE_PAGE_SIZE), hasOlder: rows.length > MESSAGE_PAGE_SIZE };
+}
+
+export async function getConversationMessageCount(conversationId: string): Promise<number> {
+  if (!isSupabaseConfigured) return readDemo().messages.filter((row) => row.conversation_id === conversationId).length;
+  if (!isMemberId(conversationId)) throw new Error('Invalid conversation.');
+  const { count, error } = await getSupabase().from('direct_messages').select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversationId).abortSignal(AbortSignal.timeout(8000));
+  throwIfError(error);
+  if (count === null || !Number.isSafeInteger(count) || count < 0) throw new Error('Message count is unavailable.');
+  return count;
 }
 
 export async function getConversation(id: string): Promise<Conversation | null> {

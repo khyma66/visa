@@ -223,8 +223,11 @@ test('retired MCP never reads credentials, request bodies or upstream services',
 test('live import is opt-in, bounded, nonredirecting, and cannot send credentials to another origin', async () => {
   const stub=moduleUrl('export class NextResponse extends Response {}');
   const tags=moduleUrl(await load('../src/lib/tagging.ts'));
+  const presentation=moduleUrl(await load('../src/lib/post-presentation.ts'));
+  const normalization=moduleUrl((await load('../src/lib/archive-presentation.ts')).replace("'./post-presentation'",JSON.stringify(presentation)));
   const source=(await load('../src/app/api/community/route.ts'))
     .replace("'next/server'",JSON.stringify(stub)).replace("'@/lib/tagging'",JSON.stringify(tags))
+    .replace("'@/lib/archive-presentation'",JSON.stringify(normalization))
 .replace("'@visa/archive'",JSON.stringify(moduleUrl('export default {};')));
   const { GET }=await import(moduleUrl(source));
   const names=['APP_ENV','COMMUNITY_SOURCE_MODE','APIFY_TOKEN','APIFY_API_BASE_URL','APIFY_LIVE_FETCH_ENABLED','APIFY_USE_LATEST_RUN','IMPORTED_CONTENT_APPROVED'];

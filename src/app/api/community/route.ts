@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { Answer, CommunityFeed, Question } from '@/lib/types';
 import { inferTags } from '@/lib/tagging';
+import { normalizeArchiveFeed } from '@/lib/archive-presentation';
 import archive from '@visa/archive';
 
 export const runtime = 'edge';
@@ -207,7 +208,8 @@ function normalizePost(post: ApifyPost, now: string): { question: Question; answ
       tags,
       status: 'open',
       vote_score: Math.max(count(post.likesCount), count(post.topReactionsCount)),
-      answer_count: Math.max(count(post.commentsCount), answers.length),
+      answer_count: answers.length,
+      source_comment_count: count(post.commentsCount),
       view_count: count(post.sharesCount),
       accepted_answer_id: null,
       created_at: createdAt,
@@ -229,7 +231,7 @@ export async function GET() {
     });
   }
   if (process.env.COMMUNITY_SOURCE_MODE === 'snapshot') {
-    return NextResponse.json(archive, { headers: {
+    return NextResponse.json(normalizeArchiveFeed(archive), { headers: {
       'Cache-Control': 'public, max-age=60, s-maxage=300',
       'X-Community-Source': 'collected-api-snapshot',
     } });
@@ -318,7 +320,7 @@ export async function GET() {
         duplicateItems: records.length - normalized.length },
     };
 
-    return NextResponse.json(feed, {
+    return NextResponse.json(normalizeArchiveFeed(feed), {
       headers: {
         'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600',
         'X-Content-Type-Options': 'nosniff',

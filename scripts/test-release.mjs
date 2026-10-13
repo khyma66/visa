@@ -111,9 +111,12 @@ test('www canonicalization preserves the destination on the owned VisaThreads do
 test('import source selects only successful runs and stays disabled in production', async () => {
   const stub=moduleUrl('export class NextResponse extends Response {}');
   const tags=moduleUrl(transpile(await readFile(new URL('../src/lib/tagging.ts',import.meta.url),'utf8')));
+  const presentation=moduleUrl(transpile(await readFile(new URL('../src/lib/post-presentation.ts',import.meta.url),'utf8')));
+  const normalization=moduleUrl(transpile(await readFile(new URL('../src/lib/archive-presentation.ts',import.meta.url),'utf8')).replace("'./post-presentation'",JSON.stringify(presentation)));
   const source=transpile(await readFile(new URL('../src/app/api/community/route.ts',import.meta.url),'utf8'))
     .replace("'next/server'",JSON.stringify(stub)).replace("'@/lib/tagging'",JSON.stringify(tags))
-.replace("'@visa/archive'",JSON.stringify(moduleUrl('export default {questions:[{id:"snapshot-test"}],source:{status:"snapshot"}};')));
+    .replace("'@/lib/archive-presentation'",JSON.stringify(normalization))
+.replace("'@visa/archive'",JSON.stringify(moduleUrl('export default {questions:[{id:"snapshot-test",source:"apify",answer_count:12}],answersByQuestionId:{"snapshot-test":[{id:"reply",question_id:"snapshot-test",status:"active"}]},source:{status:"snapshot"}};')));
   const { GET }=await import(moduleUrl(source));
   const old={APP_ENV:process.env.APP_ENV,APIFY_TOKEN:process.env.APIFY_TOKEN,APIFY_USE_LATEST_RUN:process.env.APIFY_USE_LATEST_RUN,IMPORTED_CONTENT_APPROVED:process.env.IMPORTED_CONTENT_APPROVED,COMMUNITY_SOURCE_MODE:process.env.COMMUNITY_SOURCE_MODE,APIFY_LIVE_FETCH_ENABLED:process.env.APIFY_LIVE_FETCH_ENABLED,APIFY_API_BASE_URL:process.env.APIFY_API_BASE_URL};
   const previousFetch=globalThis.fetch;
@@ -123,7 +126,10 @@ test('import source selects only successful runs and stays disabled in productio
     globalThis.fetch=async () => { throw new Error('Must not fetch unapproved imports'); };
     assert.equal((await GET()).status,503);
     process.env.APP_ENV='development'; delete process.env.APIFY_TOKEN;
-    assert.equal((await (await GET()).json()).questions[0].id,'snapshot-test');
+    const snapshot=(await (await GET()).json());
+    assert.equal(snapshot.questions[0].id,'snapshot-test');
+    assert.equal(snapshot.questions[0].answer_count,1);
+    assert.equal(snapshot.questions[0].source_comment_count,12);
     delete process.env.COMMUNITY_SOURCE_MODE;
     process.env.APIFY_LIVE_FETCH_ENABLED='true'; delete process.env.APIFY_API_BASE_URL;
     process.env.APP_ENV='development'; process.env.APIFY_TOKEN='test-only-not-a-real-credential'; process.env.APIFY_USE_LATEST_RUN='true';
@@ -134,9 +140,15 @@ test('import source selects only successful runs and stays disabled in productio
         return Response.json({data:{id:'test-successful-run',status:'SUCCEEDED'}});
       }
       assert(url.pathname.includes('test-successful-run'));
-      return Response.json([],{headers:{'x-apify-pagination-total':'0'}});
+      return Response.json([{id:'live-test',text:'What documents are needed for an H1B interview?',commentsCount:12,
+        topComments:[{id:'captured',text:'Check the official appointment instructions.'},{id:'captured',text:'Check the official appointment instructions.'}]}],{headers:{'x-apify-pagination-total':'1'}});
     };
-    assert.equal((await GET()).status,200);
+    const liveResponse=await GET();
+    assert.equal(liveResponse.status,200);
+    const live=await liveResponse.json();
+    assert.equal(live.questions[0].answer_count,1);
+    assert.equal(live.questions[0].source_comment_count,12);
+    assert.equal(live.answersByQuestionId['apify-live-test'].length,1);
     assert.equal(calls,2);
   } finally {
     globalThis.fetch=previousFetch;

@@ -7,6 +7,7 @@ import { Menu, Search, Activity, ChevronDown, CircleHelp, LogOut, MessageCircle,
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 import { CommunityNavigation } from './CommunityNavigation';
+import { FeedbackLauncher, OwnerFeedbackLink } from './FeedbackLauncher';
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -37,7 +38,7 @@ export function SiteHeader() {
   return (
     <header className="site-header">
       <a href="#main-content" className="skip-link">Skip to content</a>
-      <div className="header-content">
+      <div className="header-content max-sm:gap-1!">
         <details ref={mobileMenu} className="mobile-menu" onKeyDown={(event) => {
           if (event.key === 'Escape' && mobileMenu.current) {
             mobileMenu.current.open = false;
@@ -48,8 +49,8 @@ export function SiteHeader() {
           <div className="mobile-menu-panel"><CommunityNavigation mobile onNavigate={() => { if (mobileMenu.current) mobileMenu.current.open = false; }}/></div>
         </details>
         <Link href="/" className="site-brand">
-          <span className="brand-mark grid h-9 w-9 place-items-center rounded-lg text-white"><CircleHelp size={21} aria-hidden="true" /></span>
-          <span className="brand-wordmark"><span className="brand-wood">Visa</span><span className="brand-ink">Threads</span></span>
+          <span className="brand-mark hidden h-9 w-9 place-items-center rounded-lg text-white min-[420px]:grid"><CircleHelp size={21} aria-hidden="true" /></span>
+          <span className="brand-wordmark max-sm:text-base"><span className="brand-wood">Visa</span><span className="brand-ink">Threads</span></span>
         </Link>
         <form action="/" method="get" role="search" className="header-search">
           <Search size={19} aria-hidden="true"/>
@@ -62,6 +63,7 @@ export function SiteHeader() {
             <ShieldCheck size={13} /> Local profile
           </span>
         )}
+        <FeedbackLauncher />
         <Link href="/ask" aria-label="Ask a Question" title="Ask a Question" className="header-ask">
           <Plus size={16} /> <span className="hidden sm:inline">Ask</span>
         </Link>
@@ -78,6 +80,7 @@ export function SiteHeader() {
               {user.email && <p className="mt-2 break-all text-xs text-slate-600">{user.email}<span className="mt-1 block text-slate-400">Sign-in email · visible only to you</span></p>}
               {!profile && (profileLoading ? <p role="status" className="mt-2 text-xs text-slate-500">Loading profile…</p> : <button className="mt-2 text-xs text-blue-700 underline" onClick={() => { void refreshProfile().catch(() => setError('Couldn’t load your profile. Try again.')); }}>Reload profile</button>)}
               <nav aria-label="Account options" className="mt-3 border-y border-slate-100 py-2" onClick={() => setOpen(false)}>
+                <OwnerFeedbackLink />
                 {[
                   ['/account?tab=profile', 'My profile', UserRound],
                   ['/account?tab=activity', 'My activity', Activity],

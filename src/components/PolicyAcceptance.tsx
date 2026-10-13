@@ -26,7 +26,7 @@ export function PolicyAcceptance({ children }: { children: React.ReactNode }) {
       .catch(() => { if (active) setStatus('error'); });
     return () => { active = false; };
   }, [user?.id, demoMode, retry]);
-  const exempt = ['/login', '/signup', '/account', '/privacy', '/terms', '/cookies', '/privacy-choices', '/contact', '/community-safety', '/countries', '/us', '/account/recovery', '/account/update-password'].includes(path);
+  const exempt = ['/login', '/signup', '/account', '/privacy', '/terms', '/cookies', '/privacy-choices', '/contact', '/community-safety', '/countries', '/us', '/account/recovery', '/account/update-password', '/feedback', '/feedback/privacy', '/owner/feedback'].includes(path);
   if (!user || demoMode || exempt || status === 'accepted') return <>{children}</>;
   async function accept() {
     if (!user || inFlight.current) return;

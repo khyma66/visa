@@ -4,6 +4,8 @@
 
 @layer base {
   :root {
+    --page-gutter: clamp(1rem, 1.7vw, 1.75rem);
+    --sidebar-width: 220px;
     --type-body-large: 0.9375rem;
     --type-body-title: 1rem;
     --type-subheading: 1.125rem;
@@ -85,43 +87,50 @@
 }
 
 @layer components {
-  .site-shell { width: 100%; margin-inline: auto; padding-inline: clamp(1rem, 2.5vw, 3rem); }
+  .site-shell { width: 100%; margin-inline: auto; padding-inline: var(--page-gutter); }
+  /* Pages already sit beside navigation: a second centered container creates
+     a large empty left rail. Keep reading widths, but share one leading edge. */
+  #main-content > main { margin-inline: 0; padding-inline: var(--page-gutter); }
+  #main-content > .page-shell { width: 100%; max-width: none; padding-block: 24px 40px; }
   .skip-link { @apply sr-only; }
   .skip-link:focus { @apply not-sr-only fixed left-4 top-4 z-[100] rounded-lg bg-slate-950 px-5 py-3 text-white; }
   .community-hero { background: #ffffff; }
-  .site-header { position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #e2e8f0; background: #fff; }
+  .site-header { position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #dce6e5; background: #fff; box-shadow: 0 2px 10px #0f383805; }
   .header-content { display: flex; min-height: 64px; align-items: center; gap: 16px; padding: 10px 24px; }
-  .site-brand { display: flex; width: 204px; flex-shrink: 0; align-items: center; gap: 8px; font-size: 21px; font-weight: 800; }
+  .site-brand { display: flex; width: 180px; flex-shrink: 0; align-items: center; gap: 8px; font-size: 21px; font-weight: 800; }
   .header-search { display: flex; min-width: 0; max-width: 660px; flex: 1; align-items: center; gap: 10px; border: 1px solid transparent; border-radius: 999px; background: #f0f3f4; padding-left: 16px; }
-  .header-search:focus-within { border-color: #1d4ed8; background: #fff; }
+  .header-search:focus-within { border-color: #0f766e; background: #fff; box-shadow: 0 0 0 3px #ccfbf1; }
   .header-search input { width: 100%; height: 42px; border: 0; background: transparent; font-size: 14px; outline: none; box-shadow: none; }
   .icon-control { display: inline-flex; height: 44px; width: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; cursor: pointer; }
   .icon-control:hover { background: #e5ebee; }
   .header-ask { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 6px; margin-left: auto; border-radius: 999px; padding: 8px 14px; font-size: 14px; font-weight: 600; white-space: nowrap; }
-  .header-ask:hover { background: #f0f3f4; }
-  .header-login { display: inline-flex; min-height: 42px; flex-shrink: 0; align-items: center; border-radius: 999px; background: #c2410c; padding: 8px 20px; font-size: 14px; font-weight: 700; color: #fff; }
-  .header-login:hover { background: #9a3412; }
+  .header-ask { background: #f0fdfa; color: #115e59; }
+  .header-ask:hover { background: #ccfbf1; }
+  .header-login { display: inline-flex; min-height: 42px; flex-shrink: 0; align-items: center; border-radius: 999px; background: #0f766e; padding: 8px 20px; font-size: 14px; font-weight: 700; color: #fff; }
+  .header-login:hover { background: #115e59; }
   .brand-wordmark { text-transform: none; letter-spacing: -0.5px; }
   .brand-mark { background: #795548; }
   .brand-wood { color: #795548; }
   .brand-ink { color: #334e68; }
-  .app-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); margin-inline: auto; }
-  .app-content { min-width: 0; }
-  .desktop-sidebar { position: sticky; top: 65px; height: calc(100dvh - 65px); overflow-y: auto; border-right: 1px solid #e2e8f0; }
+  .app-layout { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); margin-inline: auto; }
+  .app-content { min-width: 0; background: #f7f9fb; }
+  .desktop-sidebar { position: sticky; top: 65px; height: calc(100dvh - 65px); overflow-y: auto; border-right: 1px solid #e2e8f0; background: #fff; }
   .community-navigation { padding: 8px 14px; font-size: 14px; }
   .nav-section { padding: 14px 0; border-bottom: 1px solid #e2e8f0; }
   .nav-section:last-child { border: 0; }
   .nav-section-title { margin: 0 12px 8px; font-size: 12px; font-weight: 600; color: #64748b; }
-  .nav-item { display: flex; min-height: 44px; align-items: center; gap: 12px; border-radius: 6px; padding: 10px 12px; color: #334155; }
+  .nav-item { display: flex; min-height: 44px; align-items: center; gap: 10px; border-radius: 9px; padding: 10px 10px; color: #334155; }
   .nav-item svg { flex-shrink: 0; }
   .nav-item:hover { background: #f3f5f6; }
-  .nav-item-active { background: #fff7ed; color: #9a3412; font-weight: 600; box-shadow: inset 3px 0 #c2410c; }
+  .nav-item-active { background: #e7f4f1; color: #115e59; font-weight: 700; box-shadow: inset 3px 0 #0f766e; }
   .nav-policy-links { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 12px; font-size: 12px; color: #64748b; }
   .nav-policy-links a:hover { text-decoration: underline; }
   .mobile-menu, .community-shortcuts { display: none; }
-  .feed-card { border-radius: 12px; }
-  .feed-card:focus-within { background: #f6f8f9; }
-  .feed-discovery { align-self: start; border-radius: 16px; background: #f8fafb; padding: 16px; }
+  .feed-card { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; box-shadow: 0 2px 4px #0f172a03; }
+  .feed-card:hover, .feed-card:focus-within { border-color: #afcfca; background: #fff; }
+  .feed-discovery { align-self: start; border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; padding: 16px; }
+  .feed-heading { border: 1px solid #d9e8e5; border-radius: 16px; background: linear-gradient(115deg, #effaf6, #f2f7ff); padding: 22px; }
+  .feed-controls { margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; padding: 12px 14px; }
 }
 
 @media (max-width: 1023px) {
@@ -143,7 +152,8 @@
   .header-ask { padding: 8px; }
   .community-shortcuts nav { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 8px 12px; scrollbar-width: thin; }
   .community-shortcuts a { flex-shrink: 0; min-height: 40px; padding: 7px 12px; border-radius: 999px; font-size: 12px; }
-  .feed-card { border-radius: 0; }
+  .feed-card { border-radius: 12px; }
+  .feed-heading { padding: 18px; }
   main { scroll-margin-top: 122px; }
 }
 

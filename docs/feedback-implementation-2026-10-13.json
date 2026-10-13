@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-13",
+  "scope": "Private website feedback and an owner-reviewed improvement backlog",
+  "releaseStatus": "Release candidate: hosted database activated; website deployment and final live verification pending at commit time",
+  "ownerStatus": "User explicitly confirmed varunchinna5966@gmail.com as the sole owner. Exactly one verified auth account was resolved and configured by privileged SQL; no client-side email authorization.",
+  "releaseBranch": "release/owner-feedback-20261013",
+  "hostedMigration": { "project": "cycnichledvqbxevrwnt", "name": "private_owner_feedback", "version": "20261013193115" },
+  "rollbackWorkerVersion": "1735beb2-0417-4b4f-9f6b-392353dad77b",
+  "routes": {
+    "submit": "/feedback",
+    "privacy": "/feedback/privacy",
+    "ownerInbox": "/owner/feedback",
+    "entry": "Header Feedback button; owner inbox link appears in the account menu only after a server-side owner check"
+  },
+  "privacy": {
+    "audience": "Feedback entry is available to everyone; submission requires sign-in; reading/reviewing is restricted to one owner UUID, not moderators",
+    "collection": ["Message", "Category", "Account ID", "Server timestamp", "Idempotency token", "Optional broad section label"],
+    "notCollectedAutomatically": ["Full URL", "Search query", "Private conversation ID or text", "Screenshots", "Browser logs", "IP address in the feedback table"],
+    "infrastructure": "Privileged infrastructure administrators/providers remain able to access stored records; this is not end-to-end encryption",
+    "retention": "No automatic deletion schedule activated; manual privacy requests through existing contact channel; finalize retention before public launch"
+  },
+  "implementation": {
+    "migration": "supabase/migrations/20261013191116_private_owner_feedback.sql",
+    "tests": "tests/database/feedback.test.mjs",
+    "database": "Private schema, RLS enabled, direct table and sequence privileges revoked, fixed-search-path definer functions behind invoker RPC wrappers",
+    "authorization": "Singleton owner UUID maintained only by a privileged operator; no client enrollment, role metadata or email-based authorization",
+    "limits": "5 new submissions per account per fixed UTC hour; 10–3000-character messages; category/section allowlists; no uploads",
+    "retries": "Per-account advisory lock and request-ID uniqueness avoid duplicate inserts when retrying the same form submission",
+    "pagination": "20 visible inbox records plus one lookahead using created_at/id keyset pagination",
+    "approvals": "Version-checked decisions, version-specific plan approval and private audit events; editing/reopening clears previous approval",
+    "deployment": "No feedback action invokes a model, writes code, opens a PR, or deploys a website change"
+  },
+  "activationSteps": [
+    "Obtain explicit confirmation of the intended sole owner account, then resolve its verified auth.users UUID using a privileged read. Do not infer from public profiles or client metadata.",
+    "Check live migration state and apply only private_owner_feedback. Do not apply unrelated pending local migrations or use a blanket database push.",
+    "Insert the confirmed UUID into private.feedback_owner using privileged SQL; never create a public enrollment endpoint. Reject attempts to add a second owner.",
+    "Verify grants, RLS and security advisors. Use isolated fixtures for mutation tests, never impersonate actual users to create test feedback in the live database.",
+    "Publish from the isolated release checkout with the already-live News, archive-source and conversation-count improvements retained. Do not overwrite the original working tree. Keep existing public-launch gates unchanged.",
+    "Verify actual signed-in owner and non-owner flows on the deployed website. Owner access is tested locally but not yet verified against the user's real login."
+  ],
+  "futureAutomation": {
+    "status": "Design foundation only; no scheduled job, AI processing, external sharing or paid service enabled",
+    "proposedPipeline": [
+      "Batch new feedback at a low-frequency schedule; deduplicate before inference and impose daily input/token/spend caps",
+      "Remove identifiers and sensitive details; treat all feedback as untrusted data, not instructions for the model or build system",
+      "Generate structured options with evidence links, impact, alternatives, effort, risk, verification and rollback; save a new unapproved plan revision",
+      "Require the owner to approve the exact plan version in this inbox",
+      "Use a separate least-privilege implementation identity to create a draft PR in an isolated branch; no database-admin or deployment keys in the AI context",
+      "Run tests/security checks and require a separate code/release review before merge or deployment; reject stale approvals after any plan/code change"
+    ],
+    "beforeEnabling": ["Owner authorization", "AI provider/data-processing disclosure", "Retention policy", "Scoped worker credentials", "Spending limits", "Prompt-injection and approval-bypass tests", "Notifications destination approval"],
+    "stack": "Reuse the current app and private Postgres backlog now; a Cloudflare scheduled Worker/Queue can be added later without introducing a second feedback database"
+  },
+  "verification": {
+    "typecheck": "passed",
+    "developmentBuild": "passed; uncommitted provenance, not a deployable release claim",
+    "bundleSecretScan": "passed; pattern-based, not an assurance about repository history",
+    "feedbackTests": 49,
+    "localBrowser": ["Header entry", "Native modal focus and Escape return", "Sign-in fallback in component test", "Form limits", "Local-only receipt", "Owner sample inbox", "Empty status filter", "390px and 320px mobile layout"],
+    "fullSuite": "634 tests passed across 17 groups with zero failures or cancellations; includes the pre-existing working-tree changes. Initial runs required header test-harness updates, a retry after stopping local preview, and permission for an existing edge-runtime localhost listener.",
+    "hostedWrites": "Applied only the feedback migration and inserted the explicitly confirmed singleton owner. No live feedback items or review events were created for testing.",
+    "hostedAccessChecks": ["Exactly one owner", "RLS enabled on all three private feedback tables", "No direct client table access", "No anonymous RPC execute grants", "Confirmed owner can read the empty inbox in a read-only role simulation", "Non-owner inbox/history calls denied, including forged owner/email user metadata"],
+    "hostedSecurityAdvisors": {
+      "newWarnings": 0,
+      "intentionalInfo": "Three private feedback tables have RLS enabled with no policies and no direct client privileges. They are deny-all tables accessed only through explicitly guarded functions.",
+      "existingWarnings": [
+        { "name": "extension_in_public", "count": 1, "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public" },
+        { "name": "pg_graphql_anon_table_exposed", "count": 11, "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0026_pg_graphql_anon_table_exposed" },
+        { "name": "pg_graphql_authenticated_table_exposed", "count": 19, "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0027_pg_graphql_authenticated_table_exposed" },
+        { "name": "auth_leaked_password_protection", "count": 1, "remediation": "https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection" }
+      ],
+      "limits": "These checks do not prove the whole website is free of security issues or replace independent security review. Existing launch gates remain closed."
+    }
+  }
+}
