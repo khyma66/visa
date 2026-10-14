@@ -31,10 +31,10 @@ jobs:
           if isinstance(domains,list):
               domains=[{k:d.get(k) for k in ['id','hostname','service','environment','zone_id']} for d in domains if d.get('hostname') in ['visa-central.com','www.visa-central.com','visathreads.com','www.visathreads.com']]
           print('VISA_DOMAINS',json.dumps(domains))
-          settings=get('/workers/scripts/visaflow-dev/settings')
+          settings=get('/workers/scripts/visathreads-sandbox/settings')
           if isinstance(settings,dict):
               safe_names={'APP_ENV','ASSISTANT_PROJECT_REF','NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SITE_URL','ASSISTANT_ENABLED','COMMUNITY_SOURCE_MODE'}
               safe={'bindings':[{'name':b.get('name'),'type':b.get('type'),**({'text':b.get('text')} if b.get('name') in safe_names else {})} for b in settings.get('bindings',[])],'compatibility_date':settings.get('compatibility_date'),'error':settings.get('error')}
-              print('VISA_WORKER_SETTINGS',json.dumps(safe))
-          print('DEPLOYMENTS',json.dumps(get('/workers/scripts/visaflow-dev/deployments')))
+              print('DEV_WORKER_SETTINGS',json.dumps(safe))
+          print('DEPLOYMENTS',json.dumps(get('/workers/scripts/visathreads-sandbox/deployments')))
           PY
