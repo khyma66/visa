@@ -1,23 +1,37 @@
-# VisaThreads discussion assistant — development rollout
+# VisaThreads assistant and development rollout
 
-Status: implemented in the repository; not deployed or validated with a live model. This replaces the earlier assistant prototype for new work. The old `/api/communities/:id/summary` route remains disabled; the active implementation uses `/api/assistant`.
+## Owner decision — October 14, 2026
 
-## Combined production candidate — October 14 UTC
+AI features belong **only on https://visathreads.com**. The development website https://visa-central.com must have no chatbot or AI controls. This supersedes the earlier isolated-dev AI rollout plan.
 
-PR #8 is being integrated with the current live revision `ebb6a63` and PR #9's popular-tag and navigation changes. Preserve both the owner-feedback UI and assistant integrations, both middleware privacy path sets, and the current archive/reply-count behavior. The combined candidate passed all 700 local tests, TypeScript and the Vinext build. This does not establish hosted model accuracy or production activation.
+| Site | Worker | Supabase project | AI |
+|---|---|---|---|
+| visathreads.com | visaflow-dev | cycnichledvqbxevrwnt | Production activation pending release checks |
+| visa-central.com | visathreads-sandbox | ppdwysmeistjxzjpmxyk | Disabled; no AI binding |
 
-Connection options:
+Both Cloudflare routes were verified through the API. The Worker named `visaflow-dev` actually serves production: never infer environment from that name. Both Supabase projects accept read queries. Cloudflare GitHub environment credentials work; another browser login is not needed.
 
-- **Cloudflare device login (remote workspace):** run `npx wrangler login --device --browser=false`, follow the generated verification URL/code, and confirm with `npx wrangler whoami`. A device code is short-lived; never save one in configuration. This authenticates the workspace actually running the command.
-- **Cloudflare local CLI:** `npx wrangler login` works when the browser can reach that machine's callback server. Logging into a laptop terminal does not authenticate a separate hosted workspace.
-- **Persistent CI access:** configure scoped `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub production environment secrets. Review the existing workflow's main-branch and release gates before using it; the legacy main branch must not replace the current live release.
-- **Supabase:** reconnect this app's Supabase connection with access to the second-account organization owning `ppdwysmeistjxzjpmxyk`. Dashboard sign-in alone does not authorize the connector. Alternatively, the current connected Supabase account can be granted an appropriate project/organization role by its owner, followed by connector reauthorization. Do not send passwords, MFA codes, service-role keys or API tokens in chat.
+PR #8 contains PR #9's popular-tag quick picks and navigation fixes plus the chatbot. Both target `release/owner-feedback-20261013`; obsolete `main` must not be deployed. The revised combined candidate passes 702 tests, TypeScript, a dev build, and the repository secret scan. These are code checks, not a hosted inference or real sign-in pass.
 
-Release order: resolve the dependency audit; verify isolated dev migration state and apply only reviewed missing dependencies/assistant migration; deploy with posts enabled and community/catch-up gates off; verify authenticated answers, source quotes, authorization, quotas and failures; then inspect the actual live Worker and promote the same candidate. Verify its bindings and production database before changing flags. The production Supabase project `cycnichledvqbxevrwnt` does not yet have the assistant migration as of this check.
+## Development deployment
 
-For eventual production activation, use `ASSISTANT_PROJECT_REF=cycnichledvqbxevrwnt`, `ASSISTANT_PROVIDER=workers-ai`, the `ASSISTANT_AI` Workers AI binding, `ASSISTANT_ENABLED=true`, `ASSISTANT_COMMUNITIES_ENABLED=false`, and `ASSISTANT_CATCHUP_ENABLED=false`. These are activation values, not a record of applied settings. Roll back generation by disabling `ASSISTANT_ENABLED`. Keep dev project settings exclusive to staging. Do not use the assistant staging helper for production.
+Use `npm run build:devsite` / `npm run deploy:devsite` with `.env.sandbox.local` containing the dev publishable key, dev Supabase URL above, and `NEXT_PUBLIC_SITE_URL=https://visa-central.com`.
 
-Current blockers: second-account dev access denied; Cloudflare device authorization pending; the existing dependency audit is unresolved; the authorized private snapshot and real-model/sign-in validation are still needed for promotion. No hosted schema mutation or production deployment was performed in preparing this candidate.
+The `sandbox` Wrangler environment pins the Worker, two visa-central domains, and dev database. The helper rejects production routes, an AI binding, enabled AI flags, and other targets. `workers.dev` is disabled. The old `build:assistant` / `deploy:assistant` commands deliberately fail with replacement instructions.
+
+The `development-site.yml` workflow runs tests/typechecking, builds with synthetic fixtures, verifies generated configuration and actual domain routing, and checks live pages plus AI denial after deployment. It records the old dev Worker version and checks that the production deployment did not change. Existing production-environment Cloudflare secrets are used only in the Cloudflare steps.
+
+Development Auth still requires its own site/callback configuration and provider settings. Do not redirect dev users into the production database. The unused assistant database migration applied before the owner's clarification does not enable AI or create a model binding.
+
+## Production activation
+
+The assistant UI renders only when built for `https://visathreads.com`. The API additionally requires project `cycnichledvqbxevrwnt`; accidental dev flags cannot enable it. The migration is additive: invoker retrieval and private count-only quotas, no posts/messages copied.
+
+Required flags: `ASSISTANT_PROJECT_REF=cycnichledvqbxevrwnt`, `ASSISTANT_PROVIDER=workers-ai`, `ASSISTANT_ENABLED=true`, `ASSISTANT_COMMUNITIES_ENABLED=false`, `ASSISTANT_CATCHUP_ENABLED=false`, and Workers AI binding `ASSISTANT_AI`. These are intended settings, not a deployment record.
+
+Keep the existing dependency audit and public-release review gates. The full audit still finds the unpatched `braces` chain. Do not replace the live 563-post / 628-reply archive with the CI synthetic fixture. The reviewed ignored archive must pass `check:private-experiences` and parity checks before a production deployment. A successful dev deployment does not authorize a public-launch flag change.
+
+Verify registered sign-in, real model inference, source quotes, unsupported/conflicting questions, account isolation, moderation invalidation, and quotas before marking production AI live. Rollback: disable `ASSISTANT_ENABLED` and redeploy the same reviewed production configuration, or restore the previous Worker version. Community/catch-up activation stays a later production-only rollout.
 
 ## Implemented
 
@@ -43,63 +57,7 @@ Text is redacted for several common identifiers before inference, but pattern ma
 
 Responses use private/no-store browser headers. The internal Cloudflare cache lasts up to five minutes and is keyed by user, request, model/version, and source contents. Retrieval and permission checks precede cache reads; content is rechecked before returning results. Cached responses are not shared across accounts. This favors isolation over maximum reuse.
 
-## Resource controls
 
-Database-enforced starting limits are **30 request/retrieval checks/minute/user**, and for new generation **4/minute/user, 20/day/user, and 500/day/project**. Route checks and database retrieval/revalidation share the first counter, so one HTTP request can consume multiple checks. Daily counters use UTC. Cached/no-evidence responses still pass the request limit, but do not reserve generation allowance. Failed inference can consume a reservation. These are request ceilings, not a monetary spending cap.
+## Limits
 
-The provider makes one bounded call with a 25-second timeout and 1,600 output-token limit, without automatic retries or escalation. A Workers AI timeout stops waiting; the binding may continue execution and incur usage. Reserved generation quota is intentionally not refunded. Identical in-flight requests coalesce within one Worker isolate; cross-isolate deduplication is not guaranteed. Usage counters retain approximately 30 days; no conversation text is stored in those tables.
-
-## Isolated staging setup
-
-Use only the new dev project: [ppdwysmeistjxzjpmxyk](https://supabase.com/dashboard/project/ppdwysmeistjxzjpmxyk).
-
-1. Authorize Supabase access to the second account's organization. Current connected access to that project is blocked by a project-permission error. Inspect its current migration history, then apply the reviewed application schema migrations in timestamp order, including `supabase/migrations/20261013190102_grounded_assistant_retrieval_and_quotas.sql`. That migration depends on the existing profiles, questions, answers, communities, and security views; applying it alone to an empty project is insufficient. Use test accounts and sanitized fixtures, not a production user/message clone.
-2. Sign into Cloudflare with the intended account using `npx wrangler login`; verify the account with `npx wrangler whoami`. Wrangler is currently unauthenticated. Find that account's Workers subdomain in its dashboard.
-3. Create the ignored root file `.env.assistant.local` with exactly these browser-safe project settings, replacing the placeholders:
-
-   ```dotenv
-   NEXT_PUBLIC_SUPABASE_URL=https://ppdwysmeistjxzjpmxyk.supabase.co
-   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_REPLACE_WITH_THE_DEV_PROJECT_KEY
-   NEXT_PUBLIC_SITE_URL=https://visathreads-ai-dev.YOUR_WORKERS_SUBDOMAIN.workers.dev
-   ```
-
-   Use the dev project's publishable key. Never insert a database password, secret key, or service-role key. The helper refuses a different project and requires the isolated Worker URL. Shell environment values override file values, so remove stale exported settings if validation fails.
-4. Configure the dev project's Auth site URL and allowed callbacks for that exact staging origin. Test email and Google sign-in separately; the Google OAuth client needs the dev Supabase callback `https://ppdwysmeistjxzjpmxyk.supabase.co/auth/v1/callback`. Do not change production Auth to point at staging.
-5. Run the verification gates, then build and deploy through the isolated helper:
-
-   ```bash
-   npm run test:assistant
-   npm run test:database
-   npm run typecheck
-   npm run build:assistant
-   npm run deploy:assistant
-   ```
-
-   `deploy:assistant` rebuilds and verifies the generated Worker configuration before deploying `visathreads-ai-dev`, with `routes: []`. The default is Cloudflare Workers AI through the `ASSISTANT_AI` binding; **no model API key is needed**. Live Apify fetching is disabled. Merely building does not test model inference.
-
-**Do not use `npm run deploy:dev`, `build:dev`, or `wrangler --env development` for this rollout.** Despite its name, the existing `env.development` has `visathreads.com` and `www.visathreads.com` custom-domain routes. The new isolated environment is named `assistant`.
-
-## Enable in stages
-
-Set flags in `wrangler.jsonc` → `env.assistant.vars`, then rebuild/redeploy. `ASSISTANT_PROJECT_REF` must match the Supabase URL or availability fails closed.
-
-| Gate | Post/global Q&A + post summaries | Community Q&A | Catch-up |
-|---|---|---|---|
-| `ASSISTANT_ENABLED` | `true` | `true` | `true` |
-| `ASSISTANT_COMMUNITIES_ENABLED` | `false` | `true` | `true` |
-| `ASSISTANT_CATCHUP_ENABLED` | `false` | `false` | `true` |
-
-Start with the first column. Verify real sign-in, native/imported discussions, relevant citations, unsupported questions, conflicting/outdated reports, deletion/moderation invalidation, account changes, and quotas. For community activation, add scope-isolation checks. For catch-up activation, add boundary timestamps, replies to older posts, empty/busy periods, partial coverage, and checkpoint behavior. Keep a reviewed question set and measure supported answers, abstention, retrieval misses, latency, and usage before widening access. Turn `ASSISTANT_ENABLED=false` and redeploy to disable generation.
-
-## Validation and remaining work
-
-Confirmed by the coordinator: `npm run build:assistant` succeeded using a synthetic publishable key for build validation; typecheck and repository secret scan passed. That key cannot authenticate to the dev project. A local Wrangler runtime smoke test could not start because of `uv_interface_addresses: Unknown system error 1`; runtime behavior and model inference remain unverified.
-
-- `npm run test:assistant`: 43/43 passed; the new migration also passed 17 PostgreSQL/PGlite tests (60 assistant-specific checks total).
-- The initial full `npm test` run recorded 455 passing checks before stopping at an existing news/experience test requiring the ignored private `src/data/api-archive.json` snapshot. Public CI now uses synthetic selection fixtures. The real-data invariants remain mandatory through `check:private-experiences` in `check:release`; the private snapshot remains absent here.
-- Remaining suites were then executed separately: groups, community UI, scale, feed UI, and assistant all passed. Scale fixtures are not a million-user capacity certification.
-- TypeScript, isolated Worker build, archive-bundle check, bundle credential scan, and repository credential scan passed. Build validation used synthetic data and a synthetic public key; no deployment was executed.
-
-Local deterministic tests and a successful build do not constitute a hosted end-to-end or model-quality pass. Restore the authorized private snapshot for the production release check, then complete the staged hosted checks above before promotion.
-
-Not established or implemented: live model accuracy, production deployment, vector/embedding retrieval, background indexing, durable incremental summaries, scheduled digests/notifications, direct-message or group-chat summaries, and million-user capacity. The bounded archive scan is transitional, not a large-corpus indexing solution. No paid plan, account, or billing changes were made.
+Quote matching does not prove semantic support. Answers summarize community evidence; they do not establish current visa rules or eligibility. Direct messages are excluded. No claim of million-user capacity, official-source verification, or completed hosted inference is made by local tests.
