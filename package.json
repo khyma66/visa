@@ -49,7 +49,9 @@
     "test:feed-ui": "node --test scripts/test-feed-ui.mjs",
     "test:assistant": "node --test scripts/test-assistant.mjs scripts/test-assistant-ui.mjs scripts/test-assistant-deploy.mjs scripts/test-assistant-data.mjs",
     "build:assistant": "node scripts/assistant-dev.mjs",
-    "deploy:assistant": "node scripts/assistant-dev.mjs --deploy"
+    "deploy:assistant": "node scripts/assistant-dev.mjs --deploy",
+    "build:devsite": "node scripts/development-site.mjs",
+    "deploy:devsite": "node scripts/development-site.mjs --deploy"
   },
   "keywords": [
     "visa",
