@@ -99,10 +99,10 @@ test('simultaneous duplicate requests share a generation within an isolate',asyn
   while(state.generated===0) await new Promise(resolve=>setImmediate(resolve));
   release();const responses=await Promise.all([a,b]);assert.deepEqual(responses.map(r=>r.status),[200,200]);assert.equal(state.generated,1);assert.equal(state.reserved,1);
 });
-test('project pin prevents mistaken deployment against production or incomplete configuration',()=>{
-  const env={ASSISTANT_ENABLED:'true',ASSISTANT_PROVIDER:'workers-ai',ASSISTANT_PROJECT_REF:'ppdwysmeistjxzjpmxyk',NEXT_PUBLIC_SUPABASE_URL:'https://ppdwysmeistjxzjpmxyk.supabase.co',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'public-key'};
+test('production-only target rejects dev and incomplete configuration',()=>{
+  const env={ASSISTANT_ENABLED:'true',ASSISTANT_PROVIDER:'workers-ai',NEXT_PUBLIC_SITE_URL:'https://visathreads.com',ASSISTANT_PROJECT_REF:'cycnichledvqbxevrwnt',NEXT_PUBLIC_SUPABASE_URL:'https://cycnichledvqbxevrwnt.supabase.co',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'public-key'};
   assert.equal(service.configuredAvailability(env).posts,true);
-  for(const changes of [{NEXT_PUBLIC_SUPABASE_URL:'https://cycnichledvqbxevrwnt.supabase.co'},{ASSISTANT_PROJECT_REF:''},{ASSISTANT_PROVIDER:'openai'},{NEXT_PUBLIC_SUPABASE_URL:'https://ppdwysmeistjxzjpmxyk.supabase.co/other'}]) assert.equal(service.configuredAvailability({...env,...changes}).posts,false);
+  for(const changes of [{NEXT_PUBLIC_SITE_URL:'https://visa-central.com'},{NEXT_PUBLIC_SITE_URL:undefined},{NEXT_PUBLIC_SUPABASE_URL:'https://ppdwysmeistjxzjpmxyk.supabase.co'},{ASSISTANT_PROJECT_REF:'ppdwysmeistjxzjpmxyk'},{ASSISTANT_PROJECT_REF:''},{ASSISTANT_PROVIDER:'openai'},{NEXT_PUBLIC_SUPABASE_URL:'https://ppdwysmeistjxzjpmxyk.supabase.co/other'}]) assert.equal(service.configuredAvailability({...env,...changes}).posts,false);
 });
 test('OpenAI adapter uses bounded structured request, no provider state, and no retries',async()=>{
   let calls=0;
