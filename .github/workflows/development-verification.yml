@@ -1,0 +1,60 @@
+name: Verify deployed development isolation
+on:
+  workflow_dispatch:
+  push:
+    branches: [chore/cloudflare-connection-check]
+    paths: [.github/workflows/development-verification.yml]
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify deployed version, ordinary pages, isolated database and disabled AI
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error, time
+          origin='https://visa-central.com'
+          expected='85589283d660b88e34ce80be156c95819ab2ed2f'
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs): return None
+          opener=urllib.request.build_opener(NoRedirect)
+          def read(path,method='GET'):
+              headers={'Cache-Control':'no-cache','Accept':'application/json' if path.startswith('/api/') else 'text/html'}
+              body=None
+              if method=='POST':
+                  headers['Content-Type']='application/json'
+                  body=json.dumps({'mode':'ask','scope':{'kind':'public'},'question':'verification'}).encode()
+              req=urllib.request.Request(origin+path,headers=headers,data=body,method=method)
+              try: response=opener.open(req,timeout=20)
+              except urllib.error.HTTPError as error: response=error
+              with response: return response.status,response.headers,response.read(2000000)
+          status,headers,body=read('/api/health?verify='+expected)
+          assert status==200, 'Health HTTP '+str(status)
+          health=json.loads(body)
+          assert health['build']['gitSha']==expected, 'Unexpected deployed commit'
+          assert health['build']['dirty']==False and health['build']['siteOrigin']==origin
+          assert health['releaseStatus']=='configured'
+          print('PASS exact deployed commit and configured development build')
+          for path in ['/','/login','/signup','/ask','/experiences','/experiences/new','/explore','/tags','/news']:
+              status,headers,body=read(path)
+              assert status==200, path+' HTTP '+str(status)
+              assert 'noindex' in headers.get('X-Robots-Tag',''), path+' not noindex'
+              assert 'https://ppdwysmeistjxzjpmxyk.supabase.co' in headers.get('Content-Security-Policy',''), 'Dev database missing from CSP'
+              assert 'cycnichledvqbxevrwnt' not in headers.get('Content-Security-Policy',''), 'Prod database present'
+              assert b'aria-label="Ask VisaThreads assistant"' not in body, 'AI header present'
+          print('PASS nine regular pages, isolated backend CSP, no AI header')
+          assert read('/assistant')[0]==404, 'Assistant page is present'
+          # Recheck an old per-path edge response without publishing another version.
+          for attempt in range(10):
+              status,headers,body=read('/api/assistant')
+              if status==200 and 'application/json' in headers.get('Content-Type',''): break
+              print('Assistant flags not propagated yet: HTTP',status)
+              if attempt<9: time.sleep(5)
+          assert status==200 and 'application/json' in headers.get('Content-Type',''), 'Assistant flags did not propagate'
+          assert json.loads(body)=={'posts':False,'communities':False,'catchup':False}
+          assert read('/api/assistant','POST')[0]==503, 'Dev inference endpoint is not disabled'
+          for method in ['GET','POST']:
+              assert read('/api/communities/00000000-0000-4000-8000-000000000001/summary',method)[0]==503, 'Legacy AI endpoint is not disabled'
+          print('PASS AI page absent, flags off, inference and legacy summaries disabled')
+          PY
