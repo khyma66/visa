@@ -37,4 +37,11 @@ jobs:
               safe={'bindings':[{'name':b.get('name'),'type':b.get('type'),**({'text':b.get('text')} if b.get('name') in safe_names else {})} for b in settings.get('bindings',[])],'compatibility_date':settings.get('compatibility_date'),'error':settings.get('error')}
               print('DEV_WORKER_SETTINGS',json.dumps(safe))
           print('DEPLOYMENTS',json.dumps(get('/workers/scripts/visathreads-sandbox/deployments')))
+          req=urllib.request.Request('https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/visathreads-sandbox',headers={'Authorization':'Bearer '+token})
+          try:
+              with urllib.request.urlopen(req,timeout=20) as r: code=r.read(20000000).decode('utf-8','replace')
+              for sha in ['439a9cc7dc08c3cade481d9f2d99f05740ee499f','6982848009c043c7483373faf09afeb3f517a391']:
+                  print('DEPLOYED_BUNDLE_SHA_PRESENT',sha,sha in code)
+              print('SCRIPT_READ_BYTES',len(code))
+          except urllib.error.HTTPError as e: print('SCRIPT_READ_HTTP',e.code)
           PY
