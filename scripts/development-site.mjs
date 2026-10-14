@@ -24,6 +24,7 @@ export function verifyAssistantWorker(config) {
     routes.every(route=>Object.keys(route).every(key=>['pattern','custom_domain'].includes(key)));
   if(config.name!==ASSISTANT_DEV_WORKER||!safeRoutes||config.workers_dev!==false||
     config.vars?.NEXT_PUBLIC_SUPABASE_URL!==`https://${ASSISTANT_DEV_REF}.supabase.co`||config.vars?.APP_ENV!=='development'||
+    config.vars?.NEXT_PUBLIC_SITE_URL!==ASSISTANT_DEV_ORIGIN||config.vars?.ASSISTANT_PROVIDER||config.vars?.ASSISTANT_PROJECT_REF||
     config.vars?.ASSISTANT_COMMUNITIES_ENABLED!=='false'||config.vars?.ASSISTANT_CATCHUP_ENABLED!=='false'||
     config.vars?.ASSISTANT_ENABLED!=='false'||config.ai) throw new Error('Refusing deployment: Worker, domains or database are not the isolated visa-central sandbox.');
 }
@@ -40,7 +41,7 @@ export async function buildAssistantDevelopment(deploy=false) {
   const values={...loadEnv('sandbox',root,''),...process.env};
   const env={...process.env,...assistantDevelopmentEnvironment(values)};
   // Existing process values prevent unrelated .env.production.local settings taking precedence.
-  for(const name of Object.keys(env)) if(/^(?:APIFY_TOKEN|DATABASE_URL|DIRECT_URL|SUPABASE_.*(?:SERVICE_ROLE|SECRET).*)$/.test(name)) delete env[name];
+  for(const name of Object.keys(env)) if(/^(?:OPENAI_API_KEY|APIFY_TOKEN|DATABASE_URL|DIRECT_URL|SUPABASE_.*(?:SERVICE_ROLE|SECRET).*)$/.test(name)) delete env[name];
   const sourceConfig=JSON.parse(await readFile(resolve(root,'wrangler.jsonc'),'utf8'));
   verifyAssistantWorker(sourceConfig.env.sandbox);
   await run('vinext',['build'],env);

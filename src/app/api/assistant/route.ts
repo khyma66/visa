@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { AssistantError } from '@/lib/assistant-core';
 import { retrieveAssistantCorpus } from '@/lib/assistant-data';
 import { runAssistantModel, providerModel, type WorkersAiBinding } from '@/lib/assistant-provider';
-import { assistantResponse, configuredAvailability, createAssistantHandler, cloudflareAssistantCache } from '@/lib/assistant-service';
+import { assistantResponse, assistantProductionRequest, configuredAvailability, createAssistantHandler, cloudflareAssistantCache } from '@/lib/assistant-service';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -22,7 +22,9 @@ function availability() {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   });
 }
-export async function GET() { return assistantResponse(availability()); }
+export async function GET(request: Request) {
+  return assistantResponse(assistantProductionRequest(request) ? availability() : { posts: false, communities: false, catchup: false });
+}
 
 const handle = createAssistantHandler({
   availability,

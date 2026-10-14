@@ -23,6 +23,14 @@ The `development-site.yml` workflow runs tests/typechecking, builds with synthet
 
 Development Auth still requires its own site/callback configuration and provider settings. Do not redirect dev users into the production database. The unused assistant database migration applied before the owner's clarification does not enable AI or create a model binding.
 
+### Latest verification and remaining blockers
+
+- Both Supabase projects accept authenticated tool queries. Production has no assistant quota RPCs yet; dev has the previously applied migration, unused by the website.
+- GitHub run `38516140744` successfully uploaded the regular dev build, but its immediate health check returned the older commit. The subsequent Cloudflare inventory showed another deployment of that older build. The new smoke check allows up to 45 seconds for propagation and still requires the exact checked commit; it also verifies denial of legacy summary endpoints.
+- The API now checks the actual HTTPS request origin as well as the configured production domain and database. Dev, workers.dev previews, unexpected ports, and lookalike domains cannot enable inference through flags or forged forwarding headers.
+- The saved GitHub token can deploy Workers. Its separate Workers AI REST check returned HTTP 401 / code 10000 in run `38516422457`. Validate an AI-authorized token (Workers AI Read and Edit on the VisaThreads account) before relying on REST model evaluation. This result does not establish whether an deployed AI binding works.
+- PR checks still fail on the `braces` dependency chain (GHSA-vfj7-8cjw-p6xm, no published patch in the advisory). The full audit remains enforced. Production also needs its reviewed private archive, additive assistant migration, and signed-in model evaluation. Do not deploy the synthetic development fixture over the live archive.
+
 ## Production activation
 
 The assistant UI renders only when built for `https://visathreads.com`. The API additionally requires project `cycnichledvqbxevrwnt`; accidental dev flags cannot enable it. The migration is additive: invoker retrieval and private count-only quotas, no posts/messages copied.

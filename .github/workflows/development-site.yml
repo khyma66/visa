@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [feat/grounded-assistant-20261013]
-    paths: [.github/workflows/development-site.yml]
+    paths: [.github/workflows/development-site.yml, scripts/development-site.mjs, scripts/smoke-development-site.mjs]
 
 permissions:
   contents: read

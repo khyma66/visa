@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {assistantDevelopmentEnvironment,verifyAssistantWorker,ASSISTANT_DEV_REF} from './development-site.mjs';
 const env={NEXT_PUBLIC_SUPABASE_URL:`https://${ASSISTANT_DEV_REF}.supabase.co`,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_'+'x'.repeat(30),NEXT_PUBLIC_SITE_URL:'https://visa-central.com'};
-test('dedicated assistant staging pins project and rejects production, secret keys, and unapproved domains',()=>{
+test('regular development pins its isolated project and rejects production, secret keys, and unapproved domains',()=>{
   assert.equal(assistantDevelopmentEnvironment(env).CLOUDFLARE_ENV,'sandbox');
   for(const change of [{NEXT_PUBLIC_SUPABASE_URL:'https://cycnichledvqbxevrwnt.supabase.co'},{NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'sb_secret_xxx'},{NEXT_PUBLIC_SITE_URL:'https://visathreads.com'}]) assert.throws(()=>assistantDevelopmentEnvironment({...env,...change}));
 });
-test('assistant deployment has its own Worker and accepts only the two verified dev domain routes',async()=>{
+test('regular development has its own Worker and accepts only the two verified dev domain routes',async()=>{
   const config=JSON.parse(await readFile(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
   assert.doesNotThrow(()=>verifyAssistantWorker(config.env.sandbox));
   assert.throws(()=>verifyAssistantWorker(config.env.development));
@@ -22,6 +22,9 @@ test('generated configuration cannot widen development routes or enable later ro
     {routes:[...config.routes,{pattern:'visathreads.com',custom_domain:true}]},
     {routes:config.routes.map(r=>({...r,custom_domain:false}))},
     {vars:{...config.vars,APP_ENV:'production'}},
+    {vars:{...config.vars,NEXT_PUBLIC_SITE_URL:'https://visathreads.com'}},
+    {vars:{...config.vars,ASSISTANT_PROVIDER:'workers-ai'}},
+    {vars:{...config.vars,ASSISTANT_PROJECT_REF:'cycnichledvqbxevrwnt'}},
     {vars:{...config.vars,NEXT_PUBLIC_SUPABASE_URL:'https://cycnichledvqbxevrwnt.supabase.co'}},
     {vars:{...config.vars,ASSISTANT_COMMUNITIES_ENABLED:'true'}},
   ]) assert.throws(()=>verifyAssistantWorker({...config,...change}));

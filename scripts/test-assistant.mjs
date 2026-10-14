@@ -17,7 +17,7 @@ const now = Date.parse('2026-10-13T18:00:00Z');
 const source = { id:`q:${id}`, questionId:id, communityId:null, kind:'question', title:'Appointment experience', body:'I attended my appointment on Monday. My passport arrived on Friday.', createdAt:'2026-10-10T00:00:00Z', updatedAt:'2026-10-10T00:00:00Z', url:`/questions/${id}`, provenance:'member' };
 const input = { mode:'ask',scope:{kind:'post',id},question:'What did the member report?' };
 const output = {status:'answered',claims:[{text:'The member reported a Monday appointment.',evidence:[{sourceId:source.id,quote:'I attended my appointment on Monday.'}]}],disagreements:[],unanswered:[]};
-const request = (value=input, headers={}) => new Request('https://example.test/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40),...headers},body:JSON.stringify(value)});
+const request = (value=input, headers={}) => new Request('https://visathreads.com/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40),...headers},body:JSON.stringify(value)});
 function harness(overrides={}) {
   const state={actor:'alice',sources:[source],reserved:0,generated:0,reads:0,cache:new Map()};
   const handler=service.createAssistantHandler({availability:()=>({posts:true,communities:true,catchup:true}),model:'test-model',
@@ -73,6 +73,17 @@ test('authentication, origin, content type, body budget and disabled rollout fai
   assert.equal((await handler(request({...input,garbage:'x'.repeat(13000)}))).status,413);
   assert.equal((await harness({availability:()=>({posts:false})}).handler(request())).status,503);
   assert.equal(state.generated,0);
+});
+test('dev and preview hosts cannot invoke AI even with production flags and forged host headers',async()=>{
+  let authenticated = 0;
+  const {handler,state} = harness({authenticate:async()=>{authenticated++;throw Error('must not run');}});
+  for (const origin of ['https://visa-central.com','https://www.visa-central.com','https://visaflow-dev.example.workers.dev','http://visathreads.com','https://visathreads.com.evil.test','https://visathreads.com:8443']) {
+    const denied = new Request(origin+'/api/assistant',{method:'POST',headers:{Origin:'https://visathreads.com',Host:'visathreads.com','X-Forwarded-Host':'visathreads.com','Content-Type':'application/json',Authorization:'Bearer '+'a'.repeat(40)},body:JSON.stringify(input)});
+    assert.equal(service.assistantProductionRequest(denied),false);
+    assert.equal((await handler(denied)).status,503);
+  }
+  assert.equal(authenticated,0);assert.equal(state.generated,0);assert.equal(state.reserved,0);
+  assert(service.assistantProductionRequest(new Request('https://www.visathreads.com/api/assistant')));
 });
 test('cache saves inference but is scoped by actor and fresh source contents',async()=>{
   const {handler,state}=harness();

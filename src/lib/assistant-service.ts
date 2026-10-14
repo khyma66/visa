@@ -15,13 +15,19 @@ export function assistantResponse(value: unknown, status = 200, retryAfter?: num
   return Response.json(value, { status, headers: { ...headers, ...(retryAfter ? { 'Retry-After': String(retryAfter) } : {}) } });
 }
 
+/** Use the request URL, never caller-controlled Origin/forwarding headers. */
+export function assistantProductionRequest(request: Request) {
+  const { origin } = new URL(request.url);
+  return origin === 'https://visathreads.com' || origin === 'https://www.visathreads.com';
+}
+
 export function createAssistantHandler(deps: AssistantDependencies) {
   // Coalesce duplicate clicks within an isolate; durable quota remains authoritative across instances.
   const inflight = new Map<string, Promise<AssistantResult>>();
   return async function handle(request: Request): Promise<Response> {
     try {
       if (request.method !== 'POST') throw new AssistantError(405, 'Use POST for assistant requests.');
-      if (!deps.availability().posts) throw new AssistantError(503, 'The assistant is not available yet.');
+      if (!assistantProductionRequest(request) || !deps.availability().posts) throw new AssistantError(503, 'The assistant is not available yet.');
       const origin = request.headers.get('origin');
       if (origin && origin !== new URL(request.url).origin) throw new AssistantError(403, 'Open the assistant on VisaThreads to continue.');
       if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type') ?? '')) throw new AssistantError(415, 'Send a JSON request.');
