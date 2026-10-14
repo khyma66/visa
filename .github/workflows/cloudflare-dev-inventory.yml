@@ -1,0 +1,40 @@
+name: Cloudflare dev inventory
+on:
+  push:
+    branches: [chore/cloudflare-connection-check]
+    paths: [.github/workflows/cloudflare-dev-inventory.yml]
+permissions: {}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: production
+    steps:
+      - name: Inspect VisaThreads routing and safe configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python3 - <<'PY'
+          import os, json, urllib.request, urllib.error
+          token=os.environ['CLOUDFLARE_API_TOKEN']
+          account=os.environ['CLOUDFLARE_ACCOUNT_ID']
+          def get(path):
+              req=urllib.request.Request('https://api.cloudflare.com/client/v4/accounts/'+account+path,headers={'Authorization':'Bearer '+token})
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as r: value=json.load(r)
+                  if not value.get('success'): return {'error':'API did not confirm success'}
+                  return value.get('result')
+              except urllib.error.HTTPError as e: return {'error':'HTTP '+str(e.code)}
+          print('WORKERS_SUBDOMAIN',json.dumps(get('/workers/subdomain')))
+          domains=get('/workers/domains')
+          if isinstance(domains,list):
+              domains=[{k:d.get(k) for k in ['id','hostname','service','environment','zone_id']} for d in domains if d.get('hostname') in ['visa-central.com','www.visa-central.com','visathreads.com','www.visathreads.com']]
+          print('VISA_DOMAINS',json.dumps(domains))
+          settings=get('/workers/scripts/visaflow-dev/settings')
+          if isinstance(settings,dict):
+              safe_names={'APP_ENV','ASSISTANT_PROJECT_REF','NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SITE_URL','ASSISTANT_ENABLED','COMMUNITY_SOURCE_MODE'}
+              safe={'bindings':[{'name':b.get('name'),'type':b.get('type'),**({'text':b.get('text')} if b.get('name') in safe_names else {})} for b in settings.get('bindings',[])],'compatibility_date':settings.get('compatibility_date'),'error':settings.get('error')}
+              print('VISA_WORKER_SETTINGS',json.dumps(safe))
+          print('DEPLOYMENTS',json.dumps(get('/workers/scripts/visaflow-dev/deployments')))
+          PY
