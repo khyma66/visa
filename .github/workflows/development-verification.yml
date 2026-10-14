@@ -10,51 +10,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify deployed version, ordinary pages, isolated database and disabled AI
+      - name: Verify with the deployment smoke-test runtime
         run: |
-          python3 - <<'PY'
-          import json, urllib.request, urllib.error, time
-          origin='https://visa-central.com'
-          expected='85589283d660b88e34ce80be156c95819ab2ed2f'
-          class NoRedirect(urllib.request.HTTPRedirectHandler):
-              def redirect_request(self,*args,**kwargs): return None
-          opener=urllib.request.build_opener(NoRedirect)
-          def read(path,method='GET'):
-              headers={'Cache-Control':'no-cache','Accept':'application/json' if path.startswith('/api/') else 'text/html'}
-              body=None
-              if method=='POST':
-                  headers['Content-Type']='application/json'
-                  body=json.dumps({'mode':'ask','scope':{'kind':'public'},'question':'verification'}).encode()
-              req=urllib.request.Request(origin+path,headers=headers,data=body,method=method)
-              try: response=opener.open(req,timeout=20)
-              except urllib.error.HTTPError as error: response=error
-              with response: return response.status,response.headers,response.read(2000000)
-          status,headers,body=read('/api/health?verify='+expected)
-          assert status==200, 'Health HTTP '+str(status)
-          health=json.loads(body)
-          assert health['build']['gitSha']==expected, 'Unexpected deployed commit'
-          assert health['build']['dirty']==False and health['build']['siteOrigin']==origin
-          assert health['releaseStatus']=='configured'
-          print('PASS exact deployed commit and configured development build')
-          for path in ['/','/login','/signup','/ask','/experiences','/experiences/new','/explore','/tags','/news']:
-              status,headers,body=read(path)
-              assert status==200, path+' HTTP '+str(status)
-              assert 'noindex' in headers.get('X-Robots-Tag',''), path+' not noindex'
-              assert 'https://ppdwysmeistjxzjpmxyk.supabase.co' in headers.get('Content-Security-Policy',''), 'Dev database missing from CSP'
-              assert 'cycnichledvqbxevrwnt' not in headers.get('Content-Security-Policy',''), 'Prod database present'
-              assert b'aria-label="Ask VisaThreads assistant"' not in body, 'AI header present'
-          print('PASS nine regular pages, isolated backend CSP, no AI header')
-          assert read('/assistant')[0]==404, 'Assistant page is present'
-          # Recheck an old per-path edge response without publishing another version.
-          for attempt in range(10):
-              status,headers,body=read('/api/assistant')
-              if status==200 and 'application/json' in headers.get('Content-Type',''): break
-              print('Assistant flags not propagated yet: HTTP',status)
-              if attempt<9: time.sleep(5)
-          assert status==200 and 'application/json' in headers.get('Content-Type',''), 'Assistant flags did not propagate'
-          assert json.loads(body)=={'posts':False,'communities':False,'catchup':False}
-          assert read('/api/assistant','POST')[0]==503, 'Dev inference endpoint is not disabled'
-          for method in ['GET','POST']:
-              assert read('/api/communities/00000000-0000-4000-8000-000000000001/summary',method)[0]==503, 'Legacy AI endpoint is not disabled'
-          print('PASS AI page absent, flags off, inference and legacy summaries disabled')
-          PY
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import {setTimeout} from 'node:timers/promises';
+          const origin='https://visa-central.com', expected='85589283d660b88e34ce80be156c95819ab2ed2f';
+          const request=(path,options={})=>fetch(origin+path,{redirect:'manual',cache:'no-store',signal:AbortSignal.timeout(20000),...options});
+          const response=await request('/api/health');
+          assert.equal(response.status,200,'Health status');
+          const health=await response.json();
+          assert.equal(health.build.gitSha,expected);assert.equal(health.build.dirty,false);
+          assert.equal(health.build.siteOrigin,origin);assert.equal(health.releaseStatus,'configured');
+          console.log('PASS exact deployed commit and configured build');
+          for(const path of ['/','/login','/signup','/ask','/experiences','/experiences/new','/explore','/tags','/news']) {
+            const page=await request(path);assert.equal(page.status,200,path);
+            assert.match(page.headers.get('x-robots-tag')??'',/noindex/);
+            const csp=page.headers.get('content-security-policy')??'';
+            assert(csp.includes('https://ppdwysmeistjxzjpmxyk.supabase.co'));
+            assert(!csp.includes('cycnichledvqbxevrwnt'));
+            assert(!(await page.text()).includes('aria-label="Ask VisaThreads assistant"'));
+          }
+          console.log('PASS nine regular pages, dev backend CSP and absent AI header');
+          assert.equal((await request('/assistant')).status,404);
+          let flags;
+          for(let i=0;i<10;i++) {
+            flags=await request('/api/assistant');
+            if(flags.status===200&&flags.headers.get('content-type')?.includes('application/json')) break;
+            console.log('Flags endpoint:',flags.status,flags.headers.get('content-type'));
+            if(i<9) await setTimeout(5000);
+          }
+          assert.equal(flags.status,200);assert.match(flags.headers.get('content-type')??'',/application\/json/);
+          assert.deepEqual(await flags.json(),{posts:false,communities:false,catchup:false});
+          const disabled=await request('/api/assistant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'ask',scope:{kind:'public'},question:'verification'})});
+          assert.equal(disabled.status,503);
+          for(const method of ['GET','POST']) assert.equal((await request('/api/communities/00000000-0000-4000-8000-000000000001/summary',{method})).status,503);
+          console.log('PASS AI page absent and all assistant endpoints disabled');
+          JS
