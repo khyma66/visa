@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
-import fetch from 'node-fetch';
+console.error('Retired legacy write test: no requests were sent. Use npm run test:database for native voting checks or explicitly isolated staging tests. See docs/ENVIRONMENT_ISOLATION.md.');
+process.exit(1);
+
+// Historical implementation retained below. Node provides fetch; do not re-enable.
 
 const BASE_URL = 'http://localhost:3000';
 const TEST_POST_ID = 'test-post-' + Date.now();

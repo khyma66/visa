@@ -1,0 +1,43 @@
+{
+  "checkedAtUtc": "2026-10-06T04:53:00Z",
+  "site": "https://visathreads.com",
+  "environment": "existing development preview; public-launch gates unchanged",
+  "worker": "visaflow-dev",
+  "workerVersion": "05c08a98-2d11-4fdf-82fd-62f6f86081ec",
+  "experienceMigration": "20261006045212_visa_experiences",
+  "sourceAudit": {
+    "actorId": "2chN8UQcH1CfxLRNE",
+    "scheduleId": "bM0hwDQbFccgtQ6dj",
+    "scheduleEnabled": true,
+    "scheduleLastInvokedAt": "2026-10-05T07:00:01.467Z",
+    "latestSuccessfulRun": "I0AI56pOzxvFHTz40",
+    "latestSuccessfulRunFinishedAt": "2026-09-12T07:01:15.209Z",
+    "latestRunRows": 93,
+    "latestRunRowsPresentInLiveFeed": 93,
+    "missingLatestRunIds": [],
+    "liveUniquePosts": 563,
+    "newestOriginalPostAt": "2026-09-12T05:04:12.000Z",
+    "snapshotFetchedAt": "2026-10-03T18:11:55.884Z",
+    "failureSince": "2026-09-13",
+    "failure": "Enabled schedule attempts to launch daily but Apify rejects the run: remaining usage of $0.003247 is insufficient.",
+    "interpretation": "24 days ago reflects original source dates, not a reversed sort or missing latest-run import. A snapshot refresh does not make the source posts newer.",
+    "requiredUserAction": "Restore sufficient Apify usage through the account owner. No billing changes or billable actor runs were performed.",
+    "ingestionLimitation": "The site serves a reviewed bundled snapshot. A future successful run still needs the existing archive refresh, review and deployment workflow; Apify scheduling alone does not update that bundle."
+  },
+  "changes": [
+    "Experience navigation on desktop, mobile and community sidebar",
+    "Experience list, categorized sharing form and detail routes",
+    "Visa-type and experience-category Other options",
+    "Server-side category filtering before newest-first cursor pagination",
+    "Existing ownership, policy-acknowledgement, moderation and rate-limit protections retained",
+    "Calendar date and exact UTC tooltip alongside relative post age",
+    "Existing daily validation now checks schedule errors, source-to-live coverage and source freshness before assessing new Related Posts"
+  ],
+  "testing": {
+    "database": "Isolated PostgreSQL tests: authenticated persistence, policy acknowledgement, author forgery denial, category constraints, archived visibility, category pagination, backwards-compatible questions feed",
+    "browser": "Isolated browser-local Other/Other experience submitted and verified after reload. No hosted fixture posts or accounts created.",
+    "build": "Development build, TypeScript and secret-pattern checks passed",
+    "regression": "Full npm test rerun passed: 340 tests across all suites. First realtime test run timed out; individual retry and full-suite rerun passed.",
+    "live": "Live Experience list and sharing form verified in browser. Public feed/read RPCs including community_post_page verified. Source dataset coverage is 93/93 with no missing IDs."
+  }
+}

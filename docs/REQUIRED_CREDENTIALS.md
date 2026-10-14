@@ -1,14 +1,16 @@
 # Required Credentials for Cloudflare and Supabase
 
+> **Legacy architecture reference — do not use these setup commands for the current app.** Follow [current launch credentials](LIVE_CREDENTIALS.md) and [go-live steps](GO_LIVE_CHECKLIST.md). The old configuration/SQL examples below are not the reviewed production path; never put privileged keys in Wrangler `vars`, and do not create the legacy tables from this guide.
+
 ## Supabase Credentials
 ### How to Obtain:
 1. Go to https://supabase.com/ and create an account
 2. Create a new project
 3. In your project dashboard, go to Settings > API
 4. Find the following:
-   - **Supabase URL**: Looks like `https://cycnichledvqbxevrwnt.supabase.co`
-   - **Supabase Anon Key**: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5Y25pY2hsZWR2cWJ4ZXZyd250Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwMzM1OTYsImV4cCI6MjA4MTYwOTU5Nn0.a2lWwtujsPH2b4TpR5XaZKO7BkHQKpMWfl83rcDhWy4
-   - **Supabase Service Role Key**: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5Y25pY2hsZWR2cWJ4ZXZyd250Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjAzMzU5NiwiZXhwIjoyMDgxNjA5NTk2fQ.Sdc2cOACcemGPdn4pCp-7LlbmvT3yfOwnLliJr-ZJd0
+   - **Supabase URL**: Looks like `https://your-project.supabase.co`
+   - **Supabase publishable key**: Looks like `sb_publishable_...`
+   - **Supabase secret key**: Keep this only in a server-side secret manager; never commit it.
 
 
 ## Cloudflare R2 Credentials
@@ -42,21 +44,21 @@ Create a `.env` file in your project root with the following variables:
 
 ```bash
 # Supabase
-PUBLIC_SUPABASE_URL=`https://cycnichledvqbxevrwnt.supabase.co`
-PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5Y25pY2hsZWR2cWJ4ZXZyd250Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwMzM1OTYsImV4cCI6MjA4MTYwOTU5Nn0.a2lWwtujsPH2b4TpR5XaZKO7BkHQKpMWfl83rcDhWy4
-SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5Y25pY2hsZWR2cWJ4ZXZyd250Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjAzMzU5NiwiZXhwIjoyMDgxNjA5NTk2fQ.Sdc2cOACcemGPdn4pCp-7LlbmvT3yfOwnLliJr-ZJd0
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_replace_me
+SUPABASE_SECRET_KEY=store_in_server_secret_manager
 
 # Cloudflare R2
-CF_ACCOUNT_ID=3ae98b91b615a3cf17f8acb402881aae
-CF_R2_ACCESS_KEY_ID=544681d718e88fa6b4e9071eff9c3c0c
-CF_R2_ACCESS_KEY_SECRET=566ec882f2ef77554d9ed4f2cda4f34b589b069c1db7d3d7df86368c03e14986
+CF_ACCOUNT_ID=your-account-id
+CF_R2_ACCESS_KEY_ID=replace_me
+CF_R2_ACCESS_KEY_SECRET=replace_me
 
 CF_R2_BUCKET_NAME=data-pipeline
 PUBLIC_CF_ACCOUNT_ID=your-account-id
-s3 end-point = https://3ae98b91b615a3cf17f8acb402881aae.r2.cloudflarestorage.com
+s3 end-point = https://your-account-id.r2.cloudflarestorage.com
 # Worker
-WORKER_URL=https://be366747.visa-1.pages.dev
-WORKER_SECRET=https://cycnichledvqbxevrwnt.supabase.co
+WORKER_URL=https://your-worker.example.workers.dev
+WORKER_SECRET=replace_me
 
 
 # Cloudflare Workers

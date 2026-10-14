@@ -1465,11 +1465,11 @@ PUBLIC_SUPABASE_URL=https://xxxxxxx.supabase.co
 PUBLIC_SUPABASE_ANON_KEY=eyJhbGc...
 
 # Cloudflare R2
-CF_ACCOUNT_ID=3ae98b91b615a3cf17f8acb402881aae
+CF_ACCOUNT_ID=your-account-id
 CF_R2_ACCESS_KEY_ID=your_access_key_id
 CF_R2_ACCESS_KEY_SECRET=your_access_key_secret  
 CF_R2_BUCKET_NAME=your-bucket-name
-PUBLIC_CF_ACCOUNT_ID=3ae98b91b615a3cf17f8acb402881aae
+PUBLIC_CF_ACCOUNT_ID=your-account-id
 
 # Worker
 WORKER_URL=https://r2-supabase-stackoverflow.YOUR_SUBDOMAIN.workers.dev
@@ -1497,7 +1497,7 @@ routes = [
 [env.production.vars]
 SUPABASE_URL = "https://xxxxxxx.supabase.co"
 SUPABASE_SERVICE_KEY = "your-service-key-here"
-CF_ACCOUNT_ID = "3ae98b91b615a3cf17f8acb402881aae"
+CF_ACCOUNT_ID = "your-account-id"
 CF_R2_BUCKET_NAME = "your-bucket-name"
 
 [[queues.consumers]]
@@ -1546,4 +1546,3 @@ dead_letter_queue = "r2-process-queue-dlq"
 - **TF-IDF**: Simple implementation using token overlap - for production, use real embeddings (Cohere, HuggingFace)
 - **Performance**: Current approach is O(n²) - for 100k+ posts, use approximate nearest neighbors (ANN)
 - **Caching**: KV cache TTL is 1 hour - adjust based on your update frequency
-

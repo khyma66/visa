@@ -3,6 +3,9 @@ Seed data script for top 20 countries and visa types
 Creates initial data for the visa platform
 """
 
+raise SystemExit("Retired legacy seed script: no database connection was opened. Use disposable staging fixtures, never production; see docs/ENVIRONMENT_ISOLATION.md.")
+
+# Historical implementation retained below for reference only. Do not re-enable.
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select

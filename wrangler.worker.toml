@@ -6,7 +6,7 @@ compatibility_flags = [
   "nodejs_compat"
 ]
 
-account_id = "3ae98b91b615a3cf17f8acb402881aae"
+account_id = "your-cloudflare-account-id"
 workers_dev = true
 
 # R2 Bucket
@@ -42,7 +42,7 @@ id = "5efb3f36000f4319ab0e926229da7b9d"
 
 # Environment
 [vars]
-SUPABASE_URL = "https://cycnichledvqbxevrwnt.supabase.co"
+SUPABASE_URL = "https://your-project.supabase.co"
 
 # Triggers
 [triggers]

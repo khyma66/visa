@@ -1,5 +1,5 @@
-import LandingPage from '@/components/LandingPage';
+import { CommunityHome } from '@/components/CommunityHome';
 
 export default function Home() {
-  return <LandingPage />;
+  return <CommunityHome />;
 }

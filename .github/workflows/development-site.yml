@@ -1,0 +1,89 @@
+name: Visa Central development site
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/grounded-assistant-20261013]
+    paths: [.github/workflows/development-site.yml, scripts/development-site.mjs, scripts/smoke-development-site.mjs]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visa-central-development
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/feat/grounded-assistant-20261013'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Existing Cloudflare credentials; all targets are guarded as development.
+    environment: production
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://ppdwysmeistjxzjpmxyk.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_iTiFgVvvFA6h9cYqMivsFA_3qnCzmX7
+      NEXT_PUBLIC_SITE_URL: https://visa-central.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check:secrets && npm test && npm run typecheck
+      - run: npm run build:devsite && npm run check:archive-bundle
+      - name: Verify isolated dev target and capture production baseline
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python3 - <<'PY'
+          import os, json, urllib.request
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs): return None
+          opener=urllib.request.build_opener(NoRedirect)
+          account=os.environ['CLOUDFLARE_ACCOUNT_ID']
+          token=os.environ['CLOUDFLARE_API_TOKEN']
+          def get(path):
+              req=urllib.request.Request('https://api.cloudflare.com/client/v4/accounts/'+account+path,headers={'Authorization':'Bearer '+token})
+              with opener.open(req,timeout=20) as response: data=json.load(response)
+              assert data.get('success'), 'Cloudflare API did not confirm success'
+              return data['result']
+          domains={d['hostname']:d['service'] for d in get('/workers/domains')}
+          for host in ['visa-central.com','www.visa-central.com']:
+              assert domains.get(host)=='visathreads-sandbox', 'Dev domain target changed; refusing deployment'
+          for host in ['visathreads.com','www.visathreads.com']:
+              assert domains.get(host)=='visaflow-dev', 'Production domain target changed; refusing deployment'
+          baseline=get('/workers/scripts/visaflow-dev/deployments')['deployments'][0]['id']
+          with open('/tmp/visa-production-baseline','w') as file: file.write(baseline)
+          previous=get('/workers/scripts/visathreads-sandbox/deployments')['deployments'][0]
+          print('Previous dev versions:',json.dumps(previous['versions']))
+          print('Verified dev routing and captured production deployment baseline.')
+          PY
+      - name: Deploy only the checked dev Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module -e "import {readFileSync} from 'node:fs'; import {verifyAssistantWorker} from './scripts/development-site.mjs'; verifyAssistantWorker(JSON.parse(readFileSync('dist/server/wrangler.json','utf8')));"
+          npx --no-install vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build
+      - name: Verify live development site has no AI
+        run: node scripts/smoke-development-site.mjs
+      - name: Verify production deployment was not changed
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python3 - <<'PY'
+          import os, json, urllib.request
+          if not os.path.exists('/tmp/visa-production-baseline'): raise SystemExit(0)
+          expected=open('/tmp/visa-production-baseline').read()
+          req=urllib.request.Request('https://api.cloudflare.com/client/v4/accounts/'+os.environ['CLOUDFLARE_ACCOUNT_ID']+'/workers/scripts/visaflow-dev/deployments',headers={'Authorization':'Bearer '+os.environ['CLOUDFLARE_API_TOKEN']})
+          with urllib.request.urlopen(req,timeout=20) as response: data=json.load(response)
+          assert data['success'] and data['result']['deployments'][0]['id']==expected, 'Production deployment changed during dev rollout; investigate concurrent work'
+          print('Production deployment unchanged.')
+          PY

@@ -6,7 +6,7 @@ compatibility_flags = [
   "nodejs_compat"
 ]
 
-account_id = "3ae98b91b615a3cf17f8acb402881aae"
+account_id = "your-cloudflare-account-id"
 workers_dev = true
 
 # Pages configuration
@@ -36,7 +36,7 @@ dead_letter_queue = "r2-process-queue-dlq"
 
 # Environment
 [vars]
-SUPABASE_URL = "https://cycnichledvqbxevrwnt.supabase.co"
+SUPABASE_URL = "https://your-project.supabase.co"
 
 # Triggers
 [triggers]

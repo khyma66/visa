@@ -1,5 +1,7 @@
 # Cloudflare MCP Server Integration
 
+> **Retired — do not deploy from this historical guide.** The old HTTP handler had no authentication while using privileged database/AI access. Its current source returns 410 and needs no secrets or resource bindings. This does not change any previously deployed instance; inventory and retire those with operator approval. See [the current security handoff](SECURITY_FIXES_2026-09-11.md).
+
 This worker exposes a **Model Context Protocol (MCP)** server that allows AI agents to interact with your Visa platform directly.
 
 ## Features
