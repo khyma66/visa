@@ -60,6 +60,7 @@ function Result({ result, catchup }: { result: AssistantResult; catchup: boolean
 
 export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
   const { user, loading: authLoading, demoMode } = useAuth();
+  const productionSite = process.env.NEXT_PUBLIC_SITE_URL === 'https://visathreads.com';
   const pathname = usePathname();
   const scopeKey = scope.kind === 'public' ? 'public' : `${scope.kind}:${scope.id}`;
   const identity = `${user?.id ?? 'signed-out'}:${scopeKey}`;
@@ -101,7 +102,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
   useEffect(() => {
     const controller = new AbortController();
     setChecking(true); setSettingsError(false); setAvailability(disabledAvailability);
-    if (demoMode) { setChecking(false); return () => controller.abort(); }
+    if (!productionSite || demoMode) { setChecking(false); return () => controller.abort(); }
     const timeout = setTimeout(() => { controller.abort(); setChecking(false); setSettingsError(true); }, 8000);
     void fetch('/api/assistant', { signal: controller.signal, cache: 'no-store' }).then(async (response) => {
       if (!response.ok) throw new Error('Unavailable');
@@ -110,7 +111,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
     }).catch(() => { if (!controller.signal.aborted) setSettingsError(true); })
       .finally(() => { clearTimeout(timeout); if (!controller.signal.aborted) setChecking(false); });
     return () => { clearTimeout(timeout); controller.abort(); };
-  }, [demoMode, retry]);
+  }, [productionSite, demoMode, retry]);
 
   const available = scope.kind === 'community' ? availability.communities : availability.posts;
   const canCatchup = scope.kind !== 'post' && available && availability.communities && availability.catchup;
@@ -158,6 +159,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
     finally { clearTimeout(timeout); if (isCurrent()) { request.current = null; setBusy(false); } }
   }
 
+  if (!productionSite) return null;
   return <section className="my-5 overflow-hidden rounded-xl border border-teal-200 bg-teal-50/40" aria-label="VisaThreads assistant">
     <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex w-full items-center gap-3 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700 sm:p-5">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-100 text-teal-800"><Sparkles size={19} aria-hidden="true" /></span>
