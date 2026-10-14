@@ -210,7 +210,7 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
   assert.equal(receipt?.schemaVersion, 1);
   assert.equal(receipt.sourceSha, sourceSha, 'Model acceptance must match the exact release commit.');
   assert.equal(receipt.provider, 'workers-ai');
-  assert.equal(receipt.model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  assert.equal(receipt.model, '@cf/openai/gpt-oss-120b');
   assert.equal(receipt.passed, true, 'Hosted model acceptance did not pass.');
   assert.equal(receipt.workerDeleted, true, 'Temporary evaluation Worker must be removed before release.');
   assert.equal(receipt.features?.posts, true);

@@ -2,7 +2,7 @@ import { AssistantError, readBoundedJson } from './assistant-core';
 
 export type AssistantPrompt = { system: string; user: string };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
-export const WORKERS_ASSISTANT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+export const WORKERS_ASSISTANT_MODEL = '@cf/openai/gpt-oss-120b';
 export const OPENAI_ASSISTANT_MODEL = 'gpt-6-luna';
 const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], properties: { sourceId: { type: 'string' }, quote: { type: 'string' } } };
 const claim = { type: 'object', additionalProperties: false, required: ['text', 'evidence'], properties: { text: { type: 'string' }, evidence: { type: 'array', items: evidence } } };
@@ -37,7 +37,8 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       try {
         const value = await Promise.race([options.binding.run(model, {
           messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
-          max_tokens: 1600, temperature: 0, seed: 39173, response_format: { type: 'json_schema', json_schema: ASSISTANT_OUTPUT_SCHEMA },
+          max_tokens: 4096, reasoning_effort: 'low', temperature: 0, seed: 39173, store: false,
+          response_format: { type: 'json_schema', json_schema: { name: 'discussion_answer', strict: true, schema: ASSISTANT_OUTPUT_SCHEMA } },
         }), aborted]);
         if (value && typeof value === 'object') {
           const payload = value as { response?: unknown; choices?: { finish_reason?: string; message?: { content?: unknown } }[] };

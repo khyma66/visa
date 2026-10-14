@@ -7,6 +7,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { waitForAcceptanceReady } from './assistant-acceptance-readiness.mjs';
+import { readAcceptanceFailureDiagnostic } from './assistant-acceptance-diagnostics.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cache = join(root, '.cache/visaflow');
@@ -57,7 +58,7 @@ const secretsPath = join(temporary, 'secrets.json');
 await writeFile(configPath, JSON.stringify({ name, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), account_id: account, compatibility_date: '2026-10-01', workers_dev: true, preview_urls: false, routes: [], ai: { binding: 'ASSISTANT_AI' }, vars: { ACCEPTANCE_EXPIRES: String(Date.now() + 15 * 60_000), ACCEPTANCE_SOURCE_SHA: sourceSha }, observability: { enabled: false } }));
 await writeFile(secretsPath, JSON.stringify({ ACCEPTANCE_SECRET: secret }), { mode: 0o600 });
 const repetitions = 3;
-const receipt = { schemaVersion: 1, sourceSha, provider: 'workers-ai', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', createdAt: new Date().toISOString(), passed: false, repetitions, features: { posts: true, communities: true, catchup: true }, cases: [], workerDeleted: false };
+const receipt = { schemaVersion: 1, sourceSha, provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', createdAt: new Date().toISOString(), passed: false, repetitions, features: { posts: true, communities: true, catchup: true }, cases: [], workerDeleted: false };
 let failure;
 try {
   const subdomain = await api('/workers/subdomain');
@@ -79,8 +80,8 @@ try {
       const url = await waitForAcceptanceReady(baseUrl, secret, sourceSha, cases);
       const reply = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }, body: JSON.stringify({ id }), redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(35_000) });
       if (!reply.ok) {
-        await reply.body?.cancel();
-        samples.push({ id, passed: false, checks: [{ name: 'hosted_inference_and_validation', passed: false }], httpStatus: reply.status, workerMarker: reply.headers.get('X-Assistant-Acceptance') === 'v1' });
+        const syntheticDiagnostic = await readAcceptanceFailureDiagnostic(reply, id, receipt.model);
+        samples.push({ id, passed: false, checks: [{ name: 'hosted_inference_and_validation', passed: false }], httpStatus: reply.status, workerMarker: reply.headers.get('X-Assistant-Acceptance') === 'v1', ...(syntheticDiagnostic ? { syntheticDiagnostic } : {}) });
         console.log(`FAIL ${id} sample ${sample + 1}/${repetitions} HTTP ${reply.status} worker-marker=${reply.headers.get('X-Assistant-Acceptance') === 'v1'}`);
         continue;
       }

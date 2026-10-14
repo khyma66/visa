@@ -32,7 +32,23 @@ export default {
       const corpus = prepareAssistantCorpus(fixture.corpus);
       const started = Date.now();
       const raw = await runAssistantModel(assistantPrompt(fixture.input, corpus), { provider: 'workers-ai', binding: env.ASSISTANT_AI, signal: request.signal });
-      const result = validateAssistantOutput(raw, corpus);
+      let result;
+      try { result = validateAssistantOutput(raw, corpus); }
+      catch {
+        // Only a known, compiled synthetic fixture reaches this branch. The
+        // model never receives credentials or production data. Keep invalid
+        // structured output for diagnosis without changing production logging
+        // or converting failed validation into a passing evaluation.
+        let output: unknown;
+        try { output = JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); }
+        catch { output = undefined; }
+        return response({ id: fixture.id, passed: false, model: WORKERS_ASSISTANT_MODEL,
+          error: 'Hosted source validation failed', durationMs: Date.now() - started,
+          syntheticDiagnostic: { source: 'compiled-synthetic-fixture-only', fixtureId: fixture.id,
+            stage: 'source-validation', ...(output === undefined ? { rawOutput: raw } : { output }),
+          },
+        }, 502);
+      }
       const evaluation = evaluateAcceptance(fixture, result);
       // Only failed, fixed COMPILED SYNTHETIC fixtures may include diagnostic
       // output. This Worker has no database, production content or free-form

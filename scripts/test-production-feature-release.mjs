@@ -113,7 +113,7 @@ test('Worker archive recovery interprets only static literals and never executes
 
 function acceptanceReceipt() {
   const ids = ['post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'public-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post'];
-  const model = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+  const model = '@cf/openai/gpt-oss-120b';
   return { schemaVersion: 1, sourceSha: 'a'.repeat(40), provider: 'workers-ai', model, createdAt: new Date().toISOString(), passed: true, repetitions: 3, features: { posts: true, communities: true, catchup: true }, workerDeleted: true, cases: ids.map(id => ({
     id, model, passed: true,
     samples: Array.from({ length: 3 }, () => ({ id, model, passed: true, checks: [{ name: 'supported', passed: true }] })),
