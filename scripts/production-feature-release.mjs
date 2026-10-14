@@ -101,7 +101,7 @@ async function liveState() {
   assert.equal(deployment.versions.length, 1, 'An in-progress traffic split needs operator review.');
   assert.equal(deployment.versions[0].percentage, 100, 'Current deployment must serve one version at 100 percent.');
   const health = await jsonRequest(`${LIVE_SITE}/api/health?release=${Date.now()}`, { cache: 'no-store' });
-  console.log(JSON.stringify({ operation: 'live-health-check', environment: health.environment, releaseStatus: health.releaseStatus, source: health.build?.gitSha, siteOrigin: health.build?.siteOrigin, dirty: health.build?.dirty, deploymentId: deployment.id, versions: deployment.versions.map(row => ({ version: row.version_id, percentage: row.percentage })) }));
+  console.log(JSON.stringify({ operation: 'live-health-check', environment: health.environment, releaseStatus: health.releaseStatus, source: health.build?.gitSha, gitTree: health.build?.gitTree, sourceSha256: health.build?.sourceSha256, configSha256: health.build?.configSha256, siteOrigin: health.build?.siteOrigin, dirty: health.build?.dirty, deploymentId: deployment.id, versions: deployment.versions.map(row => ({ version: row.version_id, percentage: row.percentage })) }));
   verifyExistingLiveProvenance(health, deployment);
   const response = await fetch(LIVE_SITE, { redirect: 'error', signal: AbortSignal.timeout(15_000) });
   assert.match(response.headers.get('x-robots-tag') ?? '', /noindex/, 'Do not change an already launched site through preview tooling.');
