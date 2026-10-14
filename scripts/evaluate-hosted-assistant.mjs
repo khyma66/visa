@@ -67,13 +67,8 @@ try {
   // Wrangler output is intentionally not forwarded: no secret or accidental source logging.
   assert(deployment.status === 0, `Temporary AI Worker deployment failed (exit ${deployment.status ?? 'timeout'})`);
   await rm(secretsPath, { force: true });
-  const url = `https://${name}.${subdomain.subdomain}.workers.dev/evaluate`;
-  await waitForAcceptanceReady(new URL('/ready', url), secret, sourceSha, cases);
-  console.log('PASS authenticated Worker readiness');
-  const rejected = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: cases[0] }), redirect: 'error', signal: AbortSignal.timeout(15_000) });
-  assert.equal(rejected.status, 404, 'Evaluation must reject unauthenticated callers');
-  assert.equal(rejected.headers.get('X-Assistant-Acceptance'), 'v1', 'Unauthenticated rejection must come from the deployed Worker');
-  await rejected.body?.cancel();
+  const url = await waitForAcceptanceReady(`https://${name}.${subdomain.subdomain}.workers.dev/evaluate`, secret, sourceSha, cases);
+  console.log('PASS authenticated Worker readiness and unauthenticated denial');
   for (const id of cases) {
     const reply = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ id }), redirect: 'error', signal: AbortSignal.timeout(35_000) });
     if (!reply.ok) { await reply.body?.cancel(); receipt.cases.push({ id, passed: false, checks: [{ name: 'hosted_inference_and_validation', passed: false }], httpStatus: reply.status }); console.log(`FAIL ${id} HTTP ${reply.status}`); continue; }

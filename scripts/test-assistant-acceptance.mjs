@@ -31,31 +31,36 @@ test('evaluation denies absent/wrong credentials and invalid/expired expiry befo
 
 test('authenticated readiness proves the actual build and requires no model inference', async () => {
   const settings = { ...env(), ACCEPTANCE_SOURCE_SHA: 'a'.repeat(40) };
-  const readyRequest = new Request('https://temporary.workers.dev/ready', { headers: { Authorization: `Bearer ${secret}` } });
+  const readyRequest = request({ id: '__ready__' });
   const ready = await worker.fetch(readyRequest, settings);
   assert.equal(ready.status, 200);
   assert.equal(ready.headers.get('X-Assistant-Acceptance'), 'v1');
   const result = await ready.json();
   assert.equal(result.sourceSha, settings.ACCEPTANCE_SOURCE_SHA);
   assert.deepEqual(result.cases, acceptanceFixtures.map(fixture => fixture.id));
-  assert.equal((await worker.fetch(new Request(readyRequest.url), settings)).status, 404);
+  assert.equal((await worker.fetch(request({ id: '__ready__' }, { Authorization: '' }), settings)).status, 404);
 });
 
 test('readiness retries only propagation and fails closed on a platform page or wrong build', async () => {
   const cases = acceptanceFixtures.map(fixture => fixture.id);
   let clock = 0, calls = 0;
   const value = { ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: 'a'.repeat(40), model: '@cf/qwen/qwen3-30b-a3b-fp8', cases };
-  const options = { now: () => clock, pause: async amount => { clock += amount; }, fetcher: async (_url, init) => {
-    calls++; assert.equal(init.headers.Authorization, `Bearer ${secret}`);
+  const options = { now: () => clock, pause: async amount => { clock += amount; }, fetcher: async (url, init) => {
+    calls++; assert.equal(url.pathname, '/evaluate'); assert.equal(init.method, 'POST'); assert.deepEqual(JSON.parse(init.body), { id: '__ready__' });
+    if (!init.headers.Authorization) return new Response('', { status: 404, headers: { 'X-Assistant-Acceptance': 'v1' } });
+    assert.equal(init.headers.Authorization, `Bearer ${secret}`);
     return calls < 3 ? new Response('platform propagation', { status: 404 }) : Response.json(value, { headers: { 'X-Assistant-Acceptance': 'v1' } });
   } };
-  await waitForAcceptanceReady('https://temporary.workers.dev/ready', secret, value.sourceSha, cases, options);
-  assert.equal(calls, 3);
+  const proven = await waitForAcceptanceReady('https://temporary.workers.dev/evaluate', secret, value.sourceSha, cases, options);
+  assert.equal(proven.pathname, '/evaluate'); assert.equal(proven.searchParams.get('readiness'), '2');
+  assert.equal(calls, 4);
   for (const reply of [() => new Response('platform page', { status: 200 }), () => Response.json({ ...value, sourceSha: 'b'.repeat(40) }, { headers: { 'X-Assistant-Acceptance': 'v1' } })]) {
     clock = 0;
-    await assert.rejects(() => waitForAcceptanceReady('https://temporary.workers.dev/ready', secret, value.sourceSha, cases, { ...options, fetcher: async () => reply() }), /no model cases were invoked/);
+    await assert.rejects(() => waitForAcceptanceReady('https://temporary.workers.dev/evaluate', secret, value.sourceSha, cases, { ...options, fetcher: async () => reply() }), /no model cases were invoked/);
     assert.equal(clock, 45_000);
   }
+  clock = 0;
+  await assert.rejects(() => waitForAcceptanceReady('https://temporary.workers.dev/evaluate', secret, value.sourceSha, cases, { ...options, fetcher: async (_url, init) => init.headers.Authorization ? Response.json(value, { headers: { 'X-Assistant-Acceptance': 'v1' } }) : new Response('platform denial', { status: 404 }) }), /unproven-authentication-rejection/);
 });
 
 test('evaluation only accepts fixed fixture IDs and rejects caller-supplied prompts', async () => {

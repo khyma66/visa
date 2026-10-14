@@ -3,9 +3,11 @@ import { test } from 'node:test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { archiveSource } from './archive-source.mjs';
 import { checkedLiveArchive, LIVE_SITE, LIVE_DATABASE, sha256 } from './live-preview-archive.mjs';
-import { featureEnvironment, verifyFeatureWorker, verifyAssistantAcceptance, verifyExistingLiveProvenance } from './production-feature-release.mjs';
+import { featureEnvironment, verifyFeatureWorker, verifyAssistantAcceptance, verifyExistingLiveProvenance, verifySourceAncestry } from './production-feature-release.mjs';
+import { sourceProvenance } from './build-provenance.mjs';
 import { archiveFromWorkerModule, recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 
 const values = { NEXT_PUBLIC_SITE_URL: LIVE_SITE, NEXT_PUBLIC_SUPABASE_URL: LIVE_DATABASE, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: `sb_publishable_${'fixture'.repeat(5)}` };
@@ -19,6 +21,24 @@ test('only the independently identified legacy version may omit a site origin', 
   for (const change of [{ gitSha: 'a'.repeat(40) }, { dirty: true }, { siteOrigin: undefined }, { siteOrigin: '' }, { siteOrigin: 'https://visa-central.com' }]) assert.throws(() => verifyExistingLiveProvenance({ ...health, build: { ...health.build, ...change } }, deployment));
   for (const changed of [{ versions: [{ version_id: '11111111-1111-1111-1111-111111111111', percentage: 100 }] }, { versions: [{ ...deployment.versions[0], percentage: 50 }] }, { versions: [...deployment.versions, deployment.versions[0]] }]) assert.throws(() => verifyExistingLiveProvenance(health, changed));
   assert.throws(() => verifyExistingLiveProvenance({ ...health, environment: 'production' }, deployment));
+});
+
+test('an unavailable original commit requires exact tracked-source fingerprint in current ancestry', async () => {
+  const root = await mkdtemp(resolve(tmpdir(), 'visa-source-parity-'));
+  try {
+    const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    git('init'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Isolated test');
+    await writeFile(resolve(root, 'app.js'), 'original source'); git('add', 'app.js'); git('commit', '-m', 'original');
+    const original = sourceProvenance(root);
+    await writeFile(resolve(root, 'app.js'), 'original source plus features'); git('add', 'app.js'); git('commit', '-m', 'features');
+    assert.equal(verifySourceAncestry(root, original).method, 'git-ancestor');
+    const unpushed = { ...original, gitSha: 'f'.repeat(40) };
+    const recovered = verifySourceAncestry(root, unpushed);
+    assert.equal(recovered.method, 'exact-source-fingerprint');
+    assert.equal(recovered.ancestor, original.gitSha);
+    assert.throws(() => verifySourceAncestry(root, { ...unpushed, sourceSha256: 'e'.repeat(64) }), /no exact tracked-source fingerprint/);
+    assert.throws(() => verifySourceAncestry(root, { ...unpushed, sourceSha256: undefined }), /fingerprint is missing/);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('existing preview feature configuration preserves launch gates and production-only AI', () => {
@@ -61,6 +81,10 @@ test('Worker archive recovery interprets only static literals and never executes
   assert.equal(archiveFromWorkerModule('var a={questions:[],answersByQuestionId:{},source:Date.now()};'), null);
   const form = new FormData(); form.append('archive.js', new Blob([js], { type: 'application/javascript' }), 'archive.js');
   assert.equal(canonicalJson(await recoverWorkerArchive(new Response(form))), canonicalJson(fixture));
+  const stringForm = new FormData(); stringForm.append('archive.js', js);
+  assert.equal(canonicalJson(await recoverWorkerArchive(new Response(stringForm))), canonicalJson(fixture));
+  const filenameForm = new FormData(); filenameForm.append('script-part', new Blob([js], { type: 'application/javascript' }), 'archive.js');
+  assert.equal(canonicalJson(await recoverWorkerArchive(new Response(filenameForm))), canonicalJson(fixture));
   const published = publishedArchive(fixture);
   assert.equal(published.questions[0].answer_count, 0, 'Last-row-wins precedes visibility filtering.');
   assert.equal(published.questions[0].source_comment_count, 2);

@@ -20,13 +20,13 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // Not an alternate chatbot endpoint: only authenticated, expiring fixed-fixture evaluation.
     const path = new URL(request.url).pathname;
-    if (!((path === '/evaluate' && request.method === 'POST') || (path === '/ready' && request.method === 'GET')) || !await authorized(request, env)) return response({ error: 'Not found' }, 404);
-    // This authenticated handshake performs no inference and distinguishes a
-    // deployed Worker from a transient platform 404 while the route propagates.
-    if (path === '/ready') return response({ ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: env.ACCEPTANCE_SOURCE_SHA, model: WORKERS_ASSISTANT_MODEL, cases: acceptanceFixtures.map(fixture => fixture.id) });
+    if (path !== '/evaluate' || request.method !== 'POST' || !await authorized(request, env)) return response({ error: 'Not found' }, 404);
     try {
       const body = await readBoundedJson(request, 128);
       if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'id')) return response({ error: 'Invalid fixture' }, 400);
+      // Probe the exact inference method/path without invoking the model. A
+      // separate /ready route cannot establish /evaluate route propagation.
+      if ((body as { id?: unknown }).id === '__ready__') return response({ ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: env.ACCEPTANCE_SOURCE_SHA, model: WORKERS_ASSISTANT_MODEL, cases: acceptanceFixtures.map(fixture => fixture.id) });
       const fixture = acceptanceFixtures.find(item => item.id === (body as { id?: unknown }).id);
       if (!fixture) return response({ error: 'Invalid fixture' }, 400);
       const corpus = prepareAssistantCorpus(fixture.corpus);

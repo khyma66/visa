@@ -31,21 +31,25 @@ function literal(node, values, depth = 0) {
   return unsupported;
 }
 
-export function archiveFromWorkerModule(source) {
+export function archiveFromWorkerModule(source, diagnostics) {
   if (!source.includes('answersByQuestionId')) return null;
   const file = ts.createSourceFile('downloaded-worker.js', source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
   assert.equal(file.parseDiagnostics.length, 0, 'Worker module could not be parsed safely.');
   const values = new Map(); const archives = [];
+  const shapes = {};
   for (const statement of file.statements) {
     if (!ts.isVariableStatement(statement)) continue;
     for (const declaration of statement.declarationList.declarations) {
       if (!ts.isIdentifier(declaration.name)) continue;
+      const shape = ts.SyntaxKind[declaration.initializer?.kind] ?? 'none';
+      shapes[shape] = (shapes[shape] ?? 0) + 1;
       const value = literal(declaration.initializer, values);
       if (value === unsupported) continue;
       values.set(declaration.name.text, value);
       if (Array.isArray(value?.questions) && value?.answersByQuestionId && value?.source) archives.push(value);
     }
   }
+  if (diagnostics) Object.assign(diagnostics, { topLevelDeclarations: Object.values(shapes).reduce((a, b) => a + b, 0), initializerShapes: shapes, literalArchives: archives.length });
   assert(archives.length <= 1, 'Ambiguous archive module; manual review required.');
   return archives[0] ?? null;
 }
@@ -58,12 +62,31 @@ export async function recoverWorkerArchive(response) {
     while (true) { const row = await reader.read(); if (row.done) break; size += row.value.byteLength; assert(size < 40 * 1024 * 1024, 'Worker download exceeds limit.'); chunks.push(row.value); }
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
   const body = Buffer.concat(chunks);
-  const modules = [];
+  const modules = []; const parts = [];
   if (/multipart\/form-data/i.test(contentType)) {
     const form = await new Response(body, { headers: { 'content-type': contentType } }).formData();
-    for (const [name, value] of form) if (/\.m?js$/.test(name) && typeof value !== 'string') modules.push(await value.text());
-  } else modules.push(body.toString('utf8'));
-  const candidates = modules.map(archiveFromWorkerModule).filter(Boolean);
+    for (const [name, value] of form) {
+      const filename = typeof value === 'string' ? name : value.name;
+      const type = typeof value === 'string' ? 'string' : value.type;
+      const size = typeof value === 'string' ? Buffer.byteLength(value) : value.size;
+      parts.push({ field: name, filename, type, bytes: size });
+      if (/\.(?:m?js|json)$/.test(name) || /\.(?:m?js|json)$/.test(filename) || /javascript/.test(type)) modules.push({ name: filename || name, source: typeof value === 'string' ? value : await value.text() });
+    }
+  } else modules.push({ name: 'single-body', source: body.toString('utf8') });
+  const moduleInfo = []; const candidates = [];
+  for (const { name, source } of modules) {
+    const info = { name, bytes: Buffer.byteLength(source), archiveMarkers: source.split('answersByQuestionId').length - 1 };
+    moduleInfo.push(info);
+    if (!info.archiveMarkers) continue;
+    let candidate;
+    if (/\.json$/.test(name) || /^[\s\r\n]*\{/.test(source)) {
+      try { const value = JSON.parse(source); if (Array.isArray(value?.questions) && value?.answersByQuestionId && value?.source) candidate = value; }
+      catch { /* A script beginning with a block is not treated as JSON. */ }
+    }
+    candidate ??= archiveFromWorkerModule(source, info);
+    if (candidate) candidates.push(candidate);
+  }
+  if (candidates.length !== 1) console.log(JSON.stringify({ operation: 'archive-recovery-metadata', contentType, bytes: size, parts, modules: moduleInfo, candidates: candidates.length }));
   assert.equal(candidates.length, 1, 'Expected exactly one literal archive in the current Worker.');
   return candidates[0];
 }

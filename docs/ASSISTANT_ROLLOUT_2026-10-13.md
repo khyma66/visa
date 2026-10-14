@@ -1,51 +1,75 @@
-# VisaThreads assistant and development rollout
+# VisaThreads production-only assistant rollout
 
 ## Owner decision — October 14, 2026
 
-AI features belong **only on https://visathreads.com**. The development website https://visa-central.com must have no chatbot or AI controls. This supersedes the earlier isolated-dev AI rollout plan.
+AI features belong **only on https://visathreads.com**. The development website https://visa-central.com must have no chatbot or AI controls. Production work now includes post Q&A, discussion summaries, public/community Q&A and time-based catch-up. This supersedes the earlier dev-AI plan and the initial post-only activation plan.
 
 | Site | Worker | Supabase project | AI |
 |---|---|---|---|
-| visathreads.com | visaflow-dev | cycnichledvqbxevrwnt | Production activation pending release checks |
+| visathreads.com | visaflow-dev | cycnichledvqbxevrwnt | Candidate prepared; hosted acceptance and deployment pending |
 | visa-central.com | visathreads-sandbox | ppdwysmeistjxzjpmxyk | Disabled; no AI binding |
 
-Both Cloudflare routes were verified through the API. The Worker named `visaflow-dev` actually serves production: never infer environment from that name. Both Supabase projects accept read queries. Cloudflare GitHub environment credentials work; another browser login is not needed.
+The Worker named `visaflow-dev` actually serves the production domain. Deployment checks pin the domain, Worker and database explicitly. Cloudflare access through the GitHub production environment works; another browser login is not required.
 
-PR #8 contains PR #9's popular-tag quick picks and navigation fixes plus the chatbot. Both target `release/owner-feedback-20261013`; obsolete `main` must not be deployed. The revised combined candidate passes 702 tests, TypeScript, a dev build, and the repository secret scan. These are code checks, not a hosted inference or real sign-in pass.
+## Current checkpoint — October 14, 2026
 
-## Development deployment
+- The combined candidate passes **1,489 local tests**, including the dependency fork regressions and upstream compatibility cases, plus TypeScript and build checks. Local tests do not establish hosted model quality or real-user sign-in acceptance.
+- The additive assistant retrieval/quota migration is **applied and verified in production** project `cycnichledvqbxevrwnt`. Missing assistant RPCs are no longer a blocker. Do not replay the repository's historical migration chain against this project.
+- The previous `braces` audit blocker is addressed by a reviewed, bounded-depth local source fork. Its origin, security changes, limits, tests and maintenance duties are recorded in [vendor/braces/FORK.md](../vendor/braces/FORK.md). The full dependency audit remains enforced. This is not an upstream patched release, and an advisory scan alone does not audit local fork source.
+- A real hosted Workers AI binding has been exercised. The initial representative acceptance run recorded **2 passing cases and 9 failing cases**. Investigation and acceptance remain pending; this is **not** a hosted model pass. The earlier standalone REST-token 401 is not evidence that the deployed binding is unavailable.
+- **Production AI has not been deployed or marked live at this checkpoint.** The release workflow requires a successful acceptance receipt for the exact release commit before deployment.
+- The original live archive must be recovered and compared against the still-active deployment as part of the guarded release. Development fixtures must never replace it.
 
-Use `npm run build:devsite` / `npm run deploy:devsite` with `.env.sandbox.local` containing the dev publishable key, dev Supabase URL above, and `NEXT_PUBLIC_SITE_URL=https://visa-central.com`.
+## Remaining PR consolidation
 
-The `sandbox` Wrangler environment pins the Worker, two visa-central domains, and dev database. The helper rejects production routes, an AI binding, enabled AI flags, and other targets. `workers.dev` is disabled. The old `build:assistant` / `deploy:assistant` commands deliberately fail with replacement instructions.
+PR #8 now targets `main` and contains the current production source, owner-feedback changes, chatbot and PR #9's tag/navigation improvements. Deploy the merged combined release, never the obsolete pre-consolidation `main` tree or an old stacked branch in isolation.
 
-The `development-site.yml` workflow runs tests/typechecking, builds with synthetic fixtures, verifies generated configuration and actual domain routing, and checks live pages plus AI denial after deployment. It records the old dev Worker version and checks that the production deployment did not change. Existing production-environment Cloudflare secrets are used only in the Cloudflare steps.
+| PR | Treatment in the combined release |
+|---|---|
+| #1 | Community privilege migrations and access tests already incorporated. |
+| #2 | Auth/security behavior reconciled into the current application; optional Turnstile support restored without changing hosted auth settings. |
+| #3 | Consolidated deployed source is an ancestor of the candidate. |
+| #4 | Source-neutral post presentation and member-only messaging preserved. |
+| #5 | Community discovery, lifecycle and bounded reads incorporated into current UI/schema. |
+| #6 | Direct sign-in entry and current Google/email behavior preserved. |
+| #7 | Community navigation, compact feed and exact-build provenance safeguards incorporated. |
+| #8 | Combined release candidate and production-only AI implementation. |
+| #9 | Exact popular-tag/navigation commit already included in #8. |
 
-Development Auth still requires its own site/callback configuration and provider settings. Do not redirect dev users into the production database. The unused assistant database migration applied before the owner's clarification does not enable AI or create a model binding.
+After the combined candidate is merged and its checks recorded, close the superseded PRs with a link to that merge. Do not merge their obsolete whole trees again merely to change their GitHub status.
 
-### Latest verification and remaining blockers
+## Guarded update of the currently live site
 
-- Both Supabase projects accept authenticated tool queries. Production has no assistant quota RPCs yet; dev has the previously applied migration, unused by the website.
-- GitHub run `38516140744` successfully uploaded the regular dev build, but its immediate health check returned the older commit. The subsequent Cloudflare inventory showed another deployment of that older build. The new smoke check allows up to 45 seconds for propagation and still requires the exact checked commit; it also verifies denial of legacy summary endpoints.
-- The API now checks the actual HTTPS request origin as well as the configured production domain and database. Dev, workers.dev previews, unexpected ports, and lookalike domains cannot enable inference through flags or forged forwarding headers.
-- The saved GitHub token can deploy Workers. Its separate Workers AI REST check returned HTTP 401 / code 10000 in run `38516422457`. Validate an AI-authorized token (Workers AI Read and Edit on the VisaThreads account) before relying on REST model evaluation. This result does not establish whether an deployed AI binding works.
-- PR checks still fail on the `braces` dependency chain (GHSA-vfj7-8cjw-p6xm, no published patch in the advisory). The full audit remains enforced. Production also needs its reviewed private archive, additive assistant migration, and signed-in model evaluation. Do not deploy the synthetic development fixture over the live archive.
+Use `.github/workflows/production-features.yml` on the reviewed merged `main` commit. Its helper, `scripts/production-feature-release.mjs`, is specific to the **already-serving early preview at visathreads.com**. The existing live launch mode and noindex status are retained. This feature update does not approve formal public launch or change `PUBLIC_LAUNCH_APPROVED`, `IMPORTED_CONTENT_APPROVED`, auth-provider settings, indexing or the dev deployment.
 
-## Production activation
+The workflow:
 
-The assistant UI renders only when built for `https://visathreads.com`. The API additionally requires project `cycnichledvqbxevrwnt`; accidental dev flags cannot enable it. The migration is additive: invoker retrieval and private count-only quotas, no posts/messages copied.
+1. Runs repository checks, TypeScript, release-helper checks and the full high-severity dependency audit.
+2. Captures domain routing, exact active deployment and rollback version. Recovers the original archive's JSON literal from the deployed Worker without executing its source, then verifies it against the live feed. Requires the original **563 posts / 628 replies**, unique IDs, metadata and reviewed experience checks; neither recovered content nor Worker source is uploaded as an artifact.
+3. Evaluates the actual Workers AI model in a temporary authenticated evaluation Worker using synthetic evidence. Requires all eleven representative cases, including every enabled mode, conflicts, unsupported policy, irrelevant evidence, prompt injection and multilingual content. Cleanup must succeed.
+4. Builds from clean, committed source descended from the captured live revision. Pins production domains/database, preserves existing secrets, and adds the `ASSISTANT_AI` binding.
+5. Immediately before deployment, verifies the live baseline has not changed and the model acceptance receipt matches the exact commit, enabled features and model, is less than one hour old, and records removal of the temporary Worker.
+6. Deploys, then checks exact source provenance, unchanged archive, feature availability and anonymous/invalid-auth denials. Verification failure triggers rollback only if no intervening unrelated deployment exists.
 
-Required flags: `ASSISTANT_PROJECT_REF=cycnichledvqbxevrwnt`, `ASSISTANT_PROVIDER=workers-ai`, `ASSISTANT_ENABLED=true`, `ASSISTANT_COMMUNITIES_ENABLED=false`, `ASSISTANT_CATCHUP_ENABLED=false`, and Workers AI binding `ASSISTANT_AI`. These are intended settings, not a deployment record.
+`production-feature-preparation.yml` performs capture/build/preflight without deploying. It does not replace hosted acceptance. `assistant-acceptance.yml` runs the hosted model evaluation independently. No successful result should be inferred from merely uploading an evaluation Worker.
 
-Keep the existing dependency audit and public-release review gates. The full audit still finds the unpatched `braces` chain. Do not replace the live 563-post / 628-reply archive with the CI synthetic fixture. The reviewed ignored archive must pass `check:private-experiences` and parity checks before a production deployment. A successful dev deployment does not authorize a public-launch flag change.
+Intended feature settings are `ASSISTANT_PROJECT_REF=cycnichledvqbxevrwnt`, `ASSISTANT_PROVIDER=workers-ai`, `ASSISTANT_ENABLED=true`, `ASSISTANT_COMMUNITIES_ENABLED=true`, `ASSISTANT_CATCHUP_ENABLED=true`, with Workers AI binding `ASSISTANT_AI`. These describe the pending candidate, not a completed deployment. The API also checks the actual HTTPS request origin, configured site and database; dev domains, previews, lookalike hosts and forged forwarding headers cannot enable inference.
 
-Verify registered sign-in, real model inference, source quotes, unsupported/conflicting questions, account isolation, moderation invalidation, and quotas before marking production AI live. Rollback: disable `ASSISTANT_ENABLED` and redeploy the same reviewed production configuration, or restore the previous Worker version. Community/catch-up activation stays a later production-only rollout.
+Keep `.github/workflows/public-release.yml`, `scripts/release-check.mjs` and the evidence requirements in `docs/release-review.json` intact. Their broader launch reviews remain separate and must not be marked verified by this feature rollout.
+
+Before calling AI live, record the successful exact-commit model evaluation, deployment/version, hosted route/feature checks and authenticated end-to-end result. Verify real answers, source quotes, unsupported/conflicting questions, account isolation, content-change invalidation and quota behavior; do not describe an anonymous denial check as a successful signed-in user flow.
+
+Rollback uses the captured previous Worker version, or a checked build with all assistant flags disabled. Worker rollback does not undo the additive database migration.
+
+## Development remains without AI
+
+The sandbox configuration pins `visa-central.com`, Worker `visathreads-sandbox` and project `ppdwysmeistjxzjpmxyk`. Its build helper rejects production targets, AI bindings and enabled AI flags. No AI page/buttons or usable inference endpoint should appear there. The previously applied dev assistant migration is unused and does not activate AI. Routine dev verification is outside the current production rollout work.
 
 ## Implemented
 
 - Collapsible **Ask about this discussion** and **Summarize discussion** on question/experience pages, with links to cited posts and replies.
 - **Ask VisaThreads** at `/assistant`, accessible from the header and community tools. Global post search is included in the first rollout.
-- Separately gated community Q&A and **Catch me up**. Intervals: 1 hour, 6 hours, 24 hours, 7 days, or since the last successful complete catch-up. The default is 24 hours; API intervals cannot exceed 31 days.
+- Separately gated community Q&A and **Catch me up**, both selected for the production-only feature release after hosted acceptance. Intervals: 1 hour, 6 hours, 24 hours, 7 days, or since the last successful complete catch-up. The default is 24 hours; API intervals cannot exceed 31 days.
 - Up to three previous user questions support follow-ups. Conversation contents are not persisted by this implementation. Only a timestamp is saved in browser storage, scoped to the account and selected community/feed. Partial or insufficient answers do not advance that checkpoint.
 - Native content is retrieved through the signed-in user's Supabase client, current RLS/invoker views, and indexed keyword/tag search. Approved snapshot content supports individual discussions, public Q&A, and public catch-up events within the selected interval. Public catch-up also retrieves current member replies to visible snapshot posts. Imported content is not guessed into native communities. Replies to older posts can appear in catch-up; the older parent is context, not a new event.
 
