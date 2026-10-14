@@ -2,7 +2,9 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "visaflow",
   "compatibility_date": "2026-09-09",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "vars": {
     "COMMUNITY_SOURCE_MODE": "snapshot",
     "APIFY_RUN_ID": "9iVj9RajtVcIVkzgZ",
@@ -27,32 +29,25 @@
     "not_found_handling": "none",
     "binding": "ASSETS"
   },
-  "cache": { "enabled": true },
-  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "cache": {
+    "enabled": true
+  },
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
   "env": {
-    "assistant": {
-      "name": "visathreads-ai-dev",
-      "workers_dev": true,
-      "routes": [],
-      "ai": { "binding": "ASSISTANT_AI" },
-      "vars": {
-        "APP_ENV": "development",
-        "COMMUNITY_SOURCE_MODE": "snapshot",
-        "APIFY_LIVE_FETCH_ENABLED": "false",
-        "ASSISTANT_ENABLED": "true",
-        "ASSISTANT_COMMUNITIES_ENABLED": "false",
-        "ASSISTANT_CATCHUP_ENABLED": "false",
-        "ASSISTANT_PROVIDER": "workers-ai",
-        "ASSISTANT_PROJECT_REF": "ppdwysmeistjxzjpmxyk"
-      },
-      "version_metadata": { "binding": "CF_VERSION_METADATA" }
-    },
     "development": {
       "name": "visaflow-dev",
       "workers_dev": true,
       "routes": [
-        { "pattern": "visathreads.com", "custom_domain": true },
-        { "pattern": "www.visathreads.com", "custom_domain": true }
+        {
+          "pattern": "visathreads.com",
+          "custom_domain": true
+        },
+        {
+          "pattern": "www.visathreads.com",
+          "custom_domain": true
+        }
       ],
       "vars": {
         "APP_ENV": "development",
@@ -62,7 +57,9 @@
         "APIFY_USE_LATEST_RUN": "true",
         "APIFY_API_BASE_URL": "https://api.apify.com/v2"
       },
-      "version_metadata": { "binding": "CF_VERSION_METADATA" }
+      "version_metadata": {
+        "binding": "CF_VERSION_METADATA"
+      }
     },
     "production": {
       "name": "visaflow",
@@ -72,7 +69,37 @@
         "PUBLIC_LAUNCH_APPROVED": "false",
         "IMPORTED_CONTENT_APPROVED": "false"
       },
-      "version_metadata": { "binding": "CF_VERSION_METADATA" }
+      "version_metadata": {
+        "binding": "CF_VERSION_METADATA"
+      }
+    },
+    "sandbox": {
+      "name": "visathreads-sandbox",
+      "workers_dev": false,
+      "routes": [
+        {
+          "pattern": "visa-central.com",
+          "custom_domain": true
+        },
+        {
+          "pattern": "www.visa-central.com",
+          "custom_domain": true
+        }
+      ],
+      "vars": {
+        "APP_ENV": "development",
+        "COMMUNITY_SOURCE_MODE": "snapshot",
+        "APIFY_LIVE_FETCH_ENABLED": "false",
+        "ASSISTANT_ENABLED": "false",
+        "ASSISTANT_COMMUNITIES_ENABLED": "false",
+        "ASSISTANT_CATCHUP_ENABLED": "false",
+        "NEXT_PUBLIC_SITE_URL": "https://visa-central.com",
+        "NEXT_PUBLIC_SUPABASE_URL": "https://ppdwysmeistjxzjpmxyk.supabase.co",
+        "NEXT_PUBLIC_DEPLOYMENT_TARGET": "development-sandbox"
+      },
+      "version_metadata": {
+        "binding": "CF_VERSION_METADATA"
+      }
     }
   }
 }
