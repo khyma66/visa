@@ -52,8 +52,8 @@ test('readiness retries only propagation and fails closed on a platform page or 
     return calls < 3 ? new Response('platform propagation', { status: 404 }) : Response.json(value, { headers: { 'X-Assistant-Acceptance': 'v1' } });
   } };
   const proven = await waitForAcceptanceReady('https://temporary.workers.dev/evaluate', secret, value.sourceSha, cases, options);
-  assert.equal(proven.pathname, '/evaluate'); assert.equal(proven.searchParams.get('readiness'), '2');
-  assert.equal(calls, 4);
+  assert.equal(proven.pathname, '/evaluate'); assert.equal(proven.searchParams.get('readiness'), '5');
+  assert.equal(calls, 10);
   for (const reply of [() => new Response('platform page', { status: 200 }), () => Response.json({ ...value, sourceSha: 'b'.repeat(40) }, { headers: { 'X-Assistant-Acceptance': 'v1' } })]) {
     clock = 0;
     await assert.rejects(() => waitForAcceptanceReady('https://temporary.workers.dev/evaluate', secret, value.sourceSha, cases, { ...options, fetcher: async () => reply() }), /no model cases were invoked/);
@@ -76,6 +76,8 @@ test('successful evaluation executes exact production model and returns no gener
     calls++;
     assert.equal(model, '@cf/qwen/qwen3-30b-a3b-fp8');
     assert.equal(input.max_tokens, 1600);
+    assert.equal(input.temperature, 0);
+    assert.equal(input.seed, 39173);
     assert.equal(input.response_format.type, 'json_schema');
     return { response: JSON.stringify({ status: 'answered', claims: [{ text: 'The member reported receiving their passport on Friday.', evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] }) };
   } } };
@@ -113,4 +115,6 @@ test('all intended usecases have semantic expectations and runner cannot silentl
   assert.match(runner, /finally\s*\{[\s\S]*cleanup\(\)/);
   assert.match(runner, /--secrets-file/);
   assert.match(runner, /workerDeleted/);
+  assert.match(runner, /const repetitions = 3/);
+  assert.match(runner, /samples\.every\(sample => sample\.passed === true\)/);
 });

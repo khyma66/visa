@@ -56,7 +56,8 @@ const configPath = join(temporary, 'wrangler.json');
 const secretsPath = join(temporary, 'secrets.json');
 await writeFile(configPath, JSON.stringify({ name, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), account_id: account, compatibility_date: '2026-10-01', workers_dev: true, preview_urls: false, routes: [], ai: { binding: 'ASSISTANT_AI' }, vars: { ACCEPTANCE_EXPIRES: String(Date.now() + 15 * 60_000), ACCEPTANCE_SOURCE_SHA: sourceSha }, observability: { enabled: false } }));
 await writeFile(secretsPath, JSON.stringify({ ACCEPTANCE_SECRET: secret }), { mode: 0o600 });
-const receipt = { schemaVersion: 1, sourceSha, provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8', createdAt: new Date().toISOString(), passed: false, features: { posts: true, communities: true, catchup: true }, cases: [], workerDeleted: false };
+const repetitions = 3;
+const receipt = { schemaVersion: 1, sourceSha, provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8', createdAt: new Date().toISOString(), passed: false, repetitions, features: { posts: true, communities: true, catchup: true }, cases: [], workerDeleted: false };
 let failure;
 try {
   const subdomain = await api('/workers/subdomain');
@@ -67,15 +68,28 @@ try {
   // Wrangler output is intentionally not forwarded: no secret or accidental source logging.
   assert(deployment.status === 0, `Temporary AI Worker deployment failed (exit ${deployment.status ?? 'timeout'})`);
   await rm(secretsPath, { force: true });
-  const url = await waitForAcceptanceReady(`https://${name}.${subdomain.subdomain}.workers.dev/evaluate`, secret, sourceSha, cases);
+  const baseUrl = `https://${name}.${subdomain.subdomain}.workers.dev/evaluate`;
+  await waitForAcceptanceReady(baseUrl, secret, sourceSha, cases);
   console.log('PASS authenticated Worker readiness and unauthenticated denial');
   for (const id of cases) {
-    const reply = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ id }), redirect: 'error', signal: AbortSignal.timeout(35_000) });
-    if (!reply.ok) { await reply.body?.cancel(); receipt.cases.push({ id, passed: false, checks: [{ name: 'hosted_inference_and_validation', passed: false }], httpStatus: reply.status }); console.log(`FAIL ${id} HTTP ${reply.status}`); continue; }
-    const value = await reply.json();
-    assert(value.id === id && value.model === receipt.model && Array.isArray(value.checks), 'Evaluation returned an unexpected fixture or model');
-    receipt.cases.push(value);
-    console.log(`${value.passed ? 'PASS' : 'FAIL'} ${id}`);
+    const samples = [];
+    // Fixed independent samples, never retrying a failed inference or replacing
+    // a failure with a later success. Every sample remains in the receipt.
+    for (let sample = 0; sample < repetitions; sample++) {
+      const url = await waitForAcceptanceReady(baseUrl, secret, sourceSha, cases);
+      const reply = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }, body: JSON.stringify({ id }), redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(35_000) });
+      if (!reply.ok) {
+        await reply.body?.cancel();
+        samples.push({ id, passed: false, checks: [{ name: 'hosted_inference_and_validation', passed: false }], httpStatus: reply.status, workerMarker: reply.headers.get('X-Assistant-Acceptance') === 'v1' });
+        console.log(`FAIL ${id} sample ${sample + 1}/${repetitions} HTTP ${reply.status} worker-marker=${reply.headers.get('X-Assistant-Acceptance') === 'v1'}`);
+        continue;
+      }
+      const value = await reply.json();
+      assert(value.id === id && value.model === receipt.model && Array.isArray(value.checks), 'Evaluation returned an unexpected fixture or model');
+      samples.push(value);
+      console.log(`${value.passed ? 'PASS' : 'FAIL'} ${id} sample ${sample + 1}/${repetitions}`);
+    }
+    receipt.cases.push({ id, model: receipt.model, passed: samples.length === repetitions && samples.every(sample => sample.passed === true), checks: samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed }))), samples });
   }
   receipt.passed = receipt.cases.length === cases.length && receipt.cases.every(item => item.passed === true && item.checks.every(check => check.passed === true));
   if (!receipt.passed) failure = Error('Hosted AI acceptance failed; production AI must remain disabled');

@@ -34,7 +34,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       try {
         const value = await Promise.race([options.binding.run(model, {
           messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user + '\n/no_think' }],
-          max_tokens: 1600, temperature: 0.1, response_format: { type: 'json_schema', json_schema: ASSISTANT_OUTPUT_SCHEMA },
+          max_tokens: 1600, temperature: 0, seed: 39173, response_format: { type: 'json_schema', json_schema: ASSISTANT_OUTPUT_SCHEMA },
         }), aborted]);
         if (value && typeof value === 'object') {
           const payload = value as { response?: unknown; choices?: { finish_reason?: string; message?: { content?: unknown } }[] };

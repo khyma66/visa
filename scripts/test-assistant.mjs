@@ -74,6 +74,8 @@ test('summary and catch-up are explicit evidence tasks without a missing questio
   const catchup=core.assistantPrompt({mode:'catchup',scope:{kind:'public'},since:'2026-10-12T00:00:00Z',until:'2026-10-13T00:00:00Z'},{sources:[source],partial:false});
   assert.match(catchup.system,/No user question is required for catch-up/);assert.equal('question' in JSON.parse(catchup.user),false);
   assert.match(summary.system,/Never infer current visa rules/);assert.match(summary.system,/exact supporting quotes/);
+  assert.match(summary.system,/Explicitly stated individual events, outcomes, dates and timing ARE evidence/);
+  assert.match(summary.system,/put the comparison in disagreements with quotes from at least two conflicting sources/);
 });
 test('authentication, origin, content type, body budget and disabled rollout fail before inference',async()=>{
   const {handler,state}=harness();
