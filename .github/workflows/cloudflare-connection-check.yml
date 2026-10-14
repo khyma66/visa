@@ -1,0 +1,82 @@
+name: Cloudflare connection check
+
+on:
+  push:
+    branches: [chore/cloudflare-connection-check]
+    paths: [.github/workflows/cloudflare-connection-check.yml]
+  workflow_dispatch:
+
+# This workflow only reads Cloudflare metadata. It never checks out application
+# code, installs packages, deploys a Worker, or changes account settings.
+permissions: {}
+
+jobs:
+  verify:
+    if: github.repository == 'khyma66/visa'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: production
+    steps:
+      - name: Verify Cloudflare access to VisaThreads Workers
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          import urllib.error
+          import urllib.request
+
+          def fail(message):
+              print(f"::error::{message}")
+              sys.exit(1)
+
+          token = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
+          account = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
+          if not token or not account:
+              fail("Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to the production environment secrets, then rerun this job.")
+          if not re.fullmatch(r"[0-9a-fA-F]{32}", account):
+              fail("CLOUDFLARE_ACCOUNT_ID must be the 32-character account ID, not a zone ID or email address.")
+
+          # Refuse redirects so the Authorization header stays at this API origin.
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          request = urllib.request.Request(
+              f"https://api.cloudflare.com/client/v4/accounts/{account}/workers/scripts",
+              headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+              method="GET",
+          )
+          try:
+              opener = urllib.request.build_opener(NoRedirect())
+              with opener.open(request, timeout=30) as response:
+                  payload = json.load(response)
+          except urllib.error.HTTPError as error:
+              fail(f"Cloudflare returned HTTP {error.code}. Check the token's account scope, expiry and Workers Scripts permission.")
+          except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+              fail("Could not read a valid Cloudflare API response. No account changes were made.")
+
+          if not isinstance(payload, dict) or payload.get("success") is not True:
+              fail("Cloudflare did not confirm this request succeeded.")
+          workers = payload.get("result")
+          if not isinstance(workers, list):
+              fail("Cloudflare returned an unexpected Workers response.")
+          expected = {"visaflow", "visaflow-dev", "visathreads-ai-dev"}
+          found = sorted({worker.get("id") for worker in workers if isinstance(worker, dict) and worker.get("id") in expected})
+          if not found:
+              fail("Cloudflare authentication succeeded, but no expected VisaThreads Worker was found. Verify the account ID and token scope.")
+          summary = (
+              "## Cloudflare connection verified\n\n"
+              "Authenticated API access and Workers read permission succeeded.\n\n"
+              "VisaThreads Workers found: " + ", ".join(f"`{name}`" for name in found) + ".\n\n"
+              "No deployment or account changes were made. Write permissions were not tested.\n"
+          )
+          print(summary)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as output:
+              output.write(summary)
+          PY
