@@ -1,0 +1,43 @@
+name: Cloudflare production AI readiness
+on:
+  push:
+    branches: [chore/cloudflare-connection-check]
+    paths: [.github/workflows/cloudflare-ai-validation.yml]
+permissions: {}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: production
+    steps:
+      - name: Validate one synthetic structured model response
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs): return None
+          schema={'type':'object','additionalProperties':False,'required':['sourceId','quote'],'properties':{'sourceId':{'type':'string'},'quote':{'type':'string'}}}
+          payload={'messages':[{'role':'system','content':'Return JSON only, exactly quoting the supplied synthetic source. Do not add facts.'},{'role':'user','content':'Source test-1: I brought a printed appointment confirmation. Return sourceId test-1 and its exact quote.\n/no_think'}],'max_tokens':300,'temperature':0.1,'response_format':{'type':'json_schema','json_schema':schema}}
+          url='https://api.cloudflare.com/client/v4/accounts/'+os.environ['CLOUDFLARE_ACCOUNT_ID']+'/ai/run/@cf/qwen/qwen3-30b-a3b-fp8'
+          req=urllib.request.Request(url,data=json.dumps(payload).encode(),headers={'Authorization':'Bearer '+os.environ['CLOUDFLARE_API_TOKEN'],'Content-Type':'application/json'},method='POST')
+          try:
+              with urllib.request.build_opener(NoRedirect).open(req,timeout=45) as response: data=json.load(response)
+          except urllib.error.HTTPError as e:
+              print('Workers AI request rejected: HTTP',e.code)
+              try: print('Cloudflare error codes:',[v.get('code') for v in json.load(e).get('errors',[])])
+              except Exception: pass
+              raise SystemExit(1)
+          assert data.get('success'), 'Model API did not confirm success'
+          result=data['result']
+          choice=(result.get('choices') or [None])[0]
+          if choice:
+              assert choice.get('finish_reason')=='stop', 'Model output was truncated'
+              result=choice['message']['content']
+          else: result=result.get('response')
+          result=json.loads(result) if isinstance(result,str) else result
+          assert result=={'sourceId':'test-1','quote':'I brought a printed appointment confirmation.'}, 'Structured output failed exact-source check'
+          print('PASS: Workers AI access, configured Qwen model, JSON schema, exact quote. Synthetic input only. No website deployed.')
+          PY
