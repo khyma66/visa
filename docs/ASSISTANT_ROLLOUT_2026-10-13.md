@@ -6,23 +6,24 @@ AI features belong **only on https://visathreads.com**. The development website 
 
 | Site | Worker | Supabase project | AI |
 |---|---|---|---|
-| visathreads.com | visaflow-dev | cycnichledvqbxevrwnt | Candidate prepared; hosted acceptance and deployment pending |
+| visathreads.com | visaflow-dev | cycnichledvqbxevrwnt | Hosted acceptance passed; merged release deployment pending |
 | visa-central.com | visathreads-sandbox | ppdwysmeistjxzjpmxyk | Disabled; no AI binding |
 
 The Worker named `visaflow-dev` actually serves the production domain. Deployment checks pin the domain, Worker and database explicitly. Cloudflare access through the GitHub production environment works; another browser login is not required.
 
 ## Current checkpoint — October 14, 2026
 
-- The combined candidate passes **1,509 repository tests**, including the dependency fork regressions and upstream compatibility cases, plus TypeScript and build checks. Local tests do not establish hosted model quality or real-user sign-in acceptance.
+- The combined release passes **1,511 repository tests**, including the dependency fork regressions and upstream compatibility cases, plus TypeScript and build checks. Web checks run `38580931135` passed. Local tests do not establish hosted model quality or real-user sign-in acceptance.
 - The additive assistant retrieval/quota migration is **applied and verified in production** project `cycnichledvqbxevrwnt`. Missing assistant RPCs are no longer a blocker. Do not replay the repository's historical migration chain against this project.
 - The previous `braces` audit blocker is addressed by a reviewed, bounded-depth local source fork. Its origin, security changes, limits, tests and maintenance duties are recorded in [vendor/braces/FORK.md](../vendor/braces/FORK.md). The full dependency audit remains enforced. This is not an upstream patched release, and an advisory scan alone does not audit local fork source.
-- A real hosted Workers AI binding has been exercised. Early runs exposed inconsistent attribution, summaries and conflict placement. The production prompt now distinguishes reported personal timelines from predictions, preserves summary details and places conflicting reports in disagreements. The first provider, Qwen3-30B-A3B, still omitted a reported delivery day in one of 33 samples (run `38523130090`). Llama 3.3 70B passed summary checks but failed two source-validation cases and declined one usable prompt-injection fixture (run `38579367106`). The candidate now uses Cloudflare-hosted `@cf/openai/gpt-oss-120b`, low reasoning effort, temperature zero and a fixed seed. The request uses its typed chat-completions schema envelope (`name`, `schema`, `strict`). The 25-second deadline and daily quotas are unchanged; completion is capped at 4,096 tokens including reasoning. Acceptance requires three successful samples of each of eleven cases; every sample is retained and failures are never replaced with retries. Hosted acceptance remains pending at this checkpoint.
-- **Production AI has not been deployed or marked live at this checkpoint.** The release workflow requires a successful acceptance receipt for the exact release commit before deployment.
-- Production preparation run `38521350134` passed repository tests, TypeScript, audit, original archive capture, the production feature build and unchanged-baseline checks. The original **563 posts and 628 replies** were recovered and their published-feed hash verified. Each release recaptures and rechecks the still-active archive; development fixtures must never replace it.
+- A real hosted Workers AI binding has been exercised. Early runs exposed inconsistent attribution, summaries and conflict placement. The production prompt now distinguishes reported personal timelines from predictions, preserves summary details and places conflicting reports in disagreements. The first provider, Qwen3-30B-A3B, still omitted a reported delivery day in one of 33 samples (run `38523130090`). Llama 3.3 70B passed summary checks but failed two source-validation cases and declined one usable prompt-injection fixture (run `38579367106`). The release now uses Cloudflare-hosted `@cf/openai/gpt-oss-120b`, low reasoning effort, temperature zero and a fixed seed. The request uses its typed chat-completions schema envelope (`name`, `schema`, `strict`). The 25-second deadline and daily quotas are unchanged; completion is capped at 4,096 tokens including reasoning. **Hosted acceptance run `38580920814` passed all 33 samples** on candidate commit `f16b20cb8e443fcffb6c427d79289a12c9fa858a`: three successful samples of each of eleven cases. Every sample is retained and failures are never replaced with retries.
+- **Production AI has not been deployed or marked live at this checkpoint.** PR #8 merged into `main` as `dbded2dac222ca543d93092998ae479f11a1c269`. Production release run `38582002973` passed all 33 hosted samples for that merge commit and uploaded Worker version `1a74afb6-711c-44a0-a3ea-4109ff4634a6`. Its exact-config smoke check then failed because the deploy CLI regenerated the mutable local provenance file with deployment-step environment values. The immutable bundled config hash was `b347d8ceb078615e478eb5fc4f948c24a65374a620051e5ef5fb6cb7e834e91d`; the overwritten expected hash was `e1846f64d6b877a98458b577181571f7bcbd33f7041c12510f38fd2a5a653e83`. Automated rollback restored the captured original Worker version `879503b4-e947-420e-8ad8-e1f2f7082ae5` at 14:44 UTC. A corrected release will compare against an immutable post-build receipt; no smoke assertion is waived.
+- Production preparation run `38580920806` passed repository tests, TypeScript, audit, original archive capture, the production feature build and unchanged-baseline checks. The original **563 posts and 628 replies** were recovered and their published-feed hash verified. Each release recaptures and rechecks the still-active archive; development fixtures must never replace it.
+- Authenticated member end-to-end acceptance has not been completed. Hosted synthetic model tests and anonymous/invalid-auth denial checks do not establish a successful signed-in user flow.
 
-## Remaining PR consolidation
+## PR consolidation
 
-PR #8 now targets `main` and contains the current production source, owner-feedback changes, chatbot and PR #9's tag/navigation improvements. Deploy the merged combined release, never the obsolete pre-consolidation `main` tree or an old stacked branch in isolation.
+PR #8 is merged into `main` as `dbded2dac222ca543d93092998ae479f11a1c269` and contains the current production source, owner-feedback changes, chatbot and PR #9's tag/navigation improvements. PRs #1, #2, #4, #5, #6, #7 and #9 were closed as incorporated; PR #3 closed automatically with the merge. Deploy the merged combined release, never the obsolete pre-consolidation `main` tree or an old stacked branch in isolation.
 
 | PR | Treatment in the combined release |
 |---|---|
@@ -33,10 +34,10 @@ PR #8 now targets `main` and contains the current production source, owner-feedb
 | #5 | Community discovery, lifecycle and bounded reads incorporated into current UI/schema. |
 | #6 | Direct sign-in entry and current Google/email behavior preserved. |
 | #7 | Community navigation, compact feed and exact-build provenance safeguards incorporated. |
-| #8 | Combined release candidate and production-only AI implementation. |
+| #8 | Merged combined release and production-only AI implementation. |
 | #9 | Exact popular-tag/navigation commit already included in #8. |
 
-After the combined candidate is merged and its checks recorded, close the superseded PRs with a link to that merge. Do not merge their obsolete whole trees again merely to change their GitHub status.
+The superseded PRs are closed; their changes were incorporated through #8 rather than merging obsolete whole trees again merely to change their GitHub status.
 
 ## Guarded update of the currently live site
 

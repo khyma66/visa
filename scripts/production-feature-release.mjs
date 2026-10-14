@@ -6,7 +6,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { checkedLiveArchive, LIVE_SITE, LIVE_DATABASE, LIVE_WORKER, sha256 } from './live-preview-archive.mjs';
-import { sourceProvenance } from './build-provenance.mjs';
+import { buildProvenance, sourceProvenance } from './build-provenance.mjs';
 import { recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -18,7 +18,8 @@ const hosts = ['visathreads.com', 'www.visathreads.com'];
 const publicVariableNames = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SITE_URL', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'GOOGLE_NEWS_RSS_ENABLED'];
 const LEGACY_BASELINE_SHA = '0624c651cb252436c47c5f2b020baecfec0bfbd0';
 const LEGACY_BASELINE_VERSION = '879503b4-e947-420e-8ad8-e1f2f7082ae5';
-const LEGACY_BASELINE_DEPLOYMENT = '82f636de-0d17-4625-9510-4480c11dc8e0';
+// Original deployment and the independently observed guarded rollback from run 38582002973.
+const LEGACY_BASELINE_DEPLOYMENTS = new Set(['82f636de-0d17-4625-9510-4480c11dc8e0', '5763d137-9c62-4646-a35b-efbe947cfe65']);
 const LEGACY_BASELINE_TREE = '1e67b513d22bd843ddcb587548feb68e71f0ef92';
 const LEGACY_BASELINE_SOURCE = '2b0809b06597008d2f9b911ec76b13648cfb3cefd271bdbe20809c2826762ea7';
 
@@ -96,7 +97,7 @@ export function verifyExistingLiveProvenance(health, deployment) {
   assert.equal(health.releaseStatus, 'configured', 'Current site backend is not configured.');
   assert.equal(health.build?.dirty, false, 'Current site was not built from clean committed source.');
   assert.match(health.build?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Current site provenance lacks a Git SHA.');
-  const legacyOrigin = health.build?.siteOrigin === null && pinnedLegacySource(health.build) && deployment.id === LEGACY_BASELINE_DEPLOYMENT &&
+  const legacyOrigin = health.build?.siteOrigin === null && pinnedLegacySource(health.build) && LEGACY_BASELINE_DEPLOYMENTS.has(deployment.id) &&
     deployment.versions?.length === 1 && deployment.versions[0].version_id === LEGACY_BASELINE_VERSION && deployment.versions[0].percentage === 100;
   assert(health.build?.siteOrigin === LIVE_SITE || legacyOrigin, 'Current site provenance has an unexpected origin.');
 }
@@ -156,6 +157,34 @@ function run(command, args, env) {
   });
 }
 
+function verifyFeatureManifestSource(manifest, source) {
+  assert.equal(manifest.schemaVersion, 1, 'Unsupported feature build manifest.');
+  assert.equal(manifest.dirty, false, 'Feature build manifest must record clean source.');
+  assert.match(manifest.configSha256 ?? '', /^[a-f0-9]{64}$/, 'Feature build manifest lacks a configuration digest.');
+  for (const field of ['gitSha', 'gitTree', 'sourceSha256', 'dirty']) {
+    assert.equal(manifest[field], source[field], `Feature build manifest ${field} does not match release source.`);
+  }
+}
+
+/** Vite config evaluation writes the ordinary manifest even during deploy's
+ * --skip-build metadata inspection. Freeze the actual build result before that
+ * can happen; deployment must never redefine its own expected provenance. */
+export async function snapshotFeatureBuildProvenance(repository, expected) {
+  const manifest = JSON.parse(await readFile(resolve(repository, '.cache/visaflow/build-provenance.json'), 'utf8'));
+  verifyFeatureManifestSource(manifest, sourceProvenance(repository));
+  assert.deepEqual(manifest, expected, 'Built provenance does not match the checked build environment.');
+  const destination = resolve(repository, '.cache/visaflow/live-preview/build-provenance.json');
+  await mkdir(resolve(repository, '.cache/visaflow/live-preview'), { recursive: true, mode: 0o700 });
+  await writeFile(destination, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+  return manifest;
+}
+
+export async function readFeatureBuildProvenance(repository = root) {
+  const manifest = JSON.parse(await readFile(resolve(repository, '.cache/visaflow/live-preview/build-provenance.json'), 'utf8'));
+  verifyFeatureManifestSource(manifest, sourceProvenance(repository));
+  return manifest;
+}
+
 /** Prove the deployed source is retained even if its original local commit was
  * never pushed: an identical tracked-source fingerprint in HEAD's ancestry is
  * equivalent evidence, not permission to accept approximately matching code. */
@@ -175,8 +204,8 @@ export function verifySourceAncestry(repository, build, baseline) {
   // The owner authorized replacing this observed live preview with the reviewed
   // feature candidate. Its original local commit was never available remotely.
   // State the transition honestly; this is neither ancestry nor equivalence.
-  if (pinnedLegacySource(build) && baseline?.deploymentId === LEGACY_BASELINE_DEPLOYMENT && baseline.previousVersion === LEGACY_BASELINE_VERSION && baseline.worker === LIVE_WORKER && baseline.siteOrigin === LIVE_SITE && baseline.databaseOrigin === LIVE_DATABASE) {
-    return { method: 'pinned-legacy-replacement', liveSource: build.gitSha, previousVersion: LEGACY_BASELINE_VERSION, previousDeployment: LEGACY_BASELINE_DEPLOYMENT, sourceEquivalence: 'not-established', rationale: 'Authorized feature replacement; exact archive and active deployment remain independently checked.' };
+  if (pinnedLegacySource(build) && LEGACY_BASELINE_DEPLOYMENTS.has(baseline?.deploymentId) && baseline.previousVersion === LEGACY_BASELINE_VERSION && baseline.worker === LIVE_WORKER && baseline.siteOrigin === LIVE_SITE && baseline.databaseOrigin === LIVE_DATABASE) {
+    return { method: 'pinned-legacy-replacement', liveSource: build.gitSha, previousVersion: LEGACY_BASELINE_VERSION, previousDeployment: baseline.deploymentId, sourceEquivalence: 'not-established', rationale: 'Authorized feature replacement; exact archive and active deployment remain independently checked.' };
   }
   throw new Error('Live source is not an ancestor and no exact tracked-source fingerprint exists in release history.');
 }
@@ -194,7 +223,9 @@ export async function buildFeatureRelease(enabled, features = {}) {
   for (const key of Object.keys(env)) if (/TOKEN|SECRET|PASSWORD|API_KEY|DATABASE_URL|DIRECT_URL|CLOUDFLARE_ACCOUNT_ID/.test(key)) delete env[key];
   checkedLiveArchive(root, env);
   await run(process.execPath, ['scripts/check-private-experiences.mjs'], env);
+  const expectedProvenance = buildProvenance(root, env);
   await run(resolve(root, 'node_modules/.bin/vinext'), ['build'], env);
+  await snapshotFeatureBuildProvenance(root, expectedProvenance);
   const config = JSON.parse(await readFile(configPath, 'utf8'));
   config.vars = { ...config.vars, ...featureEnvironment(values, enabled, features) };
   delete config.vars.CLOUDFLARE_ENV; delete config.vars.VISATHREADS_EXISTING_PREVIEW;
@@ -242,6 +273,7 @@ export async function predeployFeatureCheck(enabled, features = {}, requireAccep
   assert.equal(deployment.id, receipt.deploymentId, 'Production changed since capture. Rebuild against the new live baseline.');
   assert.equal(health.build.gitSha, receipt.health.build.gitSha);
   const config = JSON.parse(await readFile(configPath, 'utf8'));
+  await readFeatureBuildProvenance(root);
   verifyFeatureWorker(config, enabled, features);
   checkedLiveArchive(root, { ...config.vars, CLOUDFLARE_ENV: 'development', VISATHREADS_EXISTING_PREVIEW: 'true' });
   if (enabled === 'true' && requireAcceptance) verifyAssistantAcceptance(JSON.parse(await readFile(resolve(root, '.cache/visaflow/assistant-acceptance.json'), 'utf8')), sourceProvenance(root).gitSha, features);

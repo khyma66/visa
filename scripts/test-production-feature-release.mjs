@@ -6,8 +6,9 @@ import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { archiveSource } from './archive-source.mjs';
 import { checkedLiveArchive, LIVE_SITE, LIVE_DATABASE, sha256 } from './live-preview-archive.mjs';
-import { featureEnvironment, verifyFeatureWorker, verifyAssistantAcceptance, verifyExistingLiveProvenance, verifySourceAncestry, uploadedFeatureVersion, verifyCurrentFeatureDeployment } from './production-feature-release.mjs';
-import { sourceProvenance } from './build-provenance.mjs';
+import { featureEnvironment, verifyFeatureWorker, verifyAssistantAcceptance, verifyExistingLiveProvenance, verifySourceAncestry, uploadedFeatureVersion, verifyCurrentFeatureDeployment, snapshotFeatureBuildProvenance, readFeatureBuildProvenance } from './production-feature-release.mjs';
+import { buildProvenance, sourceProvenance } from './build-provenance.mjs';
+import { assertHealthProvenance } from './smoke-site.mjs';
 import { archiveFromWorkerModule, recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 
 const values = { NEXT_PUBLIC_SITE_URL: LIVE_SITE, NEXT_PUBLIC_SUPABASE_URL: LIVE_DATABASE, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: `sb_publishable_${'fixture'.repeat(5)}` };
@@ -17,6 +18,8 @@ test('only the independently identified legacy version may omit a site origin', 
   const health = { environment: 'development', releaseStatus: 'configured', build: { gitSha: '0624c651cb252436c47c5f2b020baecfec0bfbd0', gitTree: '1e67b513d22bd843ddcb587548feb68e71f0ef92', sourceSha256: '2b0809b06597008d2f9b911ec76b13648cfb3cefd271bdbe20809c2826762ea7', dirty: false, siteOrigin: null } };
   const deployment = { id: '82f636de-0d17-4625-9510-4480c11dc8e0', versions: [{ version_id: '879503b4-e947-420e-8ad8-e1f2f7082ae5', percentage: 100 }] };
   verifyExistingLiveProvenance(health, deployment);
+  verifyExistingLiveProvenance(health, { ...deployment, id: '5763d137-9c62-4646-a35b-efbe947cfe65' });
+  assert.throws(() => verifyExistingLiveProvenance(health, { ...deployment, id: 'unobserved-deployment' }));
   verifyExistingLiveProvenance({ ...health, build: { ...health.build, gitSha: 'a'.repeat(40), siteOrigin: LIVE_SITE } }, deployment);
   for (const change of [{ gitSha: 'a'.repeat(40) }, { gitTree: 'b'.repeat(40) }, { sourceSha256: 'c'.repeat(64) }, { dirty: true }, { siteOrigin: undefined }, { siteOrigin: '' }, { siteOrigin: 'https://visa-central.com' }]) assert.throws(() => verifyExistingLiveProvenance({ ...health, build: { ...health.build, ...change } }, deployment));
   for (const changed of [{ versions: [{ version_id: '11111111-1111-1111-1111-111111111111', percentage: 100 }] }, { versions: [{ ...deployment.versions[0], percentage: 50 }] }, { versions: [...deployment.versions, deployment.versions[0]] }]) assert.throws(() => verifyExistingLiveProvenance(health, changed));
@@ -43,6 +46,8 @@ test('an unavailable original commit requires exact tracked-source fingerprint i
     const transition = verifySourceAncestry(root, legacy, baseline);
     assert.equal(transition.method, 'pinned-legacy-replacement');
     assert.equal(transition.sourceEquivalence, 'not-established');
+    const rollbackTransition = verifySourceAncestry(root, legacy, { ...baseline, deploymentId: '5763d137-9c62-4646-a35b-efbe947cfe65' });
+    assert.equal(rollbackTransition.previousDeployment, '5763d137-9c62-4646-a35b-efbe947cfe65');
     assert.throws(() => verifySourceAncestry(root, legacy));
     for (const change of [{ previousVersion: '11111111-1111-1111-1111-111111111111' }, { deploymentId: '22222222-2222-2222-2222-222222222222' }, { worker: 'visathreads-sandbox' }, { siteOrigin: 'https://visa-central.com' }]) assert.throws(() => verifySourceAncestry(root, legacy, { ...baseline, ...change }));
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -199,5 +204,57 @@ test('only a fresh unchanged current-live archive may be used by an explicit pre
     // Generic CI and the formal public launch still never select private data.
     assert.equal(archiveSource(root, { CI: 'true' }), resolve(root, 'src/data/archive-fixture.json'));
     assert.equal(archiveSource(root, { NEXT_PUBLIC_APP_ENV: 'production' }), resolve(root, 'src/data/archive-fixture.json'));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('deploy metadata regeneration cannot replace immutable checked build provenance', async () => {
+  const root = await mkdtemp(resolve(tmpdir(), 'visa-feature-provenance-'));
+  try {
+    const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    git('init'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Isolated test');
+    await writeFile(resolve(root, '.gitignore'), '.cache/\n');
+    await writeFile(resolve(root, 'wrangler.jsonc'), '{"name":"visaflow-dev"}\n');
+    await writeFile(resolve(root, 'app.js'), 'reviewed feature source');
+    git('add', '.'); git('commit', '-m', 'reviewed feature');
+    await mkdir(resolve(root, '.cache/visaflow/live-preview'), { recursive: true });
+    await writeFile(resolve(root, '.cache/visaflow/live-preview/receipt.json'), JSON.stringify({ archiveSha256: 'a'.repeat(64) }));
+    const buildEnv = featureEnvironment(values, 'true', { communities: 'true', catchup: 'true' });
+    const expected = buildProvenance(root, buildEnv);
+    const mutablePath = resolve(root, '.cache/visaflow/build-provenance.json');
+    await writeFile(mutablePath, JSON.stringify(expected));
+    await snapshotFeatureBuildProvenance(root, expected);
+    // --skip-build still evaluates Vite config with the deployment step's
+    // different environment. Reproduce that overwrite without running deploy.
+    const regenerated = buildProvenance(root, { ASSISTANT_ENABLED: 'true' });
+    assert.equal(regenerated.gitSha, expected.gitSha);
+    assert.notEqual(regenerated.configSha256, expected.configSha256);
+    await writeFile(mutablePath, JSON.stringify(regenerated));
+    assert.deepEqual(await readFeatureBuildProvenance(root), expected);
+    await assert.rejects(() => snapshotFeatureBuildProvenance(root, regenerated), /EEXIST/);
+    const deployedHealth = { build: expected, environment: 'development', releaseStatus: 'configured' };
+    assertHealthProvenance(deployedHealth, await readFeatureBuildProvenance(root));
+    assert.throws(() => assertHealthProvenance(deployedHealth, regenerated), /configSha256/);
+    await writeFile(resolve(root, 'app.js'), 'different release source');
+    git('add', 'app.js'); git('commit', '-m', 'different release');
+    await assert.rejects(() => readFeatureBuildProvenance(root), /gitSha does not match release source/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('provenance snapshot rejects a stale source or incorrectly configured build before freezing', async () => {
+  const root = await mkdtemp(resolve(tmpdir(), 'visa-feature-provenance-rejection-'));
+  try {
+    const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    git('init'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Isolated test');
+    await writeFile(resolve(root, '.gitignore'), '.cache/\n');
+    await writeFile(resolve(root, 'wrangler.jsonc'), '{"name":"visaflow-dev"}\n');
+    git('add', '.'); git('commit', '-m', 'reviewed feature');
+    await mkdir(resolve(root, '.cache/visaflow'), { recursive: true });
+    const expected = buildProvenance(root, values);
+    const mutablePath = resolve(root, '.cache/visaflow/build-provenance.json');
+    await writeFile(mutablePath, JSON.stringify({ ...expected, gitSha: 'b'.repeat(40) }));
+    await assert.rejects(() => snapshotFeatureBuildProvenance(root, expected), /gitSha does not match release source/);
+    await writeFile(mutablePath, JSON.stringify({ ...expected, configSha256: 'b'.repeat(64) }));
+    await assert.rejects(() => snapshotFeatureBuildProvenance(root, expected), /checked build environment/);
+    await assert.rejects(() => readFeatureBuildProvenance(root), /ENOENT/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
