@@ -44,7 +44,7 @@ test('authenticated readiness proves the actual build and requires no model infe
 test('readiness retries only propagation and fails closed on a platform page or wrong build', async () => {
   const cases = acceptanceFixtures.map(fixture => fixture.id);
   let clock = 0, calls = 0;
-  const value = { ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: 'a'.repeat(40), model: '@cf/qwen/qwen3-30b-a3b-fp8', cases };
+  const value = { ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: 'a'.repeat(40), model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', cases };
   const options = { now: () => clock, pause: async amount => { clock += amount; }, fetcher: async (url, init) => {
     calls++; assert.equal(url.pathname, '/evaluate'); assert.equal(init.method, 'POST'); assert.deepEqual(JSON.parse(init.body), { id: '__ready__' });
     if (!init.headers.Authorization) return new Response('', { status: 404, headers: { 'X-Assistant-Acceptance': 'v1' } });
@@ -74,7 +74,7 @@ test('successful evaluation executes exact production model and returns no gener
   const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
   const settings = { ...env(), ASSISTANT_AI: { run: async (model, input) => {
     calls++;
-    assert.equal(model, '@cf/qwen/qwen3-30b-a3b-fp8');
+    assert.equal(model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
     assert.equal(input.max_tokens, 1600);
     assert.equal(input.temperature, 0);
     assert.equal(input.seed, 39173);

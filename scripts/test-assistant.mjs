@@ -145,7 +145,9 @@ test('OpenAI adapter uses bounded structured request, no provider state, and no 
   }});assert.equal(text,JSON.stringify(output));assert.equal(calls,1);
   await assert.rejects(()=>provider.runAssistantModel({system:'test',user:'test'},{provider:'openai',apiKey:'test-only',fetcher:async()=>{calls++;return new Response('',{status:429});}}));assert.equal(calls,2);
 });
-test('Workers AI supports documented chat completion shape and rejects truncated output',async()=>{
-  const run=async finish_reason=>provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async(model,input)=>{assert.match(model,/qwen3/);assert.equal(input.max_tokens,1600);return {choices:[{finish_reason,message:{content:JSON.stringify(output)}}]};}}});
+test('Workers AI supports Llama responses and rejects truncated chat completions',async()=>{
+  const run=async finish_reason=>provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async(model,input)=>{assert.equal(model,'@cf/meta/llama-3.3-70b-instruct-fp8-fast');assert.equal(input.max_tokens,1600);assert.equal(input.temperature,0);assert.equal(input.seed,39173);assert.equal(input.messages[1].content,'test');return {choices:[{finish_reason,message:{content:JSON.stringify(output)}}]};}}});
   assert.equal(await run('stop'),JSON.stringify(output));await assert.rejects(()=>run('length'));
+  const text=await provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async()=>({response:JSON.stringify(output)})}});
+  assert.equal(text,JSON.stringify(output));
 });

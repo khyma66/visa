@@ -2,7 +2,7 @@ import { AssistantError, readBoundedJson } from './assistant-core';
 
 export type AssistantPrompt = { system: string; user: string };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
-export const WORKERS_ASSISTANT_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
+export const WORKERS_ASSISTANT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 export const OPENAI_ASSISTANT_MODEL = 'gpt-6-luna';
 const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], properties: { sourceId: { type: 'string' }, quote: { type: 'string' } } };
 const claim = { type: 'object', additionalProperties: false, required: ['text', 'evidence'], properties: { text: { type: 'string' }, evidence: { type: 'array', items: evidence } } };
@@ -36,7 +36,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       const aborted = new Promise<never>((_, reject) => { stop = () => reject(unavailable()); signal.addEventListener('abort', stop, { once: true }); });
       try {
         const value = await Promise.race([options.binding.run(model, {
-          messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user + '\n/no_think' }],
+          messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
           max_tokens: 1600, temperature: 0, seed: 39173, response_format: { type: 'json_schema', json_schema: ASSISTANT_OUTPUT_SCHEMA },
         }), aborted]);
         if (value && typeof value === 'object') {

@@ -57,7 +57,7 @@ const secretsPath = join(temporary, 'secrets.json');
 await writeFile(configPath, JSON.stringify({ name, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), account_id: account, compatibility_date: '2026-10-01', workers_dev: true, preview_urls: false, routes: [], ai: { binding: 'ASSISTANT_AI' }, vars: { ACCEPTANCE_EXPIRES: String(Date.now() + 15 * 60_000), ACCEPTANCE_SOURCE_SHA: sourceSha }, observability: { enabled: false } }));
 await writeFile(secretsPath, JSON.stringify({ ACCEPTANCE_SECRET: secret }), { mode: 0o600 });
 const repetitions = 3;
-const receipt = { schemaVersion: 1, sourceSha, provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8', createdAt: new Date().toISOString(), passed: false, repetitions, features: { posts: true, communities: true, catchup: true }, cases: [], workerDeleted: false };
+const receipt = { schemaVersion: 1, sourceSha, provider: 'workers-ai', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', createdAt: new Date().toISOString(), passed: false, repetitions, features: { posts: true, communities: true, catchup: true }, cases: [], workerDeleted: false };
 let failure;
 try {
   const subdomain = await api('/workers/subdomain');
