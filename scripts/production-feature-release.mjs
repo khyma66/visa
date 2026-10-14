@@ -179,6 +179,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     else throw new Error('Use capture, build or predeploy. This helper does not deploy.');
   } catch (error) {
     // Never expose assertion diffs containing recovered source or public config.
-    console.error(`Feature release blocked: ${error.message.split('\n')[0]}`); process.exitCode = 1;
+    console.error(`Feature release blocked: ${error.message.split('\n')[0]}`); console.error(String(error.stack).split('\n').filter(line => /at .*production-feature-release|at .*recover-worker-archive/.test(line)).slice(0,2).join('\n')); process.exitCode = 1;
   }
 }
