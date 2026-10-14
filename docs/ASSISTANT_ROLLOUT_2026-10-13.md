@@ -6,20 +6,35 @@ AI features belong **only on https://visathreads.com**. The development website 
 
 | Site | Worker | Supabase project | AI |
 |---|---|---|---|
-| visathreads.com | visaflow-dev | cycnichledvqbxevrwnt | Hosted acceptance passed; merged release deployment pending |
+| visathreads.com | visaflow-dev | cycnichledvqbxevrwnt | Live: post Q&A/summaries, public/community Q&A, and catch-up |
 | visa-central.com | visathreads-sandbox | ppdwysmeistjxzjpmxyk | Disabled; no AI binding |
 
 The Worker named `visaflow-dev` actually serves the production domain. Deployment checks pin the domain, Worker and database explicitly. Cloudflare access through the GitHub production environment works; another browser login is not required.
 
 ## Current checkpoint — October 14, 2026
 
-- The combined release passes **1,511 repository tests**, including the dependency fork regressions and upstream compatibility cases, plus TypeScript and build checks. Web checks run `38580931135` passed. Local tests do not establish hosted model quality or real-user sign-in acceptance.
+- The combined release passes **1,513 repository tests**, including the dependency fork regressions and upstream compatibility cases, plus TypeScript and build checks. Web checks run `38583830663` passed for follow-up commit `15fc12aa818b6971303606b4e0cf3fa687c839a6`, including two new provenance regressions. Local tests do not establish hosted model quality or real-user sign-in acceptance.
 - The additive assistant retrieval/quota migration is **applied and verified in production** project `cycnichledvqbxevrwnt`. Missing assistant RPCs are no longer a blocker. Do not replay the repository's historical migration chain against this project.
 - The previous `braces` audit blocker is addressed by a reviewed, bounded-depth local source fork. Its origin, security changes, limits, tests and maintenance duties are recorded in [vendor/braces/FORK.md](../vendor/braces/FORK.md). The full dependency audit remains enforced. This is not an upstream patched release, and an advisory scan alone does not audit local fork source.
 - A real hosted Workers AI binding has been exercised. Early runs exposed inconsistent attribution, summaries and conflict placement. The production prompt now distinguishes reported personal timelines from predictions, preserves summary details and places conflicting reports in disagreements. The first provider, Qwen3-30B-A3B, still omitted a reported delivery day in one of 33 samples (run `38523130090`). Llama 3.3 70B passed summary checks but failed two source-validation cases and declined one usable prompt-injection fixture (run `38579367106`). The release now uses Cloudflare-hosted `@cf/openai/gpt-oss-120b`, low reasoning effort, temperature zero and a fixed seed. The request uses its typed chat-completions schema envelope (`name`, `schema`, `strict`). The 25-second deadline and daily quotas are unchanged; completion is capped at 4,096 tokens including reasoning. **Hosted acceptance run `38580920814` passed all 33 samples** on candidate commit `f16b20cb8e443fcffb6c427d79289a12c9fa858a`: three successful samples of each of eleven cases. Every sample is retained and failures are never replaced with retries.
-- **Production AI has not been deployed or marked live at this checkpoint.** PR #8 merged into `main` as `dbded2dac222ca543d93092998ae479f11a1c269`. Production release run `38582002973` passed all 33 hosted samples for that merge commit and uploaded Worker version `1a74afb6-711c-44a0-a3ea-4109ff4634a6`. Its exact-config smoke check then failed because the deploy CLI regenerated the mutable local provenance file with deployment-step environment values. The immutable bundled config hash was `b347d8ceb078615e478eb5fc4f948c24a65374a620051e5ef5fb6cb7e834e91d`; the overwritten expected hash was `e1846f64d6b877a98458b577181571f7bcbd33f7041c12510f38fd2a5a653e83`. Automated rollback restored the captured original Worker version `879503b4-e947-420e-8ad8-e1f2f7082ae5` at 14:44 UTC. A corrected release will compare against an immutable post-build receipt; no smoke assertion is waived.
+- **Production AI is deployed and enabled as of October 14, 2026, 14:56 UTC.** PR #8 merged into `main` as `dbded2dac222ca543d93092998ae479f11a1c269`. Production release run `38582002973` passed all 33 hosted samples for that merge commit and uploaded Worker version `1a74afb6-711c-44a0-a3ea-4109ff4634a6`. Its exact-config smoke check then failed because the deploy CLI regenerated the mutable local provenance file with deployment-step environment values. The immutable bundled config hash was `b347d8ceb078615e478eb5fc4f948c24a65374a620051e5ef5fb6cb7e834e91d`; the overwritten expected hash was `e1846f64d6b877a98458b577181571f7bcbd33f7041c12510f38fd2a5a653e83`. Automated rollback restored the captured original Worker version `879503b4-e947-420e-8ad8-e1f2f7082ae5` at 14:44 UTC. Follow-up commit `15fc12aa818b6971303606b4e0cf3fa687c839a6` compares against an immutable post-build receipt and retains that evidence even after failure; no smoke assertion is waived. Corrected release run `38583831283` passed all 33 hosted samples, deployed, passed every live smoke check, and completed successfully. No rollback was needed for the corrected release.
 - Production preparation run `38580920806` passed repository tests, TypeScript, audit, original archive capture, the production feature build and unchanged-baseline checks. The original **563 posts and 628 replies** were recovered and their published-feed hash verified. Each release recaptures and rechecks the still-active archive; development fixtures must never replace it.
 - Authenticated member end-to-end acceptance has not been completed. Hosted synthetic model tests and anonymous/invalid-auth denial checks do not establish a successful signed-in user flow.
+
+## Successful production release evidence
+
+- Release run: https://github.com/khyma66/visa/actions/runs/38583831283 — success at 14:56 UTC, October 14, 2026.
+- Application commit: `15fc12aa818b6971303606b4e0cf3fa687c839a6`.
+- Source tree: `372bef6b23e554b0e8aa03e51e17910ad73e3ed1`.
+- Source fingerprint: `cc80b79d7e2d51545f971e4196d54bea2ec63c7899188dca4879e8fec5a9e407`.
+- Build configuration fingerprint: `b347d8ceb078615e478eb5fc4f948c24a65374a620051e5ef5fb6cb7e834e91d`.
+- Active Worker version: `9fa4f008-6624-4f17-b3ec-dfbaf60db168` on `visaflow-dev`, serving `https://visathreads.com`.
+- Hosted model: all **33/33 samples** passed for the exact application commit; temporary evaluation Worker deleted.
+- Live checks: exact clean source/configuration match; `{posts:true, communities:true, catchup:true}`; assistant route HTTP 200; original **563 posts / 628 replies** and canonical feed hash unchanged; anonymous and invalid sessions rejected with 401, cross-origin requests with 403; private/no-store responses.
+- All 24 general smoke routes passed, including security headers, unique script nonces, real 404, and unchanged preview/noindex state.
+- Browser: `https://visathreads.com/assistant` displays **Ask VisaThreads**, the assistant navigation link, source/privacy guidance, and the expected sign-in link for a guest. No authenticated member session was available; a real signed-in answer flow is **not verified**.
+- Evidence artifact: `11904672129`, containing only the immutable build manifest and hosted model receipt. Documentation-only commits may follow the deployed application commit.
+- Rollback version remains `879503b4-e947-420e-8ad8-e1f2f7082ae5`; the additive database migration is retained on Worker rollback.
 
 ## PR consolidation
 
@@ -54,11 +69,11 @@ The workflow:
 
 `production-feature-preparation.yml` performs capture/build/preflight without deploying. It does not replace hosted acceptance. `assistant-acceptance.yml` runs the hosted model evaluation independently. No successful result should be inferred from merely uploading an evaluation Worker.
 
-Intended feature settings are `ASSISTANT_PROJECT_REF=cycnichledvqbxevrwnt`, `ASSISTANT_PROVIDER=workers-ai`, `ASSISTANT_ENABLED=true`, `ASSISTANT_COMMUNITIES_ENABLED=true`, `ASSISTANT_CATCHUP_ENABLED=true`, with Workers AI binding `ASSISTANT_AI`. These describe the pending candidate, not a completed deployment. The API also checks the actual HTTPS request origin, configured site and database; dev domains, previews, lookalike hosts and forged forwarding headers cannot enable inference.
+Active feature settings are `ASSISTANT_PROJECT_REF=cycnichledvqbxevrwnt`, `ASSISTANT_PROVIDER=workers-ai`, `ASSISTANT_ENABLED=true`, `ASSISTANT_COMMUNITIES_ENABLED=true`, `ASSISTANT_CATCHUP_ENABLED=true`, with Workers AI binding `ASSISTANT_AI`. These settings were verified in the completed production deployment. The API also checks the actual HTTPS request origin, configured site and database; dev domains, previews, lookalike hosts and forged forwarding headers cannot enable inference.
 
 Keep `.github/workflows/public-release.yml`, `scripts/release-check.mjs` and the evidence requirements in `docs/release-review.json` intact. Their broader launch reviews remain separate and must not be marked verified by this feature rollout.
 
-Before calling AI live, record the successful exact-commit model evaluation, deployment/version, hosted route/feature checks and authenticated end-to-end result. Verify real answers, source quotes, unsupported/conflicting questions, account isolation, content-change invalidation and quota behavior; do not describe an anonymous denial check as a successful signed-in user flow.
+Deployment and enablement are verified below. Real-account acceptance remains incomplete: verify real answers, source quotes, unsupported/conflicting questions, account isolation, content-change invalidation and quota behavior in a signed-in member session. Do not describe the hosted synthetic model evaluation or anonymous denial checks as a successful signed-in user flow.
 
 Rollback uses the captured previous Worker version, or a checked build with all assistant flags disabled. Worker rollback does not undo the additive database migration.
 
