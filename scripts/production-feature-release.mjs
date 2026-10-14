@@ -17,6 +17,13 @@ const hosts = ['visathreads.com', 'www.visathreads.com'];
 const publicVariableNames = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SITE_URL', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'GOOGLE_NEWS_RSS_ENABLED'];
 const LEGACY_BASELINE_SHA = '0624c651cb252436c47c5f2b020baecfec0bfbd0';
 const LEGACY_BASELINE_VERSION = '879503b4-e947-420e-8ad8-e1f2f7082ae5';
+const LEGACY_BASELINE_DEPLOYMENT = '82f636de-0d17-4625-9510-4480c11dc8e0';
+const LEGACY_BASELINE_TREE = '1e67b513d22bd843ddcb587548feb68e71f0ef92';
+const LEGACY_BASELINE_SOURCE = '2b0809b06597008d2f9b911ec76b13648cfb3cefd271bdbe20809c2826762ea7';
+
+function pinnedLegacySource(build) {
+  return build?.gitSha === LEGACY_BASELINE_SHA && build.gitTree === LEGACY_BASELINE_TREE && build.sourceSha256 === LEGACY_BASELINE_SOURCE && build.dirty === false;
+}
 
 async function jsonRequest(url, options = {}, maximum = 12 * 1024 * 1024) {
   const response = await fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(30_000) });
@@ -88,7 +95,7 @@ export function verifyExistingLiveProvenance(health, deployment) {
   assert.equal(health.releaseStatus, 'configured', 'Current site backend is not configured.');
   assert.equal(health.build?.dirty, false, 'Current site was not built from clean committed source.');
   assert.match(health.build?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Current site provenance lacks a Git SHA.');
-  const legacyOrigin = health.build?.siteOrigin === null && health.build.gitSha === LEGACY_BASELINE_SHA &&
+  const legacyOrigin = health.build?.siteOrigin === null && pinnedLegacySource(health.build) && deployment.id === LEGACY_BASELINE_DEPLOYMENT &&
     deployment.versions?.length === 1 && deployment.versions[0].version_id === LEGACY_BASELINE_VERSION && deployment.versions[0].percentage === 100;
   assert(health.build?.siteOrigin === LIVE_SITE || legacyOrigin, 'Current site provenance has an unexpected origin.');
 }
@@ -151,7 +158,7 @@ function run(command, args, env) {
 /** Prove the deployed source is retained even if its original local commit was
  * never pushed: an identical tracked-source fingerprint in HEAD's ancestry is
  * equivalent evidence, not permission to accept approximately matching code. */
-export function verifySourceAncestry(repository, build) {
+export function verifySourceAncestry(repository, build, baseline) {
   assert.match(build?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Live source commit is missing.');
   assert.match(build?.sourceSha256 ?? '', /^[a-f0-9]{64}$/, 'Live tracked-source fingerprint is missing.');
   const git = (...args) => execFileSync('git', args, { cwd: repository, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -164,6 +171,12 @@ export function verifySourceAncestry(repository, build) {
     const sourceEntries = entries.split('\0').filter(entry => entry.slice(entry.indexOf('\t') + 1) !== 'docs/release-review.json').join('\0');
     if (sha256(sourceEntries) === build.sourceSha256) return { method: 'exact-source-fingerprint', liveSource: build.gitSha, ancestor, sourceSha256: build.sourceSha256 };
   }
+  // The owner authorized replacing this observed live preview with the reviewed
+  // feature candidate. Its original local commit was never available remotely.
+  // State the transition honestly; this is neither ancestry nor equivalence.
+  if (pinnedLegacySource(build) && baseline?.deploymentId === LEGACY_BASELINE_DEPLOYMENT && baseline.previousVersion === LEGACY_BASELINE_VERSION && baseline.worker === LIVE_WORKER && baseline.siteOrigin === LIVE_SITE && baseline.databaseOrigin === LIVE_DATABASE) {
+    return { method: 'pinned-legacy-replacement', liveSource: build.gitSha, previousVersion: LEGACY_BASELINE_VERSION, previousDeployment: LEGACY_BASELINE_DEPLOYMENT, sourceEquivalence: 'not-established', rationale: 'Authorized feature replacement; exact archive and active deployment remain independently checked.' };
+  }
   throw new Error('Live source is not an ancestor and no exact tracked-source fingerprint exists in release history.');
 }
 
@@ -172,7 +185,7 @@ export async function buildFeatureRelease(enabled, features = {}) {
   assert.equal(provenance.dirty, false, 'Feature release requires committed, clean source.');
   if (process.env.GITHUB_SHA) assert.equal(provenance.gitSha, process.env.GITHUB_SHA);
   const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
-  console.log(JSON.stringify(verifySourceAncestry(root, receipt.health.build)));
+  console.log(JSON.stringify(verifySourceAncestry(root, receipt.health.build, receipt)));
   const values = JSON.parse(await readFile(resolve(privateDirectory, 'public-build-values.json'), 'utf8'));
   const env = { ...process.env, ...featureEnvironment(values, enabled, features) };
   // Only deploy steps receive account credentials. Avoid accidentally bundling
@@ -208,6 +221,7 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
 }
 
 export async function predeployFeatureCheck(enabled, features = {}, requireAcceptance = false) {
+  if (requireAcceptance) assert.equal(process.env.GITHUB_REF, 'refs/heads/main', 'Production feature deployment requires the reviewed main branch.');
   const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
   const { deployment, health } = await liveState();
   assert.equal(deployment.id, receipt.deploymentId, 'Production changed since capture. Rebuild against the new live baseline.');

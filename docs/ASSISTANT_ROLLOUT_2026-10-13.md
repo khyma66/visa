@@ -28,7 +28,7 @@ PR #8 now targets `main` and contains the current production source, owner-feedb
 |---|---|
 | #1 | Community privilege migrations and access tests already incorporated. |
 | #2 | Auth/security behavior reconciled into the current application; optional Turnstile support restored without changing hosted auth settings. |
-| #3 | Consolidated deployed source is an ancestor of the candidate. |
+| #3 | Consolidated release branch is an ancestor of the candidate. |
 | #4 | Source-neutral post presentation and member-only messaging preserved. |
 | #5 | Community discovery, lifecycle and bounded reads incorporated into current UI/schema. |
 | #6 | Direct sign-in entry and current Google/email behavior preserved. |
@@ -47,7 +47,7 @@ The workflow:
 1. Runs repository checks, TypeScript, release-helper checks and the full high-severity dependency audit.
 2. Captures domain routing, exact active deployment and rollback version. Recovers the original archive's JSON literal from the deployed Worker without executing its source, then verifies it against the live feed. Requires the original **563 posts / 628 replies**, unique IDs, metadata and reviewed experience checks; neither recovered content nor Worker source is uploaded as an artifact.
 3. Evaluates the actual Workers AI model in a temporary authenticated evaluation Worker using synthetic evidence. Requires all eleven representative cases, including every enabled mode, conflicts, unsupported policy, irrelevant evidence, prompt injection and multilingual content. Cleanup must succeed.
-4. Builds from clean, committed source descended from the captured live revision. Pins production domains/database, preserves existing secrets, and adds the `ASSISTANT_AI` binding.
+4. Builds from clean, committed source. The identified historical preview is replaced under the exact pinned transition documented in `PRODUCTION_FEATURE_TRANSITION_2026-10-14.md`; its original source commit is unavailable, and source equivalence is not claimed. Pins production domains/database, preserves existing secrets, and adds the `ASSISTANT_AI` binding.
 5. Immediately before deployment, verifies the live baseline has not changed and the model acceptance receipt matches the exact commit, enabled features and model, is less than one hour old, and records removal of the temporary Worker.
 6. Deploys, then checks exact source provenance, unchanged archive, feature availability and anonymous/invalid-auth denials. Verification failure triggers rollback only if no intervening unrelated deployment exists.
 

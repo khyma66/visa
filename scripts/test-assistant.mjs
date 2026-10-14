@@ -65,6 +65,16 @@ test('prompts label untrusted evidence and exclude assistant history as knowledg
   const prompt=core.assistantPrompt({...input,previousQuestions:['Contact me at secret@example.com']},{sources:[source],partial:false});
   assert.match(prompt.system,/untrusted/);assert.match(prompt.system,/Never infer current visa rules/);assert.doesNotMatch(prompt.user,/secret@example/);
 });
+test('summary and catch-up are explicit evidence tasks without a missing question to answer',()=>{
+  const summary=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},{sources:[source],partial:false});
+  assert.match(summary.system,/No user question is required for a summary/);
+  assert.match(summary.system,/Preserve key dates or named days/);
+  assert.match(summary.system,/return status answered with cited claims even though there is no question/);
+  const data=JSON.parse(summary.user);assert.equal(data.task,'summary');assert.equal('question' in data,false);assert.equal(data.sources[0].body,source.body);
+  const catchup=core.assistantPrompt({mode:'catchup',scope:{kind:'public'},since:'2026-10-12T00:00:00Z',until:'2026-10-13T00:00:00Z'},{sources:[source],partial:false});
+  assert.match(catchup.system,/No user question is required for catch-up/);assert.equal('question' in JSON.parse(catchup.user),false);
+  assert.match(summary.system,/Never infer current visa rules/);assert.match(summary.system,/exact supporting quotes/);
+});
 test('authentication, origin, content type, body budget and disabled rollout fail before inference',async()=>{
   const {handler,state}=harness();
   assert.equal((await handler(request(input,{Authorization:''}))).status,401);

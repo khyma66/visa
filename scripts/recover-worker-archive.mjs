@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import ts from 'typescript';
 
 const unsupported = Symbol('not-static-json');
-function literal(node, values, depth = 0) {
+function literal(node, values, depth = 0, unsupportedKinds = {}) {
   if (!node || depth > 30) return unsupported;
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
   if (ts.isNumericLiteral(node)) return Number(node.text);
@@ -11,8 +11,11 @@ function literal(node, values, depth = 0) {
   if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
   if (ts.isIdentifier(node)) return values.get(node.text) ?? unsupported;
   if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(node.operand)) return -Number(node.operand.text);
+  // Vite minifies JSON booleans to !0 / !1. Interpret just these literal forms;
+  // arbitrary operators or expressions in a downloaded Worker are never run.
+  if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken && ts.isNumericLiteral(node.operand) && ['0', '1'].includes(node.operand.text)) return node.operand.text === '0';
   if (ts.isArrayLiteralExpression(node)) {
-    const rows = node.elements.map(child => literal(child, values, depth + 1));
+    const rows = node.elements.map(child => literal(child, values, depth + 1, unsupportedKinds));
     return rows.includes(unsupported) ? unsupported : rows;
   }
   if (ts.isObjectLiteralExpression(node)) {
@@ -21,13 +24,15 @@ function literal(node, values, depth = 0) {
       if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return unsupported;
       const name = property.name;
       if (!ts.isIdentifier(name) && !ts.isStringLiteral(name) && !ts.isNumericLiteral(name)) return unsupported;
-      const value = literal(ts.isShorthandPropertyAssignment(property) ? name : property.initializer, values, depth + 1);
+      const value = literal(ts.isShorthandPropertyAssignment(property) ? name : property.initializer, values, depth + 1, unsupportedKinds);
       if (value === unsupported || Object.hasOwn(result, name.text)) return unsupported;
       result[name.text] = value;
     }
     return result;
   }
   // No code execution, function calls, template substitutions or evaluation.
+  const kind = ts.SyntaxKind[node.kind];
+  unsupportedKinds[kind] = (unsupportedKinds[kind] ?? 0) + 1;
   return unsupported;
 }
 
@@ -36,20 +41,20 @@ export function archiveFromWorkerModule(source, diagnostics) {
   const file = ts.createSourceFile('downloaded-worker.js', source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
   assert.equal(file.parseDiagnostics.length, 0, 'Worker module could not be parsed safely.');
   const values = new Map(); const archives = [];
-  const shapes = {};
+  const shapes = {}; const unsupportedKinds = {};
   for (const statement of file.statements) {
     if (!ts.isVariableStatement(statement)) continue;
     for (const declaration of statement.declarationList.declarations) {
       if (!ts.isIdentifier(declaration.name)) continue;
       const shape = ts.SyntaxKind[declaration.initializer?.kind] ?? 'none';
       shapes[shape] = (shapes[shape] ?? 0) + 1;
-      const value = literal(declaration.initializer, values);
+      const value = literal(declaration.initializer, values, 0, unsupportedKinds);
       if (value === unsupported) continue;
       values.set(declaration.name.text, value);
       if (Array.isArray(value?.questions) && value?.answersByQuestionId && value?.source) archives.push(value);
     }
   }
-  if (diagnostics) Object.assign(diagnostics, { topLevelDeclarations: Object.values(shapes).reduce((a, b) => a + b, 0), initializerShapes: shapes, literalArchives: archives.length });
+  if (diagnostics) Object.assign(diagnostics, { topLevelDeclarations: Object.values(shapes).reduce((a, b) => a + b, 0), initializerShapes: shapes, unsupportedSyntaxKinds: unsupportedKinds, literalArchives: archives.length });
   assert(archives.length <= 1, 'Ambiguous archive module; manual review required.');
   return archives[0] ?? null;
 }

@@ -2,6 +2,9 @@ name: Prepare current VisaThreads feature release
 
 on:
   workflow_dispatch:
+  push:
+    branches: [feat/grounded-assistant-20261013]
+    paths: [.github/workflows/production-feature-preparation.yml]
 
 permissions:
   contents: read
@@ -17,6 +20,8 @@ jobs:
     environment: production
     env:
       ASSISTANT_ENABLED: 'true'
+      ASSISTANT_COMMUNITIES_ENABLED: 'true'
+      ASSISTANT_CATCHUP_ENABLED: 'true'
     steps:
       - uses: actions/checkout@v4
         with:
