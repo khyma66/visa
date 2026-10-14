@@ -11,6 +11,7 @@ function availability() {
   // Public build values require direct references so Vite/Next can inline them.
   // Passing process.env wholesale loses them on a Worker with runtime-only vars.
   return configuredAvailability({
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     ASSISTANT_PROJECT_REF: process.env.ASSISTANT_PROJECT_REF,
