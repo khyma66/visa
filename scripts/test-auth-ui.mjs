@@ -27,6 +27,7 @@ const navigation = dataUrl(`
 `);
 const auth = dataUrl('export function useAuth(){return globalThis.__authHarness.auth;}');
 const dependencies = {
+  './TurnstileCheck': dataUrl('export function TurnstileCheck(){return null;}'),
   'react/jsx-runtime': jsx, react: hooks, 'next/link': links, 'next/navigation': navigation,
   './AuthProvider': auth, '@/components/AuthProvider': auth,
   './Avatar': dataUrl('export function Avatar(){return null;}'),
@@ -125,8 +126,9 @@ const event = () => ({ preventDefault() {} });
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
 dependencies['@/lib/auth-flow'] = await compile('../src/lib/auth-flow.ts');
-dependencies['@/lib/supabase/client'] = dataUrl('export function getAuthMethods(...args){return globalThis.__authHarness.invoke("getAuthMethods", args);}');
+dependencies['@/lib/supabase/client'] = dataUrl('export function getAuthMethods(...args){return globalThis.__authHarness.invoke("getAuthMethods", args);} export function getSupabase(){return {auth:{resetPasswordForEmail:(...args)=>globalThis.__authHarness.invoke("resetPasswordForEmail",args)}};}');
 const { AuthForm } = await import(await compile('../src/components/AuthForm.tsx'));
+const { PasswordRecovery } = await import(await compile('../src/components/PasswordRecovery.tsx'));
 dependencies['./FeedbackLauncher'] = dataUrl('export const FeedbackLauncher=()=>null,OwnerFeedbackLink=()=>null;');
 dependencies['./CommunityNavigation'] = await compile('../src/components/CommunityNavigation.tsx');
 const { CommunityNavigation } = await import(dependencies['./CommunityNavigation']);
@@ -318,4 +320,63 @@ test('cancelled callbacks remove provider error details and preserve a safe retr
     assert(textOf(h.tree).includes('Sign-in wasn’t completed'));
     assert(!textOf(h.tree).includes('Supabase'));
   } finally { h.close(); }
+});
+
+test('configured security check blocks unsolved attempts and resets after email success or password failure', async () => {
+  const previous = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = 'public-fixture';
+  const h = setup();
+  const challenge = () => nodes(h.tree).find(n => n.type?.name === 'TurnstileCheck');
+  try {
+    await h.settle(); change(h, 'Email Address', 'fixture@example.invalid');
+    assert(challenge());
+    assert(byText(h, 'button', 'Send verification code').props.disabled);
+    // Submitting directly also fails; disabled presentation is not the guard.
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    assert.equal(h.calls.filter(c => c.name === 'requestCode').length, 0);
+    challenge().props.onToken('single-use-email-token'); h.render();
+    const initialReset = challenge().props.resetKey;
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    assert.equal(h.calls.find(c => c.name === 'requestCode').args[4], 'single-use-email-token');
+    assert.equal(challenge().props.resetKey, initialReset + 1);
+    assert(byText(h, 'button', 'Verify & continue').props.disabled);
+    // The old token is not reused by verification; a new challenge is passed on.
+    change(h, 'Sign-in code', '123456'); challenge().props.onToken('single-use-verify-token'); h.render();
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    assert.equal(h.calls.find(c => c.name === 'verifyCode').args[2], 'single-use-verify-token');
+  } finally { h.close(); }
+  const password = setup();
+  try {
+    await password.settle(); byText(password, 'button', 'Use a password instead').props.onClick(); password.render();
+    change(password, 'Email Address', 'fixture@example.invalid'); change(password, 'Password', 'fixture-password');
+    nodes(password.tree).find(n => n.type?.name === 'TurnstileCheck').props.onToken('single-use-password-token'); password.render();
+    password.handlers.login = async () => { throw { code: 'captcha_failed', message: 'private provider details' }; };
+    nodes(password.tree).find(n => n.type === 'form').props.onSubmit(event()); await password.settle();
+    assert.equal(password.calls.find(c => c.name === 'login').args[2], 'single-use-password-token');
+    assert(byText(password, 'button', 'Log In').props.disabled);
+    assert.match(textOf(password.tree), /Complete the security check/);
+    assert(!textOf(password.tree).includes('private provider details'));
+  } finally { password.close(); if (previous === undefined) delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY; else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = previous; }
+});
+
+
+test('password recovery passes and clears the CAPTCHA token, while disabled configuration stays unchanged', async () => {
+  const previous = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = 'public-fixture';
+  const h = setup();
+  try {
+    h.slots=[];h.effects=[];h.render(PasswordRecovery,{});await h.settle();
+    h.handlers.resetPasswordForEmail = async () => ({error:{code:'captcha_failed'}});
+    change(h,'Account email','member@example.invalid');
+    assert(byText(h,'button','Send recovery email').props.disabled);
+    const challenge=()=>nodes(h.tree).find(n=>n.type?.name==='TurnstileCheck');
+    challenge().props.onToken('single-use-recovery-token');h.render();
+    nodes(h.tree).find(n=>n.type==='form').props.onSubmit(event());await h.settle();
+    const call=h.calls.find(c=>c.name==='resetPasswordForEmail');
+    assert.equal(call.args[1].captchaToken,'single-use-recovery-token');
+    assert.equal(new URL(call.args[1].redirectTo).pathname,'/account/update-password');
+    assert.equal(challenge().props.resetKey,1);assert(byText(h,'button','Send recovery email').props.disabled);
+    delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;h.render();
+    assert(!challenge());assert.equal(byText(h,'button','Send recovery email').props.disabled,false);
+  } finally { h.close();if(previous===undefined)delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY=previous; }
 });

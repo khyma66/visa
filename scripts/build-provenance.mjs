@@ -38,9 +38,14 @@ export function buildProvenance(root = process.cwd(), env = process.env) {
     appEnvironment,
     siteOrigin,
     backendOrigin: publicOrigin(env.NEXT_PUBLIC_SUPABASE_URL),
+    turnstileSiteKeyDigest: sha256(env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ''),
     publishableKeyDigest: sha256(env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? ''),
     workerEnvironment: env.CLOUDFLARE_ENV ?? null,
     workerConfigDigest: sha256(readFileSync(resolve(root, 'wrangler.jsonc'))),
+    ...(env.VISATHREADS_EXISTING_PREVIEW === 'true' ? { existingPreviewFeatures: {
+      assistant: env.ASSISTANT_ENABLED, communities: env.ASSISTANT_COMMUNITIES_ENABLED, catchup: env.ASSISTANT_CATCHUP_ENABLED,
+      archiveSha256: JSON.parse(readFileSync(resolve(root, '.cache/visaflow/live-preview/receipt.json'), 'utf8')).archiveSha256,
+    } } : {}),
   };
   return {
     schemaVersion: 1,

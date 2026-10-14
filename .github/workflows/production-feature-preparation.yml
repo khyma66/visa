@@ -1,0 +1,60 @@
+name: Prepare current VisaThreads feature release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visaflow-production
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    env:
+      ASSISTANT_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check:secrets && npm test && npm run typecheck
+      - run: node --test scripts/test-production-feature-release.mjs
+      - run: npm audit --audit-level=high
+      - name: Capture the existing live baseline without logging post content
+        run: node scripts/production-feature-release.mjs capture
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
+      - name: Build existing preview with production-only post AI
+        run: node scripts/production-feature-release.mjs build
+      - name: Verify the live baseline has not changed
+        run: node scripts/production-feature-release.mjs predeploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Only hashes and source identifiers are retained. The recovered snapshot,
+      # Worker bundle and public build values are never uploaded as artifacts.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-feature-provenance-${{ github.sha }}
+          path: .cache/visaflow/build-provenance.json
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Remove recovered content
+        if: always()
+        run: rm -f src/data/api-archive.json .cache/visaflow/live-preview/public-build-values.json
+
+# Preparation intentionally has no deploy command. Hosted inference acceptance
+# and production database compatibility still need verification before activation.
+# The formal Reviewed public release workflow and its review gates are unchanged.

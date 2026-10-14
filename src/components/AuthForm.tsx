@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, Mail, MessagesSquare, Search, Tags } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from './AuthProvider';
+import { TurnstileCheck } from './TurnstileCheck';
 import { getAuthMethods } from '@/lib/supabase/client';
-import { authCallbackUrl, authErrorMessage, safeAuthNext, type AuthMethods, type SocialProvider } from '@/lib/auth-flow';
+import { authCallbackUrl, authErrorMessage, authCaptchaOptions, safeAuthNext, type AuthMethods, type SocialProvider } from '@/lib/auth-flow';
 
 const inputClass = 'mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 font-normal outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100';
 const buttonClass = 'flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50';
@@ -32,6 +33,10 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [sessionSlow, setSessionSlow] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const captchaSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? '';
+  const resetCaptcha = () => { setCaptchaToken(''); setCaptchaReset(value => value + 1); };
   useEffect(() => {
     if (!loading) { setSessionSlow(false); return; }
     const timer = window.setTimeout(() => setSessionSlow(true), 8000);
@@ -78,12 +83,15 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
   }
 
   async function sendCode() {
-    if (codeChannel === 'phone') {
-      if (!methods) throw { code: 'phone_provider_disabled' };
-      await requestPhoneCode(phone, methods, signup);
-    } else {
-      await requestCode(email, callback(), signup, signup ? { firstName, lastName } : undefined);
-    }
+    const token = authCaptchaOptions(captchaToken).captchaToken;
+    try {
+      if (codeChannel === 'phone') {
+        if (!methods) throw { code: 'phone_provider_disabled' };
+        await requestPhoneCode(phone, methods, signup, token);
+      } else {
+        await requestCode(email, callback(), signup, signup ? { firstName, lastName } : undefined, token);
+      }
+    } finally { resetCaptcha(); }
     setStep('code'); setCode(''); setCooldown(60);
     setMessage(codeChannel === 'phone' ? 'Check your text messages for your VisaThreads sign-in code.' : 'Check your inbox and spam folder for your VisaThreads sign-in email.');
   }
@@ -91,10 +99,18 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
   function submit(event: FormEvent) {
     event.preventDefault();
     void run(async () => {
-      if (step === 'email' && !useCode) { await login(email, password); setPassword(''); }
+      if (step === 'email' && !useCode) {
+        const token = authCaptchaOptions(captchaToken).captchaToken;
+        try { await login(email, password, token); setPassword(''); } finally { resetCaptcha(); }
+      }
       else if (step === 'email') await sendCode();
-      else if (codeChannel === 'phone') await verifyPhoneCode(phone, code);
-      else await verifyCode(email, code);
+      else {
+        const token = authCaptchaOptions(captchaToken).captchaToken;
+        try {
+          if (codeChannel === 'phone') await verifyPhoneCode(phone, code, token);
+          else await verifyCode(email, code, token);
+        } finally { resetCaptcha(); }
+      }
       if (step === 'code' || !useCode) router.replace(safeAuthNext(new URLSearchParams(window.location.search).get('next')));
     });
   }
@@ -140,14 +156,15 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             </>}
             {step === 'email' ? codeChannel === 'phone' ? <label className="block text-sm font-bold text-slate-700">Phone number<input type="tel" name="phone" required autoComplete="tel" maxLength={20} placeholder="+15551234567" disabled={busy || loading} value={phone} onChange={event => setPhone(event.target.value)} className={inputClass} /></label> : <label className="block text-sm font-bold text-slate-700">Email Address<input type="email" name="email" required autoComplete="email" maxLength={254} placeholder="you@example.com" disabled={busy || loading} value={email} onChange={event => setEmail(event.target.value)} className={inputClass} /></label> : <label className="block text-sm font-bold text-slate-700">Sign-in code<input type="text" name="code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,10}" minLength={6} maxLength={10} autoFocus disabled={busy || loading} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 10))} className={`${inputClass} text-center text-2xl tracking-[0.25em]`} /></label>}
             {step === 'email' && !useCode && <label className="block text-sm font-bold text-slate-700">Password<input type="password" name="password" required autoComplete="current-password" maxLength={128} disabled={busy || loading} value={password} onChange={event => setPassword(event.target.value)} className={inputClass} /></label>}
+            {captchaSiteKey && <TurnstileCheck siteKey={captchaSiteKey} resetKey={captchaReset} onToken={setCaptchaToken} />}
             {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
             {message && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
-            <button disabled={busy || loading || (step === 'email' && useCode && cooldown > 0)} className={buttonClass}>{busy ? 'Please wait…' : step === 'email' ? (!useCode ? 'Log In' : cooldown ? `Try again in ${cooldown}s` : 'Send verification code') : 'Verify & continue'}<ArrowRight aria-hidden="true" size={17} /></button>
+            <button disabled={busy || loading || (step === 'email' && useCode && cooldown > 0) || Boolean(captchaSiteKey && !captchaToken)} className={buttonClass}>{busy ? 'Please wait…' : step === 'email' ? (!useCode ? 'Log In' : cooldown ? `Try again in ${cooldown}s` : 'Send verification code') : 'Verify & continue'}<ArrowRight aria-hidden="true" size={17} /></button>
           </form>
           {signup && step === 'email' && <p className="mt-4 text-xs leading-5 text-slate-500">After signing in, you’ll confirm the <Link href="/terms" target="_blank" rel="noopener" className="underline">Terms</Link> and <Link href="/privacy" target="_blank" rel="noopener" className="underline">Privacy notice</Link> once before participating. Links open in a new tab.</p>}
           {step === 'email' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm text-blue-700"><span className="flex flex-wrap gap-3">{methods?.phone && <button type="button" disabled={busy || loading} onClick={() => { setCodeChannel('phone'); setUseCode(true); setPassword(''); setError(''); }}>Use phone instead</button>}{codeChannel === 'phone' && <button type="button" disabled={busy || loading} onClick={() => { setCodeChannel('email'); setUseCode(true); setPassword(''); setError(''); }}>Use email instead</button>}{codeChannel === 'email' && !signup && <button type="button" disabled={busy || loading} onClick={() => { setUseCode(value => !value); setPassword(''); setError(''); }}>{useCode ? 'Use a password instead' : 'Use an email code instead'}</button>}</span>{!signup && <Link href="/account/recovery" className="underline">Forgot password?</Link>}</div>}
           <p className="mt-4 text-sm text-slate-600">{signup ? 'Already a member? ' : 'New to VisaThreads? '}<Link href={signup ? '/login' : '/signup'} className="font-bold text-blue-700 underline">{signup ? 'Log In' : 'Create Account'}</Link></p>
-          {step === 'code' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm font-bold text-blue-700"><button type="button" disabled={busy || cooldown > 0} onClick={() => void run(sendCode)} className="disabled:text-slate-400">{cooldown ? `Resend in ${cooldown}s` : 'Resend code'}</button><button type="button" disabled={busy || loading} onClick={() => { setStep('email'); setCode(''); setError(''); setMessage(''); }}>Use a different {codeChannel === 'phone' ? 'phone' : 'email'}</button></div>}
+          {step === 'code' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm font-bold text-blue-700"><button type="button" disabled={busy || cooldown > 0 || Boolean(captchaSiteKey && !captchaToken)} onClick={() => void run(sendCode)} className="disabled:text-slate-400">{cooldown ? `Resend in ${cooldown}s` : 'Resend code'}</button><button type="button" disabled={busy || loading} onClick={() => { setStep('email'); setCode(''); setError(''); setMessage(''); }}>Use a different {codeChannel === 'phone' ? 'phone' : 'email'}</button></div>}
           <p className="mt-5 text-xs leading-5 text-slate-500">Your email is not shown on your public profile. A community username is created for you.</p>
         </>}
       </section>

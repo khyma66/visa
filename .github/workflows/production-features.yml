@@ -1,0 +1,96 @@
+name: Release current VisaThreads AI features
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/production-features.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visaflow-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: production
+    env:
+      ASSISTANT_ENABLED: 'true'
+      ASSISTANT_COMMUNITIES_ENABLED: 'true'
+      ASSISTANT_CATCHUP_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check:secrets && npm test && npm run typecheck
+      - run: node --test scripts/test-production-feature-release.mjs
+      - run: npm audit --audit-level=high
+      - name: Capture original live archive and active rollback version
+        run: node scripts/production-feature-release.mjs capture
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
+      - name: Evaluate hosted model before enabling features
+        run: node scripts/evaluate-hosted-assistant.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Build candidate preserving current launch state and existing content
+        run: node scripts/production-feature-release.mjs build
+      - name: Require model acceptance and unchanged live baseline
+        run: node scripts/production-feature-release.mjs deploy-check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy checked production feature build
+        id: deploy
+        run: |
+          npx --no-install vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build
+          node scripts/production-feature-release.mjs record-deployment
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify exact source, unchanged archive, feature availability and auth denials
+        run: node scripts/smoke-production-features.mjs
+      - name: Restore captured version if this deployment fails verification
+        if: failure() && steps.deploy.outcome == 'success'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          ROLLBACK_VERSION=$(node scripts/production-feature-release.mjs rollback-version)
+          npx --no-install wrangler rollback "$ROLLBACK_VERSION" --name visaflow-dev --config dist/server/wrangler.json --message "Restore captured version after failed AI feature smoke verification"
+      - name: Preserve source and model acceptance only
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-ai-feature-evidence-${{ github.sha }}
+          path: |
+            .cache/visaflow/build-provenance.json
+            .cache/visaflow/assistant-acceptance.json
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Ensure temporary evaluation Worker is removed
+        if: always()
+        run: node scripts/evaluate-hosted-assistant.mjs --cleanup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Remove recovered content
+        if: always()
+        run: rm -f src/data/api-archive.json .cache/visaflow/live-preview/public-build-values.json
+
+# This updates the already-serving early preview on visathreads.com. It neither
+# opens PUBLIC_LAUNCH_APPROVED nor replaces the Reviewed public release workflow.

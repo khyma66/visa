@@ -15,11 +15,11 @@ type AuthContextValue = {
   profileLoading: boolean;
   demoMode: boolean;
   refreshProfile: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
-  requestCode: (email: string, redirectTo: string, createAccount?: boolean, names?: SignupNames) => Promise<void>;
-  verifyCode: (email: string, token: string) => Promise<void>;
-  requestPhoneCode: (phone: string, methods: AuthMethods, createAccount?: boolean) => Promise<void>;
-  verifyPhoneCode: (phone: string, token: string) => Promise<void>;
+  login: (email: string, password: string, captchaToken?: string) => Promise<void>;
+  requestCode: (email: string, redirectTo: string, createAccount?: boolean, names?: SignupNames, captchaToken?: string) => Promise<void>;
+  verifyCode: (email: string, token: string, captchaToken?: string) => Promise<void>;
+  requestPhoneCode: (phone: string, methods: AuthMethods, createAccount?: boolean, captchaToken?: string) => Promise<void>;
+  verifyPhoneCode: (phone: string, token: string, captchaToken?: string) => Promise<void>;
   signInWithProvider: (provider: SocialProvider, methods: AuthMethods, redirectTo: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -59,11 +59,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     profileLoading,
     demoMode: !isSupabaseConfigured,
     refreshProfile: async () => { await sessionSync.current?.refresh(); },
-    login: async (email, password) => signInWithPassword(getSupabase(), email, password),
-    requestCode: async (email, redirectTo, createAccount = false, names) => requestEmailCode(getSupabase(), email, redirectTo, createAccount, names),
-    verifyCode: async (email, token) => verifyEmailCode(getSupabase(), email, token),
-    requestPhoneCode: async (phone, methods, createAccount = false) => requestPhoneCode(getSupabase(), phone, methods, createAccount),
-    verifyPhoneCode: async (phone, token) => verifyPhoneCode(getSupabase(), phone, token),
+    login: async (email, password, captchaToken) => signInWithPassword(getSupabase(), email, password, captchaToken),
+    requestCode: async (email, redirectTo, createAccount = false, names, captchaToken) => requestEmailCode(getSupabase(), email, redirectTo, createAccount, names, captchaToken),
+    verifyCode: async (email, token, captchaToken) => verifyEmailCode(getSupabase(), email, token, captchaToken),
+    requestPhoneCode: async (phone, methods, createAccount = false, captchaToken) => requestPhoneCode(getSupabase(), phone, methods, createAccount, captchaToken),
+    verifyPhoneCode: async (phone, token, captchaToken) => verifyPhoneCode(getSupabase(), phone, token, captchaToken),
     signInWithProvider: async (provider, methods, redirectTo) => startSocialSignIn(getSupabase(), provider, methods, redirectTo),
     signOut: async () => {
       if (!isSupabaseConfigured) return;

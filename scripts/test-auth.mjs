@@ -146,3 +146,29 @@ test('password setup requires server-confirmed email and validates length', asyn
 test('normalized traversal cannot loop back into auth pages', () => {
   for (const path of ['/a/../login', '/a/../signup', '/a/../account/recovery', '/signup#x']) assert.equal(flow.safeAuthNext(path), '/');
 });
+
+test('optional CAPTCHA passes fresh tokens to every supported Auth request and fails before network if missing', async () => {
+  const previous = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const calls = [];
+  const record = name => async (...args) => { calls.push({ name, args }); return { error: null, data: { session: {} } }; };
+  const client = { auth: { signInWithOtp: record('otp'), verifyOtp: record('verify'), signInWithPassword: record('password'), resetPasswordForEmail: record('recovery') } };
+  try {
+    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = 'configured-public-fixture';
+    const requests = [
+      token => flow.requestEmailCode(client, 'member@example.invalid', 'https://visathreads.com/login', false, undefined, token),
+      token => flow.requestPhoneCode(client, '+15551234567', { phone: true }, false, token),
+      token => flow.signInWithPassword(client, 'member@example.invalid', 'fixture-only', token),
+      token => flow.verifyEmailCode(client, 'member@example.invalid', '123456', token),
+      token => flow.verifyPhoneCode(client, '+15551234567', '123456', token),
+      token => flow.requestPasswordRecovery(client, 'member@example.invalid', 'https://visathreads.com/account/update-password', token),
+    ];
+    for (const request of requests) await assert.rejects(() => request(), e => e.code === 'captcha_required');
+    assert.equal(calls.length, 0);
+    for (const [index, request] of requests.entries()) await request('one-use-fixture-'+index);
+    for (const [index, call] of calls.entries()) assert.equal((call.name === 'recovery' ? call.args[1] : call.args[0].options).captchaToken, 'one-use-fixture-'+index);
+    for (const token of ['x'.repeat(2049), 'token\ninvalid']) assert.throws(() => flow.authCaptchaOptions(token), e => e.code === 'captcha_failed');
+    delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    assert.deepEqual(flow.authCaptchaOptions(), {});
+    assert.match(flow.authErrorMessage({code:'captcha_required'}), /security check/);
+  } finally { if (previous === undefined) delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY; else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = previous; }
+});

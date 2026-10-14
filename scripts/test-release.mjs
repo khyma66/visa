@@ -168,3 +168,26 @@ test('import source selects only successful runs and stays disabled in productio
     for (const [name,value] of Object.entries(old)) if (value===undefined) delete process.env[name]; else process.env[name]=value;
   }
 });
+
+test('Turnstile adds only its exact script and frame origin when configured and leaves connect policy unchanged', async () => {
+  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } }');
+  const source = transpile(await readFile(new URL('../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub));
+  const { middleware } = await import(moduleUrl(source));
+  const previous = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const policy = () => middleware({ nextUrl: new URL('https://visathreads.com/') }).headers.get('content-security-policy');
+  try {
+    delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    const disabled = policy();
+    assert(!disabled.includes('challenges.cloudflare.com'));
+    assert(disabled.includes("frame-src 'none'"));
+    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = 'public-fixture';
+    const enabled = policy();
+    assert.equal(enabled.match(/https:\/\/challenges.cloudflare.com/g)?.length, 2);
+    assert(enabled.includes('frame-src https://challenges.cloudflare.com;'));
+    const connect = csp => csp.split(';').find(d => d.trim().startsWith('connect-src'));
+    assert.equal(connect(enabled), connect(disabled));
+    assert(!enabled.includes('*.cloudflare.com'));
+    assert.deepEqual(releaseProblems({...env,NEXT_PUBLIC_TURNSTILE_SITE_KEY:'public-fixture'},review,config),[]);
+    assert(releaseProblems({...env,NEXT_PUBLIC_TURNSTILE_SITE_KEY:'https://untrusted.example'},review,config).some(p=>p.includes('Turnstile')));
+  } finally { if (previous === undefined) delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY; else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = previous; }
+});

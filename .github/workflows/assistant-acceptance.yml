@@ -1,0 +1,44 @@
+name: Hosted assistant acceptance
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/grounded-assistant-20261013]
+    paths: [.github/workflows/assistant-acceptance.yml, 'scripts/assistant-acceptance-*', scripts/evaluate-hosted-assistant.mjs, 'src/lib/assistant-*.ts']
+permissions:
+  contents: read
+concurrency:
+  group: visathreads-assistant-acceptance
+  cancel-in-progress: false
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify protected evaluation harness
+        run: node --test scripts/test-assistant-acceptance.mjs
+      - name: Exercise the production provider through an authenticated temporary binding
+        run: node scripts/evaluate-hosted-assistant.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Always remove temporary evaluation Worker
+        if: always()
+        run: node scripts/evaluate-hosted-assistant.mjs --cleanup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Preserve boolean-only acceptance receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assistant-acceptance-${{ github.sha }}
+          path: .cache/visaflow/assistant-acceptance.json
+          include-hidden-files: true
+          if-no-files-found: error

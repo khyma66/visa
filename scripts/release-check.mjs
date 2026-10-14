@@ -25,7 +25,8 @@ export function releaseProblems(env, review, config, source) {
   if (!safeKey) problems.push('Only a publishable/anon key may be exposed to the browser.');
   if (env.NEXT_PUBLIC_APP_ENV !== 'production') problems.push('NEXT_PUBLIC_APP_ENV must be production.');
   if (!origin(env.NEXT_PUBLIC_SITE_URL)) problems.push('A real HTTPS public site origin is required.');
-  const allowed = new Set(['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY','NEXT_PUBLIC_APP_ENV','NEXT_PUBLIC_SITE_URL']);
+  if (env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !/^[A-Za-z0-9_-]{3,100}$/.test(env.NEXT_PUBLIC_TURNSTILE_SITE_KEY)) problems.push('Turnstile requires a valid public site key.');
+  const allowed = new Set(['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY','NEXT_PUBLIC_APP_ENV','NEXT_PUBLIC_SITE_URL','NEXT_PUBLIC_TURNSTILE_SITE_KEY']);
   if (Object.keys(env).some((key) => key.startsWith('NEXT_PUBLIC_') && !allowed.has(key))) problems.push('Review unexpected NEXT_PUBLIC variables before exposing them to the browser.');
   if (review.siteOrigin !== env.NEXT_PUBLIC_SITE_URL || review.databaseOrigin !== env.NEXT_PUBLIC_SUPABASE_URL) problems.push('Release evidence must match the selected site and database.');
   for (const name of requiredReviews) {

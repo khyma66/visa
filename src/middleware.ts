@@ -21,15 +21,18 @@ export function middleware(request: NextRequest) {
       backendSources = ` ${backend.origin} wss://${backend.host}`;
     }
   } catch { /* Unconfigured previews do not get a wildcard backend allowance. */ }
+  // Keep this on the document for client-side navigation into auth routes.
+  // No script is loaded until an enabled auth form actually mounts.
+  const captchaOrigin = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ? ' https://challenges.cloudflare.com' : '';
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'${localDevelopment ? " 'unsafe-eval'" : ''}`,
+    `script-src 'self' 'nonce-${nonce}'${localDevelopment ? " 'unsafe-eval'" : ''}${captchaOrigin}`,
     "script-src-attr 'none'",
     "style-src 'self' 'unsafe-inline'",
     `connect-src 'self'${backendSources}${localDevelopment ? ' ws://localhost:* ws://127.0.0.1:*' : ''}`,
     "img-src 'self' data: blob:",
     "font-src 'self'",
-    "frame-src 'none'",
+    `frame-src${captchaOrigin || " 'none'"}`,
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",

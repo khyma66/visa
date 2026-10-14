@@ -11,6 +11,7 @@ const reactUrl = import.meta.resolve('react');
 const flowSource = await readFile(new URL('../src/lib/auth-flow.ts', import.meta.url), 'utf8');
 const flowUrl = url(ts.transpileModule(flowSource, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText);
 const dependencies = {
+  './TurnstileCheck': url('export function TurnstileCheck(){return null;}'),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'),
   react: url(`
     export const useRef=initial=>({current:initial});

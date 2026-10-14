@@ -33,7 +33,7 @@ export function authErrorMessage(reason: unknown): string {
   if (error?.code === 'invalid_credentials') return 'The email or password is incorrect. Try again or use an email code.';
   if (error?.code === 'email_not_confirmed') return 'Verify your email before signing in.';
   if (['weak_password', 'invalid_password'].includes(error?.code ?? '')) return 'Use a unique password between 12 and 128 characters.';
-  if (error?.code === 'captcha_failed') return 'Complete the security check and try again.';
+  if (['captcha_failed', 'captcha_required'].includes(error?.code ?? '')) return 'Complete the security check and try again.';
   return 'We couldn’t complete sign-in. Check your connection and try again.';
 }
 
@@ -45,30 +45,32 @@ function signupNameData(names?: SignupNames) {
   return { first_name, last_name };
 }
 
-export async function requestEmailCode(client: SupabaseClient, email: string, redirectTo: string, createAccount = false, names?: SignupNames) {
+export async function requestEmailCode(client: SupabaseClient, email: string, redirectTo: string, createAccount = false, names?: SignupNames, captchaToken?: string) {
   // Full names stay in private auth metadata. Public profiles expose only the
   // server-derived avatar initial, and login never rewrites name metadata.
   const data = createAccount ? signupNameData(names) : undefined;
-  const { error } = await client.auth.signInWithOtp({ email: normalizeEmail(email), options: { shouldCreateUser: createAccount, emailRedirectTo: redirectTo, ...(data ? { data } : {}) } });
+  const { error } = await client.auth.signInWithOtp({ email: normalizeEmail(email), options: { shouldCreateUser: createAccount, emailRedirectTo: redirectTo, ...(data ? { data } : {}), ...authCaptchaOptions(captchaToken) } });
   if (error) throw error;
 }
 
-export async function verifyEmailCode(client: SupabaseClient, email: string, token: string) {
+export async function verifyEmailCode(client: SupabaseClient, email: string, token: string, captchaToken?: string) {
   if (!/^\d{6,10}$/.test(token.trim())) throw { code: 'invalid_code' };
-  const { data, error } = await client.auth.verifyOtp({ email: normalizeEmail(email), token: token.trim(), type: 'email' });
+  const captcha = authCaptchaOptions(captchaToken);
+  const { data, error } = await client.auth.verifyOtp({ email: normalizeEmail(email), token: token.trim(), type: 'email', ...(captcha.captchaToken ? { options: captcha } : {}) });
   if (error) throw error;
   if (!data.session) throw new Error('Session missing');
 }
 
-export async function requestPhoneCode(client: SupabaseClient, phone: string, methods: AuthMethods, createAccount = false) {
+export async function requestPhoneCode(client: SupabaseClient, phone: string, methods: AuthMethods, createAccount = false, captchaToken?: string) {
   if (!methods.phone) throw { code: 'phone_provider_disabled' };
-  const { error } = await client.auth.signInWithOtp({ phone: normalizePhone(phone), options: { shouldCreateUser: createAccount } });
+  const { error } = await client.auth.signInWithOtp({ phone: normalizePhone(phone), options: { shouldCreateUser: createAccount, ...authCaptchaOptions(captchaToken) } });
   if (error) throw error;
 }
 
-export async function verifyPhoneCode(client: SupabaseClient, phone: string, token: string) {
+export async function verifyPhoneCode(client: SupabaseClient, phone: string, token: string, captchaToken?: string) {
   if (!/^\d{6,10}$/.test(token.trim())) throw { code: 'invalid_code' };
-  const { data, error } = await client.auth.verifyOtp({ phone: normalizePhone(phone), token: token.trim(), type: 'sms' });
+  const captcha = authCaptchaOptions(captchaToken);
+  const { data, error } = await client.auth.verifyOtp({ phone: normalizePhone(phone), token: token.trim(), type: 'sms', ...(captcha.captchaToken ? { options: captcha } : {}) });
   if (error) throw error;
   if (!data.session) throw new Error('Session missing');
 }
@@ -91,8 +93,8 @@ export function normalizePhone(value: string): string {
   return phone;
 }
 
-export async function signInWithPassword(client: SupabaseClient, email: string, password: string) {
-  const { data, error } = await client.auth.signInWithPassword({ email: normalizeEmail(email), password });
+export async function signInWithPassword(client: SupabaseClient, email: string, password: string, captchaToken?: string) {
+  const { data, error } = await client.auth.signInWithPassword({ email: normalizeEmail(email), password, options: authCaptchaOptions(captchaToken) });
   if (error) throw error;
   if (!data.session) throw new Error('Session missing');
 }
@@ -105,4 +107,17 @@ export async function setVerifiedPassword(client: SupabaseClient, password: stri
   const { data, error } = await client.auth.updateUser({ password });
   if (error) throw error;
   if (!data.user) throw new Error('User missing');
+}
+
+/** Client-side completeness check only; Supabase must enforce CAPTCHA server-side. */
+export function authCaptchaOptions(token?: string): { captchaToken?: string } {
+  const value = token?.trim();
+  if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() && !value) throw { code: 'captcha_required' };
+  if (value && (value.length > 2048 || /[\s\u0000-\u001f\u007f]/.test(value))) throw { code: 'captcha_failed' };
+  return value ? { captchaToken: value } : {};
+}
+
+export async function requestPasswordRecovery(client: SupabaseClient, email: string, redirectTo: string, captchaToken?: string) {
+  const { error } = await client.auth.resetPasswordForEmail(normalizeEmail(email), { redirectTo, ...authCaptchaOptions(captchaToken) });
+  if (error) throw error;
 }

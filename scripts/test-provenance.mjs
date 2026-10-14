@@ -68,6 +68,7 @@ test('source provenance follows committed code, excludes only review evidence an
     assert(!JSON.stringify(metadata).includes(env.NEXT_PUBLIC_SUPABASE_URL));
     assert.equal(metadata.configSha256, buildProvenance(root, env).configSha256);
     assert.notEqual(metadata.configSha256, buildProvenance(root, { ...env, NEXT_PUBLIC_SITE_URL: 'https://other.example.org' }).configSha256);
+    assert.notEqual(metadata.configSha256, buildProvenance(root, { ...env, NEXT_PUBLIC_TURNSTILE_SITE_KEY: 'public-fixture' }).configSha256);
     const filename = buildProvenanceSource(root, env);
     assert.equal(JSON.parse(readFileSync(filename, 'utf8')).gitSha, metadata.gitSha);
     assert.equal(sourceProvenance(root).dirty, false, 'Generated metadata must not dirty the worktree');
