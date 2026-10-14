@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+process.env.NEXT_PUBLIC_SITE_URL = 'https://visathreads.com';
+
 // Run the real component handlers; only hooks, identity and network are fake.
 const dataUrl = (text) => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
 const source = await readFile(new URL('../src/components/AssistantPanel.tsx', import.meta.url), 'utf8');
@@ -53,6 +55,16 @@ function button(h, label) { const value = nodes(h.tree).find(node => node.type =
 function changeQuestion(h, value) { nodes(h.tree).find(node => node.type === 'textarea').props.onChange({ target: { value } }); h.render(); }
 function choose(h, label) { button(h, label).props.onClick(); h.render(); }
 function submit(h) { const promise = nodes(h.tree).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} }); h.render(); return promise; }
+
+test('dev has no assistant UI or requests even when availability reports enabled', async () => {
+  const h = new Harness();
+  process.env.NEXT_PUBLIC_SITE_URL = 'https://visa-central.com';
+  try {
+    h.render(); await h.settle();
+    assert.equal(h.tree, null);
+    assert.equal(h.calls.length, 0);
+  } finally { h.close(); process.env.NEXT_PUBLIC_SITE_URL = 'https://visathreads.com'; }
+});
 
 test('anonymous sign-in returns to the post, demo never contacts the assistant', async () => {
   const h = new Harness(); h.auth.user = null;
