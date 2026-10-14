@@ -148,12 +148,31 @@ function run(command, args, env) {
   });
 }
 
+/** Prove the deployed source is retained even if its original local commit was
+ * never pushed: an identical tracked-source fingerprint in HEAD's ancestry is
+ * equivalent evidence, not permission to accept approximately matching code. */
+export function verifySourceAncestry(repository, build) {
+  assert.match(build?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Live source commit is missing.');
+  assert.match(build?.sourceSha256 ?? '', /^[a-f0-9]{64}$/, 'Live tracked-source fingerprint is missing.');
+  const git = (...args) => execFileSync('git', args, { cwd: repository, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    git('merge-base', '--is-ancestor', build.gitSha, 'HEAD');
+    return { method: 'git-ancestor', liveSource: build.gitSha, ancestor: build.gitSha };
+  } catch { /* An unpushed local commit may have an exact source-equivalent ancestor. */ }
+  for (const ancestor of git('rev-list', 'HEAD').trim().split('\n')) {
+    const entries = git('ls-tree', '-r', '-z', ancestor);
+    const sourceEntries = entries.split('\0').filter(entry => entry.slice(entry.indexOf('\t') + 1) !== 'docs/release-review.json').join('\0');
+    if (sha256(sourceEntries) === build.sourceSha256) return { method: 'exact-source-fingerprint', liveSource: build.gitSha, ancestor, sourceSha256: build.sourceSha256 };
+  }
+  throw new Error('Live source is not an ancestor and no exact tracked-source fingerprint exists in release history.');
+}
+
 export async function buildFeatureRelease(enabled, features = {}) {
   const provenance = sourceProvenance(root);
   assert.equal(provenance.dirty, false, 'Feature release requires committed, clean source.');
   if (process.env.GITHUB_SHA) assert.equal(provenance.gitSha, process.env.GITHUB_SHA);
   const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
-  execFileSync('git', ['merge-base', '--is-ancestor', receipt.health.build.gitSha, 'HEAD'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+  console.log(JSON.stringify(verifySourceAncestry(root, receipt.health.build)));
   const values = JSON.parse(await readFile(resolve(privateDirectory, 'public-build-values.json'), 'utf8'));
   const env = { ...process.env, ...featureEnvironment(values, enabled, features) };
   // Only deploy steps receive account credentials. Avoid accidentally bundling
