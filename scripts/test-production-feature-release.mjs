@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { archiveSource } from './archive-source.mjs';
 import { checkedLiveArchive, LIVE_SITE, LIVE_DATABASE, sha256 } from './live-preview-archive.mjs';
-import { featureEnvironment, verifyFeatureWorker, verifyAssistantAcceptance, verifyExistingLiveProvenance, verifySourceAncestry } from './production-feature-release.mjs';
+import { featureEnvironment, verifyFeatureWorker, verifyAssistantAcceptance, verifyExistingLiveProvenance, verifySourceAncestry, uploadedFeatureVersion, verifyCurrentFeatureDeployment } from './production-feature-release.mjs';
 import { sourceProvenance } from './build-provenance.mjs';
 import { archiveFromWorkerModule, recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 
@@ -111,11 +111,72 @@ test('Worker archive recovery interprets only static literals and never executes
   assert.equal(fixture.questions[0].answer_count, 2, 'Original source is immutable.');
 });
 
-test('production activation requires fresh exact-source hosted acceptance for every enabled feature', () => {
+function acceptanceReceipt() {
   const ids = ['post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'public-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post'];
-  const receipt = { schemaVersion: 1, sourceSha: 'a'.repeat(40), provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8', createdAt: new Date().toISOString(), passed: true, features: { posts: true, communities: true, catchup: true }, workerDeleted: true, cases: ids.map(id => ({ id, passed: true, checks: [{ name: 'supported', passed: true }] })) };
+  const model = '@cf/qwen/qwen3-30b-a3b-fp8';
+  return { schemaVersion: 1, sourceSha: 'a'.repeat(40), provider: 'workers-ai', model, createdAt: new Date().toISOString(), passed: true, repetitions: 3, features: { posts: true, communities: true, catchup: true }, workerDeleted: true, cases: ids.map(id => ({
+    id, model, passed: true,
+    samples: Array.from({ length: 3 }, () => ({ id, model, passed: true, checks: [{ name: 'supported', passed: true }] })),
+    checks: Array.from({ length: 3 }, (_, index) => ({ name: `sample_${index + 1}_supported`, passed: true })),
+  })) };
+}
+
+test('production activation requires fresh exact-source hosted acceptance for every enabled feature', () => {
+  const receipt = acceptanceReceipt();
   verifyAssistantAcceptance(receipt, receipt.sourceSha, { communities: 'true', catchup: 'true' });
   for (const change of [{ sourceSha: 'b'.repeat(40) }, { model: 'wrong-model' }, { passed: false }, { workerDeleted: false }, { createdAt: '2020-01-01T00:00:00Z' }, { features: { posts: true } }, { cases: receipt.cases.slice(1) }, { cases: receipt.cases.map(row => ({ ...row, checks: [{ name: 'supported', passed: false }] })) }]) assert.throws(() => verifyAssistantAcceptance({ ...receipt, ...change }, receipt.sourceSha, { communities: 'true', catchup: 'true' }));
+});
+
+test('production acceptance cannot pass through aggregate-only, incomplete or failing samples', () => {
+  const mutations = [
+    receipt => { delete receipt.repetitions; },
+    ...[1, 2, 4].map(count => receipt => { receipt.repetitions = count; }),
+    receipt => { delete receipt.cases[0].samples; },
+    receipt => { receipt.cases[0].samples.pop(); },
+    receipt => { receipt.cases[0].samples.push(receipt.cases[0].samples[0]); },
+    receipt => { receipt.cases[0].samples[0].passed = false; },
+    receipt => { receipt.cases[0].samples[0].checks[0].passed = false; },
+    receipt => { receipt.cases[0].samples[0].checks = []; },
+    receipt => { receipt.cases[0].samples[0].checks[0].name = ''; },
+    receipt => { receipt.cases[0].samples[0].model = 'another-model'; },
+    receipt => { receipt.cases[0].samples[0].id = receipt.cases[1].id; },
+    receipt => { receipt.cases[0].checks.pop(); },
+    receipt => { receipt.cases[0].checks[0].name = 'unsupported-aggregate'; },
+    receipt => { receipt.cases[0].model = 'another-model'; },
+    receipt => { receipt.cases[0].passed = false; },
+    receipt => { receipt.cases[0] = receipt.cases[1]; },
+  ];
+  for (const mutate of mutations) {
+    const receipt = acceptanceReceipt(); mutate(receipt);
+    assert.throws(() => verifyAssistantAcceptance(receipt, receipt.sourceSha, { communities: 'true', catchup: 'true' }));
+  }
+});
+
+const uploadedVersion = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+const deploymentEntry = { type: 'deploy', version: 1, worker_name: 'visaflow-dev', version_id: uploadedVersion };
+
+test('deployment ownership requires the exact structured Wrangler deploy receipt', () => {
+  const output = JSON.stringify({ type: 'unrelated-informational-entry' }) + '\n' + JSON.stringify(deploymentEntry) + '\n';
+  assert.equal(uploadedFeatureVersion(output), uploadedVersion);
+  for (const value of ['', '{}', 'invalid json', JSON.stringify({ ...deploymentEntry, type: 'version-upload' }), JSON.stringify({ ...deploymentEntry, worker_name: 'unrelated-worker' }), JSON.stringify({ ...deploymentEntry, version: 2 }), JSON.stringify({ ...deploymentEntry, version_id: null }), JSON.stringify({ ...deploymentEntry, version_id: 'not-a-version' }), JSON.stringify(deploymentEntry) + '\n' + JSON.stringify(deploymentEntry), ' '.repeat(1024 * 1024 + 1)]) assert.throws(() => uploadedFeatureVersion(value));
+});
+
+test('recording and rollback refuse unrelated deployments and accept a provable upload after recording failed', () => {
+  const baseline = { deploymentId: 'captured-baseline' };
+  const current = { id: 'owned-deployment', versions: [{ version_id: uploadedVersion, percentage: 100 }] };
+  verifyCurrentFeatureDeployment(current, uploadedVersion, baseline);
+  verifyCurrentFeatureDeployment(current, uploadedVersion, baseline, current);
+  for (const changed of [undefined, { ...current, id: baseline.deploymentId }, { ...current, versions: [] }, { ...current, versions: [current.versions[0], current.versions[0]] }, { ...current, versions: [{ version_id: uploadedVersion, percentage: 99 }] }, { ...current, versions: [{ version_id: '11111111-2222-3333-4444-555555555555', percentage: 100 }] }]) assert.throws(() => verifyCurrentFeatureDeployment(changed, uploadedVersion, baseline));
+  assert.throws(() => verifyCurrentFeatureDeployment({ ...current, id: 'later-deployment' }, uploadedVersion, baseline, current), /later deployment/);
+  assert.throws(() => verifyCurrentFeatureDeployment(current, 'unproven', baseline));
+});
+
+test('production workflow captures structured deploy output and attempts guarded recovery after upload failure', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/production-features.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /WRANGLER_OUTPUT_FILE_PATH: \$\{\{ github.workspace \}\}\/\.cache\/visaflow\/live-preview\/wrangler-deploy\.ndjson/);
+  assert.match(workflow, /if: always\(\) && \(steps\.deploy\.outcome == 'success' \|\| steps\.deploy\.outcome == 'failure'\)\n\s+run: node scripts\/production-feature-release\.mjs record-deployment/);
+  assert.match(workflow, /if: failure\(\) && \(steps\.deploy\.outcome == 'success' \|\| steps\.deploy\.outcome == 'failure'\)/);
+  assert.match(workflow, /ROLLBACK_VERSION=\$\(node scripts\/production-feature-release\.mjs rollback-version\)/);
 });
 
 test('only a fresh unchanged current-live archive may be used by an explicit preview release', async () => {

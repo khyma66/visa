@@ -13,6 +13,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const privateDirectory = resolve(root, '.cache/visaflow/live-preview');
 const receiptPath = resolve(privateDirectory, 'receipt.json');
 const configPath = resolve(root, 'dist/server/wrangler.json');
+const deploymentOutputPath = resolve(privateDirectory, 'wrangler-deploy.ndjson');
 const hosts = ['visathreads.com', 'www.visathreads.com'];
 const publicVariableNames = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SITE_URL', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'GOOGLE_NEWS_RSS_ENABLED'];
 const LEGACY_BASELINE_SHA = '0624c651cb252436c47c5f2b020baecfec0bfbd0';
@@ -214,8 +215,22 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
   assert.equal(receipt.workerDeleted, true, 'Temporary evaluation Worker must be removed before release.');
   assert.equal(receipt.features?.posts, true);
   for (const feature of ['communities', 'catchup']) if (features[feature] === 'true') assert.equal(receipt.features?.[feature], true, `${feature} needs hosted model acceptance.`);
+  assert.equal(receipt.repetitions, 3, 'Hosted acceptance requires three independent samples per case.');
   const requiredCases = ['post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'public-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post'];
-  assert(Array.isArray(receipt.cases) && receipt.cases.length === requiredCases.length && requiredCases.every(id => receipt.cases.some(row => row.id === id && row.passed === true && Array.isArray(row.checks) && row.checks.length > 0 && row.checks.every(check => check.passed === true))), 'All representative hosted model cases and their checks must pass.');
+  assert(Array.isArray(receipt.cases) && receipt.cases.length === requiredCases.length && requiredCases.every(id => receipt.cases.some(row => row.id === id)), 'Every required hosted case must occur exactly once.');
+  for (const row of receipt.cases) {
+    assert.equal(row.model, receipt.model);
+    assert.equal(row.passed, true, 'Every hosted case must pass.');
+    assert(Array.isArray(row.samples) && row.samples.length === receipt.repetitions, 'Every hosted case must retain all three samples.');
+    for (const sample of row.samples) {
+      assert.equal(sample.id, row.id, 'Sample belongs to a different fixture.');
+      assert.equal(sample.model, receipt.model, 'Sample belongs to a different model.');
+      assert.equal(sample.passed, true, 'Every hosted sample must pass.');
+      assert(Array.isArray(sample.checks) && sample.checks.length > 0 && sample.checks.every(check => typeof check.name === 'string' && check.name.length > 0 && check.passed === true), 'Every sample must retain passing semantic checks.');
+    }
+    const aggregate = row.samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed })));
+    assert.deepEqual(row.checks, aggregate, 'Aggregate checks must exactly retain all 33 sample results.');
+  }
   const age = Date.now() - Date.parse(receipt.createdAt);
   assert(age >= 0 && age < 60 * 60 * 1000, 'Hosted model acceptance is expired.');
 }
@@ -233,22 +248,52 @@ export async function predeployFeatureCheck(enabled, features = {}, requireAccep
   console.log('Live route, deployment baseline, archive and production-only assistant target verified.');
 }
 
+/** Read Wrangler's structured output, not console text or an arbitrary newest version.
+ * Wrangler 4.147.0 emits this NDJSON entry after a completed deployment. */
+export function uploadedFeatureVersion(text) {
+  assert(typeof text === 'string' && text.length <= 1024 * 1024, 'Unexpected deployment output.');
+  let rows;
+  try { rows = text.split('\n').filter(line => line.trim()).map(line => JSON.parse(line)); }
+  catch { throw new Error('Invalid structured Wrangler deployment output.'); }
+  const deployments = rows.filter(row => row?.type === 'deploy');
+  assert.equal(deployments.length, 1, 'Exactly one recorded deployment is required.');
+  const deployed = deployments[0];
+  assert.equal(deployed.version, 1, 'Unknown Wrangler deployment output format.');
+  assert.equal(deployed.worker_name, LIVE_WORKER, 'Upload targeted a different Worker.');
+  assert.match(deployed.version_id ?? '', /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i, 'Upload did not record an exact Worker version.');
+  return deployed.version_id;
+}
+
+export function verifyCurrentFeatureDeployment(deployment, uploadedVersion, baseline, recorded) {
+  assert.match(uploadedVersion ?? '', /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i);
+  assert(deployment?.id && deployment.id !== baseline.deploymentId, 'Deployment did not change.');
+  assert.equal(deployment.versions?.length, 1, 'A traffic split cannot be recorded or rolled back automatically.');
+  assert.equal(deployment.versions[0].percentage, 100);
+  assert.equal(deployment.versions[0].version_id, uploadedVersion, 'A different version is active; refuse to overwrite unrelated work.');
+  if (recorded) assert.equal(deployment.id, recorded.id, 'A later deployment exists; automatic rollback would overwrite unrelated work.');
+}
+
 export async function recordFeatureDeployment() {
   const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
+  const uploadedVersion = uploadedFeatureVersion(await readFile(deploymentOutputPath, 'utf8'));
   const { deployments } = await cloudflare(`/workers/scripts/${LIVE_WORKER}/deployments`);
-  assert.notEqual(deployments[0].id, receipt.deploymentId, 'Deployment did not change.');
-  assert.equal(deployments[0].versions.length, 1);
-  assert.equal(deployments[0].versions[0].percentage, 100);
+  verifyCurrentFeatureDeployment(deployments[0], uploadedVersion, receipt);
   await writeFile(resolve(privateDirectory, 'deployed.json'), JSON.stringify(deployments[0]), { mode: 0o600 });
-  console.log(JSON.stringify({ deployedVersion: deployments[0].versions[0].version_id, rollbackVersion: receipt.previousVersion }));
+  console.log(JSON.stringify({ deployedVersion: uploadedVersion, rollbackVersion: receipt.previousVersion }));
 }
 
 export async function checkedRollbackVersion() {
   const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
-  const deployed = JSON.parse(await readFile(resolve(privateDirectory, 'deployed.json'), 'utf8'));
+  const uploadedVersion = uploadedFeatureVersion(await readFile(deploymentOutputPath, 'utf8'));
+  let deployed;
+  try { deployed = JSON.parse(await readFile(resolve(privateDirectory, 'deployed.json'), 'utf8')); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
   const { deployments } = await cloudflare(`/workers/scripts/${LIVE_WORKER}/deployments`);
-  assert.equal(deployments[0].id, deployed.id, 'A later deployment exists; automatic rollback would overwrite unrelated work.');
-  assert.match(receipt.previousVersion, /^[a-f0-9-]{36}$/);
+  // A failed recording API call must not suppress rollback after a successful
+  // upload. The CLI's exact version remains sufficient proof when no record exists.
+  verifyCurrentFeatureDeployment(deployments[0], uploadedVersion, receipt, deployed);
+  assert.match(receipt.previousVersion, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i);
+  assert.notEqual(receipt.previousVersion, uploadedVersion);
   console.log(receipt.previousVersion);
 }
 

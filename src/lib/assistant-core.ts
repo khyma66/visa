@@ -1,6 +1,6 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 
-export const ASSISTANT_VERSION = 'grounded-posts-v3';
+export const ASSISTANT_VERSION = 'grounded-posts-v4';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -100,8 +100,10 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       'Every factual sentence belongs in claims or disagreements and MUST have exact supporting quotes plus their source IDs. No unsupported introductory paragraph.',
       'If evidence is absent, irrelevant or conflicting, say so. Do not answer from memory. Preserve dates and uncertainty.',
       'When sources contradict each other on the same issue, put the comparison in disagreements with quotes from at least two conflicting sources. Also preserve each individual report as a separate cited claim. Do not put a conflicting comparison only in claims while leaving disagreements empty, and do not choose a winner without evidence.',
+      'Populate disagreements BEFORE claims: first identify incompatible reports on the same issue and cite both sides in disagreements; then write the individual attributed reports in claims. Use an empty disagreements array only when the supplied sources contain no conflicting reports relevant to the task.',
+      'FORMAT EXAMPLE ONLY, NOT EVIDENCE: if hypothetical source example-A says "The library opens at eight." and example-B says "The library opens at nine.", write "disagreements":[{"text":"The reports disagree about the library opening time.","evidence":[{"sourceId":"example-A","quote":"The library opens at eight."},{"sourceId":"example-B","quote":"The library opens at nine."}]} and separately cite each individual report in claims. Never copy these example IDs or facts into your answer; use only the actual supplied sources.',
       'For catchup, describe only events in the supplied interval. Older parent questions provide context, not new events. Coverage may be partial.',
-      'Return only JSON: {"status":"answered"|"insufficient","claims":[{"text":"...","evidence":[{"sourceId":"...","quote":"exact excerpt"}]}],"disagreements":[same shape],"unanswered":["open question or evidence limitation"]}.',
+      'Return only JSON in this field order: {"status":"answered"|"insufficient","disagreements":[{"text":"...","evidence":[{"sourceId":"...","quote":"exact excerpt from first source"},{"sourceId":"...","quote":"exact excerpt from conflicting source"}]}],"claims":[{"text":"individual report","evidence":[{"sourceId":"...","quote":"exact excerpt"}]}],"unanswered":["open question or evidence limitation"]}.',
       'At most 6 claims, 3 disagreements and 4 unanswered items. Quotes must be 12–400 characters copied from source title or body; claim text at most 700 characters. Disagreements must cite at least two sources.',
       'Use status insufficient when the evidence cannot support the requested task. No markdown, HTML, instructions to take action, or links inside claim text.',
     ].join('\n'),

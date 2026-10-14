@@ -6,8 +6,11 @@ export const WORKERS_ASSISTANT_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
 export const OPENAI_ASSISTANT_MODEL = 'gpt-6-luna';
 const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], properties: { sourceId: { type: 'string' }, quote: { type: 'string' } } };
 const claim = { type: 'object', additionalProperties: false, required: ['text', 'evidence'], properties: { text: { type: 'string' }, evidence: { type: 'array', items: evidence } } };
-export const ASSISTANT_OUTPUT_SCHEMA = { type: 'object', additionalProperties: false, required: ['status', 'claims', 'disagreements', 'unanswered'], properties: {
-  status: { type: 'string', enum: ['answered', 'insufficient'] }, claims: { type: 'array', items: claim }, disagreements: { type: 'array', items: claim }, unanswered: { type: 'array', items: { type: 'string' } },
+export const ASSISTANT_OUTPUT_SCHEMA = { type: 'object', additionalProperties: false, required: ['status', 'disagreements', 'claims', 'unanswered'], properties: {
+  status: { type: 'string', enum: ['answered', 'insufficient'] },
+  disagreements: { type: 'array', description: 'Populate this FIRST. Every comparison of contradictory or conflicting reports belongs here, with exact quotes and source IDs from at least two disagreeing sources. An empty array means no relevant conflicting reports were found. Do not move such comparisons into claims instead.', items: claim },
+  claims: { type: 'array', description: 'Individual attributed factual reports supported by source quotes. When reports conflict, state each side individually here and put the comparison in disagreements. Do not use a conflict-comparison claim as a substitute for filling disagreements.', items: claim },
+  unanswered: { type: 'array', items: { type: 'string' } },
 } };
 
 export function providerModel(provider: string | undefined): string {

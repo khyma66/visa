@@ -57,15 +57,22 @@ jobs:
       - name: Deploy checked production feature build
         id: deploy
         run: |
+          rm -f .cache/visaflow/live-preview/wrangler-deploy.ndjson
           npx --no-install vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build
-          node scripts/production-feature-release.mjs record-deployment
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ github.workspace }}/.cache/visaflow/live-preview/wrangler-deploy.ndjson
+      - name: Record exact uploaded version independently of deploy exit status
+        if: always() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')
+        run: node scripts/production-feature-release.mjs record-deployment
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Verify exact source, unchanged archive, feature availability and auth denials
         run: node scripts/smoke-production-features.mjs
       - name: Restore captured version if this deployment fails verification
-        if: failure() && steps.deploy.outcome == 'success'
+        if: failure() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

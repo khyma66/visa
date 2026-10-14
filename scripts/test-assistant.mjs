@@ -77,6 +77,16 @@ test('summary and catch-up are explicit evidence tasks without a missing questio
   assert.match(summary.system,/Explicitly stated individual events, outcomes, dates and timing ARE evidence/);
   assert.match(summary.system,/put the comparison in disagreements with quotes from at least two conflicting sources/);
 });
+test('output contract classifies conflicts before individual reports without changing source validation',()=>{
+  const prompt=core.assistantPrompt(input,{sources:[source],partial:false});
+  assert.match(prompt.system,/Populate disagreements BEFORE claims/);
+  assert.match(prompt.system,/FORMAT EXAMPLE ONLY, NOT EVIDENCE/);
+  assert.match(prompt.system,/Never copy these example IDs or facts/);
+  assert.deepEqual(Object.keys(provider.ASSISTANT_OUTPUT_SCHEMA.properties),['status','disagreements','claims','unanswered']);
+  assert.match(provider.ASSISTANT_OUTPUT_SCHEMA.properties.disagreements.description,/at least two disagreeing sources/);
+  assert.match(provider.ASSISTANT_OUTPUT_SCHEMA.properties.claims.description,/put the comparison in disagreements/);
+  assert.throws(()=>core.validateAssistantOutput(JSON.stringify({...output,disagreements:[{text:'The reports differ.',evidence:[{sourceId:'example-A',quote:'The library opens at eight.'},{sourceId:'example-B',quote:'The library opens at nine.'}]}]}),{sources:[source],partial:false}));
+});
 test('authentication, origin, content type, body budget and disabled rollout fail before inference',async()=>{
   const {handler,state}=harness();
   assert.equal((await handler(request(input,{Authorization:''}))).status,401);
