@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { waitForAcceptanceReady } from './assistant-acceptance-readiness.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cache = join(root, '.cache/visaflow');
@@ -53,7 +54,7 @@ const temporary = join(cache, name);
 await mkdir(temporary, { recursive: true, mode: 0o700 });
 const configPath = join(temporary, 'wrangler.json');
 const secretsPath = join(temporary, 'secrets.json');
-await writeFile(configPath, JSON.stringify({ name, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), account_id: account, compatibility_date: '2026-10-01', workers_dev: true, preview_urls: false, routes: [], ai: { binding: 'ASSISTANT_AI' }, vars: { ACCEPTANCE_EXPIRES: String(Date.now() + 15 * 60_000) }, observability: { enabled: false } }));
+await writeFile(configPath, JSON.stringify({ name, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), account_id: account, compatibility_date: '2026-10-01', workers_dev: true, preview_urls: false, routes: [], ai: { binding: 'ASSISTANT_AI' }, vars: { ACCEPTANCE_EXPIRES: String(Date.now() + 15 * 60_000), ACCEPTANCE_SOURCE_SHA: sourceSha }, observability: { enabled: false } }));
 await writeFile(secretsPath, JSON.stringify({ ACCEPTANCE_SECRET: secret }), { mode: 0o600 });
 const receipt = { schemaVersion: 1, sourceSha, provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8', createdAt: new Date().toISOString(), passed: false, features: { posts: true, communities: true, catchup: true }, cases: [], workerDeleted: false };
 let failure;
@@ -67,12 +68,15 @@ try {
   assert(deployment.status === 0, `Temporary AI Worker deployment failed (exit ${deployment.status ?? 'timeout'})`);
   await rm(secretsPath, { force: true });
   const url = `https://${name}.${subdomain.subdomain}.workers.dev/evaluate`;
+  await waitForAcceptanceReady(new URL('/ready', url), secret, sourceSha, cases);
+  console.log('PASS authenticated Worker readiness');
   const rejected = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: cases[0] }), redirect: 'error', signal: AbortSignal.timeout(15_000) });
   assert.equal(rejected.status, 404, 'Evaluation must reject unauthenticated callers');
+  assert.equal(rejected.headers.get('X-Assistant-Acceptance'), 'v1', 'Unauthenticated rejection must come from the deployed Worker');
   await rejected.body?.cancel();
   for (const id of cases) {
     const reply = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ id }), redirect: 'error', signal: AbortSignal.timeout(35_000) });
-    if (!reply.ok) { await reply.body?.cancel(); receipt.cases.push({ id, passed: false, checks: [{ name: 'hosted_inference_and_validation', passed: false }], httpStatus: reply.status }); continue; }
+    if (!reply.ok) { await reply.body?.cancel(); receipt.cases.push({ id, passed: false, checks: [{ name: 'hosted_inference_and_validation', passed: false }], httpStatus: reply.status }); console.log(`FAIL ${id} HTTP ${reply.status}`); continue; }
     const value = await reply.json();
     assert(value.id === id && value.model === receipt.model && Array.isArray(value.checks), 'Evaluation returned an unexpected fixture or model');
     receipt.cases.push(value);

@@ -5,11 +5,21 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { archiveSource } from './archive-source.mjs';
 import { checkedLiveArchive, LIVE_SITE, LIVE_DATABASE, sha256 } from './live-preview-archive.mjs';
-import { featureEnvironment, verifyFeatureWorker, verifyAssistantAcceptance } from './production-feature-release.mjs';
+import { featureEnvironment, verifyFeatureWorker, verifyAssistantAcceptance, verifyExistingLiveProvenance } from './production-feature-release.mjs';
 import { archiveFromWorkerModule, recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 
 const values = { NEXT_PUBLIC_SITE_URL: LIVE_SITE, NEXT_PUBLIC_SUPABASE_URL: LIVE_DATABASE, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: `sb_publishable_${'fixture'.repeat(5)}` };
 const config = enabled => ({ name: 'visaflow-dev', routes: ['visathreads.com', 'www.visathreads.com'].map(pattern => ({ pattern, custom_domain: true })), vars: featureEnvironment(values, enabled), ai: { binding: 'ASSISTANT_AI' } });
+
+test('only the independently identified legacy version may omit a site origin', () => {
+  const health = { environment: 'development', releaseStatus: 'configured', build: { gitSha: '0624c651cb252436c47c5f2b020baecfec0bfbd0', dirty: false, siteOrigin: null } };
+  const deployment = { versions: [{ version_id: '879503b4-e947-420e-8ad8-e1f2f7082ae5', percentage: 100 }] };
+  verifyExistingLiveProvenance(health, deployment);
+  verifyExistingLiveProvenance({ ...health, build: { ...health.build, gitSha: 'a'.repeat(40), siteOrigin: LIVE_SITE } }, deployment);
+  for (const change of [{ gitSha: 'a'.repeat(40) }, { dirty: true }, { siteOrigin: undefined }, { siteOrigin: '' }, { siteOrigin: 'https://visa-central.com' }]) assert.throws(() => verifyExistingLiveProvenance({ ...health, build: { ...health.build, ...change } }, deployment));
+  for (const changed of [{ versions: [{ version_id: '11111111-1111-1111-1111-111111111111', percentage: 100 }] }, { versions: [{ ...deployment.versions[0], percentage: 50 }] }, { versions: [...deployment.versions, deployment.versions[0]] }]) assert.throws(() => verifyExistingLiveProvenance(health, changed));
+  assert.throws(() => verifyExistingLiveProvenance({ ...health, environment: 'production' }, deployment));
+});
 
 test('existing preview feature configuration preserves launch gates and production-only AI', () => {
   for (const enabled of ['true', 'false']) {
