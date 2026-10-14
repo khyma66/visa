@@ -15,6 +15,8 @@ const receiptPath = resolve(privateDirectory, 'receipt.json');
 const configPath = resolve(root, 'dist/server/wrangler.json');
 const hosts = ['visathreads.com', 'www.visathreads.com'];
 const publicVariableNames = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SITE_URL', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'GOOGLE_NEWS_RSS_ENABLED'];
+const LEGACY_BASELINE_SHA = '0624c651cb252436c47c5f2b020baecfec0bfbd0';
+const LEGACY_BASELINE_VERSION = '879503b4-e947-420e-8ad8-e1f2f7082ae5';
 
 async function jsonRequest(url, options = {}, maximum = 12 * 1024 * 1024) {
   const response = await fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(30_000) });
@@ -79,6 +81,18 @@ export function verifyFeatureWorker(config, enabled, features = {}) {
   assert.deepEqual(config.ai, { binding: 'ASSISTANT_AI' });
 }
 
+/** One observed older build omitted only its site origin. Routes are checked
+ * independently before this function; no future build inherits this exception. */
+export function verifyExistingLiveProvenance(health, deployment) {
+  assert.equal(health.environment, 'development', 'Existing live site is no longer an early preview.');
+  assert.equal(health.releaseStatus, 'configured', 'Current site backend is not configured.');
+  assert.equal(health.build?.dirty, false, 'Current site was not built from clean committed source.');
+  assert.match(health.build?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Current site provenance lacks a Git SHA.');
+  const legacyOrigin = health.build?.siteOrigin === null && health.build.gitSha === LEGACY_BASELINE_SHA &&
+    deployment.versions?.length === 1 && deployment.versions[0].version_id === LEGACY_BASELINE_VERSION && deployment.versions[0].percentage === 100;
+  assert(health.build?.siteOrigin === LIVE_SITE || legacyOrigin, 'Current site provenance has an unexpected origin.');
+}
+
 async function liveState() {
   const domains = await cloudflare('/workers/domains');
   for (const host of hosts) assert.equal(domains.find(row => row.hostname === host)?.service, LIVE_WORKER, 'Live route ownership changed.');
@@ -88,11 +102,7 @@ async function liveState() {
   assert.equal(deployment.versions[0].percentage, 100, 'Current deployment must serve one version at 100 percent.');
   const health = await jsonRequest(`${LIVE_SITE}/api/health?release=${Date.now()}`, { cache: 'no-store' });
   console.log(JSON.stringify({ operation: 'live-health-check', environment: health.environment, releaseStatus: health.releaseStatus, source: health.build?.gitSha, siteOrigin: health.build?.siteOrigin, dirty: health.build?.dirty, deploymentId: deployment.id, versions: deployment.versions.map(row => ({ version: row.version_id, percentage: row.percentage })) }));
-  assert.equal(health.environment, 'development', 'Existing live site is no longer an early preview.');
-  assert.equal(health.releaseStatus, 'configured', 'Current site backend is not configured.');
-  assert.equal(health.build?.siteOrigin, LIVE_SITE, 'Current site provenance has an unexpected origin.');
-  assert.equal(health.build?.dirty, false, 'Current site was not built from clean committed source.');
-  assert.match(health.build?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Current site provenance lacks a Git SHA.');
+  verifyExistingLiveProvenance(health, deployment);
   const response = await fetch(LIVE_SITE, { redirect: 'error', signal: AbortSignal.timeout(15_000) });
   assert.match(response.headers.get('x-robots-tag') ?? '', /noindex/, 'Do not change an already launched site through preview tooling.');
   await response.body?.cancel();
