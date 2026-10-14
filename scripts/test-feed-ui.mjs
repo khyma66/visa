@@ -86,6 +86,16 @@ function textOf(node) { return Array.isArray(node) ? node.map(textOf).join(' ') 
 function button(h, label) { const result = nodes(h.tree).find((node) => node.type === 'button' && textOf(node).trim() === label); assert(result, `Missing ${label} button`); return result; }
 function search(h, value) { const input = nodes(h.tree).find((node) => node.type === 'input'); input.props.onChange({ target: { value } }); h.render(); }
 function ids(h) { return nodes(h.tree).filter((node) => node.props?.question).map((node) => node.props.question.id); }
+
+test('initial feed and sort clicks start fetching without the search debounce', async () => {
+  const h = new Harness();
+  try {
+    h.render(); await h.settle();
+    assert.equal(h.calls.length, 1, 'Initial data starts without waiting 200ms');
+    button(h, 'Top').props.onClick(); h.render(); await h.settle();
+    assert.equal(h.calls.at(-1).sort, 'score', 'Sort clicks do not wait for a typing timer');
+  } finally { h.close(); }
+});
 function select(h, label, value) {
   const control = nodes(h.tree).find(node => node.type === 'select' && node.props['aria-label'] === label);
   assert(control, `Missing ${label} selector`);

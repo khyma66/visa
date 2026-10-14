@@ -143,6 +143,49 @@ function createHarness(search = '') {
   return h;
 }
 const publish = (h) => nodes(h.tree).find((n) => n.type === 'form').props.onSubmit(event());
+const popularTag = (h, label) => nodes(h.tree).find((node) => node.type === 'button' && node.props['aria-pressed'] !== undefined && textOf(node).trim() === label);
+
+test('experience popular tags are available before typing and persist when publishing', async () => {
+  const h = createHarness();
+  try {
+    h.render(AskQuestionForm, { experience: true }); await h.settle();
+    assert(popularTag(h, 'H-1B'));
+    popularTag(h, 'H-1B').props.onClick(); h.render();
+    popularTag(h, 'Biometrics').props.onClick(); h.render();
+    assert.equal(popularTag(h, 'H-1B').props['aria-pressed'], true);
+    assert(nodes(h.tree).some(node => node.props?.['aria-label'] === 'Remove H-1B'));
+    change(h, 'Experience Title', 'My recent appointment experience');
+    change(h, 'Situation and Timeline', 'I arrived early and completed the appointment without a long wait.');
+    await publish(h);
+    const payload = h.calls.find(call => call.name === 'createQuestion').args[1];
+    assert.deepEqual(payload.tags.slice(0, 2), ['h1b', 'biometrics']);
+    assert.equal(payload.post_kind, 'experience');
+  } finally { h.close(); }
+});
+
+test('tag quick picks enforce five selections, toggle off and normalize typed duplicates', async () => {
+  const h = createHarness();
+  const input = () => nodes(h.tree).find(node => node.props?.['aria-label'] === 'Add a tag');
+  try {
+    h.render(AskQuestionForm, { experience: true }); await h.settle();
+    popularTag(h, 'H-1B').props.onClick(); h.render();
+    input().props.onChange({ target: { value: 'H-1B' } }); h.render();
+    input().props.onKeyDown({ key: 'Enter', preventDefault() {} }); h.render();
+    assert.match(textOf(h.tree), /1\s*\/5 tags selected/);
+    for (const label of ['H-4', 'F-1', 'B1/B2', 'Stamping']) { popularTag(h, label).props.onClick(); h.render(); }
+    assert.equal(input().props.disabled, true);
+    assert.equal(popularTag(h, 'Biometrics').props.disabled, true);
+    popularTag(h, 'H-1B').props.onClick(); h.render();
+    assert.equal(input().props.disabled, false);
+    assert.equal(popularTag(h, 'Biometrics').props.disabled, false);
+    popularTag(h, 'Biometrics').props.onClick(); h.render();
+    assert.match(textOf(h.tree), /5\s*\/5 tags selected/);
+    let prevented = false;
+    input().props.onKeyDown({ key: 'Enter', preventDefault() { prevented = true; } });
+    assert.equal(prevented, true, 'An empty Enter never submits the whole form');
+  } finally { h.close(); }
+});
+
 function fillQuestion(h) {
   change(h, 'Question Title', ' What documents for my H1B transfer? ');
   change(h, 'Situation and Timeline', ' I am changing employers and need to understand the required transfer documents. ');

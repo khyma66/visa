@@ -46,6 +46,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const filterKey = JSON.stringify([search, tag, visaType, sortMode, revision, experience, category, origin]);
   const filterRef = useRef(filterKey);
   filterRef.current = filterKey;
+  const previousSearch = useRef(search);
 
   useEffect(() => {
     const params = new URLSearchParams(queryString);
@@ -72,6 +73,8 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
 
   useEffect(() => {
     let active = true;
+    const typing = previousSearch.current !== search;
+    previousSearch.current = search;
     setLoading(true); setError(''); setMore(false); setCursor(undefined);
     olderLock.current = null; setLoadingOlder(false);
     const timer = setTimeout(() => {
@@ -79,7 +82,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
         .then((data) => { if (active) { setQuestions(data.questions); setMore(data.more); setCursor(data.cursor); } })
         .catch(() => { if (active) { setQuestions([]); setError('Questions could not be loaded. Please try again.'); } })
         .finally(() => { if (active) setLoading(false); });
-    }, 200);
+    }, typing && search ? 200 : 0);
     return () => { active = false; clearTimeout(timer); };
   }, [search, tag, visaType, sortMode, revision, experience, category, origin]);
 

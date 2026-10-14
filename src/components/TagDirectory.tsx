@@ -19,6 +19,7 @@ export function TagDirectory() {
   const [hasMore, setHasMore] = useState(false);
   const generation = useRef(0);
   const archive = useRef<ArchiveTagSummary[]>([]);
+  const previousSearch = useRef(search);
 
   const loadPage = useCallback(async (cursor?: DirectoryTag, signal?: AbortSignal) => {
     if (!isSupabaseConfigured) return archiveDirectoryPage(archive.current, search, sort, cursor);
@@ -60,7 +61,9 @@ export function TagDirectory() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = setTimeout(() => void refresh(controller.signal), 200);
+    const typing = previousSearch.current !== search;
+    previousSearch.current = search;
+    const timer = setTimeout(() => void refresh(controller.signal), typing && search ? 200 : 0);
     const visible = () => { if (document.visibilityState === 'visible') void refresh(controller.signal); };
     window.addEventListener('focus', visible);
     window.addEventListener('online', visible);
