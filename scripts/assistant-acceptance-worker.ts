@@ -33,8 +33,17 @@ export default {
       const started = Date.now();
       const raw = await runAssistantModel(assistantPrompt(fixture.input, corpus), { provider: 'workers-ai', binding: env.ASSISTANT_AI, signal: request.signal });
       const result = validateAssistantOutput(raw, corpus);
-      // Never return the prompt, source content, or generated prose; only fixed check names and booleans.
-      return response({ ...evaluateAcceptance(fixture, result), model: WORKERS_ASSISTANT_MODEL, durationMs: Date.now() - started });
+      const evaluation = evaluateAcceptance(fixture, result);
+      // Only failed, fixed COMPILED SYNTHETIC fixtures may include diagnostic
+      // output. This Worker has no database, production content or free-form
+      // prompt input. Production API responses/logging are completely unchanged.
+      return response({ ...evaluation, model: WORKERS_ASSISTANT_MODEL, durationMs: Date.now() - started,
+        ...(!evaluation.passed ? { syntheticDiagnostic: {
+          source: 'compiled-synthetic-fixture-only', fixtureId: fixture.id,
+          failedChecks: evaluation.checks.filter(check => !check.passed).map(check => check.name),
+          output: { status: result.status, claims: result.claims, disagreements: result.disagreements, unanswered: result.unanswered },
+        } } : {}),
+      });
     } catch { return response({ error: 'Hosted inference or source validation failed' }, 502); }
   },
 };

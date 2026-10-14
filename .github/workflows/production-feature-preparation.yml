@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [feat/grounded-assistant-20261013]
-    paths: [.github/workflows/production-feature-preparation.yml]
+    paths: [.github/workflows/production-feature-preparation.yml, scripts/production-feature-release.mjs, scripts/recover-worker-archive.mjs]
 
 permissions:
   contents: read

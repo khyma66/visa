@@ -88,6 +88,21 @@ test('successful evaluation executes exact production model and returns no gener
   assert.doesNotMatch(JSON.stringify(value), /passport|Monday|Friday/);
 });
 
+test('failed semantic checks retain validated diagnostics only for compiled synthetic fixtures', async () => {
+  const settings = { ...env(), ASSISTANT_AI: { run: async () => ({ response: JSON.stringify({ status: 'insufficient', claims: [], disagreements: [], unanswered: ['Evidence is insufficient.'] }) }) } };
+  const reply = await worker.fetch(request(), settings);
+  assert.equal(reply.status, 200);
+  const value = await reply.json();
+  assert.equal(value.passed, false);
+  assert.equal(value.syntheticDiagnostic.source, 'compiled-synthetic-fixture-only');
+  assert.equal(value.syntheticDiagnostic.fixtureId, 'post-question');
+  assert.equal(value.syntheticDiagnostic.output.status, 'insufficient');
+  assert(value.syntheticDiagnostic.failedChecks.includes('correct_reported_day'));
+  assert.deepEqual(value.syntheticDiagnostic.output.claims, []);
+  assert.equal((await worker.fetch(request({ id: 'post-question', sources: ['not a fixture'] }), settings)).status, 400);
+  assert.equal((await worker.fetch(request({ id: 'not-a-compiled-fixture' }), settings)).status, 400);
+});
+
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
   assert.equal(acceptanceFixtures.length, 11);

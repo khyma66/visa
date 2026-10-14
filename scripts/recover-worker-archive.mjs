@@ -14,6 +14,12 @@ function literal(node, values, depth = 0, unsupportedKinds = {}) {
   // Vite minifies JSON booleans to !0 / !1. Interpret just these literal forms;
   // arbitrary operators or expressions in a downloaded Worker are never run.
   if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken && ts.isNumericLiteral(node.operand) && ['0', '1'].includes(node.operand.text)) return node.operand.text === '0';
+  // Vite may encode large nested JSON values as JSON.parse("..."). Decode the
+  // literal with our own JSON parser; never invoke the downloaded expression.
+  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === 'JSON' && node.expression.name.text === 'parse' && node.arguments.length === 1 && (ts.isStringLiteral(node.arguments[0]) || ts.isNoSubstitutionTemplateLiteral(node.arguments[0]))) {
+    try { return JSON.parse(node.arguments[0].text); }
+    catch { throw new Error('Static JSON payload in Worker archive is invalid; content withheld.'); }
+  }
   if (ts.isArrayLiteralExpression(node)) {
     const rows = node.elements.map(child => literal(child, values, depth + 1, unsupportedKinds));
     return rows.includes(unsupported) ? unsupported : rows;
@@ -30,7 +36,7 @@ function literal(node, values, depth = 0, unsupportedKinds = {}) {
     }
     return result;
   }
-  // No code execution, function calls, template substitutions or evaluation.
+  // No code execution, arbitrary function calls, template substitutions or eval.
   const kind = ts.SyntaxKind[node.kind];
   unsupportedKinds[kind] = (unsupportedKinds[kind] ?? 0) + 1;
   return unsupported;
@@ -41,20 +47,29 @@ export function archiveFromWorkerModule(source, diagnostics) {
   const file = ts.createSourceFile('downloaded-worker.js', source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
   assert.equal(file.parseDiagnostics.length, 0, 'Worker module could not be parsed safely.');
   const values = new Map(); const archives = [];
-  const shapes = {}; const unsupportedKinds = {};
+  const shapes = {}; const unsupportedKinds = {}; const callShapes = [];
+  const inspectCalls = node => {
+    if (ts.isCallExpression(node) && callShapes.length < 20) {
+      const expression = node.expression;
+      const callee = ts.isIdentifier(expression) ? expression.text : ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression) ? `${expression.expression.text}.${expression.name.text}` : ts.SyntaxKind[expression.kind];
+      callShapes.push({ callee: callee.slice(0, 100), argumentKinds: node.arguments.map(argument => ts.SyntaxKind[argument.kind]), literalArgumentLengths: node.arguments.map(argument => ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument) ? argument.text.length : null) });
+    }
+    ts.forEachChild(node, inspectCalls);
+  };
   for (const statement of file.statements) {
     if (!ts.isVariableStatement(statement)) continue;
     for (const declaration of statement.declarationList.declarations) {
       if (!ts.isIdentifier(declaration.name)) continue;
       const shape = ts.SyntaxKind[declaration.initializer?.kind] ?? 'none';
       shapes[shape] = (shapes[shape] ?? 0) + 1;
+      if (declaration.initializer) inspectCalls(declaration.initializer);
       const value = literal(declaration.initializer, values, 0, unsupportedKinds);
       if (value === unsupported) continue;
       values.set(declaration.name.text, value);
       if (Array.isArray(value?.questions) && value?.answersByQuestionId && value?.source) archives.push(value);
     }
   }
-  if (diagnostics) Object.assign(diagnostics, { topLevelDeclarations: Object.values(shapes).reduce((a, b) => a + b, 0), initializerShapes: shapes, unsupportedSyntaxKinds: unsupportedKinds, literalArchives: archives.length });
+  if (diagnostics) Object.assign(diagnostics, { topLevelDeclarations: Object.values(shapes).reduce((a, b) => a + b, 0), initializerShapes: shapes, unsupportedSyntaxKinds: unsupportedKinds, callShapes, literalArchives: archives.length });
   assert(archives.length <= 1, 'Ambiguous archive module; manual review required.');
   return archives[0] ?? null;
 }

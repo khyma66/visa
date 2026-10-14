@@ -92,6 +92,13 @@ test('Worker archive recovery interprets only static literals and never executes
   assert.equal(decoded.questions[0].rejected, false);
   assert.equal(decoded.source.ready, true);
   assert.equal(archiveFromWorkerModule('var e={questions:[],answersByQuestionId:{},source:{ready:!dangerous()}};'), null);
+  const parsedNested = `var e={questions:JSON.parse(${JSON.stringify(JSON.stringify(fixture.questions))}),answersByQuestionId:JSON.parse(${JSON.stringify(JSON.stringify(fixture.answersByQuestionId))}),source:{name:'Synthetic test'}};`;
+  const recoveredNested = archiveFromWorkerModule(parsedNested);
+  assert.deepEqual(recoveredNested.questions, fixture.questions);
+  assert.deepEqual(recoveredNested.answersByQuestionId, fixture.answersByQuestionId);
+  assert.equal(archiveFromWorkerModule('var e={questions:JSON.parse(dangerous()),answersByQuestionId:{},source:{}};'), null);
+  assert.equal(archiveFromWorkerModule('var e={questions:JSON.parse("[]",dangerous),answersByQuestionId:{},source:{}};'), null);
+  assert.equal(archiveFromWorkerModule('var e={questions:dangerous.parse("[]"),answersByQuestionId:{},source:{}};'), null);
   const form = new FormData(); form.append('archive.js', new Blob([js], { type: 'application/javascript' }), 'archive.js');
   assert.equal(canonicalJson(await recoverWorkerArchive(new Response(form))), canonicalJson(fixture));
   const stringForm = new FormData(); stringForm.append('archive.js', js);
