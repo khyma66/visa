@@ -7,7 +7,7 @@ import { AlertTriangle, Check, CheckCircle2, Plus, Search, X } from 'lucide-reac
 import { getCommunityById, getMembershipForCommunity, listMyCommunitiesPage, type Community } from '@/lib/groups';
 import { createQuestion } from '@/lib/community';
 import { topicLabel } from '@/lib/post-presentation';
-import { normalizeTags, suggestTags } from '@/lib/tagging';
+import { normalizeTags, POPULAR_POST_TAGS, suggestTags } from '@/lib/tagging';
 import { useAuth } from './AuthProvider';
 import { RelatedQuestions } from './RelatedQuestions';
 
@@ -79,8 +79,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
   const suggestedTags = suggestTags(`${title}\n${body}`);
 
   function addTag(value: string) {
-    const next = normalizeTags([...selectedTags, value]);
-    if (next.length > selectedTags.length) setSelectedTags(next);
+    setSelectedTags((current) => normalizeTags([...current, value]));
     setTagInput('');
   }
 
@@ -170,10 +169,20 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
           </label>
           <div className="block">
             <span className="font-bold text-slate-900">Tags</span>
-            <span className="mt-1 block text-sm text-slate-500">Tags are suggested from your title and situation as you type. Add up to five.</span>
+            <span id="post-tags-help" className="mt-1 block text-sm text-slate-500">Pick popular tags below or type your own. Add up to five.</span>
             <div className="mt-3 flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 focus-within:border-blue-600 focus-within:ring-4 focus-within:ring-blue-100">
               {selectedTags.map((tag) => <span key={topicLabel(tag)} className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1.5 text-sm font-bold text-blue-700">{topicLabel(tag)}<button type="button" aria-label={`Remove ${topicLabel(tag)}`} onClick={() => setSelectedTags((current) => current.filter((item) => item !== tag))} className="rounded p-0.5 hover:bg-blue-100"><X size={13} /></button></span>)}
-              <input value={tagInput} onChange={(event) => setTagInput(event.target.value)} onKeyDown={(event) => { if (event.key === ',' || event.key === 'Enter' || event.key === 'Tab') { if (tagInput.trim()) { event.preventDefault(); addTag(tagInput); } } }} placeholder={selectedTags.length ? 'Add another tag' : 'h1b, transfer, premium-processing'} className="min-w-48 flex-1 border-0 p-1 outline-none" />
+              <input aria-label="Add a tag" aria-describedby="post-tags-help post-tags-count" disabled={selectedTags.length >= 5 || submitting} maxLength={40} value={tagInput} onChange={(event) => setTagInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); if (event.key === ',' || event.key === 'Enter' || event.key === 'Tab') { if (tagInput.trim()) { event.preventDefault(); addTag(tagInput); } } }} placeholder={selectedTags.length >= 5 ? 'Remove a tag to add another' : selectedTags.length ? 'Add another tag' : 'Type a tag and press Enter'} className="min-w-0 basis-40 flex-1 border-0 p-1 outline-none disabled:bg-transparent" />
+            </div>
+            <p id="post-tags-count" role="status" className="mt-2 text-xs text-slate-500">{selectedTags.length}/5 tags selected{selectedTags.length >= 5 ? ' · Remove a tag to choose another.' : ''}</p>
+            <div className="mt-3" role="group" aria-label="Popular tags">
+              <p className="text-xs font-bold tracking-wide text-slate-500">Popular Tags</p>
+              <div className="mt-2 flex flex-wrap gap-2">{POPULAR_POST_TAGS.map((tag) => {
+                const selected = selectedTags.includes(tag);
+                return <button key={tag} type="button" aria-pressed={selected} disabled={submitting || (!selected && selectedTags.length >= 5)} onClick={() => selected ? setSelectedTags((current) => current.filter((item) => item !== tag)) : addTag(tag)} className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:opacity-40 ${selected ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-200 bg-white text-blue-700 hover:border-blue-300 hover:bg-blue-50'}`}>
+                  {selected ? <Check size={13} aria-hidden="true" /> : <Plus size={13} aria-hidden="true" />}{topicLabel(tag)}
+                </button>;
+              })}</div>
             </div>
             {suggestedTags.length > 0 && <div className="mt-3 rounded-lg bg-slate-50 p-3"><div className="flex items-center gap-2 text-xs font-bold tracking-wide text-slate-500"><Check size={14} /> Suggested from Your Post</div><div className="mt-2 flex flex-wrap gap-2">{suggestedTags.map((tag) => selectedTags.includes(tag) ? <span key={topicLabel(tag)} className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700"><Check size={12} /> {topicLabel(tag)}</span> : <button key={topicLabel(tag)} type="button" onClick={() => addTag(tag)} disabled={selectedTags.length >= 5} className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-blue-700 shadow-sm ring-1 ring-slate-200 hover:bg-blue-50 disabled:opacity-40"><Plus size={12} /> {topicLabel(tag)}</button>)}</div></div>}
             <p className="mt-2 text-xs text-slate-500">Your selected tags are saved. Suggested tags are added automatically when you publish.</p>

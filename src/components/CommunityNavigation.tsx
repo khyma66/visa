@@ -28,7 +28,7 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
       <p className="nav-section-title">{section.name}</p>
       {section.links.map(({ href, label, icon: Icon, ...state }) => {
         const active = 'active' in state ? state.active : pathname === href;
-        return <Link key={href} href={href} prefetch={false} onClick={onNavigate} aria-current={active ? 'page' : undefined} className={`nav-item ${active ? 'nav-item-active' : ''}`}>
+        return <Link key={href} href={href} prefetch={section.name === 'Discover' ? true : undefined} onClick={onNavigate} aria-current={active ? 'page' : undefined} className={`nav-item ${active ? 'nav-item-active' : ''}`}>
           <Icon size={20} strokeWidth={1.7} aria-hidden="true"/><span>{label}</span>
         </Link>;
       })}

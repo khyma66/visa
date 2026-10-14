@@ -28,6 +28,8 @@ export type Question = {
   source_url?: string | null;
   source_label?: string | null;
   source_group?: string | null;
+  /** Upstream platform count, not necessarily available as archived replies. */
+  source_comment_count?: number;
   post_kind?: 'question' | 'discussion' | 'promotion' | 'experience';
   experience_category?: string | null;
 };

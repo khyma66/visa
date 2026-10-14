@@ -1,3 +1,6 @@
+// Curated quick picks, available immediately without waiting for a tag-count API.
+export const POPULAR_POST_TAGS = ['h1b', 'h4', 'f1', 'b1-b2', 'stamping', 'interview', 'dropbox', 'biometrics', 'ds-160', 'timeline', 'premium-processing', '221g'];
+
 export const TAG_RULES: Array<[string, RegExp]> = [
   ['h1b', /\bh[ -]?1b\b/i],
   ['h4', /\bh[ -]?4\b/i],

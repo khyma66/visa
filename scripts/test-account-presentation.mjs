@@ -18,6 +18,7 @@ const dependencies = {
   'lucide-react': import.meta.resolve('lucide-react'),
   './AuthProvider': asModule('export const useAuth=()=>globalThis.__accountPresentation.auth;'),
   './CommunityNavigation': asModule('export const CommunityNavigation=()=>null;'),
+  './FeedbackLauncher': asModule('export const FeedbackLauncher=()=>null,OwnerFeedbackLink=()=>null;'),
   './Avatar': asModule(`import React from ${JSON.stringify(reactUrl)};export const Avatar=({name})=>React.createElement('span',{'data-public-avatar-name':name,'aria-hidden':true},'Avatar');`),
   '@/lib/supabase/client': asModule('export const getSupabase=()=>{throw new Error("Network prohibited in presentation tests");};'),
   '@/lib/account': asModule('const unavailable=()=>{throw new Error("Network prohibited in presentation tests")};export const getAccountActivity=unavailable,getAccountIdentity=unavailable,hasAccountPolicyAcceptance=unavailable,saveProfileBio=unavailable;'),
@@ -171,7 +172,7 @@ test('query-only navigation within account closes the profile-menu disclosure', 
     for (const tab of ['profile', 'activity', 'settings']) {
       const state = setup({ values: { 0: true }, query: 'tab=profile' });
       const options = findAccountOptions(SiteHeader());
-      const choice = options.props.children.find(item => item.props.href === `/account?tab=${tab}`);
+      const choice = React.Children.toArray(options.props.children).find(item => item.props?.href === `/account?tab=${tab}`);
       assert(choice, `missing ${tab} account choice`);
       // The pathname stays /account; its nav click must close the menu itself.
       options.props.onClick({ target: choice });

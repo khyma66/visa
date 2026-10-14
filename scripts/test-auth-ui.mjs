@@ -127,6 +127,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 dependencies['@/lib/auth-flow'] = await compile('../src/lib/auth-flow.ts');
 dependencies['@/lib/supabase/client'] = dataUrl('export function getAuthMethods(...args){return globalThis.__authHarness.invoke("getAuthMethods", args);}');
 const { AuthForm } = await import(await compile('../src/components/AuthForm.tsx'));
+dependencies['./FeedbackLauncher'] = dataUrl('export const FeedbackLauncher=()=>null,OwnerFeedbackLink=()=>null;');
 dependencies['./CommunityNavigation'] = await compile('../src/components/CommunityNavigation.tsx');
 const { CommunityNavigation } = await import(dependencies['./CommunityNavigation']);
 const { SiteHeader } = await import(await compile('../src/components/SiteHeader.tsx'));

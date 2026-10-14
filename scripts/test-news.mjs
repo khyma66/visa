@@ -144,6 +144,40 @@ test('rendered headlines show publisher/date/Google links, escape markup and con
   assert.match(escaped,/&lt;script&gt;/);assert.doesNotMatch(escaped,/<script>/);
 });
 
+test('news lead, secondary cards and remaining coverage preserve every headline and its source order',async()=>{
+  const articles=await parse(rss(Array.from({length:24},(_,index)=>item({
+    title:`Visa coverage fixture ${String(index).padStart(2,'0')}`,
+    source:`Publisher ${index}`,
+    link:`https://news.google.com/rss/articles/CBMiVisaFixture${String(index).padStart(8,'0')}`,
+    pubDate:new Date(now-index*60_000).toUTCString(),
+  })).join('')));
+  const html=renderToStaticMarkup(createElement(NewsResults,{feed:await makeFeed(articles)}));
+  const rendered=[...html.matchAll(/<article\b[^>]*>[\s\S]*?<\/article>/g)].map(match=>match[0]);
+  assert.equal(rendered.length,articles.length);
+  assert.equal((html.match(/Latest headline/g)??[]).length,1);
+  assert.match(html,/aria-label="More visa headlines"/);
+  assert.doesNotMatch(html,/<img\b|<script\b/);
+  articles.forEach((article,index)=>{
+    assert.equal(html.split(article.title).length-1,1,`Headline ${index} must not be duplicated`);
+    assert(rendered[index].includes(article.title),`Headline ${index} must keep the upstream order`);
+    assert(rendered[index].includes(`href="${article.sourceUrl}"`));
+    assert(rendered[index].includes(article.publisher));
+    assert(rendered[index].includes(`dateTime="${article.publishedAt}"`));
+    assert.match(rendered[index],/target="_blank" rel="noopener noreferrer"/);
+    assert.match(rendered[index],/opens on Google News in a new tab/);
+    assert.match(rendered[index],/focus-visible:outline/);
+  });
+});
+
+test('a single headline remains a complete lead without empty additional coverage',async()=>{
+  const html=renderToStaticMarkup(createElement(NewsResults,{feed:await makeFeed()}));
+  assert.equal((html.match(/<article\b/g)??[]).length,1);
+  assert.match(html,/Latest headline/);
+  assert.doesNotMatch(html,/More coverage|aria-label="More visa headlines"/);
+  const empty=renderToStaticMarkup(createElement(NewsResults,{feed:await makeFeed([])}));
+  assert.doesNotMatch(empty,/<article\b|Latest headline|More coverage/);
+});
+
 test('loading, empty, unavailable and always-available external Google search are accessible',async()=>{
   const loading=renderToStaticMarkup(createElement(NewsFeed));assert.match(loading,/role="status"/);assert.match(loading,/Loading latest headlines/);
   assert(loading.includes(escape(news.GOOGLE_NEWS_SEARCH_URL).replaceAll('"','&quot;')));

@@ -19,6 +19,7 @@ export function TagDirectory() {
   const [hasMore, setHasMore] = useState(false);
   const generation = useRef(0);
   const archive = useRef<ArchiveTagSummary[]>([]);
+  const previousSearch = useRef(search);
 
   const loadPage = useCallback(async (cursor?: DirectoryTag, signal?: AbortSignal) => {
     if (!isSupabaseConfigured) return archiveDirectoryPage(archive.current, search, sort, cursor);
@@ -60,7 +61,9 @@ export function TagDirectory() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = setTimeout(() => void refresh(controller.signal), 200);
+    const typing = previousSearch.current !== search;
+    previousSearch.current = search;
+    const timer = setTimeout(() => void refresh(controller.signal), typing && search ? 200 : 0);
     const visible = () => { if (document.visibilityState === 'visible') void refresh(controller.signal); };
     window.addEventListener('focus', visible);
     window.addEventListener('online', visible);
@@ -85,7 +88,7 @@ export function TagDirectory() {
     finally { if (current === generation.current) setLoadingMore(false); }
   }
 
-  return <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+  return <main className="page-shell">
     <Link href="/" className="text-sm text-blue-700 hover:underline">← All questions</Link>
     <div className="mt-5 flex items-center gap-3"><Tags className="text-orange-600" /><h1 className="text-3xl font-medium">Tags</h1></div>
     <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Find your topic, explore similar experiences, and join the discussion. Choose a tag to see matching questions and posts.</p>

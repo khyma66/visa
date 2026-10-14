@@ -1,6 +1,9 @@
-/** Provenance stays in the data layer; never infer account ownership from a display name. */
+/** Origin is metadata, not a topic tag. Never infer ownership from a display name. */
 import type { Question } from './types';
 type PostAuthor = { id: string; source?: string; author_id?: string | null; author_username: string };
+
+export const COMMUNITY_ARCHIVE_LABEL = 'Community archive';
+export const COMMUNITY_ARCHIVE_DESCRIPTION = 'Republished from an external community discussion. This archive author is not linked to a VisaThreads account, so direct messaging is unavailable.';
 
 export function isImportedPost(post: Pick<PostAuthor, 'id' | 'source'>): boolean {
   return post.source === 'apify' || post.id.startsWith('apify-');

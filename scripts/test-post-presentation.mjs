@@ -44,6 +44,7 @@ async function compile(relativePath) {
 dependencies['@/lib/messaging-state'] = await compile('../src/lib/messaging-state.ts');
 dependencies['@/lib/post-categories'] = await compile('../src/lib/post-categories.ts');
 dependencies['@/lib/post-presentation'] = await compile('../src/lib/post-presentation.ts');
+dependencies['./PostOriginBadge'] = await compile('../src/components/PostOriginBadge.tsx');
 dependencies['./SafetyNotice'] = await compile('../src/components/SafetyNotice.tsx');
 const { QuestionCard } = await import(await compile('../src/components/QuestionCard.tsx'));
 const { QuestionDetail } = await import(await compile('../src/components/QuestionDetail.tsx'));
@@ -75,10 +76,14 @@ const renderDetail = (post, replies = [], viewerId = 'viewer') => {
 };
 const visibleText = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 const accessibleLabels = (html) => [...html.matchAll(/aria-label="([^"]*)"/g)].map((match) => match[1]).join(' ');
-function assertNoImportPresentation(html) {
+function assertArchivePresentation(html) {
   const surface = `${visibleText(html)} ${accessibleLabels(html)}`;
   assert.doesNotMatch(surface, /imported|apify|source reactions|source comments|view source|open group post|group comment|group question|group discussion|source of record|collected snapshot|VisaFlow replies|VisaFlow answer|VisaFlow only|external group sentinel|archive source sentinel/i);
   assert.doesNotMatch(html, /href="https:\/\/example\.org\/archive-sentinel/);
+  assert.match(visibleText(html), /Community archive/);
+  assert.match(accessibleLabels(html), /Community archive\. Republished from an external community discussion/);
+  assert.match(accessibleLabels(html), /not linked to a VisaThreads account/);
+  assert.doesNotMatch(html, /href="\/?\?tag=(?:community-archive|archive|imported)/);
 }
 function assertQuestionMessage(html, expected) {
   assert.equal(visibleText(html).includes('Message author'), expected);
@@ -90,16 +95,16 @@ function assertReplyMessage(html, expected) {
 }
 
 for (const sourceUrl of [imported.source_url, null, undefined]) {
-  test(`imported question with source URL ${String(sourceUrl)} has no provenance UI or message action`, () => {
+  test(`imported question with source URL ${String(sourceUrl)} has a consistent archive badge and no message action`, () => {
     const post = { ...imported, source_url: sourceUrl };
     for (const viewer of ['viewer', null]) {
       const html = renderDetail(post, [], viewer);
-      assertNoImportPresentation(html);
+      assertArchivePresentation(html);
       assertQuestionMessage(html, false);
       assert(visibleText(html).includes(post.title));
       assert(visibleText(html).includes(post.body));
     }
-    assertNoImportPresentation(renderToStaticMarkup(createElement(QuestionCard, { question: post })));
+    assertArchivePresentation(renderToStaticMarkup(createElement(QuestionCard, { question: post })));
   });
 }
 test('imported author ID cannot enable messaging, even when it looks like a real user', () => {
@@ -108,7 +113,9 @@ test('imported author ID cannot enable messaging, even when it looks like a real
 for (const source of ['visaflow', undefined]) {
   test(`real user question (${String(source)}) offers messaging to another viewer and guests`, () => {
     for (const viewer of ['viewer', null]) {
-      assertQuestionMessage(renderDetail({ ...question, source }, [], viewer), true);
+      const html = renderDetail({ ...question, source }, [], viewer);
+      assertQuestionMessage(html, true);
+      assert.doesNotMatch(html, /Community archive/);
     }
   });
 }
@@ -121,10 +128,11 @@ test('own question and question without an account have no messaging action', ()
 test('source URL alone is never used as a proxy for message eligibility', () => {
   assertQuestionMessage(renderDetail({ ...question, source_url: imported.source_url }), true);
 });
-test('imported answers hide provenance and messaging even if an author ID is present', () => {
+test('imported answers retain the archive badge without messaging even if an author ID is present', () => {
   for (const source_url of [imported.source_url, undefined]) {
     const html = renderDetail(imported, [{ ...answer, source: 'apify', source_url }]);
-    assertNoImportPresentation(html);
+    assertArchivePresentation(html);
+    assert.equal((html.match(/aria-label="Community archive\./g) ?? []).length, 2);
     assertReplyMessage(html, false);
     assert(visibleText(html).includes(answer.body));
   }
@@ -132,7 +140,8 @@ test('imported answers hide provenance and messaging even if an author ID is pre
 test('real replies to imported questions retain messaging for other users and guests', () => {
   for (const viewer of ['viewer', null]) {
     const html = renderDetail(imported, [answer], viewer);
-    assertNoImportPresentation(html);
+    assertArchivePresentation(html);
+    assert.equal((html.match(/aria-label="Community archive\./g) ?? []).length, 1);
     assertQuestionMessage(html, false);
     assertReplyMessage(html, true);
   }
@@ -151,7 +160,22 @@ test('mixed discussion exposes messaging only for eligible native authors', () =
     { ...answer, id: 'own', author_id: 'viewer', author_username: 'self_tester' },
   ];
   const html = renderDetail(imported, replies);
-  assertNoImportPresentation(html);
+  assertArchivePresentation(html);
   const messageLabels = [...html.matchAll(/aria-label="Message ([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(messageLabels, ['reply-tester']);
+});
+
+test('archive badge is presentation metadata and does not change source records or topic tags', () => {
+  const post = structuredClone(imported);
+  const before = structuredClone(post);
+  renderToStaticMarkup(createElement(QuestionCard, { question: post }));
+  renderDetail(post);
+  assert.deepEqual(post, before);
+  for (const tag of post.tags) assert(renderDetail(post).includes(`/?tag=${tag}`));
+});
+
+test('cards expose exact reply totals without rounding', () => {
+  const html = renderToStaticMarkup(createElement(QuestionCard, { question: { ...question, answer_count: 1234 } }));
+  assert(visibleText(html).includes('1234 replies'));
+  assert.doesNotMatch(visibleText(html), /1\.2K replies/);
 });

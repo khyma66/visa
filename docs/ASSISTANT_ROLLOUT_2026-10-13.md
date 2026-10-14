@@ -2,6 +2,23 @@
 
 Status: implemented in the repository; not deployed or validated with a live model. This replaces the earlier assistant prototype for new work. The old `/api/communities/:id/summary` route remains disabled; the active implementation uses `/api/assistant`.
 
+## Combined production candidate — October 14 UTC
+
+PR #8 is being integrated with the current live revision `ebb6a63` and PR #9's popular-tag and navigation changes. Preserve both the owner-feedback UI and assistant integrations, both middleware privacy path sets, and the current archive/reply-count behavior. The combined candidate passed all 700 local tests, TypeScript and the Vinext build. This does not establish hosted model accuracy or production activation.
+
+Connection options:
+
+- **Cloudflare device login (remote workspace):** run `npx wrangler login --device --browser=false`, follow the generated verification URL/code, and confirm with `npx wrangler whoami`. A device code is short-lived; never save one in configuration. This authenticates the workspace actually running the command.
+- **Cloudflare local CLI:** `npx wrangler login` works when the browser can reach that machine's callback server. Logging into a laptop terminal does not authenticate a separate hosted workspace.
+- **Persistent CI access:** configure scoped `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub production environment secrets. Review the existing workflow's main-branch and release gates before using it; the legacy main branch must not replace the current live release.
+- **Supabase:** reconnect this app's Supabase connection with access to the second-account organization owning `ppdwysmeistjxzjpmxyk`. Dashboard sign-in alone does not authorize the connector. Alternatively, the current connected Supabase account can be granted an appropriate project/organization role by its owner, followed by connector reauthorization. Do not send passwords, MFA codes, service-role keys or API tokens in chat.
+
+Release order: resolve the dependency audit; verify isolated dev migration state and apply only reviewed missing dependencies/assistant migration; deploy with posts enabled and community/catch-up gates off; verify authenticated answers, source quotes, authorization, quotas and failures; then inspect the actual live Worker and promote the same candidate. Verify its bindings and production database before changing flags. The production Supabase project `cycnichledvqbxevrwnt` does not yet have the assistant migration as of this check.
+
+For eventual production activation, use `ASSISTANT_PROJECT_REF=cycnichledvqbxevrwnt`, `ASSISTANT_PROVIDER=workers-ai`, the `ASSISTANT_AI` Workers AI binding, `ASSISTANT_ENABLED=true`, `ASSISTANT_COMMUNITIES_ENABLED=false`, and `ASSISTANT_CATCHUP_ENABLED=false`. These are activation values, not a record of applied settings. Roll back generation by disabling `ASSISTANT_ENABLED`. Keep dev project settings exclusive to staging. Do not use the assistant staging helper for production.
+
+Current blockers: second-account dev access denied; Cloudflare device authorization pending; the existing dependency audit is unresolved; the authorized private snapshot and real-model/sign-in validation are still needed for promotion. No hosted schema mutation or production deployment was performed in preparing this candidate.
+
 ## Implemented
 
 - Collapsible **Ask about this discussion** and **Summarize discussion** on question/experience pages, with links to cited posts and replies.

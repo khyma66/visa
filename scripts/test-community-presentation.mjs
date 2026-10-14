@@ -41,6 +41,7 @@ async function component(name) {
   }
   return { url:moduleUrl(code), value:await import(moduleUrl(code)) };
 }
+dependencies['./PostOriginBadge'] = (await component('PostOriginBadge')).url;
 const {value:{QuestionCard},url:cardUrl} = await component('QuestionCard');
 dependencies['./QuestionCard']=cardUrl;
 const {value:{QuestionDetail}} = await component('QuestionDetail');
@@ -63,7 +64,18 @@ function render(Component, props={}, {values={},user=null,question=props.initial
   finally{delete globalThis.__presentation;}
 }
 const text = (html) => html.replace(/<[^>]*>/g,' ');
-const noPipelineLabels = (html) => assert.doesNotMatch(text(html),/imported|apify|collected archive|source records|completed runs|duplicate records|group question|group comment/i);
+const noPipelineLabels = (html) => assert.doesNotMatch(text(html),/apify|collected archive|source records|completed runs|duplicate records|group question|group comment/i);
+
+test('shared page gutter removes the second centered left rail without forcing reading pages full-width', async () => {
+  const css = await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8');
+  assert.match(css, /#main-content > main\s*\{[^}]*margin-inline:\s*0;[^}]*padding-inline:\s*var\(--page-gutter\)/);
+  assert.match(css, /#main-content > \.page-shell\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*none/);
+  assert.match(css, /grid-template-columns:\s*var\(--sidebar-width\) minmax\(0, 1fr\)/);
+  for (const name of ['CommunityHome', 'QuestionDetail', 'OfficialNewsFeed', 'NewsFeed', 'MessagesClient', 'TagDirectory', 'ExploreCommunities', 'CommunityPage', 'AccountClient']) {
+    const source = await readFile(new URL(`../src/components/${name}.tsx`, import.meta.url), 'utf8');
+    assert.match(source, /<main className="page-shell\b/, `${name} must use the shared page layout`);
+  }
+});
 
 test('source question cards use normal discussion layout without fake member identities or changed reaction semantics',()=>{
   const html=render(QuestionCard,{question:source});
@@ -71,12 +83,14 @@ test('source question cards use normal discussion layout without fake member ide
   assert(html.includes(source.title));assert(html.includes(source.body));
   assert(html.includes('reactions'));assert(html.includes('replies'));assert(!html.includes('views'));
   assert(html.includes('Community Contributor'));assert(!html.includes(source.author_username));assert(!html.includes('Member avatar'));
+  assert(html.includes('Community archive'));assert(html.includes('not linked to a VisaThreads account'));
   assert(!html.includes(source.source_url));assert(!html.includes('/messages?'));
 });
 test('native cards preserve public usernames, member avatars, votes and normal question links',()=>{
   const html=render(QuestionCard,{question:native});
   assert(html.includes('u/alice-test'));assert(html.includes('Member avatar'));assert(html.includes('votes'));
   assert(html.includes(`/questions/${native.id}`));assert(!html.includes('Community Contributor'));
+  assert(!html.includes('Community archive'));
 });
 test('selected archive experiences retain their working canonical question links',()=>{
   const html=render(QuestionCard,{question:{...source,post_kind:'experience',experience_category:'Visa interview'}});
@@ -114,6 +128,7 @@ test('source detail uses neutral presentation with no source-author messaging or
   const html=render(QuestionDetail,{initialQuestion:source},{user:{id:bob}});
   noPipelineLabels(html);assert(!html.includes('Originally shared in'));
   assert(!html.includes(source.source_url));assert(html.includes('Community Contributor'));
+  assert(html.includes('Community archive'));
   assert(html.includes('Join the discussion'));assert(!html.includes('Original discussion'));
   assert(!html.includes('Message author'));assert(!html.includes('/messages?'));assert(!html.includes('aria-label="Upvote"'));
   assert(!html.includes(source.author_username));assert(!html.includes('Peer experiences, not legal advice'));
@@ -123,6 +138,7 @@ test('an apify ID remains source-only even when its source flag/link are absent 
   const html=render(QuestionDetail,{initialQuestion:malformed},{user:{id:bob}});
   assert(!html.includes('/messages?'));assert(!html.includes('u/alice-test'));assert(!html.includes('aria-label="Upvote"'));
   assert(html.includes('Community Contributor'));
+  assert(html.includes('Community archive'));
 });
 test('native post messaging binds both public username and registered profile ID for guests and other members',()=>{
   for(const user of [null,{id:bob}]) {
@@ -159,8 +175,21 @@ test('tag directory presents combined discussion counts without splitting people
   noPipelineLabels(html);assert(html.includes('12 posts'));assert(html.includes('/?tag=h1b'));assert(html.includes('Transfer timelines'));
   assert(!html.includes('member-created'));
 });
-test('related questions use source-neutral accessible reply counts and shared-topic navigation',()=>{
+test('related questions show archive origin separately from topic tags and exact reply counts',()=>{
   const html=render(RelatedQuestions,{context:{tags:['h1b']}},{values:{0:[{...source,matched_tags:['h1b']}]}});
   noPipelineLabels(html);assert(html.includes('aria-label="3 replies"'));assert(html.includes('/questions/apify-fixture'));
   assert(html.includes('Shared topics: h1b'));assert(!html.includes('/messages?'));
+  assert(html.includes('Community archive'));assert(!html.includes('tag=community-archive'));
+  const member=render(RelatedQuestions,{context:{tags:['h1b']}},{values:{0:[{...native,matched_tags:['h1b']} ]}});
+  assert(!member.includes('Community archive'));
+});
+
+test('related questions use singular labels for exactly one post and reply',()=>{
+  const html=render(RelatedQuestions,{context:{tags:['h1b']}},{values:{0:[{...source,answer_count:1,matched_tags:['h1b']} ]}});
+  assert(html.includes('aria-label="1 reply"'));assert(!html.includes('1 replies'));
+  assert(html.includes('1 related post'));assert(!html.includes('1 related posts'));
+  for(const count of [0,2,1234]) {
+    const plural=render(RelatedQuestions,{context:{tags:['h1b']}},{values:{0:[{...source,answer_count:count} ]}});
+    assert(plural.includes(`aria-label="${count} replies"`));
+  }
 });

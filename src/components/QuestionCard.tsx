@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 import type { Question } from '@/lib/types';
 import { Avatar } from './Avatar';
+import { PostOriginBadge } from './PostOriginBadge';
 
 function compact(value: number) {
   return Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
@@ -20,6 +21,7 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
           <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
             {!imported && <Avatar seed={question.author_avatar_seed} size="sm" />}
             <span className="break-all font-semibold text-slate-700">{imported ? 'Community Contributor' : `u/${question.author_username}`}</span>
+            <PostOriginBadge post={question} />
             <span aria-hidden="true">·</span>
             <time dateTime={question.created_at} title={new Date(question.created_at).toLocaleString()}>{formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</time>
             <span className="ml-auto rounded bg-blue-50 px-2 py-1 font-semibold text-blue-800">{question.visa_type}</span>
@@ -37,7 +39,7 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
             <span title={imported ? "reactions" : "votes"} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-2"><ArrowUp size={14} aria-hidden="true" />{compact(question.vote_score)}<span className="sr-only"> {imported ? "reactions" : "votes"}</span></span>
             <Link href={path} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 hover:bg-slate-200 ${question.accepted_answer_id ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100'}`}>
               {question.accepted_answer_id ? <CheckCircle2 size={14} aria-hidden="true" /> : <MessageCircle size={14} aria-hidden="true" />}
-              {compact(question.answer_count)} replies{question.accepted_answer_id && <span className="sr-only">, accepted answer</span>}
+              {question.answer_count} replies{question.accepted_answer_id && <span className="sr-only">, accepted answer</span>}
             </Link>
             {onRelated && <button onClick={() => onRelated(question)} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 hover:bg-slate-200"><GitFork size={14} aria-hidden="true" />Related</button>}
             {!imported && <span className="ml-auto inline-flex items-center gap-1 font-normal"><Eye size={14} aria-hidden="true" />{compact(question.view_count)} views</span>}

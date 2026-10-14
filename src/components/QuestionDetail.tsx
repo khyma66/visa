@@ -1,11 +1,11 @@
 'use client';
 
-import { topicLabel } from '@/lib/post-presentation';
+import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowDown, ArrowUp, Check, CheckCircle2, ExternalLink, MessageCircle, Share2, ThumbsUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, CheckCircle2, MessageCircle, Share2, ThumbsUp } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   acceptAnswer, createAnswer, getAnswerPage, getDiscussionContext, getQuestion, sortAnswers, voteAnswer, voteQuestion,
@@ -18,6 +18,7 @@ import { RelatedQuestions } from './RelatedQuestions';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 import { ReportButton } from './ReportButton';
+import { PostOriginBadge } from './PostOriginBadge';
 import { AssistantPanel } from './AssistantPanel';
 
 function Author({ username, seed, createdAt, sourceOnly = false }: { username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
@@ -137,22 +138,22 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
     finally { setSubmitting(false); }
   }
 
-  if (loading) return <main className="mx-auto max-w-6xl p-8"><div className="h-64 animate-pulse rounded-2xl bg-slate-100" /></main>;
-  if (!question) return <main className="mx-auto max-w-4xl p-8"><h1 className="text-2xl font-black">Question not found</h1><Link href="/" className="mt-4 inline-block font-bold text-blue-700">Back to questions</Link></main>;
+  if (loading) return <main className="page-shell mx-auto max-w-6xl p-8"><div className="h-64 animate-pulse rounded-2xl bg-slate-100" /></main>;
+  if (!question) return <main className="page-shell mx-auto max-w-4xl p-8"><h1 className="text-2xl font-black">Question not found</h1><Link href="/" className="mt-4 inline-block font-bold text-blue-700">Back to questions</Link></main>;
 
   const owner = user?.id === question.author_id;
-  const imported = question.source === 'apify' || question.id.startsWith('apify-');
+  const imported = isImportedPost(question);
   const experience = question.post_kind === 'experience';
   const threadPath = `/${experience ? 'experiences' : 'questions'}/${id}`;
   const authorMessageHref = getMemberMessageHref(question, user?.id);
   const canAnswer = question.status === 'open';
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+    <main className="page-shell mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_310px]">
         <div>
           <section className="border-b border-slate-200 pb-6">
             {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/experiences" className="underline">Experience</Link> · {question.experience_category}</p>}
-            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span>{question.destination_country !== 'Global' && <span className="text-slate-400">{question.destination_country}</span>}</div>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span>{question.destination_country !== 'Global' && <span className="text-slate-400">{question.destination_country}</span>}<PostOriginBadge post={question} /></div>
             <h1 className="mt-4 text-3xl font-normal text-slate-950">{question.title}</h1>
             <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : experience ? 'replies' : 'answers'}</span></div>
           </section>
@@ -184,7 +185,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             {paginationNotice && <p role="status" className="mt-3 rounded-lg bg-blue-50 p-3 text-xs leading-5 text-blue-800">{paginationNotice}</p>}
             <div className="divide-y divide-slate-200">
               {answers.map((answer) => {
-                const sourceOnly = answer.source === 'apify' || answer.id.startsWith('apify-');
+                const sourceOnly = isImportedPost(answer);
                 const messageHref = getMemberMessageHref(answer, user?.id);
                 return (
                 <article key={answer.id} id={`answer-${answer.id}`} className={`flex scroll-mt-24 gap-4 py-7 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
@@ -193,6 +194,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                     void voteAnswer(answer.id, user.id, value).then(load).catch((reason: Error) => setError(reason.message));
                   }} />}
                   <div className="min-w-0 flex-1">
+                    {sourceOnly && <div className="mb-3"><PostOriginBadge post={answer} /></div>}
                     {answer.is_accepted && <p className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-700"><CheckCircle2 size={17} /> Accepted by the question author</p>}
                     <div className="whitespace-pre-wrap text-lg leading-normal text-slate-800">{answer.body}</div>
                     {!sourceOnly && <ReportButton kind={imported ? 'imported_answer' : 'answer'} target={answer.id} />}

@@ -1,6 +1,8 @@
 import type { Conversation, DirectMessage } from './types';
 
 export const MESSAGE_PAGE_SIZE = 50;
+export type ConversationFolder = 'chats' | 'requests' | 'closed';
+export type ConversationCounts = Record<ConversationFolder, number>;
 
 const MEMBER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const USERNAME = /^[a-z][a-z0-9-]{4,31}$/;
@@ -32,9 +34,26 @@ export function messageLoginHref(username = '', memberId = ''): string {
   return `/login?next=${encodeURIComponent(target)}`;
 }
 
-export function conversationFolder(conversation: Conversation, userId: string): 'chats' | 'requests' | 'closed' {
+export function conversationFolder(conversation: Conversation, userId: string): ConversationFolder {
   if (conversation.request_status === 'blocked' || conversation.request_status === 'declined') return 'closed';
   return conversation.request_status === 'pending' && conversation.requested_by !== userId ? 'requests' : 'chats';
+}
+
+/** Shared predicates keep exact RLS-scoped counts and folder pages equivalent. */
+export function conversationFolderFilter(folder: ConversationFolder, userId: string): string {
+  if (!isMemberId(userId)) throw new Error('A signed-in account is required.');
+  if (folder === 'closed') return 'request_status.in.(blocked,declined)';
+  if (folder === 'requests') return `and(request_status.eq.pending,or(requested_by.is.null,requested_by.neq.${userId}))`;
+  return `request_status.is.null,request_status.eq.accepted,and(request_status.eq.pending,requested_by.eq.${userId})`;
+}
+
+export function conversationCursorFilter(before: Conversation): string {
+  const time = before.last_message_at;
+  // Keep Postgres microseconds intact: Date#toISOString truncates them and can
+  // skip rows sharing the original timestamp. Restrict raw filter syntax.
+  if (!isMemberId(before.id) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(time)
+    || !Number.isFinite(Date.parse(time))) throw new Error('Invalid conversation cursor.');
+  return `last_message_at.lt.${time},and(last_message_at.eq.${time},id.lt.${before.id})`;
 }
 
 export function canSendToConversation(conversation: Conversation | null | undefined, userId: string, messages: DirectMessage[], loading: boolean): boolean {

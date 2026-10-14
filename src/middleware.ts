@@ -11,7 +11,7 @@ export function middleware(request: NextRequest) {
   }
   const production = process.env.APP_ENV === 'production';
   const approved = process.env.PUBLIC_LAUNCH_APPROVED === 'true';
-  const sensitive = /^\/(login|signup|account|messages|moderation|ask|assistant)(\/|$)/.test(request.nextUrl.pathname);
+  const sensitive = /^\/(login|signup|account|messages|moderation|ask|owner|feedback|assistant)(\/|$)/.test(request.nextUrl.pathname);
   const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
   const localDevelopment = process.env.NODE_ENV === 'development';
   let backendSources = '';
