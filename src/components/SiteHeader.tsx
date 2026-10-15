@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu, Search, Activity, ChevronDown, CircleHelp, LogOut, MessageCircle, Plus, Settings, ShieldCheck, Sparkles, UserRound, UsersRound } from 'lucide-react';
+import { Menu, Search, Activity, ChevronDown, LogOut, MessageCircle, Plus, Settings, ShieldCheck, Sparkles, UserRound, UsersRound } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 import { CommunityNavigation } from './CommunityNavigation';
@@ -48,9 +48,11 @@ export function SiteHeader() {
           <summary className="icon-control" aria-label="Open navigation" title="Navigation"><Menu size={22}/></summary>
           <div className="mobile-menu-panel"><CommunityNavigation mobile onNavigate={() => { if (mobileMenu.current) mobileMenu.current.open = false; }}/></div>
         </details>
-        <Link href="/" className="site-brand">
-          <span className="brand-mark hidden h-9 w-9 place-items-center rounded-lg text-white min-[420px]:grid"><CircleHelp size={21} aria-hidden="true" /></span>
-          <span className="brand-wordmark max-sm:text-base"><span className="brand-wood">Visa</span><span className="brand-ink">Threads</span></span>
+        <Link href="/" className="site-brand" aria-label="VisaThreads home">
+          {/* Pre-sized local asset: no remote request or image-processing service. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/assets/brand/visathreads-mark-v1.webp" width={40} height={40} alt="" className="brand-mark" decoding="async" />
+          <span className="brand-wordmark">VisaThreads</span>
         </Link>
         <form action="/" method="get" role="search" className="header-search">
           <Search size={19} aria-hidden="true"/>

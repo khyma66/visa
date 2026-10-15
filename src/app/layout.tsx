@@ -16,7 +16,13 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://visathreads.com'),
   title: { default: 'VisaThreads — U.S. Visa Questions, Answered', template: '%s · VisaThreads' },
   description: 'Ask visa questions with a public pseudonym, find similar cases, share experiences, and message other community members.',
-  icons: { icon: '/favicon.svg' },
+  icons: {
+    icon: [
+      { url: '/assets/brand/favicon-32-v1.png', sizes: '32x32', type: 'image/png' },
+      { url: '/assets/brand/favicon-48-v1.png', sizes: '48x48', type: 'image/png' },
+    ],
+    apple: { url: '/assets/brand/apple-touch-icon-v1.png', sizes: '180x180', type: 'image/png' },
+  },
   keywords: 'visa questions, immigration community, pseudonymous visa discussions, visa answers',
   authors: [{ name: 'VisaThreads' }],
   openGraph: {

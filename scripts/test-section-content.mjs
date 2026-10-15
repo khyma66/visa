@@ -220,9 +220,9 @@ test('experience selection rejects archived, unreviewed, native and unrelated-ma
   assert.deepEqual(selectedExperiences(rejected), []);
   assert.deepEqual(selectedExperiences([]), []);
 });
-test('Applewood logo colors meet WCAG normal text contrast on white', async () => {
+test('neutral brand wordmark meets WCAG normal text contrast on white', async () => {
   const css = await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8');
-  for (const hex of ['#795548', '#334e68']) {
+  for (const hex of ['#1e293b']) {
     assert(css.includes(hex)); const rgb = hex.slice(1).match(/../g).map(v => parseInt(v, 16) / 255).map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
     assert(1.05 / (rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722 + 0.05) >= 4.5);
   }
