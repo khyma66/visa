@@ -61,11 +61,11 @@ try {
   emit({ worker: WORKER, timeframe, availableSafeKeys: discovered.filter((entry) => allowedKeys.has(entry.key)).map(({ key, type }) => ({ key, type })) });
   if (!discovered.some((entry) => entry.key === '$metadata.service')) throw new Error('Worker telemetry service field unavailable in incident window');
   const result = await readTelemetry('query', {
-    queryId: 'assistant-incident-20261015-readonly', timeframe, dry: true, limit: 100,
-    parameters: { filters, filterCombination: 'and', needle: { value: '/api/assistant', isRegex: false, matchCase: true }, view: 'events' },
+    queryId: 'assistant-incident-20261015-readonly', timeframe, dry: true, limit: 100, view: 'events',
+    parameters: { filters, filterCombination: 'and', needle: { value: '/api/assistant', isRegex: false, matchCase: true } },
   });
   const events = result?.events?.events ?? [];
-  emit({ matchedEventCount: number(result?.events?.count), returnedEvents: events.length, events: events.slice(0, 100).map(safeEvent) });
+  emit({ eventsViewReturned: Boolean(result?.events), matchedEventCount: number(result?.events?.count), returnedEvents: events.length, events: events.slice(0, 100).map(safeEvent) });
 } catch (error) {
   // Only locally defined error messages are safe; fetch errors may include URLs.
   const known = typeof error?.message === 'string' && /^(Unexpected diagnostic endpoint|Production read credentials unavailable|Diagnostic response exceeded safe size|Telemetry (keys|query) (returned non-JSON HTTP \d+|query failed)|Existing credential cannot read Workers telemetry|Worker telemetry service field unavailable in incident window)$/.test(error.message);
