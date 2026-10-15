@@ -56,6 +56,33 @@ for (const rpc of ['feedback_is_owner()', 'feedback_submit(null,null,null,null)'
     await assert.rejects(() => db.query(`select public.${rpc}`), /permission denied/);
   }, 'anon'));
 }
+const feedbackRpcs = [
+  ['feedback_is_owner()', 'feedback_is_owner()'],
+  ['feedback_submit(uuid,text,text,text)', 'feedback_submit(null,null,null,null)'],
+  ['feedback_inbox(text,timestamptz,uuid)', 'feedback_inbox(null,null,null)'],
+  ['feedback_review(uuid,integer,text,text)', "feedback_review(null,1,'approve','')"],
+  ['feedback_history(uuid)', 'feedback_history(null)'],
+];
+for (const schema of ['public', 'private']) {
+  for (const [signature, call] of feedbackRpcs) {
+    test(`service_role has no execute privilege on ${schema}.${signature}`, async () => {
+      // Check the actual function ACL as well as the call: a missing schema
+      // USAGE privilege alone must not conceal an accidental EXECUTE grant.
+      assert.equal(await scalar("select has_function_privilege('service_role',$1,'EXECUTE')", [`${schema}.${signature}`]), false);
+      await asUser(owner, async () => {
+        await assert.rejects(() => db.query(`select ${schema}.${call}`), /permission denied/);
+      }, 'service_role');
+    });
+  }
+  test(`authenticated account without a user ID is not an owner via ${schema}`, () => asUser(null, async () => {
+    assert.equal(await scalar(`select ${schema}.feedback_is_owner()`), false);
+  }));
+  for (const [, call] of feedbackRpcs.slice(1)) {
+    test(`authenticated account without a user ID cannot call ${schema}.${call}`, () => asUser(null, async () => {
+      await assert.rejects(() => db.query(`select ${schema}.${call}`), /Sign in to send feedback|Owner access required/);
+    }));
+  }
+}
 for (const who of [member, moderator]) {
   test(`${who === member ? 'member' : 'moderator'} cannot read owner inbox or become owner`, () => asUser(who, async () => {
     assert.equal(await scalar('select public.feedback_is_owner()'), false);
@@ -67,10 +94,23 @@ for (const who of [member, moderator]) {
   test(`${who} cannot review feedback by guessing its ID`, () => asUser(who, async () => {
     await assert.rejects(() => review('approve'), /Owner access required/);
   }));
+  for (const rpc of ['feedback_inbox(null,null,null)', 'feedback_history(null)', "feedback_review(null,1,'approve','')"]) {
+    test(`${who === member ? 'member' : 'moderator'} cannot bypass the wrapper with private.${rpc}`, () => asUser(who, async () => {
+      await assert.rejects(() => db.query(`select private.${rpc}`), /Owner access required/);
+    }));
+  }
 }
 test('no user can self-enroll as owner', () => asUser(member, async () => {
   await assert.rejects(() => db.query('insert into private.feedback_owner(user_id) values($1)', [member]), /permission denied/);
 }));
+for (const [action, sql] of [
+  ['replace', 'update private.feedback_owner set user_id=$1'],
+  ['remove', 'delete from private.feedback_owner where user_id=$1'],
+]) {
+  test(`a member cannot ${action} the configured owner`, () => asUser(member, async () => {
+    await assert.rejects(() => db.query(sql, [action === 'replace' ? member : owner]), /permission denied/);
+  }));
+}
 test('there can only be one owner', async () => {
   await assert.rejects(() => db.query('insert into private.feedback_owner(user_id) values($1)', [member]), /duplicate key/);
 });
@@ -119,6 +159,22 @@ test('unconfigured owner fails closed rather than collecting unattended submissi
     await assert.rejects(() => submit(), /not available yet/);
   } finally { await db.exec('rollback'); }
 });
+for (const schema of ['public', 'private']) {
+  for (const rpc of ['feedback_inbox(null,null,null)', 'feedback_history(null)', "feedback_review(null,1,'approve','')"]) {
+    test(`owner revocation immediately blocks ${schema}.${rpc} without refreshing claims`, async () => {
+      await db.exec('begin');
+      try {
+        await db.query("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+        assert.equal(await scalar('select public.feedback_is_owner()'), true);
+        await db.exec('delete from private.feedback_owner');
+        await db.exec('set local role authenticated');
+        assert.equal(await scalar('select public.feedback_is_owner()'), false);
+        await assert.rejects(() => db.query(`select ${schema}.${rpc}`), /Owner access required/);
+      } finally { await db.exec('rollback'); }
+      assert.equal(await scalar('select user_id from private.feedback_owner'), owner);
+    });
+  }
+}
 test('owner inbox omits submitter identity and request tokens', () => asUser(owner, async () => {
   assert.equal(await scalar('select public.feedback_is_owner()'), true);
   const items = await scalar('select public.feedback_inbox()');
@@ -199,22 +255,90 @@ test('client pages twenty visible rows using a lookahead cursor', async () => {
 const deps={
   react:import.meta.resolve('react'),'react/jsx-runtime':import.meta.resolve('react/jsx-runtime'),'lucide-react':import.meta.resolve('lucide-react'),
   'next/link':moduleUrl(`import React from ${JSON.stringify(import.meta.resolve('react'))};export default function Link(props){return React.createElement('a',props,props.children);}`),
+  'next/navigation':moduleUrl("export const usePathname=()=>'/news';"),
   './AuthProvider':moduleUrl('export const useAuth=()=>globalThis.__feedbackAuth;'),
   '@/lib/feedback':feedbackUrl,
 };
-let formSource=transpile(await readFile(new URL('../../src/components/FeedbackForm.tsx',import.meta.url),'utf8'));
-for(const [key,value] of Object.entries(deps)) formSource=formSource.replaceAll(`from '${key}'`,`from ${JSON.stringify(value)}`).replaceAll(`from "${key}"`,`from ${JSON.stringify(value)}`);
-const {FeedbackForm}=await import(moduleUrl(formSource));
+function componentModule(source, dependencies = deps) {
+  let compiled = transpile(source);
+  for (const [key, value] of Object.entries(dependencies)) compiled = compiled.replaceAll(`from '${key}'`, `from ${JSON.stringify(value)}`).replaceAll(`from "${key}"`, `from ${JSON.stringify(value)}`);
+  return moduleUrl(compiled);
+}
+const formSource = await readFile(new URL('../../src/components/FeedbackForm.tsx',import.meta.url),'utf8');
+const formUrl = componentModule(formSource);
+const {FeedbackForm}=await import(formUrl);
+function assertNeutralFeedbackCopy(text) {
+  // Keep the sensitive-data warning and privacy disclosure; prohibit the
+  // unnecessary ownership/private labels in rendered copy and metadata.
+  const normalized = text.replace(/private conversations/gi, 'conversations');
+  assert.doesNotMatch(normalized, /\bowner\b|\bprivate(?:ly)?\b/i);
+}
 test('guest feedback entry offers login and a no-account help fallback',()=>{
   globalThis.__feedbackAuth={user:null,loading:false,demoMode:false};
-  const html=renderToStaticMarkup(React.createElement(FeedbackForm));
-  assert(html.includes('/login?next=%2Ffeedback#sign-in'));assert(html.includes('/contact'));assert(!html.includes('<textarea'));
+  try {
+    const html=renderToStaticMarkup(React.createElement(FeedbackForm));
+    assert(html.includes('/login?next=%2Ffeedback#sign-in'));assert(html.includes('/contact'));assert(!html.includes('<textarea'));
+    assertNeutralFeedbackCopy(html.replace(/<[^>]*>/g, ' '));
+  } finally { delete globalThis.__feedbackAuth; }
 });
 test('signed-in form has limits, privacy disclosure and no owner controls',()=>{
   globalThis.__feedbackAuth={user:{id:member},loading:false,demoMode:false};
-  const html=renderToStaticMarkup(React.createElement(FeedbackForm,{section:'messages'}));
-  assert(html.includes('maxLength="3000"'));assert(html.includes('/feedback/privacy'));assert(html.includes('Include section:'));
-  assert(!html.includes('Approve'));assert(!html.includes('owner/feedback'));delete globalThis.__feedbackAuth;
+  try {
+    const html=renderToStaticMarkup(React.createElement(FeedbackForm,{section:'messages'}));
+    assert(html.includes('maxLength="3000"'));assert(html.includes('/feedback/privacy'));assert(html.includes('Include section:'));
+    assert(html.includes('Send Feedback'));assert(html.includes('private conversations'));
+    assert(!html.includes('Approve'));assert(!html.includes('owner/feedback'));
+    assertNeutralFeedbackCopy(html.replace(/<[^>]*>/g, ' '));
+  } finally { delete globalThis.__feedbackAuth; }
+});
+test('feedback receipt confirms submission without ownership or privacy marketing', async () => {
+  // Exercise the real receipt branch with only its initial state preloaded.
+  // No network submission or live user record is needed for this presentation test.
+  const receiptSource = formSource.replace("const [receipt, setReceipt] = useState('');", `const [receipt, setReceipt] = useState('${requestId}');`);
+  assert.notEqual(receiptSource, formSource, 'Receipt preload must match the component state declaration');
+  const { FeedbackForm: ReceiptForm } = await import(componentModule(receiptSource));
+  globalThis.__feedbackAuth = { user: { id: member }, loading: false, demoMode: false };
+  try {
+    const html = renderToStaticMarkup(React.createElement(ReceiptForm));
+    assert(html.includes('Thanks for helping us improve'));assert(html.includes(requestId));assert(!html.includes('<textarea'));
+    assertNeutralFeedbackCopy(html.replace(/<[^>]*>/g, ' '));
+  } finally { delete globalThis.__feedbackAuth; }
+});
+const feedbackUiFiles = [
+  'src/components/FeedbackForm.tsx', 'src/components/FeedbackLauncher.tsx', 'src/components/FeedbackInbox.tsx',
+  'src/app/feedback/page.tsx', 'src/app/feedback/privacy/page.tsx', 'src/app/owner/feedback/page.tsx',
+];
+for (const file of feedbackUiFiles) {
+  test(`${file} has neutral feedback labels, tooltips, receipts and metadata`, async () => {
+    const source = await readFile(new URL(`../../${file}`, import.meta.url), 'utf8');
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const visibleCopy = [];
+    function visit(node) {
+      if (ts.isJsxText(node) || ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+        // Routes/imports and authorization identifiers are implementation, not
+        // display copy. AST traversal also excludes explanatory code comments.
+        if (!/^(?:\/|\.|@)/.test(node.text)) visibleCopy.push(node.text);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(tree);
+    assertNeutralFeedbackCopy(visibleCopy.join(' '));
+  });
+}
+test('feedback launcher tooltip and signed-out inbox render neutral labels', async () => {
+  const launcherSource = await readFile(new URL('../../src/components/FeedbackLauncher.tsx', import.meta.url), 'utf8');
+  const inboxSource = await readFile(new URL('../../src/components/FeedbackInbox.tsx', import.meta.url), 'utf8');
+  const { FeedbackLauncher } = await import(componentModule(launcherSource, { ...deps, './FeedbackForm': formUrl }));
+  const { FeedbackInbox } = await import(componentModule(inboxSource));
+  globalThis.__feedbackAuth = { user: null, loading: false, demoMode: false };
+  try {
+    const launcherHtml = renderToStaticMarkup(React.createElement(FeedbackLauncher));
+    assert.match(launcherHtml, /title="Send feedback"/i);
+    const inboxHtml = renderToStaticMarkup(React.createElement(FeedbackInbox));
+    assert(inboxHtml.includes('Feedback Inbox'));
+    assertNeutralFeedbackCopy(launcherHtml.replace(/<[^>]*>/g, ' '));
+    assertNeutralFeedbackCopy(inboxHtml.replace(/<[^>]*>/g, ' '));
+  } finally { delete globalThis.__feedbackAuth; }
 });
 
 test('feedback and owner pages stay uncached and unindexed even after public launch', async () => {
