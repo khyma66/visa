@@ -7,10 +7,12 @@ const compile = (source) => ts.transpileModule(source, { compilerOptions: { targ
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 const tagging = moduleUrl(compile(await readFile(new URL('../src/lib/tagging.ts', import.meta.url), 'utf8')));
 const core = moduleUrl(compile(await readFile(new URL('../src/lib/assistant-core.ts', import.meta.url), 'utf8')));
+const search = moduleUrl(compile(await readFile(new URL('../src/lib/assistant-search.ts', import.meta.url), 'utf8')).replace("'./assistant-core'", JSON.stringify(core)));
 const source = compile(await readFile(new URL('../src/lib/assistant-data.ts', import.meta.url), 'utf8'))
   .replace("import archive from '@visa/archive';", 'const archive = new Proxy({}, { get: (_, key) => globalThis.__assistantArchive[key] });')
-  .replace("'./tagging'", JSON.stringify(tagging)).replace("'./assistant-core'", JSON.stringify(core));
+  .replace("'./tagging'", JSON.stringify(tagging)).replace("'./assistant-core'", JSON.stringify(core)).replace("'./assistant-search'", JSON.stringify(search));
 const { retrieveAssistantCorpus } = await import(moduleUrl(source));
+const { assistantPostSearchQuery, assistantPostSearchScore, buildAssistantPostSearchResult } = await import(search);
 const saved = Object.fromEntries(['COMMUNITY_SOURCE_MODE', 'APP_ENV', 'IMPORTED_CONTENT_APPROVED'].map((name) => [name, process.env[name]]));
 afterEach(() => {
   for (const [name, value] of Object.entries(saved)) value === undefined ? delete process.env[name] : process.env[name] = value;
@@ -249,4 +251,115 @@ test('Why, How, and What happened next follow the latest answered topic without 
     assert.equal(db.calls[0].args.query_text, previousQuestions[1], 'Native search must also use the latest topic, not generic continuation wording');
     assert.doesNotMatch(db.calls[0].args.query_text, /Chennai|H-1B/);
   }
+});
+
+const postSearchRequest = (question = 'give all posts related to stamping delay') => ({ mode: 'ask', scope: { kind: 'public' }, question });
+const searchSource = (overrides = {}) => ({ id: 'q:apify-stamping', questionId: 'apify-stamping', kind: 'question', communityId: null,
+  title: 'My stamping delay', body: 'My H-1B stamping is delayed; I am still waiting for my passport.',
+  createdAt: '2026-10-12T00:00:00Z', updatedAt: '2026-10-12T00:00:00Z', url: '/questions/apify-stamping', provenance: 'archive', ...overrides });
+
+test('explicit post requests use search intent; explanation questions and single-post asks do not', () => {
+  for (const question of ['give all posts related to stamping delay', 'Can you show me posts about stamping delays?',
+    'Can you show me all posts about stamping delay?', 'List discussions about passport delivery', 'posts related to Chennai stamping',
+    'find me posts about stamping delay', 'search for posts about stamping delay', 'look for posts about stamping delay', 'I want posts about stamping delay']) {
+    assert(assistantPostSearchQuery(postSearchRequest(question)), question);
+  }
+  for (const question of ['Why is stamping delayed?', 'What do the posts say about stamping delays?', 'Explain this post about stamping',
+    'Give me an answer about stamping delay', 'show all posts', 'show why posts about stamping delay have conflicting timelines',
+    'give an explanation of why posts about stamping delay differ', 'Show me how posts on stamping delays differ', 'List differences between posts about stamping',
+    'show a synopsis of posts about stamping delay', 'give overview of posts about stamping delay', 'Find stamping delay threads']) {
+    assert.equal(assistantPostSearchQuery(postSearchRequest(question)), null, question);
+  }
+  assert.equal(assistantPostSearchQuery({ ...postSearchRequest(), scope: { kind: 'post', id } }), null);
+  assert.equal(assistantPostSearchQuery({ ...postSearchRequest(), mode: 'catchup' }), null);
+  assert.equal(assistantPostSearchQuery(postSearchRequest()).text, 'stamping delay');
+});
+
+test('stamping delay search requires both concepts and recognizes real processing variants', () => {
+  const query = assistantPostSearchQuery(postSearchRequest());
+  for (const body of ['My stamping has been delayed since last month.', 'My dropbox case is pending without an update.',
+    'The visa passport is still waiting at the consulate.', 'My visa interview ended in administrative processing.',
+    'I received 221(g) after my interview.']) {
+    assert(assistantPostSearchScore(searchSource({ title: 'Member experience', body }), query) > 0, body);
+  }
+  for (const body of ['My H-1B extension has been pending for 10 months.', 'My stamping was approved and passport arrived Friday.',
+    'My EAD renewal is delayed.', 'My appointment options are Tuesday or Friday.', 'My passport renewal at the county office is pending.']) {
+    assert.equal(assistantPostSearchScore(searchSource({ title: 'Member experience', body }), query), 0, body);
+  }
+  assert.equal(assistantPostSearchScore(searchSource({ body: 'My Chennai stamping is pending.' }),
+    assistantPostSearchQuery(postSearchRequest('Find posts about Hyderabad stamping delays'))), 0, 'Explicit city restriction is preserved');
+  assert(assistantPostSearchScore(searchSource({ title: 'H-1B visa delay', body: 'My H-1B stamping is pending.' }),
+    assistantPostSearchQuery(postSearchRequest('Find posts about H1B stamping delay'))) > 0);
+  assert(assistantPostSearchScore(searchSource({ title: 'H1B visa delay', body: 'My H1B stamping is pending.' }),
+    assistantPostSearchQuery(postSearchRequest('Find posts about H-1B stamping delay'))) > 0);
+  assert.equal(assistantPostSearchScore(searchSource({ title: 'H-4 stamping', body: 'My H-4 stamping is pending.' }),
+    assistantPostSearchQuery(postSearchRequest('Find posts about H1B stamping delay'))), 0, 'Visa type restriction survives normalization');
+});
+
+test('exact production query retrieves only relevant posts, deduplicates replies, and strips command noise from native search', async () => {
+  reviewedArchive([
+    q({ id: 'apify-delay', title: 'Stamping delay', body: 'My visa stamping was delayed for two weeks.' }),
+    q({ id: 'apify-admin', title: 'Visa interview', body: 'I am in administrative processing with the consulate.' }),
+    q({ id: 'apify-extension', title: 'H-1B extension pending', body: 'My extension has been pending for ten months.' }),
+    q({ id: 'apify-completed', title: 'Stamping completed', body: 'My stamping was approved and passport arrived Friday.' }),
+  ], { 'apify-delay': [a(1, { question_id: 'apify-delay', body: 'My stamping delay lasted three weeks; still waiting for the passport.' })] });
+  const db = client();
+  const corpus = await retrieveAssistantCorpus(db, postSearchRequest());
+  assert.deepEqual(new Set(corpus.sources.map(source => source.questionId)), new Set(['apify-delay', 'apify-admin']));
+  assert.equal(corpus.sources.length, 2, 'Replies do not consume separate post slots');
+  assert.match(db.calls[0].args.query_text, /stamping delay/);
+  assert.doesNotMatch(db.calls[0].args.query_text, /give|all posts|related/);
+  const result = buildAssistantPostSearchResult(postSearchRequest(), corpus);
+  assert.equal(result.kind, 'posts'); assert.equal(result.status, 'answered');
+  assert.equal(result.posts.length, 2); assert.equal(result.coverage.partial, true);
+  assert.deepEqual(result.claims, []); assert.deepEqual(result.disagreements, []);
+  for (const post of result.posts) assert.equal(post.url, `/questions/${post.questionId}`);
+});
+
+test('native search candidates receive the same strict topic filter as the archive', async () => {
+  delete process.env.COMMUNITY_SOURCE_MODE;
+  const rows = [
+    { source_id: 'q:apify-native-delay', source_kind: 'question', question_id: 'apify-native-delay', community_id: null,
+      title: 'Dropbox delay', body: 'My dropbox visa is still pending.', created_at: q().created_at, updated_at: q().updated_at },
+    { source_id: `q:${id}`, source_kind: 'question', question_id: id, community_id: null,
+      title: 'Petition delay', body: 'My H-1B extension is pending.', created_at: q().created_at, updated_at: q().updated_at },
+  ];
+  const result = await retrieveAssistantCorpus(client({}, { data: rows, error: null }), postSearchRequest());
+  assert.deepEqual(result.sources.map(source => source.questionId), ['apify-native-delay']);
+});
+
+test('post results use actual excerpts, redact identifiers, canonicalize links, and retain matches beyond model context caps', () => {
+  const body = `${'Unrelated introduction. '.repeat(250)}My stamping delay remains pending. Contact person@example.com for details.`;
+  const corpus = { partial: false, sources: [
+    searchSource({ body, url: 'https://untrusted.example/tracker', parentContext: 'Private parent context' }),
+    searchSource({ id: 'a:reply', kind: 'reply', body: 'My stamping remains delayed.', url: '/arbitrary' }),
+    searchSource({ id: 'q:bad', questionId: '../escape', body: 'My stamping is pending.' }),
+  ] };
+  const result = buildAssistantPostSearchResult(postSearchRequest(), corpus, 0);
+  assert.equal(result.posts.length, 1); assert.equal(result.posts[0].url, '/questions/apify-stamping');
+  assert.match(result.posts[0].excerpt, /stamping delay remains pending/);
+  assert.match(result.posts[0].excerpt, /\[email removed\]/);
+  assert(!JSON.stringify(result).includes('person@example.com'));
+  assert(!JSON.stringify(result).includes('Private parent context'));
+  assert(!JSON.stringify(result).includes('untrusted.example'));
+  assert(result.posts[0].excerpt.length <= 360);
+  assert.equal(result.generatedAt, '1970-01-01T00:00:00.000Z');
+});
+
+test('search returns a clear empty result rather than a source-verification failure', () => {
+  const result = buildAssistantPostSearchResult(postSearchRequest(), { partial: true, sources: [searchSource({ title: 'Extension', body: 'My petition is pending.' })] });
+  assert.equal(result.kind, 'posts'); assert.equal(result.status, 'insufficient');
+  assert.deepEqual(result.posts, []); assert.equal(result.coverage.partial, true);
+  assert.deepEqual(result.unanswered, ['No matching posts found. Try a broader topic.']);
+});
+
+test('search caps unique results honestly without allowing repeated replies to crowd out other posts', async () => {
+  const questions = Array.from({ length: 55 }, (_, index) => q({ id: `apify-delay-${index}`, title: 'Stamping delay', body: 'My stamping is pending at the consulate.' }));
+  reviewedArchive(questions, { 'apify-delay-0': Array.from({ length: 60 }, (_, index) => a(index, { question_id: 'apify-delay-0', body: 'My stamping delay is still pending.' })) });
+  const corpus = await retrieveAssistantCorpus(client(), postSearchRequest());
+  assert.equal(corpus.sources.length, 48); assert.equal(new Set(corpus.sources.map(source => source.questionId)).size, 48);
+  assert.equal(corpus.partial, true);
+  const result = buildAssistantPostSearchResult(postSearchRequest(), { partial: false,
+    sources: Array.from({ length: 60 }, (_, index) => searchSource({ id: `q:apify-${index}`, questionId: `apify-${index}` })) });
+  assert.equal(result.posts.length, 48); assert.equal(result.coverage.sourceCount, 48); assert.equal(result.coverage.partial, true);
 });

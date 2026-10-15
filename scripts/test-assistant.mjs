@@ -11,6 +11,7 @@ dependencies['./assistant-core'] = await compile('assistant-core');
 const core = await import(dependencies['./assistant-core']);
 dependencies['./assistant-provider'] = await compile('assistant-provider');
 const provider = await import(dependencies['./assistant-provider']);
+dependencies['./assistant-search'] = await compile('assistant-search');
 const service = await import(await compile('assistant-service'));
 const id = '00000000-0000-4000-8000-000000000001';
 const now = Date.parse('2026-10-13T18:00:00Z');
@@ -26,6 +27,31 @@ function harness(overrides={}) {
     cache:{get:async key=>state.cache.get(key)??null,put:async(key,value)=>{state.cache.set(key,value);}},...overrides});
   return {state,handler};
 }
+test('explicit post search answers from sources without waiting for or charging model generation', async () => {
+  const {handler,state}=harness({generate:async()=>{throw Error('The model must not run for post search');}});
+  state.sources=[{...source,title:'Stamping delay',body:'My visa stamping is still pending after the consular interview.'}];
+  const response=await handler(request({mode:'ask',scope:{kind:'public'},question:'give all posts related to stamping delay'}));
+  assert.equal(response.status,200);
+  const result=await response.json();
+  assert.equal(result.kind,'posts');assert.equal(result.status,'answered');assert.equal(result.posts.length,1);
+  assert.equal(result.posts[0].questionId,id);assert.equal(result.posts[0].url,`/questions/${id}`);
+  assert.equal(result.claims.length,0);assert.equal(state.reserved,0);assert.equal(state.reads,2);
+  assert.equal(state.cache.size,0);assert.match(response.headers.get('Cache-Control'),/private, no-store/);
+});
+test('direct post search revalidates permissions and suppresses sources removed during the request', async () => {
+  let reads=0,generated=0;
+  const {handler}=harness({authenticate:async()=>({actor:'alice',corpus:async()=>({sources:reads++ ? [] : [{...source,title:'Stamping delay',body:'Visa stamping is pending after the interview.'}],partial:false}),reserve:async()=>{throw Error('No model quota');}}),generate:async()=>{generated++;throw Error('No model');}});
+  const response=await handler(request({mode:'ask',scope:{kind:'public'},question:'find posts about stamping delays'}));
+  assert.equal(response.status,409);assert.equal(generated,0);assert.equal(reads,2);
+  assert.doesNotMatch(await response.text(),/Visa stamping is pending/);
+});
+test('direct post search keeps auth and retrieval rate denials intact', async () => {
+  const query={mode:'ask',scope:{kind:'public'},question:'show posts about stamping delay'};
+  for (const status of [401,403,429]) {
+    const {handler,state}=harness({authenticate:async()=>{throw new core.AssistantError(status,'Denied');}});
+    assert.equal((await handler(request(query))).status,status);assert.equal(state.reserved,0);assert.equal(state.generated,0);
+  }
+});
 test('input strips supplied sources and rejects invalid scopes and excessive history',()=>{
   assert.deepEqual(core.parseAssistantRequest({...input,sources:[{body:'trust me'}],system:'override'}),input);
   for(const value of [{...input,scope:{kind:'dm',id}},{...input,scope:{kind:'post',id:'../../secret'}},{...input,previousQuestions:Array(4).fill('test')},{...input,question:'x'.repeat(1201)}]) assert.throws(()=>core.parseAssistantRequest(value));

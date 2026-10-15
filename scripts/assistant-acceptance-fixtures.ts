@@ -23,7 +23,7 @@ const publicQuestionSources: AssistantSource[] = [
   source(39, 'Hyderabad biometrics — my fingerprints and photograph took 15 minutes.\nI have no experience with the Chennai location.', { id: 'a:16eb1d0f-9a94-44ce-8c0a-33e3e09c59cd', questionId: '5eb3dfd1-bb14-4889-9c23-1036cc8899bd', communityId: null, title: 'Hyderabad biometrics, personal report' }),
 ];
 type Check = { name: string; test(result: AssistantResult): boolean };
-export type AcceptanceFixture = { id: string; input: AssistantRequest; corpus: AssistantCorpus; checks: Check[] };
+export type AcceptanceFixture = { id: string; input: AssistantRequest; corpus: AssistantCorpus; checks: Check[]; execution?: 'direct-post-search' };
 const words = (result: AssistantResult) => [...result.claims, ...result.disagreements].map(claim => claim.text).join(' ').toLowerCase();
 const answered: Check = { name: 'answers_from_evidence', test: result => result.status === 'answered' && result.claims.length > 0 };
 const insufficient: Check = { name: 'abstains_without_support', test: result => result.status === 'insufficient' };
@@ -33,8 +33,24 @@ const post = { kind: 'post' as const, id: postId };
 const community = { kind: 'community' as const, id: groupId };
 const since = '2026-10-13T00:00:00Z', until = '2026-10-14T00:00:00Z';
 const catchupCorpus: AssistantCorpus = { sources: [source(2, 'Today, October 13, I reported that my appointment was rescheduled to October 20.', { parentContext: 'An older July discussion asked about a July 25 appointment.', parentUpdatedAt: '2026-07-01T00:00:00Z' })], partial: false, since, until };
+const stampingPostIds = ['00000000-0000-4000-8000-000000000050', '00000000-0000-4000-8000-000000000051'];
+const stampingSearchCorpus: AssistantCorpus = { partial: true, sources: [
+  source(50, 'My Chennai visa stamping has been delayed for three weeks. The application still shows pending.', { id: `q:${stampingPostIds[0]}`, kind: 'question', questionId: stampingPostIds[0], communityId: null, title: 'Chennai stamping delay', url: `/questions/${stampingPostIds[0]}` }),
+  source(51, 'I am also experiencing a stamping delay at the same Chennai location.', { questionId: stampingPostIds[0], communityId: null, title: 'Chennai stamping delay', url: `/questions/${stampingPostIds[0]}#answer-fixture-51` }),
+  source(52, 'My Hyderabad visa stamping is delayed. I am still waiting for my passport after the appointment.', { id: `q:${stampingPostIds[1]}`, kind: 'question', questionId: stampingPostIds[1], communityId: null, title: 'Hyderabad stamping delay', url: `/questions/${stampingPostIds[1]}` }),
+  source(53, 'My extension petition has been delayed for two months. This post is about the petition filing only.', { questionId: '00000000-0000-4000-8000-000000000052', communityId: null, title: 'Extension processing delay' }),
+  source(54, 'My visa stamping was completed quickly and the passport arrived two days later.', { questionId: '00000000-0000-4000-8000-000000000053', communityId: null, title: 'Quick visa stamping experience' }),
+] };
 
 export const acceptanceFixtures: AcceptanceFixture[] = [
+  { id: 'direct-post-search', execution: 'direct-post-search', input: { mode: 'ask', scope: { kind: 'public' }, question: 'give all posts related to stamping delay' }, corpus: stampingSearchCorpus, checks: [
+    { name: 'returns_post_search_results', test: result => result.kind === 'posts' && result.status === 'answered' },
+    { name: 'matching_posts_deduplicated', test: result => result.posts?.length === 2 && stampingPostIds.every(id => result.posts?.some(post => post.questionId === id)) },
+    { name: 'original_links_preserved', test: result => !!result.posts?.length && result.posts.every(post => post.url === `/questions/${post.questionId}`) },
+    { name: 'excerpts_from_visible_sources', test: result => !!result.posts?.length && result.posts.every(post => stampingSearchCorpus.sources.some(source => source.id === post.sourceId && source.body.includes(post.excerpt))) },
+    { name: 'no_generated_claims', test: result => result.claims.length === 0 && result.disagreements.length === 0 },
+    { name: 'partial_coverage_disclosed', test: result => result.coverage.partial === true },
+  ] },
   { id: 'post-question', input: { mode: 'ask', scope: post, question: 'On which day did this member receive their passport?' }, corpus: { sources: [appointment], partial: false }, checks: [answered, mentions('correct_reported_day', /friday/), absent('no_universal_timeline', /guarantee|everyone|all applicants/)] },
   { id: 'post-summary', input: { mode: 'summary', scope: post }, corpus: { sources: [appointment], partial: false }, checks: [answered, mentions('appointment_preserved', /monday/), mentions('delivery_preserved', /friday/)] },
   { id: 'public-question', input: { mode: 'ask', scope: { kind: 'public' }, question: 'What did members report about Chennai biometrics?' }, corpus: { sources: publicQuestionSources, partial: false }, checks: [answered, mentions('duration_preserved', /ten|10/), mentions('place_preserved', /chennai/), { name: 'correct_uuid_source_cited', test: result => result.claims.some(claim => claim.evidence.some(item => item.sourceId === 'a:9d153d62-49bf-4e8f-8bd2-7ceb4945dbf8')) }, absent('unrelated_reports_excluded', /mumbai|hyderabad|london|bengaluru|delhi|pickup|hotel|35 minutes|25 minutes|two hours/)] },

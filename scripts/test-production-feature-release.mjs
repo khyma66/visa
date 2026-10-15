@@ -117,7 +117,7 @@ test('Worker archive recovery interprets only static literals and never executes
 });
 
 function acceptanceReceipt() {
-  const ids = ['post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context'];
+  const ids = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context'];
   const model = '@cf/openai/gpt-oss-120b';
   return { schemaVersion: 1, sourceSha: 'a'.repeat(40), provider: 'workers-ai', model, createdAt: new Date().toISOString(), passed: true, repetitions: 3, features: { posts: true, communities: true, catchup: true }, workerDeleted: true, cases: ids.map(id => ({
     id, model, passed: true,

@@ -18,6 +18,7 @@ dependencies['./assistant-core'] = await compile('assistant-core');
 const core = await import(dependencies['./assistant-core']);
 dependencies['./assistant-provider'] = await compile('assistant-provider');
 const provider = await import(dependencies['./assistant-provider']);
+dependencies['./assistant-search'] = await compile('assistant-search');
 const service = await import(await compile('assistant-service'));
 
 const id = '00000000-0000-4000-8000-000000000001';

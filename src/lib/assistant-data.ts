@@ -6,6 +6,7 @@ import type { AssistantCorpus, AssistantRequest, AssistantSource } from './assis
 import type { Answer, CommunityFeed, Question } from './types';
 import { detectTopics } from './tagging';
 import { AssistantError, assistantPreviousQuestions, assistantRetrievalQuestion, assistantSearchTerms } from './assistant-core';
+import { assistantPostSearchQuery, assistantPostSearchScore } from './assistant-search';
 
 export const ASSISTANT_SOURCE_LIMIT = 48;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -50,6 +51,8 @@ function archiveEnabled(): boolean {
     && (process.env.APP_ENV !== 'production' || process.env.IMPORTED_CONTENT_APPROVED === 'true');
 }
 function sourceScorer(input: AssistantRequest): (source: AssistantSource) => number {
+  const postSearch = assistantPostSearchQuery(input);
+  if (postSearch) return source => assistantPostSearchScore(source, postSearch);
   const words = assistantSearchTerms(input.question ?? '').slice(0, 24);
   const previous = assistantPreviousQuestions(input).join(' ');
   const historyWords = assistantSearchTerms(previous).filter(word => !words.includes(word)).slice(0, 24);
@@ -71,13 +74,23 @@ function publicArchiveMatches(input: AssistantRequest): AssistantCorpus {
   if (!archiveEnabled()) return { sources: [], partial: false };
   const snapshot = archive as unknown as CommunityFeed;
   const score = sourceScorer(input);
+  const postSearch = assistantPostSearchQuery(input);
   const matches: Array<{ source: AssistantSource; score: number }> = [];
+  const matchedQuestions = new Set<string>();
   let scanned = 0, matched = 0, partial = false;
   const consider = (source: AssistantSource) => {
     if (!Number.isFinite(Date.parse(source.createdAt))) return;
     const rank = input.mode === 'ask' ? score(source) : 1;
     if (!rank) return;
-    matched++;
+    if (!postSearch || !matchedQuestions.has(source.questionId)) matched++;
+    matchedQuestions.add(source.questionId);
+    if (postSearch) {
+      const existing = matches.findIndex(row => row.source.questionId === source.questionId);
+      if (existing >= 0) {
+        if (matches[existing].score >= rank) return;
+        matches.splice(existing, 1);
+      }
+    }
     matches.push({ source, score: rank });
     matches.sort((a, b) => b.score - a.score || b.source.createdAt.localeCompare(a.source.createdAt) || a.source.id.localeCompare(b.source.id));
     if (matches.length > ASSISTANT_SOURCE_LIMIT) matches.pop();
@@ -98,7 +111,11 @@ function publicArchiveMatches(input: AssistantRequest): AssistantCorpus {
 }
 
 async function searchSources(client: SupabaseClient, input: AssistantRequest): Promise<AssistantCorpus> {
-  const question = input.mode === 'ask' ? assistantRetrievalQuestion(input) : '';
+  const postSearch = assistantPostSearchQuery(input);
+  const question = postSearch ? [postSearch.text,
+    ...(postSearch.stamping ? ['stamping dropbox passport consulate administrative processing 221g'] : []),
+    ...(postSearch.delay ? ['delay pending waiting stuck'] : []),
+  ].join(' ') : input.mode === 'ask' ? assistantRetrievalQuestion(input) : '';
   const { data, error } = await client.rpc('assistant_sources', {
     target_community_id: input.scope.kind === 'community' ? input.scope.id : null,
     target_question_id: input.scope.kind === 'post' ? input.scope.id : null,
@@ -112,8 +129,9 @@ async function searchSources(client: SupabaseClient, input: AssistantRequest): P
   if (error?.code === '42501') throw new AssistantError(403, 'This account cannot use the assistant.');
   if (error || !Array.isArray(data)) throw new Error('Assistant sources are temporarily unavailable.');
   const rows = data as SourceRow[];
+  const sources = rows.slice(0, ASSISTANT_SOURCE_LIMIT).map(rowSource);
   return {
-    sources: rows.slice(0, ASSISTANT_SOURCE_LIMIT).map(rowSource),
+    sources: postSearch ? sources.filter(source => assistantPostSearchScore(source, postSearch) > 0) : sources,
     partial: rows.length > ASSISTANT_SOURCE_LIMIT,
     ...(input.mode === 'catchup' ? { since: input.since, until: input.until } : {}),
   };
@@ -194,13 +212,18 @@ export async function retrieveAssistantCorpus(client: SupabaseClient, input: Ass
     const score = sourceScorer(input);
     const combined = [...corpus.sources, ...historical.sources]
       .sort((a, b) => (input.mode === 'ask' ? score(b) - score(a) : 0) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+    const seenQuestions = new Set<string>();
+    const selected = assistantPostSearchQuery(input) ? combined.filter(source => {
+      if (seenQuestions.has(source.questionId)) return false;
+      seenQuestions.add(source.questionId); return true;
+    }) : combined;
     return {
       ...corpus,
-      sources: combined.slice(0, ASSISTANT_SOURCE_LIMIT),
+      sources: selected.slice(0, ASSISTANT_SOURCE_LIMIT),
       // Global keyword search has no indexed path for live imported_answers
       // yet. They are included in specific-post asks; do
       // not claim exhaustive global coverage until that index is deployed.
-      partial: corpus.partial || historical.partial || combined.length > ASSISTANT_SOURCE_LIMIT
+      partial: corpus.partial || historical.partial || selected.length > ASSISTANT_SOURCE_LIMIT
         || (input.mode === 'ask' && archiveEnabled()),
     };
   }

@@ -101,6 +101,7 @@ export default {
       }
       const result = serviceBody as AssistantResult;
       const evaluation = evaluateAcceptance(fixture, result);
+      const directPostSearch = fixture.execution === 'direct-post-search';
       const sameInput = (input: AssistantRequest) => input.mode === fixture.input.mode
         && JSON.stringify(input.scope) === JSON.stringify(fixture.input.scope)
         && input.question === fixture.input.question
@@ -110,10 +111,17 @@ export default {
       evaluation.checks.push(
         { name: 'application_request_parsed', passed: receivedInputs.length > 0 && receivedInputs.every(sameInput) },
         { name: 'application_authentication_used', passed: events.filter(event => event === 'authenticate').length === 1 },
-        { name: 'application_quota_reserved', passed: events.filter(event => event === 'reserve').length === 1 },
-        { name: 'application_runtime_binding_loaded', passed: events.filter(event => event === 'runtime-binding').length === 1 },
-        { name: 'application_provider_called_once', passed: events.filter(event => event === 'generate').length === 1 },
-        { name: 'application_sources_revalidated', passed: events[1] === 'corpus' && events.slice(events.indexOf('generate') + 1).filter(event => event === 'corpus').length >= 2 },
+        ...(directPostSearch ? [
+          { name: 'application_model_quota_not_used', passed: events.filter(event => event === 'reserve').length === 0 },
+          { name: 'application_runtime_binding_not_loaded', passed: events.filter(event => event === 'runtime-binding').length === 0 },
+          { name: 'application_provider_not_called', passed: events.filter(event => event === 'generate').length === 0 },
+          { name: 'application_sources_revalidated', passed: events[1] === 'corpus' && events.filter(event => event === 'corpus').length >= 2 },
+        ] : [
+          { name: 'application_quota_reserved', passed: events.filter(event => event === 'reserve').length === 1 },
+          { name: 'application_runtime_binding_loaded', passed: events.filter(event => event === 'runtime-binding').length === 1 },
+          { name: 'application_provider_called_once', passed: events.filter(event => event === 'generate').length === 1 },
+          { name: 'application_sources_revalidated', passed: events[1] === 'corpus' && events.slice(events.indexOf('generate') + 1).filter(event => event === 'corpus').length >= 2 },
+        ]),
         { name: 'application_response_private', passed: serviceResponse.headers.get('cache-control') === 'private, no-store'
           && serviceResponse.headers.get('vary') === 'Authorization' && serviceResponse.headers.get('x-content-type-options') === 'nosniff' },
       );

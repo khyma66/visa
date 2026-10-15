@@ -28,7 +28,18 @@ export type AssistantSource = {
 };
 export type AssistantEvidence = { sourceId: string; quote: string };
 export type AssistantClaim = { text: string; evidence: AssistantEvidence[] };
+export type AssistantPostMatch = {
+  questionId: string;
+  title: string;
+  url: string;
+  excerpt: string;
+  sourceId: string;
+  createdAt: string;
+};
 export type AssistantResult = {
+  /** Direct, server-selected search results; no model-generated claims. */
+  kind?: 'posts';
+  posts?: AssistantPostMatch[];
   status: 'answered' | 'insufficient';
   claims: AssistantClaim[];
   disagreements: AssistantClaim[];

@@ -21,7 +21,7 @@ function dateLabel(value: string) {
 }
 
 // Model text never controls external navigation, HTML, or script execution.
-function sourceHref(source: AssistantSource) {
+function sourceHref(source: Pick<AssistantSource, 'url'>) {
   return /^\/(?:questions|experiences)\/[a-zA-Z0-9_-]+(?:#answer-[a-zA-Z0-9_-]+)?$/.test(source.url) ? source.url : null;
 }
 
@@ -36,7 +36,23 @@ function Claims({ claims, sources }: { claims: AssistantClaim[]; sources: Assist
   </p>)}</div>;
 }
 
+function PostResults({ result }: { result: AssistantResult }) {
+  const posts = (result.posts ?? []).filter(post => sourceHref(post));
+  const cards = (items: typeof posts) => <ol className="mt-3 space-y-3">{items.map(post => <li key={post.questionId} className="rounded-xl border border-slate-200 p-3">
+    <a href={sourceHref(post)!} className="text-sm font-semibold leading-5 text-teal-700 underline decoration-teal-200 underline-offset-2">{post.title}</a>
+    <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-5 text-slate-700">{post.excerpt}</p>
+    <time dateTime={post.createdAt} className="mt-2 block text-xs text-slate-500">{dateLabel(post.createdAt)}</time>
+  </li>)}</ol>;
+  return <div aria-label="Assistant response">
+    <p className="text-sm leading-6 text-slate-800">{posts.length ? `Found ${posts.length} matching post${posts.length === 1 ? '' : 's'}.` : 'No matching posts found. Try a visa type, location, or another keyword.'}</p>
+    {cards(posts.slice(0, 8))}
+    {posts.length > 8 && <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-teal-700">{`Show ${posts.length - 8} more posts`}</summary>{cards(posts.slice(8))}</details>}
+    {result.coverage.partial && <p className="mt-3 text-xs leading-5 text-amber-800">More posts may match. Narrow your search to see more specific results.</p>}
+  </div>;
+}
+
 function Result({ result, catchup }: { result: AssistantResult; catchup: boolean }) {
+  if (result.kind === 'posts') return <PostResults result={result} />;
   const evidence = [...result.claims, ...result.disagreements].flatMap((claim) => claim.evidence);
   return <div aria-label="Assistant response">
     {result.status === 'insufficient' && <p className="text-sm leading-6 text-slate-800">{result.unanswered[0] || (catchup ? 'No updates found for this time range.' : 'I couldn’t find enough relevant discussions to answer. Try a more specific question.')}</p>}
@@ -178,6 +194,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
       const value = await response.json() as AssistantResult;
       if (!isCurrent()) return;
       if (!['answered', 'insufficient'].includes(value.status) || !Array.isArray(value.claims) || !Array.isArray(value.sources) || !Array.isArray(value.disagreements) || !Array.isArray(value.unanswered) || !value.coverage) throw new Error('Invalid response');
+      if (value.kind === 'posts' && (!Array.isArray(value.posts) || value.posts.some(post => !post || ['questionId', 'title', 'url', 'excerpt', 'sourceId', 'createdAt'].some(key => typeof post[key as keyof typeof post] !== 'string')))) throw new Error('Invalid post results');
       setConversation((current) => current.identity === actor ? { ...current, turns: current.turns.map((item) => item.id === turnId ? { ...item, state: 'complete', result: value } : item) } : current);
       // A partial digest cannot mark a whole interval as read.
       if (mode === 'catchup' && scope.kind === 'community' && value.status === 'answered' && !value.coverage.partial && value.coverage.until && Number.isFinite(Date.parse(value.coverage.until)) && Date.parse(value.coverage.until) <= Date.now() && (!checkpoint || Date.parse(value.coverage.until) > Date.parse(checkpoint))) {

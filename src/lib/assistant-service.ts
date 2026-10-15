@@ -1,6 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult } from './assistant-contract';
 import { ASSISTANT_VERSION, AssistantError, assistantAvailability, assistantFingerprint, assistantPrompt, emptyAssistantResult, parseAssistantRequest, prepareAssistantCorpus, readBoundedJson, requireAssistantMode, validateAssistantOutput, type AssistantValidationCode } from './assistant-core';
 import type { AssistantPrompt } from './assistant-provider';
+import { assistantPostSearchQuery, buildAssistantPostSearchResult } from './assistant-search';
 
 export type AssistantCache = { get(key: string): Promise<AssistantResult | null>; put(key: string, value: AssistantResult): Promise<void> };
 export type AssistantFailureStage = 'request' | 'authentication' | 'retrieval' | 'quota' | 'generation' | 'validation' | 'revalidation';
@@ -46,6 +47,19 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       request.signal.throwIfAborted();
       stage = 'retrieval';
       const original = await session.corpus(input);
+      if (assistantPostSearchQuery(input)) {
+        // Finding existing posts does not require text generation or model quota.
+        // Still authenticate, rate-limit and recheck the caller-visible corpus.
+        const fingerprint = await assistantFingerprint(original);
+        const result = buildAssistantPostSearchResult(input, original);
+        request.signal.throwIfAborted();
+        stage = 'revalidation';
+        if (await assistantFingerprint(await session.corpus(input)) !== fingerprint) {
+          throw new AssistantError(409, 'The discussion changed while answering. Please ask again.');
+        }
+        request.signal.throwIfAborted();
+        return assistantResponse(result);
+      }
       const corpus = prepareAssistantCorpus(original, input);
       if (!corpus.sources.length) return assistantResponse(emptyAssistantResult(corpus));
       const fingerprint = await assistantFingerprint(original);

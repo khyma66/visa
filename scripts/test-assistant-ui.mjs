@@ -106,6 +106,28 @@ test('evidence renders as escaped text with dates and only internal discussion l
   } finally { h.close(); }
 });
 
+test('post search shows linked excerpts immediately with compact expandable results', async () => {
+  const h=new Harness();
+  const posts=Array.from({length:10},(_,i)=>({questionId:`post-${i}`,sourceId:`q:post-${i}`,title:`Stamping delay ${i}`,excerpt:'Passport still pending <script>unsafe()</script>',url:`/questions/post-${i}`,createdAt:'2026-10-01T10:00:00Z'}));
+  h.post=async()=>reply(fixture({kind:'posts',posts:[...posts,{...posts[0],questionId:'unsafe',url:'javascript:alert(1)'}],claims:[],sources:[],coverage:{sourceCount:10,partial:true}}));
+  try {
+    h.render({scope:{kind:'public'},defaultOpen:true});await h.settle();changeQuestion(h,'give all posts related to stamping delay');await submit(h);await h.settle();
+    assert.match(textOf(h.tree),/Found 10 matching posts/);assert.match(textOf(h.tree),/Show 2 more posts/);
+    assert.match(textOf(h.tree),/More posts may match/);assert.doesNotMatch(textOf(h.tree),/Thinking|verify the sources/);
+    const html=renderToStaticMarkup(h.tree);assert.match(html,/href="\/questions\/post-0"/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/javascript:|<script>/);
+    assert.equal(nodes(h.tree).filter(node=>node.type==='li').length,10);
+  } finally { h.close(); }
+});
+
+test('empty post search gives a useful no-match message and accepts another question', async () => {
+  const h=new Harness();h.post=async()=>reply(fixture({kind:'posts',status:'insufficient',posts:[],claims:[],sources:[]}));
+  try {
+    h.render({scope:{kind:'public'},defaultOpen:true});await h.settle();changeQuestion(h,'find posts about an unknown topic');await submit(h);await h.settle();
+    assert.match(textOf(h.tree),/No matching posts found/);assert.doesNotMatch(textOf(h.tree),/No answer received|Try again/);
+    changeQuestion(h,'find posts about stamping');assert.equal(button(h,'Send message').props.disabled,false);
+  } finally { h.close(); }
+});
+
 test('stop cancels the active request, restores the draft, and rejects duplicate submits and late results', async () => {
   const h = new Harness(), pending = defer(); h.post = () => pending.promise;
   try {
