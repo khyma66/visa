@@ -22,6 +22,20 @@ The hosted gate now runs the actual application handler, including parsing, auth
 
 Fifteen fixtures require three independent passing samples each (45 total), retaining every failure. Coverage includes ten noisy public sources, topic changes, short follow-ups, answers beyond character 4,000, concise relevance, communities/catch-up, conflicts, unsupported claims, injection and multilingual content.
 
-Local verification passed 1,546 tests, TypeScript and the repository secret scan. Dependency audit passed its high-severity gate (three moderate advisories remain).
+The final production CI passed 1,548 tests (including 92 assistant-specific tests), TypeScript and the repository secret scan. The release helper’s 13 tests also ran again as a dedicated gate. Dependency audit passed its high-severity gate (three moderate advisories remain).
 
-The existing release workflow preserves the production archive and launch settings, deploys only after all gates pass, and checks immutable source/configuration receipts with guarded rollback. Production release and a real signed-in browser answer remain pending at the time this implementation commit is prepared. Do not equate synthetic acceptance with verified member sign-in.
+The existing release workflow preserves the production archive and launch settings, deploys only after all gates pass, and checks immutable source/configuration receipts with guarded rollback. Final release [38665753026](https://github.com/khyma66/visa/actions/runs/38665753026) completed successfully on October 15, 2026 at 01:44 UTC. It deployed commit `899f7fe493b56c8794642c0b0ede87c12a2f0b36` (tree `de541898fc4ba24c068cc8be1077178400eaab37`) as Worker version `317351cd-fec1-44f4-9f0b-241d74ed02c7`. Artifact `11942970534` retains all 45 passing hosted samples and the immutable build receipt. Every runtime-binding check and all three short-follow-up samples passed; the temporary evaluation Worker was deleted. Smoke checks verified exact source, all production AI flags and unchanged 563 posts / 628 replies. The preceding conversational release `babc5c3ebdedc0491a5382520ce86801e9e45833` also passed 42 samples and deployed successfully in run `38665376392`.
+
+## Signed-in production browser verification
+
+A real existing member signed in through the secure email-code flow. No credentials or account identifiers are retained here. On the final live version, three actual model requests returned correct short answers with citations:
+
+| Surface | Question | Verified answer |
+| --- | --- | --- |
+| [Published Cognizant discussion](https://visathreads.com/questions/apify-2286326712182444) | On what date did the original poster upgrade to premium processing? | August 20. |
+| Same conversation | How long had it been pending? | Over 10 months; correctly retained the original poster’s context. |
+| [Standalone Ask page](https://visathreads.com/assistant) | In the Cognizant discussion where an extension had been pending for over 10 months, when was it upgraded to premium processing? | August 20, citing the correct discussion retrieved from the public corpus. |
+
+Enter-to-send, the Thinking state, retained conversation messages and expanded source quotes were observed directly. The citation quote matched the published post. Catch-up controls were absent on both public and post chat. Community scope has unit and hosted acceptance coverage; no new live community or synthetic production content was created for testing. The final browser remained on the successful standalone conversation.
+
+These results demonstrate the checked questions and paths; they do not establish universal answer accuracy. Partial corpus coverage remains visible to members.

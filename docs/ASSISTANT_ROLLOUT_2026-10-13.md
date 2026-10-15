@@ -1,6 +1,6 @@
 # VisaThreads production-only assistant rollout
 
-October 15 correction: see [production chat changes](ASSISTANT_CHAT_FIX_2026-10-15.md). Catch-up is now community-only. Historical release evidence below records the October 14 deployment.
+October 15 correction: [production chat changes and signed-in verification](ASSISTANT_CHAT_FIX_2026-10-15.md) are live at commit `899f7fe493b56c8794642c0b0ede87c12a2f0b36`, with 45/45 hosted samples and three successful real member questions. Catch-up is now community-only. Historical release evidence below records the October 14 deployment.
 
 ## Owner decision — October 14, 2026
 
