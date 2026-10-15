@@ -11,7 +11,7 @@ Read-only Cloudflare diagnostic run: https://github.com/khyma66/visa/actions/run
 ## Changes
 
 - Ordered chat messages, short copy, Enter-to-send, pending/stop controls, preserved drafts and retry, expandable sources. Chat memory stays in the component and clears on account/scope changes.
-- New questions do not inherit unrelated topics; referential follow-ups use the latest relevant user question. Whole-word search avoids substring collisions, replies retain discussion context, and long posts retain the passage matching the question.
+- New questions do not inherit unrelated topics; referential follow-ups, including short “Why?” and “What happened next?” messages, use the latest relevant user question. Whole-word search avoids substring collisions, replies retain discussion context, and long posts retain the passage matching the question.
 - The model receives a source-ID enum and schema limits matching validation. Quotes must come from the cited source title/body; parent context is not citable as a reply. Backend exact-quote validation remains mandatory, and whitespace-only quotes are rejected.
 - Safe error telemetry records only fixed stages/reason codes and HTTP status. No questions, sources, tokens, identities or provider error bodies are logged. Concurrent requests retain the correct shared failure stage.
 - Catch-up is community-only in both UI and backend. Empty intervals have a specific response.
@@ -20,7 +20,7 @@ Read-only Cloudflare diagnostic run: https://github.com/khyma66/visa/actions/run
 
 The hosted gate now runs the actual application handler, including parsing, authentication dependency, quota, corpus preparation, real Workers AI inference, validation, revalidation, private headers and the runtime binding import. Authentication and corpus in this expiring evaluator are fixed synthetic dependencies, not production accounts or records.
 
-Fourteen fixtures require three independent passing samples each (42 total), retaining every failure. Coverage includes ten noisy public sources, topic changes, answers beyond character 4,000, concise relevance, communities/catch-up, conflicts, unsupported claims, injection and multilingual content.
+Fifteen fixtures require three independent passing samples each (45 total), retaining every failure. Coverage includes ten noisy public sources, topic changes, short follow-ups, answers beyond character 4,000, concise relevance, communities/catch-up, conflicts, unsupported claims, injection and multilingual content.
 
 Local verification passed 1,546 tests, TypeScript and the repository secret scan. Dependency audit passed its high-severity gate (three moderate advisories remain).
 

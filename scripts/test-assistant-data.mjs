@@ -233,3 +233,20 @@ test('a follow-up after a topic change uses the last topic, not the earlier conv
   assert.doesNotMatch(db.calls[0].args.query_text, /Chennai|H-1B/);
   assert.match(db.calls[0].args.query_text, /Schengen/);
 });
+
+test('Why, How, and What happened next follow the latest answered topic without reviving older posts', async () => {
+  reviewedArchive([
+    q({ id: 'apify-chennai', title: 'Chennai H-1B appointment', body: 'My Chennai H-1B stamping appointment happened Monday.' }),
+    q({ id: 'apify-schengen', title: 'Schengen delivery', body: 'My Schengen passport arrived Friday in Dallas because the courier delayed delivery.' }),
+  ]);
+  const previousQuestions = ['Chennai H-1B appointments?', 'When did the Schengen passport arrive in Dallas?'];
+  const initial = await retrieveAssistantCorpus(client(), { mode: 'ask', scope: { kind: 'public' }, question: previousQuestions[1] });
+  assert.deepEqual(initial.sources.map(source => source.questionId), ['apify-schengen']);
+  for (const question of ['Why?', 'How?', 'What happened next?']) {
+    const db = client();
+    const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question, previousQuestions });
+    assert.deepEqual(result.sources.map(source => source.questionId), ['apify-schengen'], question);
+    assert.equal(db.calls[0].args.query_text, previousQuestions[1], 'Native search must also use the latest topic, not generic continuation wording');
+    assert.doesNotMatch(db.calls[0].args.query_text, /Chennai|H-1B/);
+  }
+});

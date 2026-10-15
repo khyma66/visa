@@ -18,7 +18,7 @@ const account = process.env.CLOUDFLARE_ACCOUNT_ID;
 assert(token && account && /^[a-f0-9]{32}$/i.test(account), 'Cloudflare account and token are required');
 const apiRoot = `https://api.cloudflare.com/client/v4/accounts/${account}`;
 const workerPattern = /^visathreads-ai-eval-[a-f0-9]{20}$/;
-const cases = ['post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer'];
+const cases = ['post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context'];
 
 async function api(path, options = {}) {
   const reply = await fetch(`${apiRoot}${path}`, { ...options, headers: { Authorization: `Bearer ${token}`, ...options.headers }, redirect: 'error', signal: AbortSignal.timeout(20_000) });

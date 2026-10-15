@@ -158,6 +158,7 @@ test('new hosted cases pass through real request parsing, topic handling and rel
     { id: 'concise-question-relevance', text: 'A member reported that Chennai biometrics took ten minutes.', sourceId: 'a:fixture-10', quote: 'My Chennai biometrics appointment took ten minutes.' },
     { id: 'conversation-topic-switch', text: 'A member reported that Hyderabad biometrics took fifteen minutes.', sourceId: 'a:fixture-11', quote: 'My Hyderabad biometrics appointment took fifteen minutes.' },
     { id: 'long-post-tail-answer', text: 'The member reported paying 650 rupees for passport courier service.', sourceId: 'a:fixture-12', quote: 'I paid 650 rupees for the passport courier service in Chennai.' },
+    { id: 'short-followup-context', text: 'The member said the appointment was rescheduled because the fingerprint scanner stopped working.', sourceId: 'a:fixture-13', quote: 'My Chennai biometrics appointment was rescheduled to October 20 because the centre’s fingerprint scanner stopped working.' },
   ];
   for (const example of examples) {
     let calls = 0;
@@ -167,6 +168,7 @@ test('new hosted cases pass through real request parsing, topic handling and rel
       assert.equal(prompt.task, 'ask');
       assert.equal(prompt.question, acceptanceFixtures.find(fixture => fixture.id === example.id).input.question);
       if (example.id === 'conversation-topic-switch') assert.deepEqual(prompt.previousQuestions, []);
+      if (example.id === 'short-followup-context') assert.deepEqual(prompt.previousQuestions, ['What did the Chennai member report about their rescheduled biometrics appointment?']);
       if (example.id === 'long-post-tail-answer') {
         assert.equal(prompt.partial, true);
         assert(prompt.sources[0].body.length <= 4000);
@@ -193,6 +195,7 @@ test('semantic gate rejects verbose answers, irrelevant details and answering a 
     { id: 'post-question', text: 'The member received their passport on Friday. '.repeat(20), check: 'answer_is_concise' },
     { id: 'concise-question-relevance', text: 'Chennai biometrics took ten minutes; the other member paid 500 rupees for parking in Pune.', check: 'unrelated_report_excluded' },
     { id: 'conversation-topic-switch', text: 'The Chennai member received their passport on Friday.', check: 'latest_question_answered' },
+    { id: 'short-followup-context', text: 'The Hyderabad member moved the appointment because their train was cancelled.', check: 'specific_cause_preserved' },
   ];
   for (const example of cases) {
     const fixture = acceptanceFixtures.find(fixture => fixture.id === example.id);
@@ -283,7 +286,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 14);
+  assert.equal(acceptanceFixtures.length, 15);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);
