@@ -296,6 +296,44 @@ test('stamping delay search requires both concepts and recognizes real processin
     assistantPostSearchQuery(postSearchRequest('Find posts about H1B stamping delay'))), 0, 'Visa type restriction survives normalization');
 });
 
+test('stamping delays must refer to stamping rather than a different process elsewhere in the post', () => {
+  const query = assistantPostSearchQuery(postSearchRequest());
+  const unrelated = [
+    searchSource({ kind: 'reply', title: 'Help, I received a job offer and have H1B visa stamping on October 19. What is the transfer timeline?',
+      body: 'With premium processing it should take 15 days, but there are delays in premium processing. You may have to wait until 2027.' }),
+    searchSource({ title: 'Travel to Pakistan for H1B stamping', body: 'I am planning to travel to Pakistan to get my H1B stamped. My I-140 has already been filed and I am waiting on the decision. Has anyone had their H1B stamped in this situation?' }),
+    searchSource({ title: 'Grace period and new job', body: 'Will my grace period affect visa stamping or the green card process? I am concerned about a delayed start date at my new job.' }),
+    searchSource({ title: 'Visa stamping plan after H1B extension', body: 'My H1B extension petition has been pending for eight months. Once it is approved, I plan to travel for visa stamping.' }),
+    searchSource({ kind: 'reply', title: 'Visa stamping appointment options', body: 'I upgraded my H1B petition to premium processing two weeks ago and am still waiting for approval.', parentContext: 'I am planning a future visa stamping appointment after my petition approval.' }),
+    searchSource({ title: 'Travel and stamping after I-140', body: 'My I-140 has been pending for several months. I plan to schedule visa stamping next year.' }),
+    searchSource({ title: 'H1B plans', body: 'My H1B extension petition is pending before I can go for stamping.' }),
+    searchSource({ title: 'Member question', body: 'I have a visa interview next month and I am waiting to hear back from my employer about my H1B petition.' }),
+  ];
+  for (const source of unrelated) assert.equal(assistantPostSearchScore(source, query), 0, source.body);
+  const relevant = [
+    'I have been waiting for my H1B stamps for months.',
+    'H1B stamping at Chennai. Still waiting for my passport.',
+    'I attended my visa interview at the embassy. My passport has not yet been returned.',
+    'My stamping interview was on Monday. The case is still pending.',
+    'I attended my visa interview on Monday. My case is still pending with no update.',
+    'Had my visa interview last month. Still waiting.',
+    'I completed my dropbox appointment. No update since last month.',
+    'My H1B extension was approved, but the stamping appointment is delayed.',
+    'My I-140 is pending. Separately, my visa stamping has been delayed for weeks.',
+    'My H1B stamping is delayed and this is affecting my job start date.',
+    'I am waiting for a visa stamping appointment at the consulate.',
+    'I completed my H1B stamping interview and I am still waiting for my passport.',
+    'I completed my H1B stamping interview and I am still waiting for an update.',
+    "I completed my H1B stamping interview and I'm still waiting for an update.",
+  ];
+  for (const body of relevant) assert(assistantPostSearchScore(searchSource({ title: 'Member report', body }), query) > 0, body);
+  assert(assistantPostSearchScore(searchSource({ title: 'Chennai stamping', body: 'My case is still pending after three weeks. No updates yet.' }), query) > 0);
+  assert(assistantPostSearchScore(searchSource({ kind: 'reply', title: 'Chennai stamping interview', parentContext: 'I attended the stamping interview on Monday.', body: 'Mine is still pending.' }), query) > 0);
+  const direct = assistantPostSearchScore(searchSource({ title: 'Member report', body: 'My stamping is delayed.' }), query);
+  const indirect = assistantPostSearchScore(searchSource({ kind: 'reply', title: 'Chennai stamping interview', parentContext: 'I attended the stamping interview on Monday.', body: 'Mine is still pending.' }), query);
+  assert(direct > indirect, 'Direct stamping-delay evidence ranks ahead of context-dependent replies');
+});
+
 test('exact production query retrieves only relevant posts, deduplicates replies, and strips command noise from native search', async () => {
   reviewedArchive([
     q({ id: 'apify-delay', title: 'Stamping delay', body: 'My visa stamping was delayed for two weeks.' }),

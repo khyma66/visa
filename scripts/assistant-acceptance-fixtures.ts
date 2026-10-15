@@ -40,6 +40,11 @@ const stampingSearchCorpus: AssistantCorpus = { partial: true, sources: [
   source(52, 'My Hyderabad visa stamping is delayed. I am still waiting for my passport after the appointment.', { id: `q:${stampingPostIds[1]}`, kind: 'question', questionId: stampingPostIds[1], communityId: null, title: 'Hyderabad stamping delay', url: `/questions/${stampingPostIds[1]}` }),
   source(53, 'My extension petition has been delayed for two months. This post is about the petition filing only.', { questionId: '00000000-0000-4000-8000-000000000052', communityId: null, title: 'Extension processing delay' }),
   source(54, 'My visa stamping was completed quickly and the passport arrived two days later.', { questionId: '00000000-0000-4000-8000-000000000053', communityId: null, title: 'Quick visa stamping experience' }),
+  // Mixed-topic decoys must not become stamping-delay matches merely because
+  // stamping occurs in the title or is a future plan after a delayed petition.
+  source(55, 'My H1B extension petition has been pending for eight months. Once it is approved, I plan to travel for visa stamping.', { id: 'q:00000000-0000-4000-8000-000000000054', kind: 'question', questionId: '00000000-0000-4000-8000-000000000054', communityId: null, title: 'Visa stamping plan after H1B extension' }),
+  source(56, 'I upgraded my H1B petition to premium processing two weeks ago and am still waiting for approval.', { questionId: '00000000-0000-4000-8000-000000000055', communityId: null, title: 'Visa stamping appointment options', parentContext: 'I am planning a future visa stamping appointment after my petition approval.' }),
+  source(57, 'My I-140 has been pending for several months. I plan to schedule visa stamping next year.', { id: 'q:00000000-0000-4000-8000-000000000056', kind: 'question', questionId: '00000000-0000-4000-8000-000000000056', communityId: null, title: 'Travel and stamping after I-140' }),
 ] };
 
 export const acceptanceFixtures: AcceptanceFixture[] = [

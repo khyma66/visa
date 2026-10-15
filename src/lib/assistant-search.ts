@@ -6,7 +6,7 @@ const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const SEARCH_WORDS = new Set('give show find list get search look looking want need all every some relevant related relate relating regarding matching recent latest available post thread discussion question link result mention mentioning contain containing from like'.split(' '));
 const POST_REQUEST_PREFIX_WORDS = new Set('me us for all any some the relevant related matching recent latest available'.split(' '));
 const STAMPING = /\bstamp(?:ing|ed|s)?\b|\bdrop[ -]?box\b|\b221[ ()-]*g\b|\badministrative processing\b|\bconsular processing\b|\bvisa (?:interview|issuance|issued|appointment)\b/i;
-const DELAY = /\bdelay(?:ed|ing|s)?\b|\bpending\b|\bwait(?:ing|ed|s)?\b|\bstuck\b|\bbacklog\b|\b(?:no|without|awaiting) (?:an? )?(?:update|response|passport)\b|\bnot (?:yet )?(?:received|returned|issued)\b|\badministrative processing\b|\b221[ ()-]*g\b/i;
+const DELAY = /\bdelay(?:ed|ing|s)?\b|\bpending\b|\bwait(?:ing|ed|s)?\b|\bstuck\b|\bbacklog\b|\b(?:no|without|awaiting) (?:an? )?(?:updates?|response|passport)\b|\bnot (?:yet )?(?:been )?(?:received|returned|issued)\b|\badministrative processing\b|\b221[ ()-]*g\b/i;
 
 export type AssistantPostSearchQuery = { text: string; terms: string[]; stamping: boolean; delay: boolean };
 const normalizeTerm = (word: string) => /^(?:h-?1-?b|h-?4|f-?1|l-?1|l-?2|b-?1|b-?2)$/.test(word) ? word.replaceAll('-', '')
@@ -40,12 +40,72 @@ function stampingContext(text: string) {
   return STAMPING.test(text) || (/\bpassport\b/i.test(text) && /\b(?:visa|consulate|embassy|ceac)\b/i.test(text));
 }
 
-/** Stamping delay is an intersection, not any mention of H-1B or pending. */
+const OTHER_PROCESS = /\b(?:extensions?|transfers?|petitions?|premium processing|i[ -]?(?:140|129|485)|ead|perm|green card|labor certification|employers?|job offers?|start dates?|delayed start|onboarding|payroll|grace period)\b/gi;
+const STAMPING_EVENT = /\bstamp(?:ing|ed|s)?\b|\bdrop[ -]?box\b|\bvisa (?:interviews?|issuance|issued|appointments?)\b|\bconsular processing\b/gi;
+const CONSULAR_ITEM = /\b(?:passports?|appointments?|interviews?|slots?)\b/gi;
+
+/** Associate the delay with its subject instead of joining unrelated topics. */
+function stampingDelayAssociation(text: string, context: string, preceding = ''): number {
+  const consularContext = stampingContext(context);
+  let strongest = 0;
+  let previousClause = preceding;
+  for (const clause of text.split(/[.!?;\n]+|,\s*(?:but|whereas|while)\b|\b(?:but|whereas)\b|\band\s+(?=(?:i|we|my|our|they|their)\b)/i)) {
+    // These are specifically consular processing states, not petition waits.
+    if (/\b(?:administrative processing|221[ ()-]*g)\b/i.test(clause)) strongest = Math.max(strongest, 36);
+    const delays = [...clause.matchAll(new RegExp(DELAY.source, 'gi'))];
+    if (!delays.length) { if (clause.trim()) previousClause = clause; continue; }
+    const otherSubjects = [...clause.matchAll(new RegExp(OTHER_PROCESS.source, 'gi'))];
+    const events = [...clause.matchAll(new RegExp(STAMPING_EVENT.source, 'gi')),
+      ...(consularContext ? [...clause.matchAll(new RegExp(CONSULAR_ITEM.source, 'gi'))] : [])];
+    for (const delay of delays) {
+      for (const event of events) {
+        const distance = Math.abs(delay.index! - event.index!);
+        if (distance > 140) continue;
+        // "I-140 pending ... stamping next year" must not become a stamping
+        // delay. A closer petition/employment subject owns that delay instead.
+        if (otherSubjects.some(other => Math.abs(delay.index! - other.index!) <= distance)) continue;
+        const between = clause.slice(Math.min(delay.index!, event.index!), Math.max(delay.index!, event.index!));
+        if (between.trim().split(/\s+/).length > 18) continue;
+        strongest = Math.max(strongest, distance <= 35 ? 48 : 28);
+      }
+    }
+    if (!otherSubjects.length && new RegExp(STAMPING_EVENT.source, 'i').test(previousClause)
+      && !new RegExp(OTHER_PROCESS.source, 'i').test(previousClause)
+      && !/\b(?:plan|planning|future|next year|hoping)\b/i.test(previousClause)
+      && /^(?:(?:(?:my|the|our|this|that)\s+)?(?:case|application|status|it|mine)\b|still (?:waiting|pending)\b|no update\b|i am still waiting\b|i'm still waiting\b)/i.test(clause.trim())) {
+      strongest = Math.max(strongest, 20);
+    }
+    if (clause.trim()) previousClause = clause;
+  }
+  return strongest;
+}
+
+function sourceStampingDelayAssociation(source: AssistantSource): number {
+  const context = `${source.title}\n${source.body}\n${source.parentContext ?? ''}`;
+  // Reply titles belong to their parent. A premium-processing reply must not
+  // inherit the parent's stamping title to masquerade as a stamping delay.
+  const direct = stampingDelayAssociation(source.body, context, source.kind === 'question' ? source.title : '');
+  if (source.kind === 'question') return Math.max(direct, stampingDelayAssociation(source.title, context));
+  if (direct) return direct;
+  // Preserve a short "mine is still pending" reply only when its parent is
+  // itself about a stamping delay and the reply has no competing subject.
+  if (source.body.length <= 300 && DELAY.test(source.body) && !new RegExp(OTHER_PROCESS.source, 'i').test(source.body)
+    && /^(?:mine|it|my case|my passport|still|no update|i am still waiting|i'm still waiting)\b/i.test(source.body.trim())
+    && (stampingDelayAssociation(`${source.title}\n${source.parentContext ?? ''}`, context)
+      || (new RegExp(STAMPING_EVENT.source, 'i').test(`${source.title}\n${source.parentContext ?? ''}`)
+        && !new RegExp(OTHER_PROCESS.source, 'i').test(`${source.title}\n${source.parentContext ?? ''}`)
+        && !/\b(?:plan|planning|future|next year|hoping)\b/i.test(`${source.title}\n${source.parentContext ?? ''}`)))) return 12;
+  return 0;
+}
+
+/** Stamping delay requires a related event, not whole-post keyword overlap. */
 export function assistantPostSearchScore(source: AssistantSource, query: AssistantPostSearchQuery): number {
   const own = `${source.title}\n${source.body}`;
   const full = `${own}\n${source.parentContext ?? ''}`;
   if (query.stamping && !stampingContext(full)) return 0;
   if (query.delay && !DELAY.test(own)) return 0;
+  const linkedDelay = query.stamping && query.delay ? sourceStampingDelayAssociation(source) : 0;
+  if (query.stamping && query.delay && !linkedDelay) return 0;
   const found = new Set(termsFor(full));
   const title = new Set(termsFor(source.title));
   const body = new Set(termsFor(source.body));
@@ -58,7 +118,7 @@ export function assistantPostSearchScore(source: AssistantSource, query: Assista
   const required = query.terms.filter(term => !conceptWords.has(term));
   if (required.some(term => !found.has(term))) return 0;
   const lexical = query.terms.reduce((score, term) => score + (body.has(term) ? 4 : 0) + (title.has(term) ? 3 : 0) + (found.has(term) ? 1 : 0), 0);
-  return lexical + (query.stamping ? 8 : 0) + (query.delay ? 8 : 0);
+  return lexical + (query.stamping ? 8 : 0) + (query.delay ? 8 : 0) + linkedDelay;
 }
 
 /** Keep a continuous source passage. No generated or paraphrased evidence. */
@@ -70,7 +130,8 @@ function searchExcerpt(source: AssistantSource, query: AssistantPostSearchQuery)
   for (let offset = 0; offset < body.length; offset += 180) {
     const chunk = body.slice(offset, offset + 360);
     const score = termsFor(chunk).filter(term => words.has(term)).length * 4
-      + (query.stamping && stampingContext(chunk) ? 3 : 0) + (query.delay && DELAY.test(chunk) ? 3 : 0);
+      + (query.stamping && stampingContext(chunk) ? 3 : 0) + (query.delay && DELAY.test(chunk) ? 3 : 0)
+      + (query.stamping && query.delay ? stampingDelayAssociation(chunk, `${source.title}\n${body}`) : 0);
     if (score > best) { start = offset; best = score; }
   }
   return body.slice(start, start + 360);
