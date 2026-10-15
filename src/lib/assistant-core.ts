@@ -1,6 +1,6 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v7';
+export const ASSISTANT_VERSION = 'grounded-chat-v8';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -65,8 +65,11 @@ export function redactAssistantText(text: string): string {
 
 // Only resolve references from recent user messages. An independent question
 // starts a new retrieval topic even when the chat still displays earlier turns.
+function standaloneFollowUp(question: string): boolean {
+  return /^(?:why|how|what happened next)[?!.]*$/i.test(question.trim().replace(/\s+/g, ' '));
+}
 function refersToEarlierTurn(question: string): boolean {
-  return /\b(?:it|its|that|those|them|they|their|there|these|same)\b|\bthis (?:one|case|post|thread|question|appointment)\b|^(?:and|what about|how about)\b|^how (?:long|much)\??$/i.test(question.trim());
+  return standaloneFollowUp(question) || /\b(?:it|its|that|those|them|they|their|there|these|same)\b|\bthis (?:one|case|post|thread|question|appointment)\b|^(?:and|what about|how about)\b|^how (?:long|much)\??$/i.test(question.trim());
 }
 export function assistantPreviousQuestions(input: AssistantRequest): string[] {
   if (!refersToEarlierTurn(input.question ?? '')) return [];
@@ -77,11 +80,16 @@ export function assistantPreviousQuestions(input: AssistantRequest): string[] {
 }
 
 export function assistantRetrievalQuestion(input: AssistantRequest): string {
-  return [input.question ?? '', ...assistantPreviousQuestions(input)].join(' ').slice(0, 1500);
+  const previous = assistantPreviousQuestions(input);
+  const question = input.question ?? '';
+  return (previous.length && standaloneFollowUp(question) ? previous : [question, ...previous]).join(' ').slice(0, 1500);
 }
 
 const SEARCH_STOPWORDS = new Set('what which when where why how did does do can could should would will is are was were a an the and or of to in for with on about this that these those it its they them their there you your me my we our us please tell explain summarize members member people report reports reported say said have has had any anyone know long take took'.split(' '));
 export function assistantSearchTerms(text: string): string[] {
+  // Continuation wording is not a new topic. In particular, 'happened' must
+  // not outrank the preceding topic merely because an unrelated post uses it.
+  if (standaloneFollowUp(text)) return [];
   return [...new Set((text.toLowerCase().normalize('NFKC').match(/[\p{L}\p{N}][\p{L}\p{M}\p{N}]*(?:-[\p{L}\p{N}][\p{L}\p{M}\p{N}]*)*/gu) ?? [])
     .filter(word => word.length >= 2 && !SEARCH_STOPWORDS.has(word))
     .map(word => word.length > 4 && word.endsWith('ies') ? `${word.slice(0, -3)}y`
