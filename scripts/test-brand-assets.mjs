@@ -38,6 +38,6 @@ test('branding remains visible and keyboard-accessible on narrow screens', async
   const css = await readFile(new URL('src/styles/globals.css', root), 'utf8');
   assert.match(css, /\.site-brand:focus-visible\s*\{[^}]*outline:/);
   assert.match(css, /\.brand-mark\s*\{[^}]*display: block;[^}]*object-fit: contain;/);
-  assert.match(css, /@media \(max-width: 379px\)[\s\S]*?\.site-brand \.brand-wordmark \{ display: none; \}/);
+  assert.match(css, /@media \(max-width: 479px\)[\s\S]*?\.site-brand \.brand-wordmark \{ display: none; \}/);
   assert(!css.includes('.brand-wood'));
 });

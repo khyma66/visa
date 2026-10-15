@@ -159,7 +159,7 @@
 }
 
 /* Keep the mark and all header actions usable on narrow phones. */
-@media (max-width: 379px) {
+@media (max-width: 479px) {
   .site-brand .brand-wordmark { display: none; }
 }
 
