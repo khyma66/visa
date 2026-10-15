@@ -1,8 +1,10 @@
 # VisaThreads production-only assistant rollout
 
+October 15 correction: see [production chat changes](ASSISTANT_CHAT_FIX_2026-10-15.md). Catch-up is now community-only. Historical release evidence below records the October 14 deployment.
+
 ## Owner decision — October 14, 2026
 
-AI features belong **only on https://visathreads.com**. The development website https://visa-central.com must have no chatbot or AI controls. Production work now includes post Q&A, discussion summaries, public/community Q&A and time-based catch-up. This supersedes the earlier dev-AI plan and the initial post-only activation plan.
+AI features belong **only on https://visathreads.com**. The development website https://visa-central.com must have no chatbot or AI controls. Production work now includes post Q&A, discussion summaries, public/community Q&A and community-only time-based catch-up. This supersedes the earlier dev-AI plan and the initial post-only activation plan.
 
 | Site | Worker | Supabase project | AI |
 |---|---|---|---|
@@ -62,7 +64,7 @@ The workflow:
 
 1. Runs repository checks, TypeScript, release-helper checks and the full high-severity dependency audit.
 2. Captures domain routing, exact active deployment and rollback version. Recovers the original archive's JSON literal from the deployed Worker without executing its source, then verifies it against the live feed. Requires the original **563 posts / 628 replies**, unique IDs, metadata and reviewed experience checks; neither recovered content nor Worker source is uploaded as an artifact.
-3. Evaluates the actual Workers AI model in a temporary authenticated evaluation Worker using synthetic evidence. Requires three passing samples for each of eleven representative cases (33 total), including every enabled mode, conflicts, unsupported policy, irrelevant evidence, prompt injection and multilingual content. Cleanup must succeed.
+3. Evaluates the actual Workers AI model in a temporary authenticated evaluation Worker using synthetic evidence. Requires three passing samples for each of fourteen representative cases (42 total), including every enabled mode, conflicts, unsupported policy, irrelevant evidence, prompt injection and multilingual content. Cleanup must succeed.
 4. Builds from clean, committed source. The identified historical preview is replaced under the exact pinned transition documented in `PRODUCTION_FEATURE_TRANSITION_2026-10-14.md`; its original source commit is unavailable, and source equivalence is not claimed. Pins production domains/database, preserves existing secrets, and adds the `ASSISTANT_AI` binding.
 5. Immediately before deployment, verifies the live baseline has not changed and the model acceptance receipt matches the exact commit, enabled features and model, is less than one hour old, and records removal of the temporary Worker.
 6. Deploys, then checks exact source provenance, unchanged archive, feature availability and anonymous/invalid-auth denials. Verification failure triggers rollback only if no intervening unrelated deployment exists.

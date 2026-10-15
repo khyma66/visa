@@ -28,6 +28,7 @@ export async function GET(request: Request) {
 
 const handle = createAssistantHandler({
   availability,
+  reportFailure: event => console.warn('assistant_request_failed', event),
   // The provider is read again during inference; deployments set immutable environment values.
   get model() { try { return providerModel(process.env.ASSISTANT_PROVIDER); } catch { return 'disabled'; } },
   cache: cloudflareAssistantCache(),
@@ -57,7 +58,9 @@ const handle = createAssistantHandler({
         binding = (env as unknown as { ASSISTANT_AI?: WorkersAiBinding }).ASSISTANT_AI;
       } catch { /* Local Next preview has no Workers AI binding. */ }
     }
-    return runAssistantModel(prompt, { provider: process.env.ASSISTANT_PROVIDER, apiKey: process.env.OPENAI_API_KEY, binding, signal });
+    return runAssistantModel(prompt, { provider: process.env.ASSISTANT_PROVIDER, apiKey: process.env.OPENAI_API_KEY, binding, signal,
+      reportFailure: reason => console.warn('assistant_provider_failed', { reason }),
+    });
   },
 });
 

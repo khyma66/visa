@@ -1,17 +1,30 @@
 import { AssistantError, readBoundedJson } from './assistant-core';
 
-export type AssistantPrompt = { system: string; user: string };
+export type AssistantPrompt = { system: string; user: string; sourceIds?: string[] };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
+export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'timeout' | 'cancelled' | 'provider_error' | 'incomplete_output' | 'empty_output' | 'oversized_output';
 export const WORKERS_ASSISTANT_MODEL = '@cf/openai/gpt-oss-120b';
 export const OPENAI_ASSISTANT_MODEL = 'gpt-6-luna';
-const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], properties: { sourceId: { type: 'string' }, quote: { type: 'string' } } };
-const claim = { type: 'object', additionalProperties: false, required: ['text', 'evidence'], properties: { text: { type: 'string' }, evidence: { type: 'array', items: evidence } } };
+const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], properties: { sourceId: { type: 'string', minLength: 1 }, quote: { type: 'string', minLength: 12, maxLength: 400 } } };
+const claim = { type: 'object', additionalProperties: false, required: ['text', 'evidence'], properties: { text: { type: 'string', minLength: 1, maxLength: 700 }, evidence: { type: 'array', minItems: 1, maxItems: 4, items: evidence } } };
 export const ASSISTANT_OUTPUT_SCHEMA = { type: 'object', additionalProperties: false, required: ['status', 'disagreements', 'claims', 'unanswered'], properties: {
   status: { type: 'string', enum: ['answered', 'insufficient'] },
-  disagreements: { type: 'array', description: 'Populate this FIRST. Every comparison of contradictory or conflicting reports belongs here, with exact quotes and source IDs from at least two disagreeing sources. An empty array means no relevant conflicting reports were found. Do not move such comparisons into claims instead.', items: claim },
-  claims: { type: 'array', description: 'Individual attributed factual reports supported by source quotes. When reports conflict, state each side individually here and put the comparison in disagreements. Do not use a conflict-comparison claim as a substitute for filling disagreements.', items: claim },
-  unanswered: { type: 'array', items: { type: 'string' } },
+  disagreements: { type: 'array', maxItems: 3, description: 'Populate this FIRST. Every comparison of contradictory or conflicting reports belongs here, with exact quotes and source IDs from at least two disagreeing sources. An empty array means no relevant conflicting reports were found. Do not move such comparisons into claims instead.', items: { ...claim, properties: { ...claim.properties, evidence: { ...claim.properties.evidence, minItems: 2 } } } },
+  claims: { type: 'array', maxItems: 6, description: 'Individual attributed factual reports supported by source quotes. When reports conflict, state each side individually here and put the comparison in disagreements. Do not use a conflict-comparison claim as a substitute for filling disagreements.', items: claim },
+  unanswered: { type: 'array', maxItems: 4, items: { type: 'string', maxLength: 400 } },
 } };
+
+/** Constrain citations to the server-selected corpus before generation. */
+export function assistantOutputSchema(prompt: AssistantPrompt) {
+  if (!prompt.sourceIds?.length) return ASSISTANT_OUTPUT_SCHEMA;
+  const sourceId = { ...evidence.properties.sourceId, enum: [...new Set(prompt.sourceIds)] };
+  const boundedEvidence = { ...evidence, properties: { ...evidence.properties, sourceId } };
+  const boundedClaim = (minimum: number) => ({ ...claim, properties: { ...claim.properties, evidence: { ...claim.properties.evidence, minItems: minimum, items: boundedEvidence } } });
+  return { ...ASSISTANT_OUTPUT_SCHEMA, properties: { ...ASSISTANT_OUTPUT_SCHEMA.properties,
+    claims: { ...ASSISTANT_OUTPUT_SCHEMA.properties.claims, items: boundedClaim(1) },
+    disagreements: { ...ASSISTANT_OUTPUT_SCHEMA.properties.disagreements, items: boundedClaim(2) },
+  } };
+}
 
 export function providerModel(provider: string | undefined): string {
   if (provider === 'workers-ai') return WORKERS_ASSISTANT_MODEL;
@@ -22,15 +35,19 @@ export function providerModel(provider: string | undefined): string {
 export async function runAssistantModel(prompt: AssistantPrompt, options: {
   provider: string | undefined; apiKey?: string; binding?: WorkersAiBinding; signal?: AbortSignal;
   fetcher?: typeof fetch;
+  reportFailure?(reason: AssistantProviderFailure): void;
 }): Promise<string> {
   const model = providerModel(options.provider);
+  const schema = assistantOutputSchema(prompt);
   const timeout = AbortSignal.timeout(25_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   const unavailable = () => new AssistantError(503, 'The assistant is temporarily unavailable. Please try again shortly.');
+  let reason: AssistantProviderFailure = 'provider_error';
+  const fail = (value: AssistantProviderFailure): never => { reason = value; throw unavailable(); };
   try {
     signal.throwIfAborted();
     if (options.provider === 'workers-ai') {
-      if (!options.binding) throw unavailable();
+      if (!options.binding) return fail('missing_binding');
       // Bounded single inference. No retries or automatic escalation multiplying costs.
       let stop: (() => void) | undefined;
       const aborted = new Promise<never>((_, reject) => { stop = () => reject(unavailable()); signal.addEventListener('abort', stop, { once: true }); });
@@ -38,33 +55,40 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         const value = await Promise.race([options.binding.run(model, {
           messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
           max_tokens: 4096, reasoning_effort: 'low', temperature: 0, seed: 39173, store: false,
-          response_format: { type: 'json_schema', json_schema: { name: 'discussion_answer', strict: true, schema: ASSISTANT_OUTPUT_SCHEMA } },
+          response_format: { type: 'json_schema', json_schema: { name: 'discussion_answer', strict: true, schema } },
         }), aborted]);
         if (value && typeof value === 'object') {
           const payload = value as { response?: unknown; choices?: { finish_reason?: string; message?: { content?: unknown } }[] };
           const first = payload.choices?.[0];
-          if (first && first.finish_reason !== 'stop') throw unavailable();
+          if (first && first.finish_reason !== 'stop') fail('incomplete_output');
           const content = first?.message?.content ?? payload.response;
           const result = typeof content === 'string' ? content : content ? JSON.stringify(content) : '';
           if (result && result.length <= 24_000) return result;
+          if (result.length > 24_000) fail('oversized_output');
         }
-        throw unavailable();
+        fail('empty_output');
       } finally { if (stop) signal.removeEventListener('abort', stop); }
     }
-    if (!options.apiKey) throw unavailable();
+    if (!options.apiKey) fail('missing_key');
     const response = await (options.fetcher ?? fetch)('https://api.openai.com/v1/responses', {
       method: 'POST', redirect: 'error', signal,
       headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, store: false, reasoning: { effort: 'none' }, max_output_tokens: 1600,
         input: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
-        text: { format: { type: 'json_schema', name: 'discussion_answer', strict: true, schema: ASSISTANT_OUTPUT_SCHEMA } },
+        text: { format: { type: 'json_schema', name: 'discussion_answer', strict: true, schema } },
       }),
     });
     if (!response.ok) { await response.body?.cancel(); throw unavailable(); }
     const data = await readBoundedJson(response, 100_000) as { status?: string; output?: { type?: string; content?: { type?: string; text?: string }[] }[] };
-    if (data.status !== 'completed' || !Array.isArray(data.output)) throw unavailable();
+    if (data.status !== 'completed' || !Array.isArray(data.output)) return fail('incomplete_output');
     const output = data.output.filter(item => item.type === 'message').flatMap(item => item.content ?? []).filter(part => part.type === 'output_text').map(part => part.text ?? '').join('');
-    if (!output || output.length > 24_000) throw unavailable();
+    if (!output) fail('empty_output');
+    if (output.length > 24_000) fail('oversized_output');
     return output;
-  } catch { throw unavailable(); }
+  } catch {
+    if (options.signal?.aborted) reason = 'cancelled';
+    else if (timeout.aborted) reason = 'timeout';
+    try { options.reportFailure?.(reason); } catch { /* telemetry cannot change the response */ }
+    throw unavailable();
+  }
 }

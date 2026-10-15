@@ -1,0 +1,258 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
+import ts from 'typescript';
+
+const dependencies = {};
+async function compile(name) {
+  const code = ts.transpileModule(await readFile(new URL(`../src/lib/${name}.ts`, import.meta.url), 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
+  }).outputText;
+  const resolved = code.replace(/(from\s+)(['"])([^'"]+)\2/g, (_, prefix, _quote, dependency) => {
+    assert(dependencies[dependency], `Unknown dependency ${dependency}`);
+    return prefix + JSON.stringify(dependencies[dependency]);
+  });
+  return `data:text/javascript;base64,${Buffer.from(resolved).toString('base64')}`;
+}
+dependencies['./assistant-core'] = await compile('assistant-core');
+const core = await import(dependencies['./assistant-core']);
+dependencies['./assistant-provider'] = await compile('assistant-provider');
+const provider = await import(dependencies['./assistant-provider']);
+const service = await import(await compile('assistant-service'));
+
+const id = '00000000-0000-4000-8000-000000000001';
+const secret = 'private-diagnostic-marker';
+const token = 'private_token_'.repeat(4);
+const source = {
+  id: `q:${id}`, questionId: id, communityId: null, kind: 'question',
+  title: 'Appointment experience', body: 'My passport arrived on Friday.',
+  createdAt: '2026-10-10T00:00:00Z', updatedAt: '2026-10-10T00:00:00Z',
+  url: `/questions/${id}`, provenance: 'member',
+};
+const input = { mode: 'ask', scope: { kind: 'post', id }, question: `When did it arrive? ${secret}` };
+const output = {
+  status: 'answered', disagreements: [], unanswered: [],
+  claims: [{ text: 'The member said Friday.', evidence: [{ sourceId: source.id, quote: source.body }] }],
+};
+const prompt = { system: `Internal instructions ${secret}`, user: `User question ${secret}` };
+const request = () => new Request('https://visathreads.com/api/assistant', {
+  method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(input),
+});
+const privateError = () => new Error(`${secret} ${token} private-user@example.invalid`);
+function assertPrivate(value) {
+  const serialized = JSON.stringify(value);
+  for (const forbidden of [secret, token, 'private-user@example.invalid', 'actor-private-id', source.id, source.body]) {
+    assert(!serialized.includes(forbidden), `Diagnostic or error response exposed ${forbidden}`);
+  }
+}
+function harness(overrides = {}) {
+  const failures = [];
+  const state = { reads: 0, generations: 0, reservations: 0 };
+  const session = {
+    actor: 'actor-private-id',
+    corpus: async () => { state.reads++; return { sources: [source], partial: false }; },
+    reserve: async () => { state.reservations++; return true; },
+  };
+  const handler = service.createAssistantHandler({
+    availability: () => ({ posts: true, communities: true, catchup: true }), model: 'test-model',
+    authenticate: async () => session,
+    generate: async () => { state.generations++; return JSON.stringify(output); },
+    reportFailure: event => failures.push(event), ...overrides,
+  });
+  return { handler, state, session, failures };
+}
+
+test('runtime failures identify the failing stage without logging inputs, account IDs, or errors', async () => {
+  for (const stage of ['request', 'authentication', 'retrieval', 'quota', 'generation', 'revalidation']) {
+    const item = harness();
+    if (stage === 'retrieval') item.session.corpus = async () => { throw privateError(); };
+    if (stage === 'quota') item.session.reserve = async () => { throw privateError(); };
+    if (stage === 'revalidation') item.session.corpus = async () => {
+      if (item.state.reads++ > 0) throw privateError();
+      return { sources: [source], partial: false };
+    };
+    const overrides = stage === 'request' ? { availability: () => ({ posts: false }) }
+      : stage === 'authentication' ? { authenticate: async () => { throw privateError(); } }
+      : stage === 'generation' ? { generate: async () => { throw privateError(); } } : {};
+    const current = Object.keys(overrides).length ? harness(overrides) : item;
+    const response = await current.handler(request());
+    assert.equal(response.status, 503, stage);
+    assert.equal(current.failures.length, 1, stage);
+    assert.equal(current.failures[0].stage, stage);
+    assert.equal(current.failures[0].status, 503);
+    assert.deepEqual(Object.keys(current.failures[0]).sort(), ['stage', 'status']);
+    assertPrivate(current.failures);
+    assertPrivate(await response.json());
+  }
+});
+
+test('malformed model JSON and unsupported citations report distinct controlled validation codes', async () => {
+  const invalidCitation = { ...output, claims: [{ text: secret, evidence: [{ sourceId: source.id, quote: `Invented source quote ${secret}` }] }] };
+  for (const [raw, code] of [[`${secret}{`, 'output_json'], [JSON.stringify(invalidCitation), 'citation_quote']]) {
+    const { handler, failures } = harness({ generate: async () => raw });
+    const response = await handler(request());
+    assert.equal(response.status, 502);
+    assert.deepEqual(failures, [{ stage: 'validation', status: 502, code }]);
+    assertPrivate(failures);
+    assertPrivate(await response.json());
+  }
+});
+
+test('diagnostic callback exceptions cannot replace the original safe response', async () => {
+  const normal = harness({ generate: async () => { throw privateError(); } });
+  let calls = 0;
+  const broken = harness({ generate: async () => { throw privateError(); }, reportFailure: () => { calls++; throw privateError(); } });
+  const expected = await normal.handler(request());
+  const response = await broken.handler(request());
+  assert.equal(calls, 1);
+  assert.equal(response.status, expected.status);
+  assert.deepEqual(await response.json(), await expected.json());
+});
+
+test('successful, empty, and expected quota-denied requests do not report server failures', async () => {
+  const success = harness();
+  assert.equal((await success.handler(request())).status, 200);
+  assert.deepEqual(success.failures, []);
+  const empty = harness();
+  empty.session.corpus = async () => ({ sources: [], partial: false });
+  assert.equal((await (await empty.handler(request())).json()).status, 'insufficient');
+  assert.deepEqual(empty.failures, []);
+  assert.equal(empty.state.generations, 0);
+  const quota = harness();
+  quota.session.reserve = async () => false;
+  assert.equal((await quota.handler(request())).status, 429);
+  assert.deepEqual(quota.failures, []);
+  assert.equal(quota.state.generations, 0);
+});
+
+test('duplicate requests sharing failed inference retain the same failure stage', async () => {
+  let release;
+  const paused = new Promise(resolve => { release = resolve; });
+  let generations = 0, lookups = 0;
+  const { handler, failures } = harness({
+    generate: async () => { generations++; await paused; throw privateError(); },
+    cache: { get: async () => { lookups++; return null; }, put: async () => {} },
+  });
+  const first = handler(request()), second = handler(request());
+  while (generations === 0 || lookups < 2) await new Promise(resolve => setImmediate(resolve));
+  // Let both callers reach the shared operation before rejecting it.
+  await new Promise(resolve => setImmediate(resolve));
+  release();
+  const responses = await Promise.all([first, second]);
+  assert.deepEqual(responses.map(response => response.status), [503, 503]);
+  assert.equal(generations, 1);
+  assert.deepEqual(failures, [{ stage: 'generation', status: 503 }, { stage: 'generation', status: 503 }]);
+  assertPrivate(failures);
+});
+
+test('Workers AI diagnostics distinguish missing binding, provider failure, and unusable output', async () => {
+  const cases = [
+    ['missing_binding', undefined],
+    ['provider_error', { run: async () => { throw privateError(); } }],
+    ['incomplete_output', { run: async () => ({ choices: [{ finish_reason: 'length', message: { content: secret } }] }) }],
+    ['empty_output', { run: async () => ({ choices: [{ finish_reason: 'stop', message: { content: '' } }] }) }],
+    ['oversized_output', { run: async () => ({ response: secret.repeat(2000) }) }],
+  ];
+  for (const [reason, binding] of cases) {
+    const events = [];
+    await assert.rejects(() => provider.runAssistantModel(prompt, { provider: 'workers-ai', binding, reportFailure: value => events.push(value) }), error => {
+      assert.equal(error.status, 503); assertPrivate({ message: error.message }); return true;
+    });
+    assert.deepEqual(events, [reason]); assertPrivate(events);
+  }
+});
+
+test('OpenAI diagnostics never expose upstream error responses or API keys', async () => {
+  for (const [reason, options] of [
+    ['missing_key', {}],
+    ['provider_error', { apiKey: token, fetcher: async () => new Response(secret, { status: 429 }) }],
+    ['incomplete_output', { apiKey: token, fetcher: async () => Response.json({ status: 'incomplete', error: secret }) }],
+    ['empty_output', { apiKey: token, fetcher: async () => Response.json({ status: 'completed', output: [] }) }],
+  ]) {
+    const events = [];
+    await assert.rejects(() => provider.runAssistantModel(prompt, { provider: 'openai', ...options, reportFailure: value => events.push(value) }), error => {
+      assert.equal(error.status, 503); assertPrivate({ message: error.message }); return true;
+    });
+    assert.deepEqual(events, [reason]); assertPrivate(events);
+  }
+});
+
+test('cancellation and the provider deadline have separate safe reasons', async (t) => {
+  const cancelled = new AbortController();
+  cancelled.abort(privateError());
+  let calls = 0;
+  const cancellations = [];
+  await assert.rejects(() => provider.runAssistantModel(prompt, {
+    provider: 'workers-ai', signal: cancelled.signal,
+    binding: { run: async () => { calls++; return {}; } }, reportFailure: reason => cancellations.push(reason),
+  }), error => error.status === 503);
+  assert.equal(calls, 0);
+  assert.deepEqual(cancellations, ['cancelled']);
+
+  const deadline = new AbortController();
+  t.mock.method(AbortSignal, 'timeout', milliseconds => { assert.equal(milliseconds, 25000); return deadline.signal; });
+  const timeouts = [];
+  const running = provider.runAssistantModel(prompt, {
+    provider: 'workers-ai', binding: { run: async () => new Promise(() => {}) }, reportFailure: reason => timeouts.push(reason),
+  });
+  deadline.abort(privateError());
+  await assert.rejects(() => running, error => { assert.equal(error.status, 503); assertPrivate({ message: error.message }); return true; });
+  assert.deepEqual(timeouts, ['timeout']);
+});
+
+test('provider diagnostic failure is contained and successful inference emits no failure', async () => {
+  let reports = 0;
+  await assert.rejects(() => provider.runAssistantModel(prompt, {
+    provider: 'workers-ai', reportFailure: () => { reports++; throw privateError(); },
+  }), error => { assert.equal(error.status, 503); assertPrivate({ message: error.message }); return true; });
+  assert.equal(reports, 1);
+  const events = [];
+  const result = await provider.runAssistantModel(prompt, {
+    provider: 'workers-ai', binding: { run: async () => ({ response: JSON.stringify(output) }) }, reportFailure: reason => events.push(reason),
+  });
+  assert.equal(result, JSON.stringify(output));
+  assert.deepEqual(events, []);
+});
+
+test('both providers receive bounded schemas citing only the server-selected sources', async () => {
+  const otherId = '00000000-0000-4000-8000-000000000002';
+  const unrelatedId = 'q:00000000-0000-4000-8000-000000000099';
+  const reply = { ...source, id: `a:${otherId}`, kind: 'reply', body: 'My passport arrived on Thursday.' };
+  const corpus = core.prepareAssistantCorpus({ sources: [source, reply], partial: false }, input);
+  // Untrusted browser fields cannot add IDs to the generated provider schema.
+  const parsed = core.parseAssistantRequest({ ...input, sourceIds: [unrelatedId], sources: [{ id: unrelatedId }] });
+  const boundedPrompt = core.assistantPrompt(parsed, corpus);
+  const schemas = [];
+  const workersResult = await provider.runAssistantModel(boundedPrompt, {
+    provider: 'workers-ai', binding: { run: async (_model, payload) => {
+      schemas.push(payload.response_format.json_schema.schema);
+      return { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(output) } }] };
+    } },
+  });
+  const openaiResult = await provider.runAssistantModel(boundedPrompt, {
+    provider: 'openai', apiKey: token, fetcher: async (_url, init) => {
+      schemas.push(JSON.parse(init.body).text.format.schema);
+      return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(output) }] }] });
+    },
+  });
+  for (const schema of schemas) {
+    for (const [key, minimum] of [['claims', 1], ['disagreements', 2]]) {
+      const claim = schema.properties[key].items;
+      const evidence = claim.properties.evidence;
+      assert.deepEqual(evidence.items.properties.sourceId.enum, [source.id, reply.id]);
+      assert(!evidence.items.properties.sourceId.enum.includes(unrelatedId));
+      assert.equal(evidence.minItems, minimum);
+      assert.equal(evidence.maxItems, 4);
+      assert.equal(evidence.items.properties.quote.minLength, 12);
+      assert.equal(evidence.items.properties.quote.maxLength, 400);
+      assert.equal(claim.properties.text.maxLength, 700);
+    }
+    assert.equal(schema.properties.unanswered.items.maxLength, 400);
+  }
+  for (const raw of [workersResult, openaiResult]) {
+    assert.equal(core.validateAssistantOutput(raw, corpus).status, 'answered');
+  }
+  const laterSchema = provider.assistantOutputSchema(core.assistantPrompt(input, { sources: [reply], partial: false }));
+  assert.deepEqual(laterSchema.properties.claims.items.properties.evidence.items.properties.sourceId.enum, [reply.id]);
+  assert.equal(provider.ASSISTANT_OUTPUT_SCHEMA.properties.claims.items.properties.evidence.items.properties.sourceId.enum, undefined);
+});

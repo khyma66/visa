@@ -15,7 +15,7 @@ const dependencies = {
   'next/navigation': dataUrl('export function usePathname(){return globalThis.__assistantHarness.pathname;}'),
   './AuthProvider': dataUrl('export function useAuth(){return globalThis.__assistantHarness.auth;}'),
   '@/lib/supabase/client': dataUrl('export function getSupabase(){return {auth:{getSession:()=>globalThis.__assistantHarness.session()}};}'),
-  'lucide-react': dataUrl('function Icon(){return null;} export {Icon as ChevronDown,Icon as Clock3,Icon as MessageSquareText,Icon as Sparkles};'),
+  'lucide-react': dataUrl('function Icon(){return null;} export {Icon as ChevronDown,Icon as Clock3,Icon as ArrowUp,Icon as Square,Icon as Sparkles};'),
 };
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText.replace(/(from\s+)(['"])([^'"]+)\2/g, (_match, prefix, _quote, name) => {
   assert(dependencies[name], `Unmapped dependency ${name}`);
@@ -51,7 +51,7 @@ class Harness {
 }
 function nodes(node) { if (Array.isArray(node)) return node.flatMap(nodes); if (!node || typeof node !== 'object') return []; if (typeof node.type === 'function') return nodes(node.type(node.props)); return [node, ...nodes(node.props?.children)]; }
 function textOf(node) { if (Array.isArray(node)) return node.map(textOf).join(' '); if (node == null || typeof node === 'boolean') return ''; if (typeof node !== 'object') return String(node); return textOf(typeof node.type === 'function' ? node.type(node.props) : node.props?.children); }
-function button(h, label) { const value = nodes(h.tree).find(node => node.type === 'button' && textOf(node).trim() === label); assert(value, `Missing button ${label}`); return value; }
+function button(h, label) { const value = nodes(h.tree).find(node => node.type === 'button' && (node.props['aria-label'] ?? textOf(node).trim()) === label); assert(value, `Missing button ${label}`); return value; }
 function changeQuestion(h, value) { nodes(h.tree).find(node => node.type === 'textarea').props.onChange({ target: { value } }); h.render(); }
 function choose(h, label) { button(h, label).props.onClick(); h.render(); }
 function submit(h) { const promise = nodes(h.tree).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} }); h.render(); return promise; }
@@ -76,8 +76,8 @@ test('anonymous sign-in returns to the post, demo never contacts the assistant',
 test('post rollout enables global post questions while community and catch-up remain gated', async () => {
   const h = new Harness(); h.availability = { posts: true, communities: false, catchup: false };
   try {
-    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle(); assert(button(h, 'Get answer')); assert(!textOf(h.tree).includes('Catch me up'));
-    h.render({ scope: { kind: 'community', id: 'community-a' }, defaultOpen: true }); await h.settle(); assert.match(textOf(h.tree), /later rollout/); assert(!nodes(h.tree).some(node => node.type === 'form'));
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle(); assert(button(h, 'Send message')); assert(!textOf(h.tree).includes('Catch me up'));
+    h.render({ scope: { kind: 'community', id: 'community-a' }, defaultOpen: true }); await h.settle(); assert.match(textOf(h.tree), /unavailable here/); assert(!nodes(h.tree).some(node => node.type === 'form'));
   } finally { h.close(); }
 });
 
@@ -91,7 +91,7 @@ test('bounded questions use the current bearer token and never submit client evi
     assert.deepEqual(calls[0].body, { mode: 'ask', scope: { kind: 'post', id: 'post-a' }, question: 'Question number 0' });
     assert.deepEqual(calls[4].body.previousQuestions, ['Question number 1', 'Question number 2', 'Question number 3']);
     assert.equal(h.storage.size, 0, 'Chat contents must not be persisted');
-    choose(h, 'Start a new question'); changeQuestion(h, 'A fresh topic'); await submit(h); await h.settle();
+    choose(h, 'New chat'); changeQuestion(h, 'A fresh topic'); await submit(h); await h.settle();
     assert.equal(h.calls.at(-1).body.previousQuestions, undefined);
   } finally { h.close(); }
 });
@@ -106,14 +106,18 @@ test('evidence renders as escaped text with dates and only internal discussion l
   } finally { h.close(); }
 });
 
-test('editing cancels the active request, duplicate submits and late results cannot leak', async () => {
+test('stop cancels the active request, restores the draft, and rejects duplicate submits and late results', async () => {
   const h = new Harness(), pending = defer(); h.post = () => pending.promise;
   try {
     h.render(); await h.settle(); changeQuestion(h, 'Old question'); const first = submit(h); void submit(h); await h.settle();
     assert.equal(h.calls.filter(call => call.method === 'POST').length, 1);
-    const active = h.calls.at(-1); changeQuestion(h, 'New question'); assert.equal(active.signal.aborted, true);
+    assert.match(textOf(h.tree), /Thinking/);
+    assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.disabled, true);
+    const active = h.calls.at(-1); choose(h, 'Stop response'); assert.equal(active.signal.aborted, true);
+    assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.value, 'Old question');
+    changeQuestion(h, 'New question');
     pending.resolve(reply(fixture())); await first; await h.settle(); assert.doesNotMatch(textOf(h.tree), /Members reported/);
-    assert.equal(button(h, 'Get answer').props.disabled, false);
+    assert.equal(button(h, 'Send message').props.disabled, false);
   } finally { h.close(); }
 });
 
@@ -185,4 +189,131 @@ test('unmount aborts generation before an old result can be displayed', async ()
   const h = new Harness(), pending = defer(); h.post = () => pending.promise;
   h.render(); await h.settle(); changeQuestion(h, 'What happened?'); const work = submit(h); await h.settle();
   const signal = h.calls.at(-1).signal; h.close(); assert.equal(signal.aborted, true); pending.resolve(reply(fixture())); await work;
+});
+
+test('catch-up is community-only and summary is post-only even when every feature is enabled', async () => {
+  const h = new Harness();
+  try {
+    for (const [scope, catchup, summary] of [[{ kind: 'public' }, false, false], [{ kind: 'post', id: 'post-a' }, false, true], [{ kind: 'community', id: 'community-a' }, true, false]]) {
+      h.render({ scope, defaultOpen: true }); await h.settle();
+      const labels = nodes(h.tree).filter(node => node.type === 'button').map(textOf);
+      assert.equal(labels.some(label => label.trim() === 'Catch me up'), catchup);
+      assert.equal(labels.some(label => label.trim() === 'Summarize'), summary);
+    }
+  } finally { h.close(); }
+});
+
+test('chat keeps ordered user and assistant messages while the next question is drafted', async () => {
+  const h = new Harness();
+  try {
+    h.render(); await h.settle();
+    changeQuestion(h, 'What documents were requested?'); await submit(h); await h.settle();
+    assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.value, '');
+    changeQuestion(h, 'Were originals required?');
+    assert.match(textOf(h.tree), /Members reported document requests/);
+    h.post = async () => reply(fixture({ claims: [{ text: 'The post does not specify originals.', evidence: [{ sourceId: 'reply-a', quote: 'They asked for documents.' }] }] }));
+    await submit(h); await h.settle();
+    const log = nodes(h.tree).find(node => node.props.role === 'log');
+    const text = textOf(log);
+    assert(text.indexOf('What documents were requested?') < text.indexOf('Members reported document requests.'));
+    assert(text.indexOf('Members reported document requests.') < text.indexOf('Were originals required?'));
+    assert(text.indexOf('Were originals required?') < text.indexOf('The post does not specify originals.'));
+    assert.deepEqual(h.calls.at(-1).body.previousQuestions, ['What documents were requested?']);
+    const details = nodes(h.tree).filter(node => node.type === 'details');
+    assert(details.length >= 2);
+    assert(details.every(node => !node.props.open), 'Citation quotes should be collapsed by default');
+    choose(h, 'Summarize'); choose(h, 'Ask');
+    assert.match(textOf(h.tree), /The post does not specify originals/);
+  } finally { h.close(); }
+});
+
+test('failed answers preserve the draft and retry the same turn without repeating prior context', async () => {
+  const h = new Harness(); h.post = async () => reply({ error: 'private upstream detail' }, 502);
+  try {
+    h.render(); await h.settle(); changeQuestion(h, 'What documents were requested?'); await submit(h); await h.settle();
+    assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.value, 'What documents were requested?');
+    assert.equal(button(h, 'Retry answer').props.disabled, false);
+    assert.doesNotMatch(textOf(h.tree), /private upstream/);
+    h.post = async () => reply(fixture()); await submit(h); await h.settle();
+    assert.equal(nodes(h.tree).filter(node => node.props['aria-label'] === 'Your message').length, 1);
+    assert.equal(h.calls.at(-1).body.previousQuestions, undefined);
+    assert.match(textOf(h.tree), /Members reported document requests/);
+  } finally { h.close(); }
+});
+
+test('Enter submits, Shift+Enter adds a line, and composition does not submit', async () => {
+  const h = new Harness(); let submitted = 0, prevented = 0;
+  try {
+    h.render(); await h.settle(); changeQuestion(h, 'What documents were requested?');
+    const textarea = nodes(h.tree).find(node => node.type === 'textarea');
+    const event = { key: 'Enter', shiftKey: false, keyCode: 13, nativeEvent: { isComposing: false }, preventDefault() { prevented++; }, currentTarget: { form: { requestSubmit() { submitted++; } } } };
+    textarea.props.onKeyDown({ ...event, shiftKey: true });
+    textarea.props.onKeyDown({ ...event, nativeEvent: { isComposing: true } });
+    textarea.props.onKeyDown({ ...event, keyCode: 229 });
+    assert.equal(submitted, 0); assert.equal(prevented, 0);
+    textarea.props.onKeyDown(event);
+    assert.equal(submitted, 1); assert.equal(prevented, 1);
+    changeQuestion(h, 'a');
+    nodes(h.tree).find(node => node.type === 'textarea').props.onKeyDown(event);
+    assert.equal(submitted, 1, 'Too-short questions must not submit');
+  } finally { h.close(); }
+});
+
+test('account and scope switches abort pending requests and hide drafts before effects run', async () => {
+  for (const switchKind of ['account', 'scope']) {
+    const h = new Harness(), pending = defer(); h.post = () => pending.promise;
+    try {
+      h.render(); await h.settle(); changeQuestion(h, 'Private old question'); const work = submit(h); await h.settle();
+      const active = h.calls.at(-1);
+      if (switchKind === 'account') { h.auth.user = { id: 'user-b' }; h.render(); }
+      else h.render({ scope: { kind: 'post', id: 'post-b' }, defaultOpen: true });
+      assert.doesNotMatch(textOf(h.tree), /Private old question/);
+      assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.value, '');
+      await h.settle(); assert.equal(active.signal.aborted, true);
+      pending.resolve(reply(fixture())); await work; await h.settle();
+      assert.doesNotMatch(textOf(h.tree), /Members reported/);
+      h.post = async () => reply(fixture()); changeQuestion(h, 'A fresh question'); await submit(h); await h.settle();
+      assert.equal(h.calls.at(-1).body.previousQuestions, undefined);
+    } finally { h.close(); }
+  }
+});
+
+test('empty community catch-up shows the server explanation once without unrelated visa advice', async () => {
+  const h = new Harness();
+  const explanation = 'No new posts or replies in this community during that time range.';
+  h.post = async () => reply(fixture({ status: 'insufficient', claims: [], unanswered: [explanation], sources: [], coverage: { sourceCount: 0, partial: false } }));
+  try {
+    h.render({ scope: { kind: 'community', id: 'community-a' }, defaultOpen: true }); await h.settle();
+    choose(h, 'Catch me up'); await submit(h); await h.settle();
+    const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
+    assert.equal(textOf(response).split(explanation).length - 1, 1);
+    assert.doesNotMatch(textOf(response), /Still unclear|visa type|location/);
+    assert.equal(h.storage.size, 0);
+  } finally { h.close(); }
+});
+
+test('unsupported questions display the server explanation rather than duplicating uncertainty', async () => {
+  const h = new Harness();
+  const explanation = 'I couldn’t find a supported answer in these discussions. Try a more specific question.';
+  h.post = async () => reply(fixture({ status: 'insufficient', claims: [], unanswered: [explanation] }));
+  try {
+    h.render(); await h.settle(); changeQuestion(h, 'Is my visa guaranteed?'); await submit(h); await h.settle();
+    const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
+    assert.equal(textOf(response).split(explanation).length - 1, 1);
+    assert.doesNotMatch(textOf(response), /Still unclear/);
+  } finally { h.close(); }
+});
+
+test('source verification and changed-discussion failures explain retry while retaining the question', async () => {
+  for (const [status, explanation] of [[502, 'I couldn’t verify the sources for that answer. Try again.'], [409, 'This discussion changed. Try again for the latest answer.']]) {
+    const h = new Harness(); h.post = async () => reply({ error: 'private provider diagnostic' }, status);
+    try {
+      h.render(); await h.settle(); changeQuestion(h, 'How long did it take?'); await submit(h); await h.settle();
+      const alert = nodes(h.tree).find(node => node.props.role === 'alert');
+      assert.equal(textOf(alert).trim(), explanation);
+      assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.value, 'How long did it take?');
+      assert.equal(button(h, 'Retry answer').props.disabled, false);
+      assert.doesNotMatch(textOf(h.tree), /private provider diagnostic/);
+    } finally { h.close(); }
+  }
 });

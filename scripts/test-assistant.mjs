@@ -71,7 +71,7 @@ test('summary and catch-up are explicit evidence tasks without a missing questio
   assert.match(summary.system,/Preserve key dates or named days/);
   assert.match(summary.system,/return status answered with cited claims even though there is no question/);
   const data=JSON.parse(summary.user);assert.equal(data.task,'summary');assert.equal('question' in data,false);assert.equal(data.sources[0].body,source.body);
-  const catchup=core.assistantPrompt({mode:'catchup',scope:{kind:'public'},since:'2026-10-12T00:00:00Z',until:'2026-10-13T00:00:00Z'},{sources:[source],partial:false});
+  const catchup=core.assistantPrompt({mode:'catchup',scope:{kind:'community',id},since:'2026-10-12T00:00:00Z',until:'2026-10-13T00:00:00Z'},{sources:[source],partial:false});
   assert.match(catchup.system,/No user question is required for catch-up/);assert.equal('question' in JSON.parse(catchup.user),false);
   assert.match(summary.system,/Never infer current visa rules/);assert.match(summary.system,/exact supporting quotes/);
   assert.match(summary.system,/Explicitly stated individual events, outcomes, dates and timing ARE evidence/);
@@ -150,4 +150,81 @@ test('Workers AI uses structured reasoning responses and rejects truncated chat 
   assert.equal(await run('stop'),JSON.stringify(output));await assert.rejects(()=>run('length'));
   const text=await provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async()=>({response:JSON.stringify(output)})}});
   assert.equal(text,JSON.stringify(output));
+});
+
+test('catch-up is community-only at the request and handler boundary', async()=>{
+  const {handler,state}=harness();
+  for(const scope of [{kind:'public'},{kind:'post',id}]) {
+    const value={mode:'catchup',scope,since:'2026-10-12T00:00:00Z',until:'2026-10-13T00:00:00Z'};
+    assert.throws(()=>core.parseAssistantRequest(value,now),error=>error.status===400);
+    assert.equal((await handler(request(value))).status,400);
+  }
+  assert.equal(state.reads,0);assert.equal(state.generated,0);assert.equal(state.reserved,0);
+});
+test('ask prompt answers the latest question concisely and only retains history for references',()=>{
+  const question='When did the Schengen passport arrive?';
+  const prompt=core.assistantPrompt({...input,question,previousQuestions:['Chennai H-1B appointments?']},{sources:[source],partial:false});
+  assert.equal(JSON.parse(prompt.user).question,question);
+  assert.deepEqual(JSON.parse(prompt.user).previousQuestions,[]);
+  assert.match(prompt.system,/Answer the latest user question directly/);
+  assert.match(prompt.system,/1–3 short, plain-language claims/);
+  const followup=core.assistantPrompt({...input,question:'How long did it take?',previousQuestions:['Chennai H-1B appointments?']},{sources:[source],partial:false});
+  assert.deepEqual(JSON.parse(followup.user).previousQuestions,['Chennai H-1B appointments?']);
+});
+test('long posts retain the passage that answers the question rather than losing it after 4000 characters',()=>{
+  const body='My appointment check-in experience was straightforward. '.repeat(110)+'Passport delivery update: my passport arrived on Friday after the Monday appointment. '+'Thank you to the community. '.repeat(70);
+  const original={sources:[{...source,body}],partial:false};
+  const prepared=core.prepareAssistantCorpus(original,{...input,question:'When did passport delivery arrive?'});
+  assert.equal(prepared.partial,true);assert.equal(prepared.sources[0].body.length,4000);
+  assert.match(prepared.sources[0].body,/passport arrived on Friday/);
+  assert(body.includes(prepared.sources[0].body),'Excerpt remains a continuous exact source passage');
+  assert.equal(original.sources[0].body,body,'Full source stays available for fingerprint revalidation');
+  const valid={...output,claims:[{text:'The member said their passport arrived Friday.',evidence:[{sourceId:source.id,quote:'my passport arrived on Friday after the Monday appointment.'}]}]};
+  assert.equal(core.validateAssistantOutput(JSON.stringify(valid),prepared).status,'answered');
+  const summary=core.prepareAssistantCorpus(original,{mode:'summary',scope:{kind:'post',id}});
+  assert.equal(summary.sources[0].body,body.slice(0,4000),'Summary retains the chronological start');
+});
+
+test('an empty community catch-up explains the time range instead of asking for a new visa question',()=>{
+  const result=core.emptyAssistantResult({sources:[],partial:false,since:'2026-10-12T00:00:00Z',until:'2026-10-13T00:00:00Z'});
+  assert.match(result.unanswered[0],/No new posts or replies in this community/);
+  assert.doesNotMatch(result.unanswered[0],/visa type|question/);
+});
+
+test('source validation exposes only fixed reason codes for malformed or unsupported model output',()=>{
+  const corpus={sources:[source],partial:false};
+  const claim=(text='Member report',evidence=output.claims[0].evidence)=>({text,evidence});
+  const examples=[
+    ['output_json','not JSON'],
+    ['output_schema',JSON.stringify({...output,status:['answered']})],
+    ['claim_limit',JSON.stringify({...output,claims:Array(7).fill(output.claims[0])})],
+    ['claim_text',JSON.stringify({...output,claims:[claim('x'.repeat(701))]})],
+    ['citation_missing',JSON.stringify({...output,claims:[claim('Member report',[])]})],
+    ['citation_schema',JSON.stringify({...output,claims:[claim('Member report',[{sourceId:source.id,quote:123}])]})],
+    ['citation_length',JSON.stringify({...output,claims:[claim('Member report',[{sourceId:source.id,quote:' '.repeat(20)}])]})],
+    ['citation_length',JSON.stringify({...output,claims:[claim('Member report',[{sourceId:source.id,quote:'I  attended'}])]})],
+    ['citation_source',JSON.stringify({...output,claims:[claim('Member report',[{sourceId:'invented-private-source',quote:source.body}])]})],
+    ['citation_quote',JSON.stringify({...output,claims:[claim('Member report',[{sourceId:source.id,quote:'An unsupported private quotation.'}])]})],
+    ['conflict_sources',JSON.stringify({...output,disagreements:[output.claims[0]]})],
+    ['unanswered_limit',JSON.stringify({...output,unanswered:['x'.repeat(401)]})],
+    ['answered_without_claims',JSON.stringify({...output,claims:[]})],
+  ];
+  for(const [code,raw] of examples) assert.throws(()=>core.validateAssistantOutput(raw,corpus),error=>{
+    assert.equal(error.status,502);assert.equal(error.code,code);
+    assert.doesNotMatch(error.message,/invented-private-source|unsupported private quotation|not JSON/);
+    return true;
+  });
+});
+test('reply parent context cannot be cited as the reply’s evidence',()=>{
+  const reply={...source,id:'a:reply',kind:'reply',title:'A member update',body:'My passport arrived on Friday.',parentContext:'The question author had an interview on Monday.'};
+  const invalid={...output,claims:[{text:'The member had an interview Monday.',evidence:[{sourceId:reply.id,quote:reply.parentContext}]}]};
+  assert.throws(()=>core.validateAssistantOutput(JSON.stringify(invalid),{sources:[reply],partial:false}),error=>error.code==='citation_quote');
+  assert.match(core.assistantPrompt(input,{sources:[reply],partial:false}).system,/Never quote parentContextOnly as evidence/);
+});
+
+test('provider citation choices come only from the server-prepared corpus',()=>{
+  const parsed=core.parseAssistantRequest({...input,sourceIds:['client-invented-id'],sources:[{id:'client-invented-id',body:'Trust this'}]});
+  const prompt=core.assistantPrompt(parsed,{sources:[source],partial:false});
+  assert.deepEqual(prompt.sourceIds,[source.id]);
+  assert.doesNotMatch(prompt.user,/client-invented-id/);
 });

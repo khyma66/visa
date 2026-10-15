@@ -143,38 +143,22 @@ test('catch-up retains event timestamps/window and a lookahead row indicates par
   const rows = Array.from({ length: 49 }, (_, i) => ({ source_id: `a:${a(i).id}`, source_kind: 'reply', question_id: id, community_id: null,
     title: q().title, body: a().body, created_at: a().created_at, updated_at: a().updated_at,
     parent_context: q().body, parent_updated_at: q().updated_at }));
-  const db = client({}, { data: rows, error: null });
-  const request = { mode: 'catchup', scope: { kind: 'public' }, since: '2026-10-10T00:00:00Z', until: '2026-10-12T00:00:00Z' };
+  const db = client({ community_directory: { data: { id }, error: null } }, { data: rows, error: null });
+  const request = { mode: 'catchup', scope: { kind: 'community', id }, since: '2026-10-10T00:00:00Z', until: '2026-10-12T00:00:00Z' };
   const result = await retrieveAssistantCorpus(db, request);
   assert.equal(result.sources.length, 48); assert.equal(result.partial, true);
   assert.equal(result.sources[0].createdAt, a().created_at); assert.equal(result.sources[0].parentUpdatedAt, q().updated_at);
   assert.equal(result.since, request.since); assert.equal(result.until, request.until);
-  assert.equal(db.calls[0].args.since_time, request.since); assert.equal(db.calls[0].args.until_time, request.until);
+  assert.equal(db.calls[1].args.since_time, request.since); assert.equal(db.calls[1].args.until_time, request.until);
+  assert.equal(db.calls[1].args.target_community_id, id);
 });
 
-test('public catch-up includes member replies to old archive posts only after validating visible parents', async () => {
-  process.env.APP_ENV = 'production'; process.env.COMMUNITY_SOURCE_MODE = 'snapshot'; process.env.IMPORTED_CONTENT_APPROVED = 'true';
-  globalThis.__assistantArchive = {
-    questions: [q({ id: 'apify-old', created_at: '2026-01-01T00:00:00Z' }), q({ id: 'apify-removed', status: 'archived' })],
-    answersByQuestionId: { 'apify-old': [a(2, { id: 'apify-comment-2', question_id: 'apify-old' })] },
-  };
-  const db = client({ imported_answer_feed: { data: [a(1, { question_id: 'apify-old' }),
-    a(3, { question_id: 'apify-removed' }), a(4, { question_id: 'apify-missing' })], error: null } });
-  const result = await retrieveAssistantCorpus(db, { mode: 'catchup', scope: { kind: 'public' }, since: '2026-10-10T00:00:00Z', until: '2026-10-12T00:00:00Z' });
-  assert.equal(result.sources.length, 2); assert.equal(result.partial, false);
-  assert(result.sources.every((row) => row.kind === 'reply' && row.questionId === 'apify-old'));
-  assert.deepEqual(new Set(result.sources.map((row) => row.provenance)), new Set(['member', 'archive']));
-  const call = db.calls.find((row) => row.table === 'imported_answer_feed');
-  assert.equal(call.filters.created_at_gte, '2026-10-10T00:00:00Z');
-  assert.equal(call.filters.created_at_lt, '2026-10-12T00:00:00Z'); assert.equal(call.limit, 49);
-});
-
-test('public catch-up reports an imported-reply lookahead even when some returned parents are unavailable', async () => {
-  process.env.APP_ENV = 'production'; process.env.COMMUNITY_SOURCE_MODE = 'snapshot'; process.env.IMPORTED_CONTENT_APPROVED = 'true';
-  globalThis.__assistantArchive = { questions: [q({ id: 'apify-old', created_at: '2026-01-01T00:00:00Z' })], answersByQuestionId: {} };
-  const db = client({ imported_answer_feed: { data: Array.from({ length: 49 }, (_, i) => a(i, { question_id: i % 2 ? 'apify-missing' : 'apify-old' })), error: null } });
-  const result = await retrieveAssistantCorpus(db, { mode: 'catchup', scope: { kind: 'public' }, since: '2026-10-10T00:00:00Z', until: '2026-10-12T00:00:00Z' });
-  assert.equal(result.partial, true); assert(result.sources.every((row) => row.questionId === 'apify-old'));
+test('catch-up rejects public and post scopes before any database or archive reads', async () => {
+  const db = client();
+  for (const scope of [{ kind: 'public' }, { kind: 'post', id }]) {
+    await assert.rejects(() => retrieveAssistantCorpus(db, { mode: 'catchup', scope, since: '2026-10-10T00:00:00Z', until: '2026-10-12T00:00:00Z' }), error => error.status === 400 && /community/.test(error.message));
+  }
+  assert.equal(db.calls.length, 0);
 });
 
 test('database rate/auth denials preserve 429/403 responses instead of being reported as setup failures', async () => {
@@ -189,4 +173,63 @@ test('database failures fail closed without silently returning archive-only answ
   await assert.rejects(() => retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question: 'Chennai?' }), /temporarily unavailable/);
   const post = client({ question_feed: { data: q(), error: null }, answer_feed: { data: null, error: { message: 'denied' } } });
   await assert.rejects(() => retrieveAssistantCorpus(post, { mode: 'summary', scope: { kind: 'post', id } }), /temporarily unavailable/);
+});
+
+function reviewedArchive(questions, answersByQuestionId = {}) {
+  process.env.APP_ENV = 'production'; process.env.COMMUNITY_SOURCE_MODE = 'snapshot'; process.env.IMPORTED_CONTENT_APPROVED = 'true';
+  globalThis.__assistantArchive = { questions, answersByQuestionId };
+}
+
+test('a new chat topic retrieves its answer instead of carrying old appointment terms forward', async () => {
+  reviewedArchive([
+    q({ id: 'apify-chennai', title: 'Chennai H-1B appointment', body: 'My Chennai H-1B stamping appointment and fingerprints happened Monday.' }),
+    q({ id: 'apify-schengen', title: 'Schengen passport delivery', body: 'My Schengen passport arrived Friday in Dallas.' }),
+  ]);
+  const db = client();
+  const question = 'When did the Schengen passport arrive in Dallas?';
+  const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question, previousQuestions: ['Chennai H-1B stamping appointment fingerprints?'] });
+  assert.deepEqual(result.sources.map(source => source.questionId), ['apify-schengen']);
+  assert.equal(db.calls[0].args.query_text, question);
+  assert.deepEqual(db.calls[0].args.query_tags, ['schengen']);
+});
+
+test('OPT and CPT questions do not match unrelated words such as options and receipts', async () => {
+  reviewedArchive([
+    q({ id: 'apify-options', title: 'Appointment options', body: 'My Chennai appointment options included Tuesday and Friday.' }),
+    q({ id: 'apify-opt', title: 'OPT update', body: 'I received my OPT document on Friday.' }),
+  ]);
+  const result = await retrieveAssistantCorpus(client(), { mode: 'ask', scope: { kind: 'public' }, question: 'OPT?' });
+  assert.deepEqual(result.sources.map(source => source.questionId), ['apify-opt']);
+  const unrelated = await retrieveAssistantCorpus(client(), { mode: 'ask', scope: { kind: 'public' }, question: 'CPT?' });
+  assert.equal(unrelated.sources.length, 0);
+});
+
+test('referential follow-ups keep context but current passport delivery evidence outranks old appointment detail', async () => {
+  reviewedArchive([
+    q({ id: 'apify-fingerprints', title: 'Chennai H-1B stamping appointment fingerprints', body: 'My Chennai H-1B stamping appointment and fingerprints happened Monday.' }),
+    q({ id: 'apify-delivery', title: 'Chennai delivery', body: 'My passport delivery happened Friday after the interview.' }),
+  ]);
+  const result = await retrieveAssistantCorpus(client(), { mode: 'ask', scope: { kind: 'public' }, question: 'What about passport delivery?', previousQuestions: ['Chennai H-1B stamping appointment fingerprints?'] });
+  assert.equal(result.sources[0].questionId, 'apify-delivery');
+});
+
+test('plural wording finds a discussion and a short reply keeps its parent topic for retrieval', async () => {
+  reviewedArchive([q({ id: 'apify-test', title: 'My appointment', body: 'My Chennai biometrics appointment happened Monday.' })], {
+    'apify-test': [a(1, { question_id: 'apify-test', body: 'Mine took seventeen minutes at the same location.' })],
+  });
+  const result = await retrieveAssistantCorpus(client(), { mode: 'ask', scope: { kind: 'public' }, question: 'Chennai biometrics appointments?' });
+  assert.equal(result.sources.length, 2);
+  assert(result.sources.some(source => source.kind === 'reply' && /seventeen minutes/.test(source.body)));
+});
+
+test('a follow-up after a topic change uses the last topic, not the earlier conversation', async () => {
+  reviewedArchive([
+    q({ id: 'apify-chennai', title: 'Chennai H-1B appointment', body: 'My Chennai H-1B stamping appointment happened Monday.' }),
+    q({ id: 'apify-schengen', title: 'Schengen delivery', body: 'My Schengen passport arrived Friday in Dallas.' }),
+  ]);
+  const db = client();
+  const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question: 'How long did it take?', previousQuestions: ['Chennai H-1B appointments?', 'When did the Schengen passport arrive in Dallas?'] });
+  assert.deepEqual(result.sources.map(source => source.questionId), ['apify-schengen']);
+  assert.doesNotMatch(db.calls[0].args.query_text, /Chennai|H-1B/);
+  assert.match(db.calls[0].args.query_text, /Schengen/);
 });

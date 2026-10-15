@@ -1,14 +1,19 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult } from './assistant-contract';
-import { ASSISTANT_VERSION, AssistantError, assistantAvailability, assistantFingerprint, assistantPrompt, emptyAssistantResult, parseAssistantRequest, prepareAssistantCorpus, readBoundedJson, requireAssistantMode, validateAssistantOutput } from './assistant-core';
+import { ASSISTANT_VERSION, AssistantError, assistantAvailability, assistantFingerprint, assistantPrompt, emptyAssistantResult, parseAssistantRequest, prepareAssistantCorpus, readBoundedJson, requireAssistantMode, validateAssistantOutput, type AssistantValidationCode } from './assistant-core';
 import type { AssistantPrompt } from './assistant-provider';
 
 export type AssistantCache = { get(key: string): Promise<AssistantResult | null>; put(key: string, value: AssistantResult): Promise<void> };
+export type AssistantFailureStage = 'request' | 'authentication' | 'retrieval' | 'quota' | 'generation' | 'validation' | 'revalidation';
+class AssistantOperationFailure extends Error {
+  constructor(public original: unknown, public stage: AssistantFailureStage) { super('Assistant operation failed'); }
+}
 export type AssistantDependencies = {
   availability(): AssistantAvailability;
   authenticate(token: string): Promise<{ actor: string; corpus(input: AssistantRequest): Promise<AssistantCorpus>; reserve(): Promise<boolean> }>;
   generate(prompt: AssistantPrompt, signal: AbortSignal): Promise<string>;
   model: string;
   cache?: AssistantCache;
+  reportFailure?(event: { stage: AssistantFailureStage; status: number; code?: AssistantValidationCode }): void;
 };
 const headers = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Vary': 'Authorization' };
 export function assistantResponse(value: unknown, status = 200, retryAfter?: number) {
@@ -25,6 +30,7 @@ export function createAssistantHandler(deps: AssistantDependencies) {
   // Coalesce duplicate clicks within an isolate; durable quota remains authoritative across instances.
   const inflight = new Map<string, Promise<AssistantResult>>();
   return async function handle(request: Request): Promise<Response> {
+    let stage: AssistantFailureStage = 'request';
     try {
       if (request.method !== 'POST') throw new AssistantError(405, 'Use POST for assistant requests.');
       if (!assistantProductionRequest(request) || !deps.availability().posts) throw new AssistantError(503, 'The assistant is not available yet.');
@@ -35,16 +41,19 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       if (!token) throw new AssistantError(401, 'Log in to use the assistant.');
       const input = parseAssistantRequest(await readBoundedJson(request, 12_000));
       requireAssistantMode(input, deps.availability());
+      stage = 'authentication';
       const session = await deps.authenticate(token);
       request.signal.throwIfAborted();
+      stage = 'retrieval';
       const original = await session.corpus(input);
-      const corpus = prepareAssistantCorpus(original);
+      const corpus = prepareAssistantCorpus(original, input);
       if (!corpus.sources.length) return assistantResponse(emptyAssistantResult(corpus));
       const fingerprint = await assistantFingerprint(original);
       // Include identity, full untruncated source contents, scope, prompt version and model.
       // Retrieval happens BEFORE every cache read, so removed/hidden data cannot return from cache.
       const key = await assistantFingerprint({ actor: session.actor, input, fingerprint, version: ASSISTANT_VERSION, model: deps.model });
       const revalidate = async () => {
+        stage = 'revalidation';
         const current = await session.corpus(input);
         if (await assistantFingerprint(current) !== fingerprint) throw new AssistantError(409, 'The discussion changed while answering. Please ask again.');
       };
@@ -64,13 +73,16 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       if (!operation) {
         if (inflight.size >= 100) throw new AssistantError(429, 'The assistant is busy. Please retry shortly.', 30);
         operation = (async () => {
+          stage = 'quota';
           if (!await session.reserve()) throw new AssistantError(429, 'The assistant usage limit has been reached. Please try again later.', 60);
+          stage = 'generation';
           const raw = await deps.generate(assistantPrompt(input, corpus), request.signal);
+          stage = 'validation';
           const result = validateAssistantOutput(raw, corpus);
           await revalidate();
           try { await deps.cache?.put(key, result); } catch { /* caching is optional */ }
           return result;
-        })();
+        })().catch(error => { throw new AssistantOperationFailure(error, stage); });
         inflight.set(key, operation);
         void operation.finally(() => inflight.delete(key)).catch(() => {});
       }
@@ -78,7 +90,14 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       await revalidate();
       request.signal.throwIfAborted();
       return assistantResponse(result);
-    } catch (error) {
+    } catch (failure) {
+      const error = failure instanceof AssistantOperationFailure ? failure.original : failure;
+      if (failure instanceof AssistantOperationFailure) stage = failure.stage;
+      const status = error instanceof AssistantError ? error.status : 503;
+      if (status >= 500) {
+        // Fixed metadata only: never expose prompts, source contents, tokens or provider errors.
+        try { deps.reportFailure?.({ stage, status, ...(error instanceof AssistantError && error.code ? { code: error.code } : {}) }); } catch { /* telemetry cannot change the response */ }
+      }
       if (error instanceof AssistantError) return assistantResponse({ error: error.message }, error.status, error.retryAfter);
       return assistantResponse({ error: 'The assistant could not complete this request. Please try again shortly.' }, 503);
     }

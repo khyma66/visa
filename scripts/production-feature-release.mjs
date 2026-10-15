@@ -247,7 +247,7 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
   assert.equal(receipt.features?.posts, true);
   for (const feature of ['communities', 'catchup']) if (features[feature] === 'true') assert.equal(receipt.features?.[feature], true, `${feature} needs hosted model acceptance.`);
   assert.equal(receipt.repetitions, 3, 'Hosted acceptance requires three independent samples per case.');
-  const requiredCases = ['post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'public-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post'];
+  const requiredCases = ['post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer'];
   assert(Array.isArray(receipt.cases) && receipt.cases.length === requiredCases.length && requiredCases.every(id => receipt.cases.some(row => row.id === id)), 'Every required hosted case must occur exactly once.');
   for (const row of receipt.cases) {
     assert.equal(row.model, receipt.model);
@@ -260,7 +260,7 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
       assert(Array.isArray(sample.checks) && sample.checks.length > 0 && sample.checks.every(check => typeof check.name === 'string' && check.name.length > 0 && check.passed === true), 'Every sample must retain passing semantic checks.');
     }
     const aggregate = row.samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed })));
-    assert.deepEqual(row.checks, aggregate, 'Aggregate checks must exactly retain all 33 sample results.');
+    assert.deepEqual(row.checks, aggregate, 'Aggregate checks must exactly retain all 42 sample results.');
   }
   const age = Date.now() - Date.parse(receipt.createdAt);
   assert(age >= 0 && age < 60 * 60 * 1000, 'Hosted model acceptance is expired.');

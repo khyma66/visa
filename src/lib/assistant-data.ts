@@ -5,7 +5,7 @@ import archive from '@visa/archive';
 import type { AssistantCorpus, AssistantRequest, AssistantSource } from './assistant-contract';
 import type { Answer, CommunityFeed, Question } from './types';
 import { detectTopics } from './tagging';
-import { AssistantError } from './assistant-core';
+import { AssistantError, assistantPreviousQuestions, assistantRetrievalQuestion, assistantSearchTerms } from './assistant-core';
 
 export const ASSISTANT_SOURCE_LIMIT = 48;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -45,39 +45,36 @@ function rowSource(row: SourceRow): AssistantSource {
   };
 }
 
-function retrievalQuestion(input: AssistantRequest): string {
-  // Include a small amount of user-authored history for follow-up references.
-  // Generated assistant answers are never used as retrieval evidence.
-  return [input.question ?? '', ...(input.previousQuestions ?? []).slice(-2).map((question) => question.slice(0, 300))]
-    .join(' ').slice(0, 1500);
-}
 function archiveEnabled(): boolean {
   return process.env.COMMUNITY_SOURCE_MODE === 'snapshot'
     && (process.env.APP_ENV !== 'production' || process.env.IMPORTED_CONTENT_APPROVED === 'true');
 }
-const SEARCH_STOPWORDS = new Set('what which when where why how did does do can could should would will is are was were a an the and or of to in for with on about this that these those it they you me my we our us please tell explain summarize members people'.split(' '));
-function sourceScorer(question: string): (source: AssistantSource) => number {
-  const words = [...new Set((question.toLowerCase().match(/[\p{L}\p{N}-]{3,}/gu) ?? [])
-    .filter((word) => !SEARCH_STOPWORDS.has(word)))].slice(0, 24);
-  const topics = detectTopics(question);
+function sourceScorer(input: AssistantRequest): (source: AssistantSource) => number {
+  const words = assistantSearchTerms(input.question ?? '').slice(0, 24);
+  const previous = assistantPreviousQuestions(input).join(' ');
+  const historyWords = assistantSearchTerms(previous).filter(word => !words.includes(word)).slice(0, 24);
+  const topics = detectTopics(input.question ?? ''), historyTopics = detectTopics(previous);
   return (source) => {
-    const title = source.title.toLowerCase(), body = source.body.toLowerCase();
-    const lexical = words.reduce((sum, word) => sum + (body.includes(word) ? 3 : 0) + (title.includes(word) ? 1 : 0), 0);
-    const foundTopics = detectTopics(`${source.title} ${source.body}`);
-    return lexical + topics.filter((topic) => foundTopics.includes(topic)).length * 2;
+    const title = new Set(assistantSearchTerms(source.title)), body = new Set(assistantSearchTerms(source.body));
+    const parent = new Set(assistantSearchTerms(source.parentContext ?? ''));
+    const lexical = (terms: string[]) => terms.reduce((sum, word) => sum + (body.has(word) ? 4 : 0) + (title.has(word) ? 1 : 0) + (parent.has(word) ? 2 : 0), 0);
+    const foundTopics = detectTopics(`${source.title} ${source.body} ${source.parentContext ?? ''}`);
+    const current = lexical(words) + topics.filter(topic => foundTopics.includes(topic)).length * 2;
+    const history = lexical(historyWords) + historyTopics.filter(topic => foundTopics.includes(topic)).length;
+    // A new question dominates history; exact tokens prevent OPT/options and
+    // H1B/H1B-like substring matches from filling the bounded evidence budget.
+    return current * 8 + Math.min(history, 6);
   };
 }
 
 function publicArchiveMatches(input: AssistantRequest): AssistantCorpus {
   if (!archiveEnabled()) return { sources: [], partial: false };
   const snapshot = archive as unknown as CommunityFeed;
-  const score = sourceScorer(retrievalQuestion(input));
+  const score = sourceScorer(input);
   const matches: Array<{ source: AssistantSource; score: number }> = [];
   let scanned = 0, matched = 0, partial = false;
   const consider = (source: AssistantSource) => {
     if (!Number.isFinite(Date.parse(source.createdAt))) return;
-    if (input.mode === 'catchup' && (!input.since || !input.until
-      || Date.parse(source.createdAt) < Date.parse(input.since) || Date.parse(source.createdAt) >= Date.parse(input.until))) return;
     const rank = input.mode === 'ask' ? score(source) : 1;
     if (!rank) return;
     matched++;
@@ -100,25 +97,8 @@ function publicArchiveMatches(input: AssistantRequest): AssistantCorpus {
   return { sources: matches.map(({ source }) => source), partial: partial || matched > ASSISTANT_SOURCE_LIMIT };
 }
 
-async function publicImportedCatchup(client: SupabaseClient, input: AssistantRequest): Promise<AssistantCorpus> {
-  if (!archiveEnabled()) return { sources: [], partial: false };
-  const snapshot = archive as unknown as CommunityFeed;
-  const { data, error } = await client.from('imported_answer_feed').select(ANSWER_FIELDS)
-    .gte('created_at', input.since!).lt('created_at', input.until!)
-    .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(ASSISTANT_SOURCE_LIMIT + 1);
-  if (error || !Array.isArray(data)) throw new Error('Assistant sources are temporarily unavailable.');
-  const visibleParents = new Map(snapshot.questions.slice(0, 5000).filter((question) => question.status !== 'archived').map((question) => [question.id, question]));
-  // A database imported_answer has no FK to the compiled snapshot. Prove that
-  // its parent is still publicly distributed before disclosing its text.
-  const sources = (data as SourceAnswer[]).slice(0, ASSISTANT_SOURCE_LIMIT).flatMap((reply) => {
-    const question = visibleParents.get(reply.question_id);
-    return question ? [replySource(reply, question, 'member')] : [];
-  });
-  return { sources, partial: data.length > ASSISTANT_SOURCE_LIMIT || snapshot.questions.length > 5000 };
-}
-
 async function searchSources(client: SupabaseClient, input: AssistantRequest): Promise<AssistantCorpus> {
-  const question = input.mode === 'ask' ? retrievalQuestion(input) : '';
+  const question = input.mode === 'ask' ? assistantRetrievalQuestion(input) : '';
   const { data, error } = await client.rpc('assistant_sources', {
     target_community_id: input.scope.kind === 'community' ? input.scope.id : null,
     target_question_id: input.scope.kind === 'post' ? input.scope.id : null,
@@ -189,7 +169,7 @@ async function postCorpus(client: SupabaseClient, input: AssistantRequest & { sc
     selected = [...relevant.sources.filter((source) => source.kind === 'reply'), ...replySources];
     partial ||= relevant.partial;
   } else if (partial && input.mode === 'ask') {
-    const score = sourceScorer(retrievalQuestion(input));
+    const score = sourceScorer(input);
     selected = [...replySources].sort((a, b) => score(b) - score(a) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
   }
   const deduplicated = [...new Map(selected.map((source) => [source.id, source])).values()];
@@ -198,8 +178,8 @@ async function postCorpus(client: SupabaseClient, input: AssistantRequest & { sc
 
 /** All content is freshly read under current permissions on every invocation. */
 export async function retrieveAssistantCorpus(client: SupabaseClient, input: AssistantRequest): Promise<AssistantCorpus> {
+  if (input.mode === 'catchup' && input.scope.kind !== 'community') throw new AssistantError(400, 'Choose a community for catch-up.');
   if (input.scope.kind === 'post') {
-    if (input.mode === 'catchup') throw new Error('Choose a community or public feed for catch-up.');
     return postCorpus(client, { ...input, scope: input.scope });
   }
   if (input.scope.kind === 'community') {
@@ -211,17 +191,16 @@ export async function retrieveAssistantCorpus(client: SupabaseClient, input: Ass
   const corpus = await searchSources(client, input);
   if (input.scope.kind === 'public') {
     const historical = publicArchiveMatches(input);
-    const memberReplies = input.mode === 'catchup' ? await publicImportedCatchup(client, input) : { sources: [], partial: false };
-    const score = sourceScorer(retrievalQuestion(input));
-    const combined = [...corpus.sources, ...historical.sources, ...memberReplies.sources]
+    const score = sourceScorer(input);
+    const combined = [...corpus.sources, ...historical.sources]
       .sort((a, b) => (input.mode === 'ask' ? score(b) - score(a) : 0) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
     return {
       ...corpus,
       sources: combined.slice(0, ASSISTANT_SOURCE_LIMIT),
       // Global keyword search has no indexed path for live imported_answers
-      // yet. They are included in specific-post asks and public catch-up; do
+      // yet. They are included in specific-post asks; do
       // not claim exhaustive global coverage until that index is deployed.
-      partial: corpus.partial || historical.partial || memberReplies.partial || combined.length > ASSISTANT_SOURCE_LIMIT
+      partial: corpus.partial || historical.partial || combined.length > ASSISTANT_SOURCE_LIMIT
         || (input.mode === 'ask' && archiveEnabled()),
     };
   }
