@@ -1,5 +1,7 @@
 # Production assistant correction — October 15, 2026
 
+Latest follow-up: [direct post search and final production verification](ASSISTANT_POST_SEARCH_FIX_2026-10-15.md) fixes explicit post-list requests. The exact stamping-delay query returned 40 matching discussions in 2,052 ms after the refined production deployment, with 48/48 hosted checks passing. The evidence below describes the earlier conversational-answer correction.
+
 The owner reported failed answers and requested a compact conversational interface. Catch-up is exclusively for communities/groups; public and post scopes reject catch-up before authentication or database access.
 
 ## Incident evidence
