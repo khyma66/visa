@@ -1,4 +1,5 @@
 name: Release current VisaThreads AI features
+# Release feedback copy updates through the same content and access checks.
 
 on:
   workflow_dispatch:

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Inbox, LockKeyhole, RefreshCw } from 'lucide-react';
+import { Inbox, RefreshCw } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { FEEDBACK_CATEGORIES, FEEDBACK_STATUSES, feedbackError, getFeedbackHistory, getFeedbackInbox, reviewFeedback, type FeedbackAction, type FeedbackCursor, type FeedbackEvent, type FeedbackItem, type FeedbackStatus } from '@/lib/feedback';
 
@@ -92,15 +92,14 @@ export function FeedbackInbox() {
     } finally { writing.current = false; setBusy(false); }
   }
   return <main className="mx-auto max-w-4xl space-y-5 px-4 py-8">
-    <div className="flex items-center gap-3"><span className="rounded-xl bg-slate-100 p-3 text-slate-700"><Inbox size={24} aria-hidden="true"/></span><div><h1 className="text-2xl font-bold">Private Feedback Inbox</h1><p className="mt-1 text-sm text-slate-500">Review suggestions. Shape improvements. Keep control.</p></div></div>
-    <p className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600"><LockKeyhole size={18} className="mt-1 shrink-0" aria-hidden="true"/>Owner-only. Members and moderators cannot read this inbox. AI processing and automatic deployments are off. Each plan requires your approval; releasing a change is a separate review.</p>
-    {demoMode && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Local layout preview with sample feedback. No private records are loaded and decisions are not saved.</p>}
-    {authLoading ? <p role="status">Checking your account…</p> : !user ? <p className="text-sm">Sign in with your designated owner account. <Link href="/login?next=%2Fowner%2Ffeedback#sign-in" className="text-blue-700 underline">Log In</Link></p> : <>
+    <div className="flex items-center gap-3"><span className="rounded-xl bg-slate-100 p-3 text-slate-700"><Inbox size={24} aria-hidden="true"/></span><div><h1 className="text-2xl font-bold">Feedback Inbox</h1><p className="mt-1 text-sm text-slate-500">Review suggestions and plan improvements.</p></div></div>
+    {demoMode && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Local layout preview with sample feedback. No submissions are loaded and decisions are not saved.</p>}
+    {authLoading ? <p role="status">Checking your account…</p> : !user ? <p className="text-sm">Sign in to continue. <Link href="/login?next=%2Fowner%2Ffeedback#sign-in" className="text-blue-700 underline">Log In</Link></p> : <>
       <div className="flex flex-wrap items-end gap-3"><div><label htmlFor="feedback-status" className="mb-1 block text-sm font-semibold">Review Status</label><select id="feedback-status" disabled={busy} value={status} onChange={event => setStatus(event.target.value as FeedbackStatus | '')} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm"><option value="">All Feedback</option>{Object.entries(FEEDBACK_STATUSES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div><button disabled={busy} className={`${button} flex items-center gap-2`} onClick={() => void load()}><RefreshCw size={15} aria-hidden="true"/>Refresh Inbox</button></div>
       {notice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{notice}</p>}
       {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
       {busy && <p role="status" className="text-sm text-slate-500">Loading or saving feedback…</p>}
-      {allowed && !items.length && !busy && <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center"><h2 className="font-bold">{status ? 'Nothing in this review stage' : 'No Feedback Yet'}</h2><p className="mt-2 text-sm text-slate-500">Submissions from the Feedback button will arrive here privately.</p></div>}
+      {allowed && !items.length && !busy && <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center"><h2 className="font-bold">{status ? 'Nothing in this review stage' : 'No Feedback Yet'}</h2><p className="mt-2 text-sm text-slate-500">Submissions from the Feedback button will arrive here.</p></div>}
       {allowed && items.map(item => <FeedbackReviewCard key={`${item.id}-${item.version}`} item={item} disabled={busy} demoMode={demoMode} onReview={review}/>)}
       {allowed && more && <button className={button} disabled={busy} onClick={() => void load(cursor)}>Load More Feedback</button>}
     </>}
