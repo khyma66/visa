@@ -55,25 +55,39 @@ function PostResults({ result }: { result: AssistantResult }) {
 function Result({ result, catchup }: { result: AssistantResult; catchup: boolean }) {
   if (result.kind === 'posts') return <PostResults result={result} />;
   const evidence = [...result.claims, ...result.disagreements].flatMap((claim) => claim.evidence);
+  const citedSources = result.sources.flatMap((source, index) => {
+    const href = sourceHref(source);
+    const quotes = [...new Set(evidence.filter((item) => item.sourceId === source.id).map((item) => item.quote))];
+    return href && quotes.length ? [{ source, index, href, quotes }] : [];
+  });
+  const coverageReasons = result.coverage.reasons ?? [];
+  const coverageNotes = {
+    'retrieval-limit': 'This answer uses a selection of relevant matching discussions.',
+    'context-limit': 'Only part of the available discussion text could be reviewed.',
+    'missing-replies': 'Some replies were not included in the imported discussion.',
+    'unindexed-replies': 'Some recent replies are not available to search yet.',
+  };
+  const limitation = !result.coverage.partial ? null
+    : catchup ? 'I could only review part of this time range. Choose a shorter range; your last catch-up hasn’t advanced.'
+    : coverageReasons.includes('missing-replies') ? 'Some replies were not included in the imported discussion, so I may be missing part of the conversation.'
+    : coverageReasons.includes('unindexed-replies') ? 'Some recent replies are not available to search yet, so this answer may miss relevant updates.'
+    : !coverageReasons.length ? 'I could only review part of these discussions. Try a more specific question.' : null;
   return <div aria-label="Assistant response">
     {result.status === 'insufficient' && <p className="text-sm leading-6 text-slate-800">{result.unanswered[0] || (catchup ? 'No updates found for this time range.' : 'I couldn’t find enough relevant discussions to answer. Try a more specific question.')}</p>}
     <Claims claims={result.claims} sources={result.sources} />
-    {!!result.disagreements.length && <div className="mt-3 border-l-2 border-amber-300 pl-3"><p className="mb-2 text-xs font-semibold text-amber-900">Compare source excerpts</p><Claims claims={result.disagreements} sources={result.sources} /></div>}
+    {!!result.disagreements.length && <div className="mt-3 border-l-2 border-amber-300 pl-3"><p className="mb-2 text-xs font-semibold text-amber-900">Related perspectives</p><Claims claims={result.disagreements} sources={result.sources} /></div>}
     {result.status !== 'insufficient' && !!result.unanswered.length && <details className="mt-3 text-xs text-slate-500"><summary className="cursor-pointer">Still unclear</summary><ul className="mt-2 list-disc space-y-1 pl-4 leading-5">{result.unanswered.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
-    {result.coverage.partial && <p className="mt-3 text-xs leading-5 text-amber-800">Partial coverage: some discussions may be missing.{catchup && ' Checkpoint unchanged. Try a shorter range.'}</p>}
+    {limitation && <p className="mt-3 text-xs leading-5 text-amber-800">{limitation}</p>}
     <details className="mt-3 text-xs text-slate-500">
-      <summary className="cursor-pointer font-medium">{evidence.length ? `Sources · ${new Set(evidence.map((item) => item.sourceId)).size}` : 'About this answer'}</summary>
-      <div className="mt-3 space-y-3 leading-5">{result.sources.map((source, index) => {
-        const href = sourceHref(source);
-        const quotes = [...new Set(evidence.filter((item) => item.sourceId === source.id).map((item) => item.quote))];
-        if (!href || !quotes.length) return null;
-        return <div key={source.id} className="border-l-2 border-teal-100 pl-3">
+      <summary className="cursor-pointer font-medium">{citedSources.length ? `Sources · ${citedSources.length}` : 'About this answer'}</summary>
+      <div className="mt-3 space-y-3 leading-5">{citedSources.map(({ source, index, href, quotes }) => <div key={source.id} className="border-l-2 border-teal-100 pl-3">
           <a href={href} className="font-semibold text-teal-700 underline">[{index + 1}] {source.title}</a>
+          <p className="mt-1">{source.provenance === 'archive' ? 'Imported community' : 'Community'} {source.kind === 'reply' ? 'reply' : 'post'}{source.kind === 'reply' && source.speakerRole === 'original-poster' && ' · Original poster'}</p>
           {quotes.map((quote, quoteIndex) => <blockquote key={quoteIndex} className="mt-1 whitespace-pre-wrap">“{quote}”</blockquote>)}
           <p className="mt-1"><time dateTime={source.createdAt}>{dateLabel(source.createdAt)}</time>{source.updatedAt !== source.createdAt && <> · Updated {dateLabel(source.updatedAt)}</>}</p>
           {source.kind === 'reply' && <p>Use “Load more” in the discussion for older replies.</p>}
-        </div>;
-      })}
+        </div>)}
+        {result.coverage.partial && !!coverageReasons.length && <ul className="list-disc space-y-1 pl-4">{[...new Set(coverageReasons)].map((reason) => coverageNotes[reason] ? <li key={reason}>{coverageNotes[reason]}</li> : null)}</ul>}
         <p>{result.notice}</p>
         <p>{result.coverage.sourceCount} source{result.coverage.sourceCount === 1 ? '' : 's'} checked{result.coverage.since && <> · {dateLabel(result.coverage.since)}</>}{result.coverage.until && <> to {dateLabel(result.coverage.until)}</>}<br />Generated {dateLabel(result.generatedAt)}{result.cached && ' · Cached answer'}</p>
       </div>
@@ -194,7 +208,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
     const timeout = setTimeout(() => {
       if (!isCurrent()) return;
       fail('That took too long. Try again.'); controller.abort(); request.current = null; setBusy(false);
-    }, 45000);
+    }, 65000);
     try {
       const { data, error: sessionError } = await getSupabase().auth.getSession();
       if (!isCurrent()) return;

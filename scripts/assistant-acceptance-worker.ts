@@ -1,4 +1,4 @@
-import { readBoundedJson, type AssistantValidationCode } from '../src/lib/assistant-core';
+import { prepareAssistantCorpus, readBoundedJson, validateAssistantOutput, type AssistantValidationCode } from '../src/lib/assistant-core';
 import type { AssistantRequest, AssistantResult } from '../src/lib/assistant-contract';
 import { createAssistantHandler, type AssistantFailureStage } from '../src/lib/assistant-service';
 import { runAssistantModel, WORKERS_ASSISTANT_MODEL, type WorkersAiBinding, type AssistantProviderFailure } from '../src/lib/assistant-provider';
@@ -40,6 +40,7 @@ export default {
       const events: string[] = [];
       const receivedInputs: AssistantRequest[] = [];
       let raw: string | undefined;
+      let rawReview: string | undefined;
       let serviceFailure: { stage: AssistantFailureStage; status: number; code?: AssistantValidationCode } | undefined;
       let providerReason: AssistantProviderFailure | undefined;
       const handler = createAssistantHandler({
@@ -60,7 +61,8 @@ export default {
           };
         },
         generate: async (prompt, signal) => {
-          events.push('generate');
+          const review = prompt.outputKind === 'review';
+          events.push(review ? 'review' : 'generate');
           // Match the production route's runtime binding lookup. Directly
           // injecting the fetch environment would miss loader/binding errors.
           let binding: WorkersAiBinding | undefined;
@@ -70,8 +72,10 @@ export default {
             if (!binding || typeof binding.run !== 'function' || binding !== env.ASSISTANT_AI) throw Error('Runtime AI binding mismatch');
           } catch { providerReason = 'missing_binding'; throw Error('Runtime AI binding unavailable'); }
           events.push('runtime-binding');
-          raw = await runAssistantModel(prompt, { provider: 'workers-ai', binding, signal, reportFailure: reason => { providerReason = reason; } });
-          return raw;
+          const output = await runAssistantModel(prompt, { provider: 'workers-ai', binding, signal, reportFailure: reason => { providerReason = reason; } });
+          if (review) rawReview = output;
+          else raw = output;
+          return output;
         },
       });
       // This is an in-memory Request passed to the shared service, not a
@@ -102,6 +106,8 @@ export default {
       const result = serviceBody as AssistantResult;
       const evaluation = evaluateAcceptance(fixture, result);
       const directPostSearch = fixture.execution === 'direct-post-search';
+      const draft = raw === undefined ? undefined : validateAssistantOutput(raw, prepareAssistantCorpus(fixture.corpus, receivedInputs[0]), Date.now(), receivedInputs[0]);
+      const expectedReviews = draft && (draft.claims.length || draft.disagreements.length) ? 1 : 0;
       const sameInput = (input: AssistantRequest) => input.mode === fixture.input.mode
         && JSON.stringify(input.scope) === JSON.stringify(fixture.input.scope)
         && input.question === fixture.input.question
@@ -115,12 +121,13 @@ export default {
         ...(directPostSearch ? [
           { name: 'application_model_quota_not_used', passed: events.filter(event => event === 'reserve').length === 0 },
           { name: 'application_runtime_binding_not_loaded', passed: events.filter(event => event === 'runtime-binding').length === 0 },
-          { name: 'application_provider_not_called', passed: events.filter(event => event === 'generate').length === 0 },
+          { name: 'application_provider_not_called', passed: events.filter(event => event === 'generate' || event === 'review').length === 0 },
           { name: 'application_sources_revalidated', passed: events[1] === 'corpus' && events.filter(event => event === 'corpus').length >= 2 },
         ] : [
           { name: 'application_quota_reserved', passed: events.filter(event => event === 'reserve').length === 1 },
-          { name: 'application_runtime_binding_loaded', passed: events.filter(event => event === 'runtime-binding').length === 1 },
+          { name: 'application_runtime_binding_loaded', passed: events.filter(event => event === 'runtime-binding').length === 1 + expectedReviews },
           { name: 'application_provider_called_once', passed: events.filter(event => event === 'generate').length === 1 },
+          { name: 'application_evidence_reviewed_when_needed', passed: events.filter(event => event === 'review').length === expectedReviews && (expectedReviews === 0 || (rawReview !== undefined && events.indexOf('review') > events.indexOf('generate'))) },
           { name: 'application_sources_revalidated', passed: events[1] === 'corpus' && events.slice(events.indexOf('generate') + 1).filter(event => event === 'corpus').length >= 2 },
         ]),
         { name: 'application_response_private', passed: serviceResponse.headers.get('cache-control') === 'private, no-store'

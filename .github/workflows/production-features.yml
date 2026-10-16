@@ -1,5 +1,5 @@
 name: Release current VisaThreads AI features
-# Restore regular chat with verified excerpts and exact, fresh release probes.
+# Release conversational answers with source context and independent evidence review.
 # Both normal and cache-busted health requests must converge before verification.
 
 on:

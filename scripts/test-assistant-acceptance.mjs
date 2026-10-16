@@ -21,6 +21,7 @@ async function compile(path) {
 dependencies['./assistant-context'] = await compile('src/lib/assistant-context');
 dependencies['./assistant-core'] = dependencies['../src/lib/assistant-core'] = await compile('src/lib/assistant-core');
 dependencies['./assistant-search'] = await compile('src/lib/assistant-search');
+dependencies['./assistant-review'] = await compile('src/lib/assistant-review');
 dependencies['../src/lib/assistant-provider'] = await compile('src/lib/assistant-provider');
 dependencies['../src/lib/assistant-service'] = await compile('src/lib/assistant-service');
 dependencies['./assistant-acceptance-fixtures'] = await compile('scripts/assistant-acceptance-fixtures');
@@ -32,6 +33,14 @@ const worker = { fetch(request, settings) { runtimeEnvironment.ASSISTANT_AI = se
 const secret = 'synthetic-test-secret-'.repeat(3);
 const env = () => ({ ACCEPTANCE_SECRET: secret, ACCEPTANCE_EXPIRES: String(Date.now() + 60_000), ASSISTANT_AI: { run: async () => { throw Error('Inference must not run'); } } });
 const request = (body = { id: 'post-question' }, headers = {}, url = 'https://temporary.workers.dev/evaluate') => new Request(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+function reviewResponse(input, supported = true) {
+  if (input.response_format.json_schema.name !== 'discussion_answer_review') return null;
+  const prompt = JSON.parse(input.messages.find(message => message.role === 'user').content);
+  const ids = input.response_format.json_schema.schema.properties.checks.items.properties.id.enum;
+  assert.deepEqual(ids, prompt.candidate.checks.map(check => check.id));
+  assert.equal(input.max_tokens, 1200);
+  return { response: JSON.stringify({ checks: ids.map(id => ({ id, supported })), answersQuestion: supported }) };
+}
 
 test('evaluation denies absent/wrong credentials and invalid/expired expiry before inference', async () => {
   for (const headers of [{ Authorization: '' }, { Authorization: 'Bearer wrong' }, { Authorization: 'a'.repeat(200) }]) assert.equal((await worker.fetch(request(undefined, headers), env())).status, 404);
@@ -86,20 +95,21 @@ test('successful evaluation executes exact production model and returns no gener
   const settings = { ...env(), ASSISTANT_AI: { run: async (model, input) => {
     calls++;
     assert.equal(model, '@cf/openai/gpt-oss-120b');
-    assert.equal(input.max_tokens, 4096);
     assert.equal(input.reasoning_effort, 'low');
     assert.equal(input.response_format.json_schema.strict, true);
     assert.equal(input.temperature, 0);
     assert.equal(input.seed, 39173);
     assert.equal(input.response_format.type, 'json_schema');
+    const review = reviewResponse(input); if (review) return review;
+    assert.equal(input.max_tokens, 4096);
     return { response: JSON.stringify({ status: 'answered', claims: [{ text: 'The member reported receiving their passport on Friday.', evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] }) };
   } } };
   const reply = await worker.fetch(request(), settings);
   assert.equal(reply.status, 200);
   const value = await reply.json();
   assert.equal(value.passed, true);
-  assert.equal(calls, 1);
-  for (const name of ['application_request_parsed', 'application_authentication_used', 'application_quota_reserved', 'application_runtime_binding_loaded', 'application_provider_called_once', 'application_sources_revalidated', 'application_response_private']) {
+  assert.equal(calls, 2);
+  for (const name of ['application_request_parsed', 'application_authentication_used', 'application_quota_reserved', 'application_runtime_binding_loaded', 'application_provider_called_once', 'application_evidence_reviewed_when_needed', 'application_sources_revalidated', 'application_response_private']) {
     assert(value.checks.some(check => check.name === name && check.passed));
   }
   assert.deepEqual(Object.keys(value).sort(), ['checks', 'durationMs', 'id', 'model', 'passed']);
@@ -135,6 +145,7 @@ test('messy public evidence preserves UUIDs and validates the complete numerical
     let calls = 0;
     const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
       calls++;
+      const review = reviewResponse(input); if (review) return review;
       const prompt = JSON.parse(input.messages.find(message => message.role === 'user').content);
       assert.equal(prompt.sources.length, 10);
       assert.equal(prompt.sources.find(source => source.id === sourceId).body, relevant.body);
@@ -142,12 +153,13 @@ test('messy public evidence preserves UUIDs and validates the complete numerical
     } } };
     const reply = await worker.fetch(request({ id: 'public-question' }), settings);
     const value = await reply.json();
-    assert.equal(calls, 1);
     if (quote === exactQuote) {
+      assert.equal(calls, 2);
       assert.equal(reply.status, 200);
       assert.equal(value.passed, true, JSON.stringify(value));
       assert.equal(value.syntheticDiagnostic, undefined);
     } else {
+      assert.equal(calls, 1);
       assert.equal(reply.status, 502);
       assert.equal(value.passed, false);
       assert.equal(value.serviceStatus, 502);
@@ -182,6 +194,7 @@ test('new hosted cases pass through real request parsing, topic handling and rel
     let calls = 0;
     const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
       calls++;
+      const review = reviewResponse(input); if (review) return review;
       const prompt = JSON.parse(input.messages.find(message => message.role === 'user').content);
       assert.equal(prompt.task, 'ask');
       assert.equal(prompt.question, acceptanceFixtures.find(fixture => fixture.id === example.id).input.question);
@@ -202,23 +215,25 @@ test('new hosted cases pass through real request parsing, topic handling and rel
     assert.equal(reply.status, 200, `${example.id}: ${await reply.clone().text()}`);
     const value = await reply.json();
     assert.equal(value.passed, true, JSON.stringify(value));
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
     assert.equal(value.syntheticDiagnostic, undefined);
   }
 });
 
-test('public grounding fixtures reject fabricated claims through the full service while preserving real evidence', async () => {
+test('reviewed public answers preserve outcomes, negation, translation and conversation context', async () => {
   const examples = [
-    { id: 'public-denied-outcome', sourceId: 'a:fixture-60', quote: 'My application was denied after the interview.' },
-    { id: 'public-negation-context', sourceId: 'a:fixture-61', quote: 'approved after the interview.' },
-    { id: 'public-prompt-injection', sourceId: 'a:fixture-62', quote: 'I attended my appointment on Monday.' },
-    { id: 'public-unsupported-policy', sourceId: 'a:fixture-63', quote: 'My application was approved after the interview.' },
-    { id: 'public-original-language', sourceId: 'a:fixture-66', quote: 'Recibí mi pasaporte el viernes.' },
-    { id: 'public-multi-hop-context', sourceId: 'a:fixture-67', quote: 'My H-1B stamping in Chennai completed after seven days.' },
-    { id: 'public-ordinal-context', sourceId: 'q:00000000-0000-4000-8000-000000000051', quote: 'My Chennai stamping interview was postponed to October 28 because the officer was unavailable.' },
+    { id: 'public-denied-outcome', sourceId: 'a:fixture-60', quote: 'My application was denied after the interview.', text: 'The member reported that their application was denied after the interview.' },
+    { id: 'public-negation-context', sourceId: 'a:fixture-61', quote: 'I was not approved after the interview.', text: 'The member said they were not approved after the interview.' },
+    { id: 'public-prompt-injection', sourceId: 'a:fixture-62', quote: 'I attended my appointment on Monday.', text: 'The member attended the appointment on Monday.' },
+    { id: 'public-original-language', sourceId: 'a:fixture-66', quote: 'Recibí mi pasaporte el viernes.', text: 'The member received their passport on Friday.' },
+    { id: 'public-multi-hop-context', sourceId: 'a:fixture-67', quote: 'My H-1B stamping in Chennai completed after seven days.', text: 'The member reported that their H-1B stamping in Chennai completed after seven days.' },
+    { id: 'public-ordinal-context', sourceId: 'q:00000000-0000-4000-8000-000000000051', quote: 'My Chennai stamping interview was postponed to October 28 because the officer was unavailable.', text: 'The member’s Chennai interview was postponed to October 28 because the officer was unavailable.' },
   ];
   for (const example of examples) {
+    let calls = 0;
     const settings = { ...env(), ASSISTANT_AI: { run: async (_model, request) => {
+      calls++;
+      const review = reviewResponse(request); if (review) return review;
       const prompt = JSON.parse(request.messages.find(message => message.role === 'user').content);
       if (example.id === 'public-multi-hop-context') assert.deepEqual(prompt.previousQuestions, ['What did members report about H-1B stamping in Chennai?']);
       if (example.id === 'public-ordinal-context') {
@@ -227,18 +242,104 @@ test('public grounding fixtures reject fabricated claims through the full servic
         assert.deepEqual(prompt.previousQuestions, []);
         assert.deepEqual(prompt.resolvedDiscussion, { questionId: example.sourceId.slice(2), sourceIds: [example.sourceId] });
       }
-      return { response: JSON.stringify({ status: 'answered', claims: [{ text: 'The member was approved immediately on Tuesday. All applicants are guaranteed approval.', evidence: [{ sourceId: example.sourceId, quote: example.quote }] }], disagreements: [], unanswered: [] }) };
+      return { response: JSON.stringify({ status: 'answered', claims: [{ text: example.text, evidence: [{ sourceId: example.sourceId, quote: example.quote }] }], disagreements: [], unanswered: [] }) };
     } } };
     const reply = await worker.fetch(request({ id: example.id }), settings);
     assert.equal(reply.status, 200, example.id);
     const evaluation = await reply.json();
     assert.equal(evaluation.passed, true, `${example.id}: ${JSON.stringify(evaluation)}`);
+    assert.equal(calls, 2);
     assert.equal(evaluation.syntheticDiagnostic, undefined);
   }
   const fixture = acceptanceFixtures.find(item => item.id === 'public-conflicting-reports');
-  const claims = fixture.corpus.sources.map(source => ({ text: 'This source proves that all phones are always allowed.', evidence: [{ sourceId: source.id, quote: source.body }] }));
-  const settings = { ...env(), ASSISTANT_AI: { run: async () => ({ response: JSON.stringify({ status: 'answered', claims, disagreements: [{ text: 'One member is wrong.', evidence: claims.flatMap(claim => claim.evidence) }], unanswered: [] }) }) } };
+  const claims = fixture.corpus.sources.map((source, index) => ({ text: index === 0 ? 'One member reported that staff allowed phones inside the venue.' : 'Another member reported that staff did not allow phones inside the venue.', evidence: [{ sourceId: source.id, quote: source.body }] }));
+  const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => reviewResponse(input) ?? ({ response: JSON.stringify({ status: 'answered', claims, disagreements: [{ text: 'The members reported different experiences with phones at their visits.', evidence: claims.flatMap(claim => claim.evidence) }], unanswered: [] }) }) } };
   const evaluation = await (await worker.fetch(request({ id: fixture.id }), settings)).json();
+  assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
+});
+
+test('independent review rejects fabricated meaning without replacing it with a raw quote', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'public-denied-outcome');
+  const draft = { status: 'answered', claims: [{ text: 'The member was approved immediately on Tuesday.', evidence: [{ sourceId: 'a:fixture-60', quote: 'My application was denied after the interview.' }] }], disagreements: [], unanswered: [] };
+  let calls = 0;
+  const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+    calls++;
+    return reviewResponse(input, false) ?? { response: JSON.stringify(draft) };
+  } } };
+  const reply = await worker.fetch(request({ id: fixture.id }), settings);
+  assert.equal(reply.status, 200);
+  const evaluation = await reply.json();
+  assert.equal(calls, 2);
+  assert.equal(evaluation.passed, false, 'Rejected prose must not masquerade as a successful factual answer');
+  assert.equal(evaluation.syntheticDiagnostic.output.status, 'insufficient');
+  assert.deepEqual(evaluation.syntheticDiagnostic.output.claims, []);
+  assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawModelOutput), draft, 'Diagnostics retain the draft, not the review response');
+  assert(evaluation.checks.some(check => check.name === 'application_evidence_reviewed_when_needed' && check.passed));
+});
+
+test('unsupported policy is rejected by the core without a needless second inference', async () => {
+  let calls = 0;
+  const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+    calls++; assert.equal(input.response_format.json_schema.name, 'discussion_answer');
+    return { response: JSON.stringify({ status: 'answered', claims: [{ text: 'The member was approved after the interview.', evidence: [{ sourceId: 'a:fixture-63', quote: 'My application was approved after the interview.' }] }], disagreements: [], unanswered: [] }) };
+  } } };
+  const evaluation = await (await worker.fetch(request({ id: 'public-unsupported-policy' }), settings)).json();
+  assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
+  assert.equal(calls, 1);
+  assert(evaluation.checks.some(check => check.name === 'application_evidence_reviewed_when_needed' && check.passed));
+});
+
+test('thank-you understanding is rejected as proof of work authorization with missing replies preserved', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'thank-you-confirmation');
+  let calls = 0;
+  const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+    calls++;
+    const review = reviewResponse(input, false); if (review) return review;
+    const prompt = JSON.parse(input.messages.find(message => message.role === 'user').content);
+    assert.equal(prompt.sources[0].speakerRole, 'original-poster');
+    return { response: JSON.stringify({ status: 'answered', claims: [{ text: 'The author was authorized to keep working on H-1B while staying in the US.', evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: fixture.corpus.sources[0].body }] }], disagreements: [], unanswered: [] }) };
+  } } };
+  const evaluation = await (await worker.fetch(request({ id: fixture.id }), settings)).json();
+  assert.equal(calls, 2);
+  assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
+});
+
+test('thank-you fixture accepts a qualified explanation without accepting affirmative permission', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'thank-you-confirmation');
+  const source = fixture.corpus.sources[0];
+  const text = 'No. The thank-you reply only repeats the original poster’s understanding; it does not establish that the author was authorized to keep working.';
+  const draft = { status: 'answered', claims: [{ text, evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
+  let calls = 0;
+  const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+    calls++;
+    return reviewResponse(input) ?? { response: JSON.stringify(draft) };
+  } } };
+  const evaluation = await (await worker.fetch(request({ id: fixture.id }), settings)).json();
+  assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
+  assert.equal(calls, 2);
+  for (const unsafe of [
+    'The author was authorized to work.',
+    'Yes, the author can keep working on H-1B.',
+    'The reply is unconfirmed, but the author may continue working.',
+    'The reply does not independently confirm permission. The original poster can keep working.',
+  ]) {
+    const result = { ...draft, claims: [{ ...draft.claims[0], text: unsafe }], sources: [source], coverage: { sourceCount: 1, partial: true, reasons: ['missing-replies'] } };
+    const unsafeEvaluation = evaluateAcceptance(fixture, result);
+    assert.equal(unsafeEvaluation.passed, false, unsafe);
+    assert(unsafeEvaluation.checks.some(check => check.name === 'no_authorization_inferred' && !check.passed), unsafe);
+  }
+});
+
+test('multiple discussion synthesis preserves separate people, timelines and citations', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'public-multiple-thread-synthesis');
+  const evidence = fixture.corpus.sources.slice(0, 2).map(source => ({ sourceId: source.id, quote: source.body.split('. ')[0] + '.' }));
+  let calls = 0;
+  const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+    calls++;
+    return reviewResponse(input) ?? { response: JSON.stringify({ status: 'answered', claims: [{ text: 'One member’s Chennai H-1B stamping completed after seven days, while another member reported twelve days. These are two individual experiences.', evidence }], disagreements: [], unanswered: [] }) };
+  } } };
+  const evaluation = await (await worker.fetch(request({ id: fixture.id }), settings)).json();
+  assert.equal(calls, 2);
   assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
 });
 
@@ -249,6 +350,9 @@ test('semantic gate rejects verbose answers, irrelevant details and answering a 
     { id: 'concise-question-relevance', text: 'Chennai biometrics took ten minutes; the other member paid 500 rupees for parking in Pune.', check: 'unrelated_report_excluded' },
     { id: 'conversation-topic-switch', text: 'The Chennai member received their passport on Friday.', check: 'latest_question_answered' },
     { id: 'short-followup-context', text: 'The Hyderabad member moved the appointment because their train was cancelled.', check: 'specific_cause_preserved' },
+    { id: 'public-original-language', text: 'The member received their passport on Tuesday.', check: 'translated_day_preserved' },
+    { id: 'thank-you-confirmation', text: 'The original poster was authorized to work.', check: 'unconfirmed_understanding_not_a_fact' },
+    { id: 'public-multiple-thread-synthesis', text: 'Everyone usually completes Chennai stamping after seven days.', check: 'no_unrelated_city_or_generalized_timeline' },
   ];
   for (const example of cases) {
     const fixture = acceptanceFixtures.find(fixture => fixture.id === example.id);
@@ -261,6 +365,12 @@ test('semantic gate rejects verbose answers, irrelevant details and answering a 
   assert(!acceptanceFixtures.some(fixture => fixture.input.mode === 'catchup' && fixture.input.scope.kind !== 'community'));
   const tail = acceptanceFixtures.find(fixture => fixture.id === 'long-post-tail-answer');
   assert(tail.corpus.sources[0].body.indexOf('650 rupees') > 4000);
+  const publicFixture = acceptanceFixtures.find(fixture => fixture.id === 'public-question');
+  const quote = publicFixture.corpus.sources[4].body;
+  for (const text of [`A discussion excerpt: “${quote}”`, quote]) {
+    const evaluation = evaluateAcceptance(publicFixture, { ...base, claims: [{ text, evidence: [{ sourceId: publicFixture.corpus.sources[4].id, quote }] }] });
+    assert(evaluation.checks.some(check => check.name === 'public_answers_are_natural_synthesis' && !check.passed));
+  }
 });
 
 test('failed semantic checks retain bounded model and validated diagnostics only for compiled synthetic fixtures', async () => {
@@ -340,7 +450,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 24);
+  assert.equal(acceptanceFixtures.length, 26);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);

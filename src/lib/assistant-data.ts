@@ -2,7 +2,7 @@
 // never import the browser client or construct a service-role client here.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import archive from '@visa/archive';
-import type { AssistantCorpus, AssistantRequest, AssistantSource } from './assistant-contract';
+import type { AssistantCorpus, AssistantCoverageReason, AssistantRequest, AssistantSource } from './assistant-contract';
 import type { Answer, CommunityFeed, Question } from './types';
 import { detectTopics } from './tagging';
 import { AssistantError, assistantPreviousQuestions, assistantRetrievalQuestion, assistantSearchTerms } from './assistant-core';
@@ -10,12 +10,13 @@ import { assistantPostSearchQuery, assistantPostSearchScore } from './assistant-
 import { assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantSeenPostIds } from './assistant-context';
 
 export const ASSISTANT_SOURCE_LIMIT = 48;
+const ASSISTANT_CONTEXT_THREAD_LIMIT = 8;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ARCHIVE_ID = /^apify-[a-zA-Z0-9_-]{1,160}$/;
-const QUESTION_FIELDS = 'id,community_id,title,body,status,created_at,updated_at';
-const ANSWER_FIELDS = 'id,question_id,body,status,is_accepted,vote_score,created_at,updated_at';
-type SourceQuestion = Pick<Question, 'id' | 'community_id' | 'title' | 'body' | 'status' | 'created_at' | 'updated_at'>;
-type SourceAnswer = Pick<Answer, 'id' | 'question_id' | 'body' | 'status' | 'is_accepted' | 'vote_score' | 'created_at' | 'updated_at'>;
+const QUESTION_FIELDS = 'id,author_id,community_id,title,body,status,created_at,updated_at';
+const ANSWER_FIELDS = 'id,author_id,question_id,body,status,is_accepted,vote_score,created_at,updated_at';
+type SourceQuestion = Pick<Question, 'id' | 'community_id' | 'title' | 'body' | 'status' | 'created_at' | 'updated_at'> & Partial<Pick<Question, 'author_id'>>;
+type SourceAnswer = Pick<Answer, 'id' | 'question_id' | 'body' | 'status' | 'is_accepted' | 'vote_score' | 'created_at' | 'updated_at'> & Partial<Pick<Answer, 'author_id'>>;
 type SourceRow = {
   source_id: string; source_kind: 'question' | 'reply'; question_id: string; community_id: string | null;
   title: string; body: string; created_at: string; updated_at: string;
@@ -26,7 +27,7 @@ function questionSource(question: SourceQuestion, provenance: AssistantSource['p
   return {
     id: `q:${question.id}`, kind: 'question', questionId: question.id, communityId: question.community_id ?? null,
     title: question.title, body: question.body, createdAt: question.created_at, updatedAt: question.updated_at,
-    url: `/questions/${encodeURIComponent(question.id)}`, provenance,
+    url: `/questions/${encodeURIComponent(question.id)}`, provenance, speakerRole: 'original-poster',
   };
 }
 function replySource(answer: SourceAnswer, question: SourceQuestion, provenance: AssistantSource['provenance']): AssistantSource {
@@ -34,6 +35,7 @@ function replySource(answer: SourceAnswer, question: SourceQuestion, provenance:
     id: `a:${answer.id}`, kind: 'reply', questionId: question.id, communityId: question.community_id ?? null,
     title: question.title, body: answer.body, createdAt: answer.created_at, updatedAt: answer.updated_at,
     parentContext: question.body.slice(0, 1000), parentUpdatedAt: question.updated_at,
+    ...(answer.author_id?.trim() && question.author_id?.trim() ? { speakerRole: answer.author_id === question.author_id ? 'original-poster' as const : 'member' as const } : {}),
     url: `/questions/${encodeURIComponent(question.id)}#answer-${encodeURIComponent(answer.id)}`, provenance,
   };
 }
@@ -79,15 +81,17 @@ function publicArchiveMatches(input: AssistantRequest): AssistantCorpus {
   const matches: Array<{ source: AssistantSource; score: number }> = [];
   const matchedQuestions = new Set<string>();
   const excluded = new Set(assistantSeenPostIds(input));
-  let scanned = 0, matched = 0, partial = false;
+  let scanned = 0, partial = false;
   const consider = (source: AssistantSource) => {
     if (excluded.has(source.questionId)) return;
     if (!Number.isFinite(Date.parse(source.createdAt))) return;
     const rank = input.mode === 'ask' ? score(source) : 1;
     if (!rank) return;
-    if (!postSearch || !matchedQuestions.has(source.questionId)) matched++;
     matchedQuestions.add(source.questionId);
-    if (postSearch) {
+    // Search candidates represent discussions, not a popularity contest among
+    // replies. Expand their full context after ranking so one busy thread does
+    // not consume every candidate slot before other discussions are considered.
+    if (postSearch || input.mode === 'ask') {
       const existing = matches.findIndex(row => row.source.questionId === source.questionId);
       if (existing >= 0) {
         if (matches[existing].score >= rank) return;
@@ -110,15 +114,22 @@ function publicArchiveMatches(input: AssistantRequest): AssistantCorpus {
       if (reply.status === 'active') consider(replySource(reply, question, 'archive'));
     }
   }
-  return { sources: matches.map(({ source }) => source), partial: partial || matched > ASSISTANT_SOURCE_LIMIT };
+  const limited = partial || matchedQuestions.size > ASSISTANT_SOURCE_LIMIT;
+  return { sources: matches.map(({ source }) => source), partial: limited,
+    ...(limited ? { coverageReasons: ['retrieval-limit'] as AssistantCoverageReason[] } : {}) };
+}
+
+function searchText(input: AssistantRequest): string {
+  const postSearch = assistantPostSearchQuery(input);
+  return postSearch ? [postSearch.text,
+    ...(postSearch.stamping ? ['stamping dropbox passport consulate administrative processing 221g'] : []),
+    ...(postSearch.delay ? ['delay pending waiting stuck'] : []),
+  ].join(' ') : input.mode === 'ask' ? assistantRetrievalQuestion(input) : '';
 }
 
 async function searchSources(client: SupabaseClient, input: AssistantRequest): Promise<AssistantCorpus> {
   const postSearch = assistantPostSearchQuery(input);
-  const question = postSearch ? [postSearch.text,
-    ...(postSearch.stamping ? ['stamping dropbox passport consulate administrative processing 221g'] : []),
-    ...(postSearch.delay ? ['delay pending waiting stuck'] : []),
-  ].join(' ') : input.mode === 'ask' ? assistantRetrievalQuestion(input) : '';
+  const question = searchText(input);
   const { data, error } = await client.rpc('assistant_sources', {
     target_community_id: input.scope.kind === 'community' ? input.scope.id : null,
     target_question_id: input.scope.kind === 'post' ? input.scope.id : null,
@@ -137,11 +148,51 @@ async function searchSources(client: SupabaseClient, input: AssistantRequest): P
   return {
     sources: postSearch ? sources.filter(source => assistantPostSearchScore(source, postSearch) > 0) : sources,
     partial: rows.length > ASSISTANT_SOURCE_LIMIT,
+    ...(rows.length > ASSISTANT_SOURCE_LIMIT ? { coverageReasons: ['retrieval-limit'] as AssistantCoverageReason[] } : {}),
     ...(input.mode === 'catchup' ? { since: input.since, until: input.until } : {}),
   };
 }
 
-async function postCorpus(client: SupabaseClient, input: AssistantRequest & { scope: { kind: 'post'; id: string } }): Promise<AssistantCorpus> {
+/** Transitional indexed-RPC gap: query the existing caller-visible reply view. */
+async function importedReplyMatches(client: SupabaseClient, input: AssistantRequest): Promise<AssistantCorpus> {
+  if (!archiveEnabled()) return { sources: [], partial: false };
+  const terms = [...new Set(assistantSearchTerms(searchText(input)).flatMap(term => {
+    const visa = /^(h|f|l|b)-?([124])-?(b?)$/.exec(term);
+    return visa ? [term, `${visa[1]}${visa[2]}${visa[3]}`, `${visa[1]}-${visa[2]}${visa[3]}`] : [term];
+  }))].filter(term => /^[\p{L}\p{N}][\p{L}\p{M}\p{N}-]*$/u.test(term)).slice(0, 24);
+  if (!terms.length) return { sources: [], partial: false };
+  const incomplete = (): AssistantCorpus => ({ sources: [], partial: true, coverageReasons: ['unindexed-replies'] });
+  try {
+    // Only generated lexical tokens enter PostgREST syntax. Punctuation,
+    // wildcards, parentheses and arbitrary client filter strings cannot pass.
+    const { data, error } = await client.from('imported_answer_feed').select(ANSWER_FIELDS)
+      .or(terms.map(term => `body.ilike.%${term}%`).join(','))
+      .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(ASSISTANT_SOURCE_LIMIT + 1);
+    if (error?.code === '42501') throw new AssistantError(403, 'This account cannot use the assistant.');
+    if (error?.code === 'PT429') throw new AssistantError(429, 'Too many assistant requests. Please wait a minute.', 60);
+    if (error || !Array.isArray(data)) return incomplete();
+    const snapshot = archive as unknown as CommunityFeed;
+    const parents = new Map(snapshot.questions.filter(question => question.status !== 'archived').map(question => [question.id, question]));
+    const excluded = new Set(assistantSeenPostIds(input));
+    const score = sourceScorer(input);
+    const sources = (data as SourceAnswer[]).slice(0, ASSISTANT_SOURCE_LIMIT).flatMap(reply => {
+      const parent = parents.get(reply.question_id);
+      if (!parent || excluded.has(parent.id) || reply.status !== 'active') return [];
+      const source = replySource(reply, parent, 'member');
+      return Number.isFinite(Date.parse(source.createdAt)) && score(source) > 0 ? [source] : [];
+    });
+    const partial = data.length > ASSISTANT_SOURCE_LIMIT;
+    return { sources, partial, ...(partial ? { coverageReasons: ['retrieval-limit'] as AssistantCoverageReason[] } : {}) };
+  } catch (error) {
+    if (error instanceof AssistantError) throw error;
+    return incomplete();
+  }
+}
+
+async function postCorpus(client: SupabaseClient, input: AssistantRequest & { scope: { kind: 'post'; id: string } }, options: {
+  allowUnavailableImportedReplies?: boolean;
+  reuseRankedMatches?: boolean;
+} = {}): Promise<AssistantCorpus> {
   const id = input.scope.id;
   const imported = ARCHIVE_ID.test(id);
   let question: SourceQuestion | null;
@@ -174,28 +225,78 @@ async function postCorpus(client: SupabaseClient, input: AssistantRequest & { sc
     .order('is_accepted', { ascending: false }).order('vote_score', { ascending: false })
     .order('created_at', { ascending: false }).order('id', { ascending: false })
     .limit(ASSISTANT_SOURCE_LIMIT);
-  if (error || !Array.isArray(data)) throw new Error('Assistant sources are temporarily unavailable.');
-  const replies = data as SourceAnswer[];
+  if (error?.code === '42501') throw new AssistantError(403, 'This account cannot use the assistant.');
+  if (error?.code === 'PT429') throw new AssistantError(429, 'Too many assistant requests. Please wait a minute.', 60);
+  const unavailableImportedReplies = imported && options.allowUnavailableImportedReplies && (error || !Array.isArray(data));
+  if ((error || !Array.isArray(data)) && !unavailableImportedReplies) throw new Error('Assistant sources are temporarily unavailable.');
+  const replies = unavailableImportedReplies ? [] : data as SourceAnswer[];
   const sourceQuestion = questionSource(question, imported ? 'archive' : 'member');
   const replySources = [
     ...replies.map((reply) => replySource(reply, question, 'member')),
     ...archivedReplies.map((reply) => replySource(reply, question, 'archive')),
   ];
-  let partial = archiveIncomplete || replySources.length >= ASSISTANT_SOURCE_LIMIT;
+  const coverageReasons = new Set<AssistantCoverageReason>();
+  if (unavailableImportedReplies) coverageReasons.add('unindexed-replies');
+  if (archiveIncomplete) coverageReasons.add('missing-replies');
+  if (replySources.length >= ASSISTANT_SOURCE_LIMIT) coverageReasons.add('retrieval-limit');
+  let partial = coverageReasons.size > 0;
   let selected = replySources;
   // Small threads retain every visible reply. For long native threads, lexical
   // and tag relevance comes first, followed by accepted/popular context. Always
   // disclose the cap; never pretend the whole discussion was read.
-  if (partial && input.mode === 'ask' && !imported) {
+  // Public expansion already has fresh global matches to merge below. Avoid
+  // charging the database search-rate gate again for every expanded thread.
+  if (partial && input.mode === 'ask' && !imported && !options.reuseRankedMatches) {
     const relevant = await searchSources(client, input);
     selected = [...relevant.sources.filter((source) => source.kind === 'reply'), ...replySources];
     partial ||= relevant.partial;
+    relevant.coverageReasons?.forEach(reason => coverageReasons.add(reason));
   } else if (partial && input.mode === 'ask') {
     const score = sourceScorer(input);
     selected = [...replySources].sort((a, b) => score(b) - score(a) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
   }
   const deduplicated = [...new Map(selected.map((source) => [source.id, source])).values()];
-  return { sources: [sourceQuestion, ...deduplicated.slice(0, ASSISTANT_SOURCE_LIMIT - 1)], partial };
+  return { sources: [sourceQuestion, ...deduplicated.slice(0, ASSISTANT_SOURCE_LIMIT - 1)], partial,
+    ...(coverageReasons.size ? { coverageReasons: [...coverageReasons] } : {}) };
+}
+
+/** Read bounded, current thread context under the same caller permissions. */
+async function publicThreadContext(client: SupabaseClient, input: AssistantRequest, ranked: AssistantSource[]): Promise<AssistantCorpus> {
+  const ids = [...new Set(ranked.map(source => source.questionId))];
+  const chosen = ids.slice(0, ASSISTANT_CONTEXT_THREAD_LIMIT);
+  const threads = await Promise.all(chosen.map(id => postCorpus(client, { ...input, scope: { kind: 'post', id } }, {
+    allowUnavailableImportedReplies: true, reuseRankedMatches: true,
+  })));
+  const coverageReasons = new Set<AssistantCoverageReason>(threads.flatMap(thread => thread.coverageReasons ?? []));
+  if (ids.length > chosen.length) coverageReasons.add('retrieval-limit');
+  const score = sourceScorer(input);
+  const groups = threads.map(thread => {
+    const parent = thread.sources.find(source => source.kind === 'question');
+    if (!parent) return [];
+    // A keyword hit can be older or less popular than the thread's bounded
+    // context window. It was just read under caller permissions: retain it
+    // after confirming its parent is still visible. Prefer the later context
+    // read for duplicate IDs so an edit is not replaced with an older body.
+    const matches = ranked.filter(source => source.kind === 'reply' && source.questionId === parent.questionId);
+    const matchedIds = new Set(matches.map(source => source.id));
+    const replies = [...new Map([...matches, ...thread.sources.filter(source => source.kind === 'reply')]
+      .map(source => [source.id, source])).values()]
+      .map(source => ({ ...source, title: parent.title, communityId: parent.communityId,
+        parentContext: parent.body.slice(0, 1000), parentUpdatedAt: parent.updatedAt }))
+      .sort((a, b) => Number(matchedIds.has(b.id)) - Number(matchedIds.has(a.id)) || score(b) - score(a)
+        || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+    return [parent, ...replies];
+  });
+  // The first 24 records include the parent and up to two replies per selected
+  // discussion. Remaining slots are shared round-robin. Keep non-keyword
+  // clarification/correction replies: they can change an apparent answer.
+  const sources = groups.flatMap(group => group.slice(0, 3));
+  for (let offset = 3; sources.length < ASSISTANT_SOURCE_LIMIT && groups.some(group => group.length > offset); offset++) {
+    for (const group of groups) if (group[offset] && sources.length < ASSISTANT_SOURCE_LIMIT) sources.push(group[offset]);
+  }
+  if (groups.reduce((total, group) => total + group.length, 0) > sources.length) coverageReasons.add('retrieval-limit');
+  return { sources, partial: coverageReasons.size > 0 || threads.some(thread => thread.partial),
+    ...(coverageReasons.size ? { coverageReasons: [...coverageReasons] } : {}) };
 }
 
 /** All content is freshly read under current permissions on every invocation. */
@@ -228,22 +329,25 @@ export async function retrieveAssistantCorpus(client: SupabaseClient, input: Ass
   const corpus = await searchSources(client, input);
   if (input.scope.kind === 'public') {
     const historical = publicArchiveMatches(input);
+    const importedReplies = await importedReplyMatches(client, input);
     const score = sourceScorer(input);
-    const combined = [...corpus.sources, ...historical.sources]
+    const combined = [...corpus.sources, ...historical.sources, ...importedReplies.sources]
       .sort((a, b) => (input.mode === 'ask' ? score(b) - score(a) : 0) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
     const seenQuestions = new Set<string>();
     const selected = assistantPostSearchQuery(input) ? combined.filter(source => {
       if (seenQuestions.has(source.questionId)) return false;
       seenQuestions.add(source.questionId); return true;
     }) : combined;
+    const context = assistantPostSearchQuery(input) ? null : await publicThreadContext(client, input, selected);
+    const coverageReasons = new Set<AssistantCoverageReason>([...corpus.coverageReasons ?? [], ...historical.coverageReasons ?? [], ...importedReplies.coverageReasons ?? [], ...context?.coverageReasons ?? []]);
+    if (selected.length > ASSISTANT_SOURCE_LIMIT - assistantSeenPostIds(input).length) coverageReasons.add('retrieval-limit');
     return {
       ...corpus,
-      sources: selected.slice(0, ASSISTANT_SOURCE_LIMIT - assistantSeenPostIds(input).length),
-      // Global keyword search has no indexed path for live imported_answers
-      // yet. They are included in specific-post asks; do
-      // not claim exhaustive global coverage until that index is deployed.
-      partial: corpus.partial || historical.partial || selected.length > ASSISTANT_SOURCE_LIMIT - assistantSeenPostIds(input).length
-        || (input.mode === 'ask' && archiveEnabled()),
+      sources: context?.sources ?? selected.slice(0, ASSISTANT_SOURCE_LIMIT - assistantSeenPostIds(input).length),
+      // Keep actual scan, retrieval and imported-export gaps distinct from
+      // routine evidence selection; never imply that a failed search was full.
+      partial: corpus.partial || historical.partial || importedReplies.partial || !!context?.partial || coverageReasons.size > 0,
+      ...(coverageReasons.size ? { coverageReasons: [...coverageReasons] } : {}),
     };
   }
   return corpus;

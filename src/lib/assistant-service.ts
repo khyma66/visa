@@ -2,9 +2,11 @@ import type { AssistantAvailability, AssistantCorpus, AssistantRequest, Assistan
 import { ASSISTANT_VERSION, AssistantError, assistantAvailability, assistantFingerprint, assistantPrompt, emptyAssistantResult, parseAssistantRequest, prepareAssistantCorpus, readBoundedJson, requireAssistantMode, validateAssistantOutput, type AssistantValidationCode } from './assistant-core';
 import type { AssistantPrompt } from './assistant-provider';
 import { assistantPostSearchQuery, buildAssistantPostSearchResult } from './assistant-search';
+import { assistantReviewCorpus, assistantReviewPrompt, validateAssistantReview } from './assistant-review';
 
-export type AssistantCache = { get(key: string): Promise<AssistantResult | null>; put(key: string, value: AssistantResult): Promise<void> };
-export type AssistantFailureStage = 'request' | 'authentication' | 'retrieval' | 'quota' | 'generation' | 'validation' | 'revalidation';
+type ReviewedCacheEntry = { result: AssistantResult; digest: string };
+export type AssistantCache = { get(key: string): Promise<ReviewedCacheEntry | null>; put(key: string, value: ReviewedCacheEntry): Promise<void> };
+export type AssistantFailureStage = 'request' | 'authentication' | 'retrieval' | 'quota' | 'generation' | 'validation' | 'review' | 'revalidation';
 class AssistantOperationFailure extends Error {
   constructor(public original: unknown, public stage: AssistantFailureStage) { super('Assistant operation failed'); }
 }
@@ -73,11 +75,11 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       };
       try {
         const cached = await deps.cache?.get(key);
-        if (cached) {
-          const cachedTime = Date.parse(cached.generatedAt);
+        if (cached?.result && cached.digest === await assistantFingerprint({ key, result: cached.result })) {
+          const cachedTime = Date.parse(cached.result.generatedAt);
           if (cachedTime <= Date.now() && Date.now() - cachedTime < 300_000) {
             // Revalidate model structure and source quotes rather than blindly trusting stored JSON.
-            const verified = validateAssistantOutput(JSON.stringify(cached), corpus, cachedTime, input);
+            const verified = validateAssistantOutput(JSON.stringify(cached.result), corpus, cachedTime, input);
             await revalidate();
             return assistantResponse({ ...verified, cached: true });
           }
@@ -92,9 +94,24 @@ export function createAssistantHandler(deps: AssistantDependencies) {
           stage = 'generation';
           const raw = await deps.generate(assistantPrompt(input, corpus), request.signal);
           stage = 'validation';
-          const result = validateAssistantOutput(raw, corpus, Date.now(), input);
+          let result = validateAssistantOutput(raw, corpus, Date.now(), input);
+          if (result.claims.length || result.disagreements.length) {
+            request.signal.throwIfAborted();
+            stage = 'review';
+            // A second, bounded inference checks meaning against full source
+            // context. It can reject text, never add unsupported facts. There
+            // are no automatic retries, model escalation or hidden quote fallback.
+            const reviewCorpus = assistantReviewCorpus(original, corpus, result);
+            if (!reviewCorpus) {
+              result = { ...result, status: 'insufficient', claims: [], disagreements: [], sources: [],
+                unanswered: ['I couldn’t check enough of the original discussion to answer that accurately. Try a more specific question.'] };
+            } else {
+              const review = await deps.generate(assistantReviewPrompt(input, reviewCorpus, result), request.signal);
+              result = validateAssistantReview(review, result);
+            }
+          }
           await revalidate();
-          try { await deps.cache?.put(key, result); } catch { /* caching is optional */ }
+          try { await deps.cache?.put(key, { result, digest: await assistantFingerprint({ key, result }) }); } catch { /* caching is optional */ }
           return result;
         })().catch(error => { throw new AssistantOperationFailure(error, stage); });
         inflight.set(key, operation);
@@ -124,7 +141,7 @@ export function cloudflareAssistantCache(): AssistantCache {
   const cache = typeof caches === 'undefined' ? undefined : (caches as unknown as { default?: EdgeCache }).default;
   const key = (hash: string) => new Request(`https://assistant-cache.invalid/v1/${hash}`);
   return {
-    async get(hash) { const response = await cache?.match(key(hash)); return response?.ok ? await readBoundedJson(response, 140_000) as AssistantResult : null; },
+    async get(hash) { const response = await cache?.match(key(hash)); return response?.ok ? await readBoundedJson(response, 140_000) as ReviewedCacheEntry : null; },
     async put(hash, value) { await cache?.put(key(hash), Response.json(value, { headers: { 'Cache-Control': 'public, max-age=300' } })); },
   };
 }
