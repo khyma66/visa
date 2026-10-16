@@ -173,7 +173,7 @@ test('typography uses a local system font, readable shared scale and responsive 
   assert(css.includes('--type-headline: 1.75rem;'));
   assert(css.includes('--type-headline: 1.5rem;'));
   assert(css.includes('--type-body: 1rem;'));
-  assert(css.includes('--type-ui: 0.875rem;'));
+  assert(css.includes('--type-ui: 1rem;'));
   assert(css.includes('font-sans text-base'));
   assert(css.includes('font-size: max(1rem, 16px)'));
 });

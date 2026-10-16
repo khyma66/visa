@@ -96,6 +96,96 @@ test('initial feed and sort clicks start fetching without the search debounce', 
     assert.equal(h.calls.at(-1).sort, 'score', 'Sort clicks do not wait for a typing timer');
   } finally { h.close(); }
 });
+
+test('sort selection responds immediately and keeps loaded cards visible while fresh results arrive', async () => {
+  const h = new Harness(), top = deferred();
+  h.getPage = ({ sort }) => sort === 'score' ? top.promise : Promise.resolve({ questions: [question('newest'), question('popular', { vote_score: 10, created_at: '2026-10-01T01:00:00Z' })], more: false });
+  try {
+    h.render(); await h.settle();
+    assert.deepEqual(ids(h), ['newest', 'popular']);
+    button(h, 'Top').props.onClick(); h.render();
+    assert.equal(button(h, 'Top').props['aria-pressed'], true, 'Selection feedback is not tied to network completion');
+    assert.deepEqual(ids(h), ['popular', 'newest'], 'Loaded posts are sorted in the same render as selection');
+    await h.settle();
+    assert.equal(h.calls.at(-1).sort, 'score');
+    assert.deepEqual(ids(h), ['popular', 'newest'], 'Do not replace usable cards with a loading skeleton');
+    assert.match(textOf(h.tree), /Updating results…/);
+    assert(!nodes(h.tree).some(node => node.props?.['aria-label'] === 'Loading questions'));
+    assert.equal(nodes(h.tree).find(node => node.props?.id === 'question-list').props['aria-busy'], true);
+    top.resolve({ questions: [question('fresh-top', { vote_score: 99 })], more: false }); await h.settle();
+    assert.deepEqual(ids(h), ['fresh-top']);
+    assert.doesNotMatch(textOf(h.tree), /Updating results/);
+    assert.equal(nodes(h.tree).find(node => node.props?.id === 'question-list').props['aria-busy'], false);
+  } finally { h.close(); }
+});
+
+test('active sort clicks and hover do not create redundant requests or history writes', async () => {
+  const h = new Harness();
+  try {
+    h.render(); await h.settle();
+    const calls = h.calls.length, writes = h.writes.length;
+    for (const label of ['New', 'Active', 'Top', 'Unanswered']) {
+      const tab = button(h, label);
+      assert.equal(tab.props.type, 'button');
+      assert.equal(tab.props.onMouseEnter, undefined, 'Hover should be immediate CSS feedback, not a data request');
+      assert.equal(tab.props.onPointerEnter, undefined);
+      assert.match(tab.props.className, /feed-sort-button/);
+    }
+    button(h, 'New').props.onClick(); h.render(); await h.settle();
+    assert.equal(h.calls.length, calls);
+    assert.equal(h.writes.length, writes);
+  } finally { h.close(); }
+});
+
+test('a changed search does not show the previous filter as refreshed results', async () => {
+  const h = new Harness(), next = deferred();
+  h.getPage = ({ search }) => search ? next.promise : Promise.resolve({ questions: [question('old-filter')], more: false });
+  try {
+    h.render(); await h.settle();
+    search(h, 'documents'); await h.flush();
+    assert.deepEqual(ids(h), []);
+    assert.match(textOf(h.tree), /Loading questions/);
+    assert.doesNotMatch(textOf(h.tree), /Updating results/);
+    next.resolve({ questions: [question('new-filter')], more: false }); await h.settle();
+    assert.deepEqual(ids(h), ['new-filter']);
+  } finally { h.close(); }
+});
+
+test('rapid sort changes reject a late response and do not prematurely declare Unanswered empty', async () => {
+  const h = new Harness(), top = deferred(), unanswered = deferred();
+  h.getPage = ({ sort }) => sort === 'score' ? top.promise : sort === 'unanswered' ? unanswered.promise : Promise.resolve({ questions: [question('answered', { answer_count: 2 })], more: false });
+  try {
+    h.render(); await h.settle();
+    button(h, 'Top').props.onClick(); h.render(); await h.settle();
+    button(h, 'Unanswered').props.onClick(); h.render(); await h.settle();
+    assert.equal(button(h, 'Unanswered').props['aria-pressed'], true);
+    assert.deepEqual(ids(h), []);
+    assert.match(textOf(h.tree), /Updating results…/);
+    assert.doesNotMatch(textOf(h.tree), /No matching questions|0 posts shown/);
+    top.resolve({ questions: [question('stale-top')], more: false }); await h.settle();
+    assert.deepEqual(ids(h), []);
+    unanswered.resolve({ questions: [question('fresh-unanswered')], more: false }); await h.settle();
+    assert.deepEqual(ids(h), ['fresh-unanswered']);
+    assert.doesNotMatch(textOf(h.tree), /Updating results/);
+  } finally { h.close(); }
+});
+
+test('failed refresh clears stale rows, keeps errors generic and allows retry', async () => {
+  const h = new Harness(), top = deferred();
+  h.getPage = ({ sort }) => sort === 'score' ? top.promise : Promise.resolve({ questions: [question('initial')], more: false });
+  try {
+    h.render(); await h.settle();
+    button(h, 'Top').props.onClick(); h.render(); await h.settle();
+    assert.deepEqual(ids(h), ['initial']);
+    top.reject(new Error('Supabase secret sentinel')); await h.settle();
+    assert.deepEqual(ids(h), []);
+    assert.match(textOf(h.tree), /Questions could not be loaded/);
+    assert.doesNotMatch(textOf(h.tree), /Supabase|sentinel|Updating results/);
+    h.getPage = async () => ({ questions: [question('recovered')], more: false });
+    button(h, 'Retry').props.onClick(); h.render(); await h.settle();
+    assert.deepEqual(ids(h), ['recovered']);
+  } finally { h.close(); }
+});
 function select(h, label, value) {
   const control = nodes(h.tree).find(node => node.type === 'select' && node.props['aria-label'] === label);
   assert(control, `Missing ${label} selector`);

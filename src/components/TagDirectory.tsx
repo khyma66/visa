@@ -90,8 +90,8 @@ export function TagDirectory() {
 
   return <main className="page-shell">
     <Link href="/" className="text-sm text-blue-700 hover:underline">← All questions</Link>
-    <div className="mt-5 flex items-center gap-3"><Tags className="text-orange-600" /><h1 className="text-3xl font-medium">Tags</h1></div>
-    <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Find your topic, explore similar experiences, and join the discussion. Choose a tag to see matching questions and posts.</p>
+    <div className="mt-5 flex items-center gap-3"><Tags className="text-orange-600" /><h1 className="text-2xl font-semibold sm:text-3xl">Tags</h1></div>
+    <p className="mt-3 max-w-2xl text-base leading-6 text-slate-600">Find your topic, explore similar experiences, and join the discussion. Choose a tag to see matching questions and posts.</p>
     <div className="my-6 flex flex-wrap items-center gap-3">
       <label className="relative"><Search size={17} className="absolute left-3 top-3 text-slate-400" /><input aria-label="Filter tags" maxLength={40} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter by tag name" className="rounded border bg-white py-2 pl-10 pr-3" /></label>
       <select aria-label="Sort tags" value={sort} onChange={(event) => setSort(event.target.value)} className="rounded border bg-white p-2"><option value="popular">Most used</option><option value="name">Name A–Z</option></select>
@@ -103,7 +103,7 @@ export function TagDirectory() {
     {loading ? <p>Loading community tags…</p> : <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{tags.map((row) => <Link key={row.tag} href={`/?tag=${encodeURIComponent(row.tag)}`} className="flex min-h-44 flex-col rounded border border-slate-200 bg-white p-5 hover:border-blue-400">
         <span className="w-fit rounded bg-blue-50 px-2 py-1 text-sm font-semibold text-blue-700">{topicLabel(row.tag)}</span>
-        <p className="my-3 line-clamp-3 text-xs leading-5 text-slate-600">{row.example_title}</p>
+        <p className="my-3 line-clamp-3 text-base leading-6 text-slate-600">{row.example_title}</p>
         <span className="mt-auto text-xs font-semibold text-slate-500">{row.question_count} {row.question_count === 1 ? 'post' : 'posts'}</span>
       </Link>)}</div>
       {!tags.length && !error && <p>No tags match “{search}”.</p>}
