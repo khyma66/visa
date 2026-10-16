@@ -58,7 +58,7 @@ function Result({ result, catchup }: { result: AssistantResult; catchup: boolean
   return <div aria-label="Assistant response">
     {result.status === 'insufficient' && <p className="text-sm leading-6 text-slate-800">{result.unanswered[0] || (catchup ? 'No updates found for this time range.' : 'I couldn’t find enough relevant discussions to answer. Try a more specific question.')}</p>}
     <Claims claims={result.claims} sources={result.sources} />
-    {!!result.disagreements.length && <div className="mt-3 border-l-2 border-amber-300 pl-3"><p className="mb-2 text-xs font-semibold text-amber-900">Reports differ</p><Claims claims={result.disagreements} sources={result.sources} /></div>}
+    {!!result.disagreements.length && <div className="mt-3 border-l-2 border-amber-300 pl-3"><p className="mb-2 text-xs font-semibold text-amber-900">Compare source excerpts</p><Claims claims={result.disagreements} sources={result.sources} /></div>}
     {result.status !== 'insufficient' && !!result.unanswered.length && <details className="mt-3 text-xs text-slate-500"><summary className="cursor-pointer">Still unclear</summary><ul className="mt-2 list-disc space-y-1 pl-4 leading-5">{result.unanswered.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
     {result.coverage.partial && <p className="mt-3 text-xs leading-5 text-amber-800">Partial coverage: some discussions may be missing.{catchup && ' Checkpoint unchanged. Try a shorter range.'}</p>}
     <details className="mt-3 text-xs text-slate-500">

@@ -221,7 +221,12 @@ test('public grounding fixtures reject fabricated claims through the full servic
     const settings = { ...env(), ASSISTANT_AI: { run: async (_model, request) => {
       const prompt = JSON.parse(request.messages.find(message => message.role === 'user').content);
       if (example.id === 'public-multi-hop-context') assert.deepEqual(prompt.previousQuestions, ['What did members report about H-1B stamping in Chennai?']);
-      if (example.id === 'public-ordinal-context') assert.match(request.messages.find(message => message.role === 'system').content, /server has already resolved the selected post/);
+      if (example.id === 'public-ordinal-context') {
+        assert.match(request.messages.find(message => message.role === 'system').content, /server has already resolved the selected post/);
+        assert.equal(prompt.question, 'Explain the selected discussion.');
+        assert.deepEqual(prompt.previousQuestions, []);
+        assert.deepEqual(prompt.resolvedDiscussion, { questionId: example.sourceId.slice(2), sourceIds: [example.sourceId] });
+      }
       return { response: JSON.stringify({ status: 'answered', claims: [{ text: 'The member was approved immediately on Tuesday. All applicants are guaranteed approval.', evidence: [{ sourceId: example.sourceId, quote: example.quote }] }], disagreements: [], unanswered: [] }) };
     } } };
     const reply = await worker.fetch(request({ id: example.id }), settings);
@@ -258,7 +263,7 @@ test('semantic gate rejects verbose answers, irrelevant details and answering a 
   assert(tail.corpus.sources[0].body.indexOf('650 rupees') > 4000);
 });
 
-test('failed semantic checks retain validated diagnostics only for compiled synthetic fixtures', async () => {
+test('failed semantic checks retain bounded model and validated diagnostics only for compiled synthetic fixtures', async () => {
   const settings = { ...env(), ASSISTANT_AI: { run: async () => ({ response: JSON.stringify({ status: 'insufficient', claims: [], disagreements: [], unanswered: ['Evidence is insufficient.'] }) }) } };
   const reply = await worker.fetch(request(), settings);
   assert.equal(reply.status, 200);
@@ -269,6 +274,7 @@ test('failed semantic checks retain validated diagnostics only for compiled synt
   assert.equal(value.syntheticDiagnostic.output.status, 'insufficient');
   assert(value.syntheticDiagnostic.failedChecks.includes('correct_reported_day'));
   assert.deepEqual(value.syntheticDiagnostic.output.claims, []);
+  assert.deepEqual(JSON.parse(value.syntheticDiagnostic.rawModelOutput), { status: 'insufficient', claims: [], disagreements: [], unanswered: ['Evidence is insufficient.'] });
   assert.equal((await worker.fetch(request({ id: 'post-question', sources: ['not a fixture'] }), settings)).status, 400);
   assert.equal((await worker.fetch(request({ id: 'not-a-compiled-fixture' }), settings)).status, 400);
 });

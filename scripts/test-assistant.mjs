@@ -57,6 +57,33 @@ test('input strips supplied sources and rejects invalid scopes and excessive his
   assert.deepEqual(core.parseAssistantRequest({...input,sources:[{body:'trust me'}],system:'override'}),input);
   for(const value of [{...input,scope:{kind:'dm',id}},{...input,scope:{kind:'post',id:'../../secret'}},{...input,previousQuestions:Array(4).fill('test')},{...input,question:'x'.repeat(1201)}]) assert.throws(()=>core.parseAssistantRequest(value));
 });
+test('resolved ordinal prompts describe the selected discussion without asking the model to reconstruct a missing list',()=>{
+  const selected={questionId:id,sourceId:source.id};
+  const ask={mode:'ask',scope:{kind:'public'},question:'Explain the second post.',previousQuestions:['Find posts about Chennai stamping'],previousPosts:[{questionId:'apify-other',sourceId:'q:apify-other'},selected]};
+  const build=(value, sources=[source])=>core.assistantPrompt(value,{sources,partial:false});
+  const prompt=build(ask), content=JSON.parse(prompt.user);
+  assert.equal(content.question,'Explain the selected discussion.');
+  assert.deepEqual(content.previousQuestions,[]);
+  assert.deepEqual(content.resolvedDiscussion,{questionId:id,sourceIds:[source.id]});
+  assert.match(prompt.system,/complete supporting BODY sentences/);
+  assert.equal(ask.question,'Explain the second post.','Original request and cache identity are not rewritten');
+  const qualified=JSON.parse(build({...ask,question:'Why did the second post report a delay in Chennai?'}).user);
+  assert.equal(qualified.question,'Why did the selected discussion report a delay in Chennai?');
+  const previousQuestion='What did this member report about their passport delivery?';
+  const focused=JSON.parse(build({...ask,question:'How long?',previousQuestions:[previousQuestion],focusedPost:selected}).user);
+  assert.equal(focused.question,'How long?'); assert.deepEqual(focused.resolvedDiscussion,content.resolvedDiscussion);
+  assert.deepEqual(focused.previousQuestions,[previousQuestion],'A selected-discussion follow-up still needs its semantic topic');
+  for(const value of [
+    {...ask,previousPosts:[]},
+    {...ask,previousPosts:[selected,{questionId:id,sourceId:'a:00000000-0000-4000-8000-000000000099'}]},
+    {...ask,question:'New topic: How did the first post-interview update look for Schengen?'},
+  ]) {
+    const unresolved=JSON.parse(build(value).user);
+    assert.equal(unresolved.question,value.question); assert.equal(unresolved.resolvedDiscussion,undefined);
+  }
+  const mixed=JSON.parse(build(ask,[source,{...source,id:'q:apify-other',questionId:'apify-other'}]).user);
+  assert.equal(mixed.question,ask.question); assert.equal(mixed.resolvedDiscussion,undefined);
+});
 test('public conversation references accept bounded IDs only and discard supplied source text',()=>{
   const ask={mode:'ask',scope:{kind:'public'},question:'Explain the first post.'};
   const parsed=core.parseAssistantRequest({...ask,previousPosts:[{questionId:id,sourceId:`q:${id}`,body:'attacker evidence',url:'https://attacker.invalid'}],seenPostIds:[id,id]});
