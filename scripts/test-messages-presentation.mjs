@@ -65,6 +65,8 @@ function button(tree, label) {
   return nodes(tree, item => item.type === 'button').find(item => item.props['aria-label'] === label || React.Children.toArray(item.props.children).join('') === label);
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
+const messageForm = tree => nodes(tree, item => item.type === 'form')
+  .find(form => nodes(form, item => item.type === 'input' && item.props['aria-label'] === 'Private message').length);
 
 test('messages waits for auth and signed-out accounts cannot see cached conversation text', () => {
   const cached = { conversations: [conversation('accepted')], activeId: 'accepted', messages: [message('private-secret')] };
@@ -307,4 +309,143 @@ test('late author-link lookup never overrides an explicitly chosen folder or sen
   assert.equal(f.state[stateNames.indexOf('activeId')], '');
   assert.match(output.html, /Member found: u\/bob-member/);
   assert.deepEqual(f.calls.map(([name]) => name), ['getMessageEntry']);
+});
+
+test('failed conversation history has an explicit retry that recovers the confirmed messages and count', async () => {
+  const row = conversation('accepted');
+  const f = fixture({ conversations: [row], activeId: row.id, inboxLoading: false });
+  const previousDocument = globalThis.document;
+  globalThis.document = { visibilityState: 'hidden' };
+  let failed = true, cleanup;
+  f.api.refreshMessages = async () => {
+    if (failed) throw new Error('Private database connection details');
+    return { messages: [message('recovered')], reset: true, hasOlder: false };
+  };
+  f.api.getConversationMessageCount = async () => 1;
+  try {
+    render(f); cleanup = f.effects[2](); await flush();
+    let output = render(f);
+    assert.match(output.html, /We couldn’t refresh this conversation/);
+    assert.doesNotMatch(output.html, /Private database connection details/);
+    failed = false;
+    button(output.tree, 'Retry conversation').props.onClick(); await flush();
+    output = render(f);
+    assert.match(output.html, /recovered text/);
+    assert.match(output.html, /1 of 1 messages shown/);
+    assert.doesNotMatch(output.html, /Retry conversation|couldn’t refresh/);
+  } finally { cleanup?.(); globalThis.document = previousDocument; }
+});
+
+test('confirmed send followed by read failure never says sending failed or invites a duplicate send', async () => {
+  const row = conversation('accepted');
+  const f = fixture({ conversations: [row], activeId: row.id, inboxLoading: false, body: 'A new message', messageTotal: 0 });
+  f.api.sendMessage = async () => {};
+  f.api.refreshMessages = async () => { throw new Error('Private read failure'); };
+  f.api.getConversationMessageCount = async () => 1;
+  f.api.listConversationFolder = async () => ({ conversations: [row], hasOlder: false });
+  f.api.getConversationCounts = async () => ({ chats: 1, requests: 0, closed: 0 });
+  await messageForm(render(f).tree).props.onSubmit({ preventDefault() {} });
+  const output = render(f);
+  assert.match(output.html, /Your message was sent, but this conversation could not refresh/);
+  assert(button(output.tree, 'Retry conversation'));
+  assert.doesNotMatch(output.html, /Private read failure|Send failed|Your text is saved/);
+  assert.equal(f.state[stateNames.indexOf('body')], '');
+  assert.equal(f.state[stateNames.indexOf('messageTotal')], null);
+  assert.equal(f.calls.filter(([name]) => name === 'sendMessage').length, 1);
+});
+
+test('failed sends retain the draft and idempotency key while duplicate same-tick submits are locked', async () => {
+  const row = conversation('accepted');
+  const f = fixture({ conversations: [row], activeId: row.id, inboxLoading: false, body: 'Keep this draft' });
+  let rejectSend;
+  f.api.sendMessage = () => new Promise((_resolve, reject) => { rejectSend = reject; });
+  const submit = messageForm(render(f).tree).props.onSubmit;
+  const first = submit({ preventDefault() {} });
+  await submit({ preventDefault() {} });
+  assert.equal(f.calls.filter(([name]) => name === 'sendMessage').length, 1);
+  rejectSend(new Error('Connection lost')); await first;
+  assert.equal(f.state[stateNames.indexOf('body')], 'Keep this draft');
+  f.api.sendMessage = async () => { throw new Error('Connection still unavailable'); };
+  await messageForm(render(f).tree).props.onSubmit({ preventDefault() {} });
+  const attempts = f.calls.filter(([name]) => name === 'sendMessage');
+  assert.equal(attempts.length, 2);
+  assert.equal(attempts[0][1][3], attempts[1][1][3]);
+  assert.equal(f.state[stateNames.indexOf('body')], 'Keep this draft');
+});
+
+test('a confirmed send superseding a manual history retry settles loading and ignores the stale retry', async () => {
+  const row = conversation('accepted');
+  const f = fixture({ conversations: [row], activeId: row.id, inboxLoading: false });
+  const previousDocument = globalThis.document;
+  globalThis.document = { visibilityState: 'hidden' };
+  let resolveSend, resolveRetry, cleanup, reads = 0;
+  f.api.sendMessage = () => new Promise(resolve => { resolveSend = resolve; });
+  f.api.refreshMessages = async () => {
+    reads++;
+    if (reads === 1) throw new Error('Initial history failure');
+    if (reads === 2) return new Promise(resolve => { resolveRetry = resolve; });
+    return { messages: [message('confirmed')], reset: true, hasOlder: false };
+  };
+  f.api.getConversationMessageCount = async () => 1;
+  f.api.listConversationFolder = async () => ({ conversations: [row], hasOlder: false });
+  f.api.getConversationCounts = async () => ({ chats: 1, requests: 0, closed: 0 });
+  try {
+    render(f); cleanup = f.effects[2](); await flush();
+    f.state[stateNames.indexOf('body')] = 'A message while reconnecting';
+    const sent = messageForm(render(f).tree).props.onSubmit({ preventDefault() {} });
+    button(render(f).tree, 'Retry conversation').props.onClick();
+    assert.equal(f.state[stateNames.indexOf('messagesLoading')], true);
+    resolveSend(); await sent;
+    let output = render(f);
+    assert.equal(f.state[stateNames.indexOf('messagesLoading')], false);
+    assert.match(output.html, /confirmed text/);
+    assert.match(output.html, /1 of 1 messages shown/);
+    assert.doesNotMatch(output.html, /Loading conversation|Retry conversation/);
+    resolveRetry({ messages: [message('obsolete')], reset: true, hasOlder: false }); await flush();
+    output = render(f);
+    assert.equal(f.state[stateNames.indexOf('messagesLoading')], false);
+    assert.doesNotMatch(output.html, /obsolete text|Loading conversation/);
+    assert.equal(nodes(output.tree, item => item.type === 'input' && item.props['aria-label'] === 'Private message')[0].props.disabled, false);
+  } finally { cleanup?.(); globalThis.document = previousDocument; }
+});
+
+test('all messaging action errors use safe UI text rather than internal database or credential details', async () => {
+  const sensitive = 'internal-database-sentinel relation private.accounts api_key=credential-sentinel';
+  const fail = async () => { throw new Error(sensitive); };
+  const row = conversation('accepted');
+  for (const action of ['recipient', 'begin', 'send', 'respond', 'older', 'olderConversations']) {
+    const active = action === 'respond' ? conversation('incoming', 'pending', bob) : row;
+    const f = fixture({ conversations: [active], activeId: active.id, messages: [message('retained')], messageTotal: 3,
+      body: 'Retained draft', recipient: 'bob-member', inboxLoading: false, hasOlder: true, inboxHasOlder: true,
+      folderCounts: { chats: 1, requests: 1, closed: 0 } });
+    const props = action === 'recipient' ? { recipientUsername: 'bob-member', recipientMemberId: bob } : {};
+    const output = render(f, props);
+    if (action === 'recipient') {
+      f.api.getMessageEntry = fail;
+      f.effects[1]();
+    } else if (action === 'begin') {
+      f.api.getMessageRecipient = fail;
+      await nodes(output.tree, item => item.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    } else if (action === 'send') {
+      f.api.sendMessage = fail;
+      await messageForm(output.tree).props.onSubmit({ preventDefault() {} });
+    } else if (action === 'respond') {
+      f.api.respondToConversation = fail;
+      button(output.tree, 'Accept request').props.onClick();
+    } else if (action === 'older') {
+      f.api.listMessages = fail;
+      button(output.tree, 'Load earlier messages').props.onClick();
+    } else {
+      f.api.listConversationFolder = fail;
+      button(output.tree, 'Load earlier conversations').props.onClick();
+    }
+    await flush();
+    const { html } = render(f, props);
+    assert.match(html, /role="alert"/, action);
+    assert.doesNotMatch(html, /internal-database-sentinel|private\.accounts|api_key|credential-sentinel/, action);
+    assert.match(html, /retained text/, action);
+    assert.match(html, /1 of 3 messages shown/, action);
+    assert.equal(f.state[stateNames.indexOf('body')], 'Retained draft', action);
+    assert.equal(f.state[stateNames.indexOf('messageTotal')], 3, action);
+  }
 });

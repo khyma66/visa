@@ -1,6 +1,7 @@
 name: Release current VisaThreads AI features
 # Restore regular chat with verified excerpts and exact, fresh release probes.
 # Both normal and cache-busted health requests must converge before verification.
+# Site quality release: shared readable typography and recoverable messaging.
 
 on:
   workflow_dispatch:

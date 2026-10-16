@@ -37,7 +37,7 @@ function NewsStory({ article, featured = false, compact = false }: { article: Ne
       {featured && <span className="rounded-md bg-teal-800 px-2.5 py-1 font-bold uppercase tracking-wider text-white">Latest headline</span>}
       <span className="font-semibold text-slate-700">{article.publisher}</span>
     </div>
-    <h2 className={`${featured ? 'text-2xl sm:text-3xl' : 'text-lg'} break-words font-bold leading-snug tracking-tight text-slate-950`}><a href={article.sourceUrl} target="_blank" rel="noopener noreferrer" className="rounded-sm hover:text-blue-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-700">{article.title}<span className="sr-only"> (opens on Google News in a new tab)</span></a></h2>
+    <h2 className={`${featured ? 'text-2xl' : 'text-thread-title'} break-words font-bold leading-snug tracking-tight text-slate-950`}><a href={article.sourceUrl} target="_blank" rel="noopener noreferrer" className="rounded-sm hover:text-blue-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-700">{article.title}<span className="sr-only"> (opens on Google News in a new tab)</span></a></h2>
     <div className={`${featured ? 'mt-auto pt-8' : 'mt-4'} flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-slate-500`}>
       <time dateTime={article.publishedAt}>{dateLabel(article.publishedAt)}</time>
       <span>Via Google News</span>

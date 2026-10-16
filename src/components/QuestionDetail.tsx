@@ -163,7 +163,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
               void voteQuestion(id, user.id, value).then((score) => setQuestion((current) => current ? { ...current, vote_score: score } : current)).catch((reason: Error) => setError(reason.message));
             }} />}
             <div className="min-w-0 flex-1">
-              <div className="whitespace-pre-wrap text-lg leading-normal text-slate-800">{question.body}</div>
+              <div className="whitespace-pre-wrap text-base leading-relaxed text-slate-800">{question.body}</div>
               <div className="mt-6 flex flex-wrap gap-2">{question.tags.map((tag) => <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}</div>
               <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
                 <div className="flex gap-2">
@@ -196,7 +196,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                   <div className="min-w-0 flex-1">
                     {sourceOnly && <div className="mb-3"><PostOriginBadge post={answer} /></div>}
                     {answer.is_accepted && <p className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-700"><CheckCircle2 size={17} /> Accepted by the question author</p>}
-                    <div className="whitespace-pre-wrap text-lg leading-normal text-slate-800">{answer.body}</div>
+                    <div className="whitespace-pre-wrap text-base leading-relaxed text-slate-800">{answer.body}</div>
                     {!sourceOnly && <ReportButton kind={imported ? 'imported_answer' : 'answer'} target={answer.id} />}
                     <div className="mt-6 flex items-end justify-between gap-4">
                       {!imported && !experience && owner && canAnswer && !sourceOnly && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline"><Check size={16} /> Accept this answer</button> : <span />}

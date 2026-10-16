@@ -26,11 +26,11 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
             <time dateTime={question.created_at} title={new Date(question.created_at).toLocaleString()}>{formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</time>
             <span className="ml-auto rounded bg-blue-50 px-2 py-1 font-semibold text-blue-800">{question.visa_type}</span>
           </div>
-          <Link href={path} className="block break-words text-lg font-semibold leading-6 text-slate-950 decoration-1 underline-offset-4 hover:text-blue-700 hover:underline">
+          <Link href={path} className="block break-words text-thread-title font-semibold text-slate-950 decoration-1 underline-offset-4 hover:text-blue-700 hover:underline">
             {question.title}
           </Link>
           {question.post_kind && question.post_kind !== 'question' && <p className="mt-2 text-xs font-semibold text-slate-600">{question.post_kind === 'experience' ? `Experience · ${question.experience_category}` : question.post_kind === 'promotion' ? 'Promotional post' : 'Discussion'}</p>}
-          <p className="mt-2 line-clamp-2 break-words text-sm leading-6 text-slate-600">{question.body}</p>
+          <p className="mt-2 line-clamp-2 break-words text-base leading-6 text-slate-600">{question.body}</p>
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {question.tags.map((tag) => <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} onClick={onTagSelect ? (event) => { event.preventDefault(); onTagSelect(tag); } : undefined} className="max-w-full break-words rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}
             {question.destination_country !== 'Global' && <span className="ml-auto text-xs text-slate-500">{question.destination_country}</span>}

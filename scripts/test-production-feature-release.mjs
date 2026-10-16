@@ -30,7 +30,26 @@ test('only the exact owner-reviewed dirty chatbot deployment can enter recovery'
   for (const key of ['deploymentId', 'previousVersion', 'worker', 'siteOrigin', 'databaseOrigin']) {
     assert.equal(pinnedChatbotRecovery(health.build, { ...CHATBOT_RECOVERY, [key]: 'different' }), false);
   }
-  verifyRecoveryFiles(new URL('../', import.meta.url).pathname);
+});
+
+test('historical recovery still requires its exact original branding, not future typography', async () => {
+  const root = await mkdtemp(resolve(tmpdir(), 'visa-historical-branding-'));
+  try {
+    // The dirty-deployment exception is historical. Do not repin its digests
+    // whenever a later clean, ancestry-checked release changes typography.
+    const files = [
+      ['src/styles/globals.css', new URL('./fixtures/chatbot-recovery/globals.css', import.meta.url)],
+      ['src/components/SiteHeader.tsx', new URL('./fixtures/chatbot-recovery/SiteHeader.tsx.txt', import.meta.url)],
+      ['public/assets/brand/visathreads-integrated-logo.png', new URL('../public/assets/brand/visathreads-integrated-logo.png', import.meta.url)],
+    ];
+    for (const [path, source] of files) {
+      await mkdir(resolve(root, path, '..'), { recursive: true });
+      await writeFile(resolve(root, path), await readFile(source));
+    }
+    verifyRecoveryFiles(root);
+    await writeFile(resolve(root, 'src/styles/globals.css'), 'altered historical typography');
+    assert.throws(() => verifyRecoveryFiles(root), /Observed branding change was not preserved/);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('recovery refuses lost branding and never treats arbitrary dirty ancestry as clean', async () => {
