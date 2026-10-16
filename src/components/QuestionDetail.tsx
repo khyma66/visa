@@ -154,7 +154,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
           <section className="border-b border-slate-200 pb-6">
             {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/experiences" className="underline">Experience</Link> · {question.experience_category}</p>}
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span>{question.destination_country !== 'Global' && <span className="text-slate-400">{question.destination_country}</span>}<PostOriginBadge post={question} /></div>
-            <h1 className="mt-4 text-3xl font-normal text-slate-950">{question.title}</h1>
+            <h1 className="mt-4 text-2xl font-semibold text-slate-950 sm:text-3xl">{question.title}</h1>
             <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : experience ? 'replies' : 'answers'}</span></div>
           </section>
           <article className="flex gap-4 py-7">
@@ -179,7 +179,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
           <AssistantPanel scope={{ kind: 'post', id: question.id }} />
 
           <section className="mt-4 border-t border-slate-200 pt-7">
-            <h2 className="text-2xl font-black text-slate-950">{experience ? `${question.answer_count} ${question.answer_count === 1 ? 'reply' : 'replies'}` : imported ? `${question.answer_count} ${question.answer_count === 1 ? 'comment' : 'comments'}` : `${question.answer_count} ${question.answer_count === 1 ? 'answer' : 'answers'}`}</h2>
+            <h2 className="text-thread-title font-semibold text-slate-950">{experience ? `${question.answer_count} ${question.answer_count === 1 ? 'reply' : 'replies'}` : imported ? `${question.answer_count} ${question.answer_count === 1 ? 'comment' : 'comments'}` : `${question.answer_count} ${question.answer_count === 1 ? 'answer' : 'answers'}`}</h2>
             <p className="mt-2 text-xs text-slate-500">{answers.length} shown{!imported && (experience ? ' · Highest votes first' : ' · Accepted answers and highest votes first')}</p>
             <p className="mt-2 text-xs text-slate-500" role="status">{demoMode ? 'Development preview · updates across tabs in this browser' : !user ? 'Log In for live replies and notifications' : liveStatus === 'live' ? 'Live discussion · replies update automatically' : 'Connecting to live updates…'}</p>
             {paginationNotice && <p role="status" className="mt-3 rounded-lg bg-blue-50 p-3 text-xs leading-5 text-blue-800">{paginationNotice}</p>}
@@ -211,7 +211,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
           </section>
 
           <section className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-            <h2 className="text-xl font-black text-slate-950">{imported || experience ? 'Join the discussion' : 'Your answer'}</h2>
+            <h2 className="text-thread-title font-semibold text-slate-950">{imported || experience ? 'Join the discussion' : 'Your answer'}</h2>
             {canAnswer && <p className="mt-2 text-sm leading-6 text-slate-500">Related posts update as you write, using the topics in your reply.</p>}
             {!canAnswer ? <p className="mt-3 rounded-lg bg-slate-100 p-4 text-sm text-slate-700">{experience ? 'This experience is closed to new replies.' : 'This question is closed. Existing answers remain available, but new answers and acceptance are disabled.'}</p> : !user ? <p className="mt-3 text-sm text-slate-600"><Link href={`/login?next=${threadPath}`} className="font-bold text-blue-700 underline">Log In</Link> to reply with your public username.</p> : (
               <form onSubmit={submitAnswer} className="mt-4"><textarea aria-label="Your reply" required minLength={20} maxLength={10000} rows={7} value={answerBody} onChange={(event) => setAnswerBody(event.target.value)} placeholder="Explain what worked and cite official guidance where possible." className="w-full rounded-xl border border-slate-300 p-4 leading-7 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" /><button disabled={submitting} className="mt-3 rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50">{submitting ? 'Posting…' : experience ? 'Post reply' : 'Post answer'}</button></form>
