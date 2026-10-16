@@ -3,7 +3,7 @@ import models from './assistant-models.json';
 
 export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[] };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
-export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
+export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'invalid_key_format' | 'network_error' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
 export const WORKERS_ASSISTANT_MODEL = models.answer;
 export const WORKERS_ASSISTANT_PROFILE = JSON.stringify(models);
 export const GROQ_ASSISTANT_MODEL = models.groq.answer;
@@ -121,8 +121,10 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
     }
     if (!options.apiKey) fail('missing_key');
     if (options.provider === 'groq') {
+      if (options.apiKey !== options.apiKey.trim() || /[^\x21-\x7e]/.test(options.apiKey)) return fail('invalid_key_format');
       const selected = review ? models.groq.review : models.groq.answer;
       const started = Date.now();
+      reason = 'network_error';
       const response = await (options.fetcher ?? fetch)('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST', redirect: 'error', signal,
         headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
@@ -134,6 +136,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
           temperature: 0, seed: 39173,
         }),
       });
+      reason = 'provider_error';
       const numberHeader = (name: string) => {
         const raw = response.headers.get(name);
         const value = raw === null ? NaN : Number(raw);

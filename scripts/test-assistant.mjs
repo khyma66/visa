@@ -63,6 +63,16 @@ test('Groq rejects truncated, empty, oversized and invalid responses', async () 
     {choices:[]},
   ]) await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',apiKey:'synthetic-key',fetcher:async()=>Response.json(data)}));
 });
+test('Groq distinguishes malformed secrets and network failures without disclosing either',async()=>{
+  for(const apiKey of ['key\n',' key','key\u0000']) {
+    let observed, calls=0;
+    await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',apiKey,reportFailure:value=>{observed=value;},fetcher:async()=>{calls++;throw Error('Do not call');}}));
+    assert.equal(observed,'invalid_key_format'); assert.equal(calls,0);
+  }
+  let observed;
+  await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',apiKey:'synthetic-key',reportFailure:value=>{observed=value;},fetcher:async()=>{throw new TypeError('Secret request detail');}}),error=>!error.message.includes('Secret'));
+  assert.equal(observed,'network_error');
+});
 test('Groq rollout requires its own server secret and production project/domain boundary',()=>{
   const env={ASSISTANT_ENABLED:'true',ASSISTANT_PROVIDER:'groq',GROQ_API_KEY:'synthetic-key',NEXT_PUBLIC_SITE_URL:'https://visathreads.com',ASSISTANT_PROJECT_REF:'cycnichledvqbxevrwnt',NEXT_PUBLIC_SUPABASE_URL:'https://cycnichledvqbxevrwnt.supabase.co',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'public-key'};
   assert.equal(service.configuredAvailability(env).posts,true);
