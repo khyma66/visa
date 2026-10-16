@@ -10,7 +10,7 @@ import { useAuth } from './AuthProvider';
 
 type Props = { scope: AssistantScope; title?: string; defaultOpen?: boolean };
 type Period = 'hour' | 'six-hours' | 'day' | 'week' | 'last';
-type Turn = { id: number; prompt: string; mode: AssistantMode; state: 'pending' | 'complete' | 'failed' | 'cancelled'; result?: AssistantResult; history?: string[]; seenPostIds?: string[]; focusedPost?: AssistantPostReference };
+type Turn = { id: number; prompt: string; mode: AssistantMode; state: 'pending' | 'complete' | 'failed' | 'cancelled'; result?: AssistantResult; history?: string[]; seenPostIds?: string[]; focusedPost?: AssistantPostReference; referencePosts?: AssistantPostReference[] };
 const periodHours = { hour: 1, 'six-hours': 6, day: 24, week: 168 } as const;
 const periodLabels: Record<Period, string> = { hour: 'the past hour', 'six-hours': 'the past 6 hours', day: 'the past 24 hours', week: 'the past 7 days', last: 'since my last catch-up' };
 const disabledAvailability: AssistantAvailability = { posts: false, communities: false, catchup: false };
@@ -187,7 +187,12 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
       if (previousQuestions.length) body.previousQuestions = previousQuestions;
       if (scope.kind === 'public' && assistantRefersToEarlierTurn(submittedQuestion)) {
         const previous = completedAsks.at(-1);
-        const previousPosts = assistantDisplayedPosts(previous?.result);
+        // Numbered search results remain the reference list through summaries
+        // and refusals. A new search (even empty) replaces it; a new topic never
+        // enters this branch. Retain IDs only, with fresh server access checks.
+        const previousPosts = previous?.result?.kind === 'posts' ? assistantDisplayedPosts(previous.result)
+          : previous?.referencePosts ?? assistantDisplayedPosts(previous?.result);
+        turn.referencePosts = previousPosts;
         if (previousPosts.length) body.previousPosts = previousPosts;
         turn.focusedPost = assistantPreviousPost({ ...body, focusedPost: previous?.focusedPost }) ?? undefined;
         if (turn.focusedPost) body.focusedPost = turn.focusedPost;
