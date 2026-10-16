@@ -50,6 +50,12 @@ export function assistantPreviousPost(input: AssistantRequest): AssistantPostRef
   return (ordinal === 'last' ? input.previousPosts?.at(-1) : input.previousPosts?.[ordinal]) ?? null;
 }
 
+/** Use only after the server has re-read and matched the selected source. */
+export function assistantResolvedPostQuestion(question: string): string {
+  if (assistantPostOrdinal(question) === null) return question;
+  return question.replace(/\b(?:the\s+)?(?:(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d+(?:st|nd|rd|th)?)\s+(?:post|thread|discussion|result)\b(?![-–—])|(?:post|thread|discussion|result)\s*(?:number\s*|#\s*)?\d+\b)/i, 'the selected discussion');
+}
+
 export function assistantSeenPostIds(input: AssistantRequest): string[] {
   if (!assistantMorePosts(input.question ?? '')) return [];
   return [...new Set([...(input.seenPostIds ?? []), ...(input.previousPosts ?? []).map(post => post.questionId)])].slice(0, 48);

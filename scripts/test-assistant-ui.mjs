@@ -181,6 +181,31 @@ test('evidence renders as escaped text with dates and only internal discussion l
   } finally { h.close(); }
 });
 
+test('compatible public excerpts are compared without asserting a conflict', async () => {
+  const coreSource = await readFile(new URL('../src/lib/assistant-core.ts', import.meta.url), 'utf8');
+  const coreModule = ts.transpileModule(coreSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText
+    .replace("'./assistant-context'", JSON.stringify(context));
+  const { validateAssistantOutput } = await import(dataUrl(coreModule));
+  const quote = 'At my visit, staff allowed phones inside the venue.';
+  const sources = ['one', 'two'].map(name => ({ ...fixture().sources[0], id: `q:apify-report-${name}`, kind: 'question',
+    questionId: `apify-report-${name}`, communityId: null, body: quote, url: `/questions/apify-report-${name}` }));
+  const evidence = sources.map(item => ({ sourceId: item.id, quote }));
+  const result = validateAssistantOutput(JSON.stringify({ status: 'answered',
+    claims: [{ text: 'One visitor reported that phones were allowed.', evidence: [evidence[0]] }],
+    disagreements: [{ text: 'These sources contradict each other.', evidence }], unanswered: [],
+  }), { sources, partial: false }, Date.now(), { mode: 'ask', scope: { kind: 'public' }, question: 'What did these visitors report about phones?' });
+  assert.equal(result.disagreements.length, 1, 'Exercise a comparison retained by the real public validator');
+  const h = new Harness(); h.post = async () => reply(result);
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    changeQuestion(h, 'What did these visitors report about phones?'); await submit(h); await h.settle();
+    assert.match(textOf(h.tree), /Compare source excerpts/);
+    assert.doesNotMatch(textOf(h.tree), /Reports differ|These sources contradict each other/);
+    assert.deepEqual(nodes(h.tree).filter(node => node.type === 'blockquote').map(node => textOf(node).replace(/[“”]/g, '').trim()), [quote, quote]);
+    for (const item of sources) assert(nodes(h.tree).some(node => node.type === 'a' && node.props.href === item.url));
+  } finally { h.close(); }
+});
+
 test('post search shows linked excerpts immediately with compact expandable results', async () => {
   const h=new Harness();
   const posts=Array.from({length:10},(_,i)=>({questionId:`post-${i}`,sourceId:`q:post-${i}`,title:`Stamping delay ${i}`,excerpt:'Passport still pending <script>unsafe()</script>',url:`/questions/post-${i}`,createdAt:'2026-10-01T10:00:00Z'}));

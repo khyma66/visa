@@ -1,5 +1,6 @@
 name: Release current VisaThreads AI features
-# Restore regular chat with reviewed context, grounding and deployment recovery.
+# Restore regular chat with explicit selected-post prompts, verified excerpts,
+# neutral comparisons and guarded deployment recovery.
 
 on:
   workflow_dispatch:

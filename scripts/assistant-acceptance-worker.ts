@@ -135,6 +135,9 @@ export default {
           source: 'compiled-synthetic-fixture-only', fixtureId: fixture.id,
           failedChecks: evaluation.checks.filter(check => !check.passed).map(check => check.name),
           output: { status: result.status, claims: result.claims, disagreements: result.disagreements, unanswered: result.unanswered },
+          // Preserve the distinction between model abstention and a rejected
+          // citation only for a failed, fixed synthetic case. Never production.
+          ...(raw !== undefined && raw.length <= 24_000 ? { rawModelOutput: raw } : {}),
         } } : {}),
       });
     } catch { return response({ error: 'Hosted inference or source validation failed' }, 502); }
