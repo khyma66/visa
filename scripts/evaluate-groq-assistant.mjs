@@ -68,6 +68,10 @@ try {
   const base = `https://${alias}-${worker}.${subdomain.subdomain}.workers.dev/evaluate`;
   const url = await waitForAcceptanceReady(base, secret, sourceSha, cases, { modelProfile: models.groq });
   console.log('PASS exact model/profile readiness and unauthenticated denial; no active version changed');
+  if (process.argv.includes('--transport')) {
+    const probe = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: '__transport__' }), redirect: 'error', signal: AbortSignal.timeout(15000) });
+    console.log(JSON.stringify(await probe.json()));
+  }
   // Serial samples bound spending and make account rate limits visible. A
   // failed sample is retained, never replaced by a successful retry.
   for (const id of selected) {

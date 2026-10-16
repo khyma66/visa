@@ -119,7 +119,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         fail('empty_output');
       } finally { if (stop) signal.removeEventListener('abort', stop); }
     }
-    if (!options.apiKey) fail('missing_key');
+    if (!options.apiKey) return fail('missing_key');
     if (options.provider === 'groq') {
       if (options.apiKey !== options.apiKey.trim() || /[^\x21-\x7e]/.test(options.apiKey)) return fail('invalid_key_format');
       const selected = review ? models.groq.review : models.groq.answer;

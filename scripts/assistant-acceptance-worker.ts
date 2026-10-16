@@ -32,6 +32,21 @@ export default {
       // Probe the exact inference method/path without invoking the model. A
       // separate /ready route cannot establish /evaluate route propagation.
       if ((body as { id?: unknown }).id === '__ready__') return response({ ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: env.ACCEPTANCE_SOURCE_SHA, model, modelProfile: profile, cases: acceptanceFixtures.map(fixture => fixture.id) });
+      if (provider === 'groq' && (body as { id?: unknown }).id === '__transport__') {
+        const probes = [];
+        // Fixed public connectivity probes: no credentials, prompts or account
+        // data are sent. Exception text is permitted only for these keyless calls.
+        for (const redirect of ['error', 'manual'] as const) {
+          try {
+            const res = await fetch('https://api.groq.com/openai/v1/models', { redirect, signal: AbortSignal.timeout(5000) });
+            probes.push({ redirect, status: res.status });
+            await res.body?.cancel();
+          } catch (error) {
+            probes.push({ redirect, error: String(error).slice(0, 300) });
+          }
+        }
+        return response({ id: '__transport__', model, probes });
+      }
       const fixture = acceptanceFixtures.find(item => item.id === (body as { id?: unknown }).id);
       if (!fixture) return response({ error: 'Invalid fixture' }, 400);
       const started = Date.now();
