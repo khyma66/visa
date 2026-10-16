@@ -45,6 +45,10 @@ export default {
             probes.push({ redirect, error: String(error).slice(0, 300) });
           }
         }
+        const authorizedModels = await fetch('https://api.groq.com/openai/v1/models', { redirect: 'manual', headers: { Authorization: `Bearer ${env.GROQ_API_KEY}` }, signal: AbortSignal.timeout(5000) });
+        const modelStatus = authorizedModels.status;
+        const modelData = await readBoundedJson(authorizedModels, 100000).catch(() => null) as { data?: { id?: string }[] } | null;
+        probes.push({ authenticatedModelsStatus: modelStatus, selectedModelListed: modelData?.data?.some(item => item.id === model) === true });
         return response({ id: '__transport__', model, probes });
       }
       const fixture = acceptanceFixtures.find(item => item.id === (body as { id?: unknown }).id);

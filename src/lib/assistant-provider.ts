@@ -8,7 +8,7 @@ export const WORKERS_ASSISTANT_MODEL = models.answer;
 export const WORKERS_ASSISTANT_PROFILE = JSON.stringify(models);
 export const GROQ_ASSISTANT_MODEL = models.groq.answer;
 export const GROQ_ASSISTANT_PROFILE = JSON.stringify(models.groq);
-export type AssistantTransport = { status: number; tokenLimit?: number; remainingTokens?: number; retryAfterSeconds?: number };
+export type AssistantTransport = { status: number; tokenLimit?: number; remainingTokens?: number; retryAfterSeconds?: number; denial?: 'model-org' | 'model-project' | 'permission' | 'other'; responseFormat?: 'json' | 'html' | 'other' };
 export type AssistantUsage = { model: string; stage: 'answer' | 'review'; inputTokens?: number; outputTokens?: number; durationMs: number };
 export const OPENAI_ASSISTANT_MODEL = 'gpt-6-luna';
 const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], properties: { sourceId: { type: 'string', minLength: 1 }, quote: { type: 'string', minLength: 12, maxLength: 400 } } };
@@ -144,10 +144,23 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         const value = raw === null ? NaN : Number(raw);
         return Number.isFinite(value) && value >= 0 && value <= 1_000_000_000 ? value : undefined;
       };
-      // Fixed numeric telemetry only. Never retain provider error bodies or credentials.
-      try { options.reportTransport?.({ status: response.status, tokenLimit: numberHeader('x-ratelimit-limit-tokens'), remainingTokens: numberHeader('x-ratelimit-remaining-tokens'), retryAfterSeconds: numberHeader('retry-after') }); } catch { /* optional metrics */ }
+      let denial: AssistantTransport['denial'];
+      const contentType = response.headers.get('content-type') ?? '';
+      const responseFormat = contentType.includes('application/json') ? 'json' : contentType.includes('text/html') ? 'html' : 'other';
       if (!response.ok) {
-        await response.body?.cancel();
+        // Inspect bounded errors only to classify documented permission codes.
+        // Never persist the body, message, identifiers, or arbitrary codes.
+        denial = 'other';
+        try {
+          const failure = await readBoundedJson(response, 8000) as { error?: { code?: unknown; type?: unknown } };
+          if (failure.error?.code === 'model_permission_blocked_org') denial = 'model-org';
+          else if (failure.error?.code === 'model_permission_blocked_project') denial = 'model-project';
+          else if (failure.error?.type === 'permissions_error') denial = 'permission';
+        } catch { /* unrecognized bodies remain private */ }
+      }
+      // Fixed labels and numeric telemetry only; no provider error text.
+      try { options.reportTransport?.({ status: response.status, tokenLimit: numberHeader('x-ratelimit-limit-tokens'), remainingTokens: numberHeader('x-ratelimit-remaining-tokens'), retryAfterSeconds: numberHeader('retry-after'), ...(denial ? { denial } : {}), responseFormat }); } catch { /* optional metrics */ }
+      if (!response.ok) {
         return fail(response.status === 429 ? 'rate_limited' : response.status === 401 || response.status === 403 ? 'authentication_failed' : response.status === 400 ? 'invalid_request' : 'provider_error');
       }
       const data = await readBoundedJson(response, 100_000) as { choices?: { finish_reason?: string; message?: { content?: unknown } }[]; usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
