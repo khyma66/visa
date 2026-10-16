@@ -1,0 +1,114 @@
+name: Release isolated VisaThreads header logo
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact merged header-logo branch commit (40-character SHA)
+        required: true
+        type: string
+  push:
+    branches: [release/header-logo-production-20261016]
+    paths: [.github/workflows/header-logo-release.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visaflow-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/release/header-logo-production-20261016' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.candidate_sha == github.sha))
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: production
+    env:
+      HEADER_LOGO_CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+      ASSISTANT_ENABLED: 'true'
+      ASSISTANT_COMMUNITIES_ENABLED: 'false'
+      ASSISTANT_CATCHUP_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Prove immutable merged logo-only source before installing or using credentials
+        run: node scripts/header-logo-release.mjs check-source
+      - run: npm ci
+      - run: npm run check:secrets && npm test && npm run typecheck
+      - run: node --test scripts/test-header-logo-release.mjs scripts/test-brand-assets.mjs scripts/test-typography.mjs
+      - run: npm audit --audit-level=high
+      - name: Capture exact live content, flags and rollback version
+        run: node scripts/header-logo-release.mjs capture
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
+      - name: Evaluate unchanged hosted assistant with all three samples per case
+        id: evaluate
+        run: node scripts/evaluate-hosted-assistant.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Build exact header-logo candidate preserving launch state and content
+        run: node scripts/header-logo-release.mjs build
+      - name: Require unchanged live baseline, logo-only scope and exact model acceptance
+        run: node scripts/header-logo-release.mjs deploy-check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy checked production header-logo build
+        id: deploy
+        run: |
+          rm -f .cache/visaflow/live-preview/wrangler-deploy.ndjson
+          npx --no-install vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ github.workspace }}/.cache/visaflow/live-preview/wrangler-deploy.ndjson
+      - name: Record exact uploaded version independently of deploy exit status
+        if: always() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')
+        run: node scripts/production-feature-release.mjs record-deployment
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify exact source, unchanged content, assets and auth denials
+        run: node scripts/smoke-production-features.mjs
+      - name: Restore captured version only if this deployment fails verification
+        if: failure() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          ROLLBACK_VERSION=$(node scripts/production-feature-release.mjs rollback-version)
+          npx --no-install wrangler rollback "$ROLLBACK_VERSION" --name visaflow-dev --config dist/server/wrangler.json --message "Restore captured version after failed header-logo smoke verification"
+      - name: Preserve exact header-logo release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-header-logo-evidence-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: |
+            .cache/visaflow/live-preview/header-logo-scope.json
+            .cache/visaflow/live-preview/build-provenance.json
+            .cache/visaflow/assistant-acceptance.json
+            .cache/visaflow/live-preview/rollout-verification.json
+          include-hidden-files: true
+          if-no-files-found: warn
+      - name: Ensure temporary evaluation Worker is removed
+        if: always() && (steps.evaluate.outcome == 'success' || steps.evaluate.outcome == 'failure')
+        run: node scripts/evaluate-hosted-assistant.mjs --cleanup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Remove recovered content
+        if: always()
+        run: rm -f src/data/api-archive.json .cache/visaflow/live-preview/public-build-values.json
+
+# This route can deploy only an exact, merged commit from this dedicated branch.
+# It does not deploy the production assistant to the development domain.
