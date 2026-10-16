@@ -4,6 +4,7 @@ name: Release current VisaThreads AI features
 # Site quality release: shared readable typography and recoverable messaging.
 # Keep credential-redacted upload diagnostics when isolated Groq setup fails.
 # Use bounded medium-effort evidence review; preserve low-latency generation.
+# Keep numbered result references through follow-ups without replaying source text.
 
 on:
   workflow_dispatch:
