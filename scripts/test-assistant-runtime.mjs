@@ -108,7 +108,7 @@ function harness(overrides = {}) {
   const handler = service.createAssistantHandler({
     availability: () => ({ posts: true, communities: true, catchup: true }), model: 'test-model',
     authenticate: async () => session,
-    generate: async prompt => { if (prompt.outputKind === 'review') return JSON.stringify({ answersQuestion: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) }); state.generations++; return JSON.stringify(output); },
+    generate: async prompt => { if (prompt.outputKind === 'review') return JSON.stringify({ fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) }); state.generations++; return JSON.stringify(output); },
     reportFailure: event => failures.push(event), ...overrides,
   });
   return { handler, state, session, failures };

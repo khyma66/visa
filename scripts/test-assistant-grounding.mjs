@@ -24,8 +24,8 @@ const input = { mode: 'ask', scope: { kind: 'public' }, question: 'What outcome 
 const source = (body, changes = {}) => ({ id: `q:${id}`, questionId: id, communityId: null, kind: 'question', title: 'Individual interview experience', body, createdAt: '2026-10-13T00:00:00Z', updatedAt: '2026-10-13T00:00:00Z', url: `/questions/${id}`, provenance: 'member', ...changes });
 const raw = (item, quote, text = 'The member was approved after the interview.', extra = {}) => JSON.stringify({ status: 'answered', claims: [{ text, evidence: [{ sourceId: item.id, quote }] }], disagreements: [], unanswered: [], ...extra });
 const validate = (item, quote, text, question = input.question, extra = {}) => core.validateAssistantOutput(raw(item, quote, text, extra), { sources: [item], partial: false }, Date.now(), { ...input, question });
-const reviewed = (result, supported = true, answersQuestion = true) => review.validateAssistantReview(JSON.stringify({
-  checks: [...result.claims.map((_, index) => ({ id: `claim:${index}`, supported })), ...result.disagreements.map((_, index) => ({ id: `disagreement:${index}`, supported }))], answersQuestion,
+const reviewed = (result, supported = true, fulfillsTask = true) => review.validateAssistantReview(JSON.stringify({
+  checks: [...result.claims.map((_, index) => ({ id: `claim:${index}`, supported })), ...result.disagreements.map((_, index) => ({ id: `disagreement:${index}`, supported }))], fulfillsTask,
 }), result);
 
 test('a real quote proves provenance but a false semantic verdict rejects its contradictory paraphrase', () => {
@@ -149,7 +149,7 @@ test('contradiction labels cannot assert a winner or a model-invented policy', (
   const claim = item => ({ text: 'Everyone must bring a phone.', evidence: [{ sourceId: item.id, quote: item.body }] });
   const result = core.validateAssistantOutput(JSON.stringify({ status: 'answered', claims: [claim(yes), claim(no)], disagreements: [{ text: 'The second member is wrong; everyone can bring phones.', evidence: [...claim(yes).evidence, ...claim(no).evidence] }], unanswered: [] }), { sources: [yes, no], partial: false }, Date.now(), input);
   assert.equal(result.disagreements.length, 1);
-  const rejected = review.validateAssistantReview(JSON.stringify({ checks: [{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: true }, { id: 'disagreement:0', supported: false }], answersQuestion: true }), result);
+  const rejected = review.validateAssistantReview(JSON.stringify({ checks: [{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: true }, { id: 'disagreement:0', supported: false }], fulfillsTask: true }), result);
   assert.equal(rejected.status, 'insufficient');
   assert.deepEqual(rejected.claims, []);
   assert.deepEqual(rejected.disagreements, []);
@@ -191,7 +191,7 @@ test('the service preserves reviewed natural answers and a changed cached answer
         const reviewInput = JSON.parse(prompt.user);
         assert.equal(reviewInput.candidate.checks[0].text, natural);
         assert.equal(reviewInput.sources[0].body, item.body);
-        return JSON.stringify({ checks: prompt.reviewIds.map(id => ({ id, supported: true })), answersQuestion: true });
+        return JSON.stringify({ checks: prompt.reviewIds.map(id => ({ id, supported: true })), fulfillsTask: true });
       }
       state.generated++;
       return raw(item, item.body, natural);
@@ -227,7 +227,7 @@ test('an unconfirmed thank-you cannot be published as work permission when the s
     authenticate: async () => ({ actor: 'synthetic-member', corpus: async () => ({ sources: [item], partial: false }), reserve: async () => true }),
     generate: async prompt => {
       prompts.push(prompt);
-      if (prompt.outputKind === 'review') return JSON.stringify({ checks: [{ id: 'claim:0', supported: false }], answersQuestion: false });
+      if (prompt.outputKind === 'review') return JSON.stringify({ checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false });
       return raw(item, item.body, 'You can keep working on H1B while waiting for a stamping slot.');
     },
   });
