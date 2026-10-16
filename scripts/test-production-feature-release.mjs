@@ -12,6 +12,16 @@ import { buildProvenance, sourceProvenance } from './build-provenance.mjs';
 import { assertHealthProvenance } from './smoke-site.mjs';
 import { archiveFromWorkerModule, recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 import { CHATBOT_RECOVERY, pinnedChatbotRecovery, verifyRecoveryFiles } from './pinned-chatbot-recovery.mjs';
+import { safeReleaseDiagnostic } from './safe-release-diagnostic.mjs';
+
+test('release CLI diagnostics redact credentials and omit non-error output', () => {
+  const secret = 'synthetic-only-credential';
+  const diagnostic = safeReleaseDiagnostic(`Binding table: hidden\n\n[ERROR] Upload failed: ${secret}; Bearer abc.xyz_123; gsk_syntheticfixture; https://example.invalid/?token=opaque-value\n\nNormal output`, [secret]);
+  assert.match(diagnostic, /Upload failed/);
+  for (const forbidden of [secret, 'abc.xyz_123', 'gsk_syntheticfixture', 'opaque-value', 'Binding table', 'Normal output']) assert(!diagnostic.includes(forbidden));
+  assert.equal(safeReleaseDiagnostic('no error output'), 'CLI exited without an error paragraph.');
+  assert(safeReleaseDiagnostic('[ERROR] ' + 'x'.repeat(5000)).length <= 4000);
+});
 
 test('only the exact owner-reviewed dirty chatbot deployment can enter recovery', () => {
   const health = { environment: 'development', releaseStatus: 'configured', build: { ...CHATBOT_RECOVERY.build } };

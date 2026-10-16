@@ -9,6 +9,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import models from '../src/lib/assistant-models.json' with { type: 'json' };
 import { waitForAcceptanceReady } from './assistant-acceptance-readiness.mjs';
+import { safeReleaseDiagnostic } from './safe-release-diagnostic.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const account = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -85,7 +86,11 @@ try {
   await writeFile(configPath, JSON.stringify({ name: worker, account_id: account, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), compatibility_date: '2026-10-01', preview_urls: true, routes: [], observability: { enabled: false }, vars: { ACCEPTANCE_PROVIDER: 'groq', ACCEPTANCE_EXPIRES: String(expires), ACCEPTANCE_SOURCE_SHA: sourceSha } }));
   await writeFile(secretsPath, JSON.stringify({ ACCEPTANCE_SECRET: secret }), { mode: 0o600 });
   const upload = spawnSync(join(root, 'node_modules/.bin/wrangler'), ['versions', 'upload', '--config', configPath, '--env', '', '--secrets-file', secretsPath, '--preview-alias', alias, '--message', 'Isolated synthetic Groq acceptance; never deploy'], { cwd: root, env: { ...process.env, CI: 'true', WRANGLER_SEND_METRICS: 'false' }, encoding: 'utf8', timeout: 120_000, maxBuffer: 4_000_000 });
-  assert(upload.status === 0, `Isolated version upload failed (${upload.status ?? 'timeout'})`);
+  if (upload.status !== 0) {
+    receipt.uploadDiagnostic = safeReleaseDiagnostic(`${upload.stdout ?? ''}\n${upload.stderr ?? ''}`, [secret, token,
+      ...Object.entries(process.env).filter(([name]) => /TOKEN|SECRET|KEY|PASSWORD/i.test(name)).map(([, value]) => value)]);
+    throw Error(`Isolated version upload failed (${upload.status ?? 'timeout'}): ${receipt.uploadDiagnostic}`);
+  }
   await rm(secretsPath, { force: true });
   // A Worker created only by secret upload starts with both routes disabled.
   // Version upload alone does not reliably enable its version URL routing.
