@@ -132,12 +132,18 @@ test('resolved ordinal prompts describe the selected discussion without asking t
   const build=(value, sources=[source])=>core.assistantPrompt(value,{sources,partial:false});
   const prompt=build(ask), content=JSON.parse(prompt.user);
   assert.equal(content.question,'Explain the selected discussion.');
+  assert.equal(content.task,'summary');
+  assert.match(prompt.system,/TASK: Summarize the supplied discussion/);
   assert.deepEqual(content.previousQuestions,[]);
   assert.deepEqual(content.resolvedDiscussion,{questionId:id,sourceIds:[source.id]});
   assert.match(prompt.system,/complete supporting BODY sentences/);
   assert.equal(ask.question,'Explain the second post.','Original request and cache identity are not rewritten');
   const qualified=JSON.parse(build({...ask,question:'Why did the second post report a delay in Chennai?'}).user);
   assert.equal(qualified.question,'Why did the selected discussion report a delay in Chennai?');
+  assert.equal(qualified.task,'ask');
+  for(const question of ['Explain the second post and whether I qualify.', 'Explain the second post in detail and predict my outcome.']) {
+    assert.equal(JSON.parse(build({...ask,question}).user).task,'ask','Qualified requests must not be silently converted to summaries');
+  }
   const previousQuestion='What did this member report about their passport delivery?';
   const focused=JSON.parse(build({...ask,question:'How long?',previousQuestions:[previousQuestion],focusedPost:selected}).user);
   assert.equal(focused.question,'How long?'); assert.deepEqual(focused.resolvedDiscussion,content.resolvedDiscussion);

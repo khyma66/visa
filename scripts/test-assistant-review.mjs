@@ -236,6 +236,9 @@ test('captured ordinal draft receives the already resolved discussion task befor
   assert.match(prompt.system.split('\n')[0], /actual reported events and stated reasons/);
   assert.match(prompt.system.split('\n')[0], /otherwise it must answer the specific question asked/);
   assert.equal(data.question, 'Explain the selected discussion.');
+  assert.equal(data.task, 'summary');
+  assert.match(prompt.system, /explicitly a SUMMARY task/);
+  assert.match(prompt.system, /Unsupported additions and material omissions still fail/);
   assert.equal(data.resolvedDiscussion.questionId, postId);
   assert.deepEqual(data.previousQuestions, []);
   assert.equal(data.candidate.checks[0].text, captured.claims[0].text);
