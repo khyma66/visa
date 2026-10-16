@@ -20,6 +20,7 @@ await verifyStableRollout({ expected, previous: receipt.health,
     const feed = await feedResponse.json();
     assert.equal(sha256(canonicalJson(feed)), receipt.publishedArchiveSha256, 'Published content changed during feature deployment.');
     const flagsResponse = await probe.request('assistant-flags', '/api/assistant', {}, { marked: true });
+    assert.equal(flagsResponse.headers.get('X-VisaThreads-Assistant-Provider'), process.env.ASSISTANT_PROVIDER ?? 'workers-ai', 'Live provider differs from the checked release.');
     assert.deepEqual(await flagsResponse.json(), features);
     const assistant = await probe.request('assistant-page', '/assistant');
     assert.match(assistant.headers.get('x-robots-tag') ?? '', /noindex/);

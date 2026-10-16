@@ -11,6 +11,8 @@ export const dynamic = 'force-dynamic';
 function identifyBuild(response: Response) {
   // Public health already exposes this immutable revision; never echo request headers.
   response.headers.set('X-VisaThreads-Build', build.gitSha ?? 'unconfigured');
+  const provider = process.env.ASSISTANT_PROVIDER;
+  response.headers.set('X-VisaThreads-Assistant-Provider', provider === 'groq' || provider === 'workers-ai' || provider === 'openai' ? provider : 'disabled');
   return response;
 }
 

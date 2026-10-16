@@ -186,6 +186,25 @@ test('production activation requires fresh exact-source hosted acceptance for ev
   for (const change of [{ sourceSha: 'b'.repeat(40) }, { model: 'wrong-model' }, { passed: false }, { workerDeleted: false }, { createdAt: '2020-01-01T00:00:00Z' }, { features: { posts: true } }, { cases: receipt.cases.slice(1) }, { cases: receipt.cases.map(row => ({ ...row, checks: [{ name: 'supported', passed: false }] })) }]) assert.throws(() => verifyAssistantAcceptance({ ...receipt, ...change }, receipt.sourceSha, { communities: 'true', catchup: 'true' }));
 });
 
+test('Groq release retains exact-model gates, stored-secret isolation and evaluation cleanup proofs', () => {
+  const features = { provider: 'groq' };
+  const vars = featureEnvironment(values, 'true', features);
+  assert.equal(vars.ASSISTANT_PROVIDER, 'groq');
+  verifyFeatureWorker({ ...config('true'), vars }, 'true', features);
+  assert.throws(() => verifyFeatureWorker({ ...config('true'), vars: { ...vars, GROQ_API_KEY: 'not-a-real-key' } }, 'true', features));
+  assert.throws(() => featureEnvironment(values, 'true', { provider: 'arbitrary' }));
+  const receipt = acceptanceReceipt();
+  receipt.provider = 'groq'; receipt.model = modelProfile.groq.answer; receipt.modelProfile = modelProfile.groq;
+  receipt.evaluationWorker = 'visaflow'; receipt.previewRoutingRestored = true; receipt.activeDeploymentsUnchanged = true;
+  delete receipt.workerDeleted;
+  for (const row of receipt.cases) { row.model = receipt.model; for (const sample of row.samples) sample.model = receipt.model; }
+  verifyAssistantAcceptance(receipt, receipt.sourceSha, features);
+  for (const change of [{ previewRoutingRestored: false }, { activeDeploymentsUnchanged: false }, { evaluationWorker: 'visaflow-dev' }, { modelProfile: { ...modelProfile.groq, review: 'untested' } }, { provider: 'workers-ai' }, { repetitions: 1 }, { passed: false }]) {
+    assert.throws(() => verifyAssistantAcceptance({ ...receipt, ...change }, receipt.sourceSha, features));
+  }
+  assert.throws(() => verifyAssistantAcceptance(acceptanceReceipt(), receipt.sourceSha, features));
+});
+
 test('production acceptance cannot pass through aggregate-only, incomplete or failing samples', () => {
   const mutations = [
     receipt => { receipt.modelProfile = { ...receipt.modelProfile, review: 'untested-reviewer' }; },
@@ -235,6 +254,9 @@ test('recording and rollback refuse unrelated deployments and accept a provable 
 
 test('production workflow captures structured deploy output and attempts guarded recovery after upload failure', async () => {
   const workflow = await readFile(new URL('../.github/workflows/production-features.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /ASSISTANT_PROVIDER: 'groq'/);
+  assert.match(workflow, /evaluate-groq-assistant\.mjs --release/);
+  assert.match(workflow, /evaluate-groq-assistant\.mjs --cleanup/);
   assert(workflow.includes('name: production-ai-feature-evidence-${{ github.sha }}-attempt-${{ github.run_attempt }}'), 'Retries retain separate evidence instead of overwriting or colliding with failed attempts');
   assert(workflow.includes('.cache/visaflow/live-preview/rollout-verification.json'), 'Every release preserves failed rollout rounds as well as the final result');
   assert.match(workflow, /WRANGLER_OUTPUT_FILE_PATH: \$\{\{ github.workspace \}\}\/\.cache\/visaflow\/live-preview\/wrangler-deploy\.ndjson/);

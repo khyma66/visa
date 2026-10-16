@@ -18,6 +18,8 @@ const worker = 'visaflow';
 const apiRoot = `https://api.cloudflare.com/client/v4/accounts/${account}`;
 const cases = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context', 'thank-you-confirmation', 'public-multiple-thread-synthesis'];
 const smoke = process.argv.includes('--smoke');
+const release = process.argv.includes('--release');
+assert(!(smoke && release), 'Smoke results cannot authorize a release');
 const selected = smoke ? ['post-question'] : cases;
 const repetitions = smoke ? 1 : 3;
 const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
@@ -25,6 +27,7 @@ const status = spawnSync('git', ['status', '--porcelain', '--untracked-files=no'
 assert(revision.status === 0 && status.status === 0 && !status.stdout.trim(), 'Evaluation requires a clean committed checkout');
 const sourceSha = revision.stdout.trim();
 const cache = join(root, '.cache/visaflow');
+const routingStatePath = join(cache, 'groq-evaluation-routing.json');
 const temporary = join(cache, `groq-eval-${randomBytes(8).toString('hex')}`);
 await mkdir(temporary, { recursive: true, mode: 0o700 });
 const secret = randomBytes(32).toString('base64url');
@@ -32,8 +35,8 @@ const alias = `groq-${randomBytes(6).toString('hex')}`;
 const expires = Date.now() + 15 * 60_000;
 const configPath = join(temporary, 'wrangler.json');
 const secretsPath = join(temporary, 'secrets.json');
-const receiptPath = join(cache, smoke ? 'groq-smoke.json' : 'groq-acceptance.json');
-const receipt = { schemaVersion: 1, provider: 'groq', model: models.groq.answer, modelProfile: models.groq, sourceSha, createdAt: new Date().toISOString(), expiresAt: new Date(expires).toISOString(), repetitions, passed: false, cases: [], activeDeploymentsUnchanged: false };
+const receiptPath = join(cache, release ? 'assistant-acceptance.json' : smoke ? 'groq-smoke.json' : 'groq-acceptance.json');
+const receipt = { schemaVersion: 1, provider: 'groq', model: models.groq.answer, modelProfile: models.groq, sourceSha, createdAt: new Date().toISOString(), expiresAt: new Date(expires).toISOString(), repetitions, passed: false, cases: [], evaluationWorker: worker, previewRoutingRestored: false, activeDeploymentsUnchanged: false };
 async function api(path, options = {}) {
   const response = await fetch(`${apiRoot}${path}`, { ...options, headers: { Authorization: `Bearer ${token}`, ...options.headers }, redirect: 'error', signal: AbortSignal.timeout(20_000) });
   assert(response.ok, `Cloudflare ${path} returned ${response.status}`);
@@ -42,7 +45,27 @@ async function api(path, options = {}) {
   return data.result;
 }
 const active = async name => (await api(`/workers/scripts/${name}/deployments`)).deployments?.[0]?.versions;
-let baseline, routing, failure;
+async function restoreRouting(state) {
+  assert.equal(state.worker, worker);
+  assert.equal(state.account, account);
+  assert.equal(typeof state.routing?.enabled, 'boolean');
+  assert.equal(typeof state.routing?.previews_enabled, 'boolean');
+  const after = await Promise.all([active(worker), active('visaflow-dev'), active('visathreads-sandbox')]);
+  assert.deepEqual(after, state.baseline, 'Active deployments changed during evaluation');
+  await api(`/workers/scripts/${worker}/subdomain`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.routing) });
+  const restored = await api(`/workers/scripts/${worker}/subdomain`);
+  assert.equal(restored.enabled, state.routing.enabled);
+  assert.equal(restored.previews_enabled, state.routing.previews_enabled);
+  await rm(routingStatePath);
+}
+if (process.argv.includes('--cleanup')) {
+  try { await restoreRouting(JSON.parse(await readFile(routingStatePath, 'utf8'))); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  await rm(temporary, { recursive: true, force: true });
+  console.log('Isolated evaluation cleanup complete.');
+  process.exit(0);
+}
+let baseline, routing, failure, ownsRouting = false;
 try {
   const [secrets, settings, domains, subdomain] = await Promise.all([
     api(`/workers/scripts/${worker}/secrets`), api(`/workers/scripts/${worker}/settings`),
@@ -55,6 +78,9 @@ try {
   baseline = await Promise.all([active(worker), active('visaflow-dev'), active('visathreads-sandbox')]);
   assert(baseline.every(value => Array.isArray(value) && value.length), 'All active deployment baselines must be known');
   routing = await api(`/workers/scripts/${worker}/subdomain`);
+  routing = { enabled: routing.enabled, previews_enabled: routing.previews_enabled ?? routing.enabled };
+  await writeFile(routingStatePath, JSON.stringify({ worker, account, routing, baseline }), { mode: 0o600, flag: 'wx' });
+  ownsRouting = true;
   console.log('PASS stored Groq key, isolated bindings, and active deployment baselines');
   await writeFile(configPath, JSON.stringify({ name: worker, account_id: account, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), compatibility_date: '2026-10-01', preview_urls: true, routes: [], observability: { enabled: false }, vars: { ACCEPTANCE_PROVIDER: 'groq', ACCEPTANCE_EXPIRES: String(expires), ACCEPTANCE_SOURCE_SHA: sourceSha } }));
   await writeFile(secretsPath, JSON.stringify({ ACCEPTANCE_SECRET: secret }), { mode: 0o600 });
@@ -104,14 +130,15 @@ try {
 } catch (error) { failure = error; }
 finally {
   try {
-    if (routing) await api(`/workers/scripts/${worker}/subdomain`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: routing.enabled, previews_enabled: routing.previews_enabled ?? routing.enabled }) });
-    if (baseline) {
-      const after = await Promise.all([active(worker), active('visaflow-dev'), active('visathreads-sandbox')]);
-      assert.deepEqual(after, baseline, 'Active deployments changed during evaluation');
+    if (ownsRouting) {
+      await restoreRouting({ worker, account, routing, baseline });
+      receipt.previewRoutingRestored = true;
       receipt.activeDeploymentsUnchanged = true;
     }
   } catch (error) { failure = error; receipt.passed = false; }
   await rm(temporary, { recursive: true, force: true });
+  receipt.features = { posts: receipt.passed && !smoke, communities: receipt.passed && !smoke, catchup: receipt.passed && !smoke };
+  receipt.cases = receipt.cases.map(row => ({ ...row, model: models.groq.answer, checks: row.samples.flatMap((sample, index) => (sample.checks ?? []).map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed }))) }));
   await writeFile(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
 }
 if (failure) { console.error(failure.message); process.exitCode = 1; }
