@@ -55,11 +55,16 @@ try {
   baseline = await Promise.all([active(worker), active('visaflow-dev'), active('visathreads-sandbox')]);
   assert(baseline.every(value => Array.isArray(value) && value.length), 'All active deployment baselines must be known');
   routing = await api(`/workers/scripts/${worker}/subdomain`);
+  console.log('PASS stored Groq key, isolated bindings, and active deployment baselines');
   await writeFile(configPath, JSON.stringify({ name: worker, account_id: account, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), compatibility_date: '2026-10-01', preview_urls: true, routes: [], observability: { enabled: false }, vars: { ACCEPTANCE_PROVIDER: 'groq', ACCEPTANCE_EXPIRES: String(expires), ACCEPTANCE_SOURCE_SHA: sourceSha } }));
   await writeFile(secretsPath, JSON.stringify({ ACCEPTANCE_SECRET: secret }), { mode: 0o600 });
   const upload = spawnSync(join(root, 'node_modules/.bin/wrangler'), ['versions', 'upload', '--config', configPath, '--env', '', '--secrets-file', secretsPath, '--preview-alias', alias, '--message', 'Isolated synthetic Groq acceptance; never deploy'], { cwd: root, env: { ...process.env, CI: 'true', WRANGLER_SEND_METRICS: 'false' }, encoding: 'utf8', timeout: 120_000, maxBuffer: 4_000_000 });
   assert(upload.status === 0, `Isolated version upload failed (${upload.status ?? 'timeout'})`);
   await rm(secretsPath, { force: true });
+  // A Worker created only by secret upload starts with both routes disabled.
+  // Version upload alone does not reliably enable its version URL routing.
+  await api(`/workers/scripts/${worker}/subdomain`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: routing.enabled, previews_enabled: true }) });
+  console.log('PASS test version uploaded; isolated version URL enabled for this run');
   const base = `https://${alias}-${worker}.${subdomain.subdomain}.workers.dev/evaluate`;
   const url = await waitForAcceptanceReady(base, secret, sourceSha, cases, { modelProfile: models.groq });
   console.log('PASS exact model/profile readiness and unauthenticated denial; no active version changed');
