@@ -27,7 +27,7 @@ function sourceHref(source: Pick<AssistantSource, 'url'>) {
 }
 
 function Claims({ claims, sources }: { claims: AssistantClaim[]; sources: AssistantSource[] }) {
-  return <div className="space-y-3">{claims.map((claim, index) => <p key={index} className="whitespace-pre-wrap text-sm leading-6 text-slate-800">
+  return <div className="space-y-3">{claims.map((claim, index) => <p key={index} className="whitespace-pre-wrap text-base leading-relaxed text-slate-800">
     {claim.text}{[...new Set(claim.evidence.map((item) => item.sourceId))].map((id) => {
       const sourceIndex = sources.findIndex((source) => source.id === id);
       const source = sources[sourceIndex];
@@ -40,12 +40,12 @@ function Claims({ claims, sources }: { claims: AssistantClaim[]; sources: Assist
 function PostResults({ result }: { result: AssistantResult }) {
   const posts = (result.posts ?? []).filter(post => sourceHref(post));
   const cards = (items: typeof posts, offset = 0) => <ol start={offset + 1} className="mt-3 space-y-3">{items.map((post, index) => <li key={post.questionId} className="rounded-xl border border-slate-200 p-3">
-    <a href={sourceHref(post)!} className="text-sm font-semibold leading-5 text-teal-700 underline decoration-teal-200 underline-offset-2">{offset + index + 1}. {post.title}</a>
-    <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-5 text-slate-700">{post.excerpt}</p>
+    <a href={sourceHref(post)!} className="text-base font-semibold leading-6 text-teal-700 underline decoration-teal-200 underline-offset-2">{offset + index + 1}. {post.title}</a>
+    <p className="mt-1.5 whitespace-pre-wrap break-words text-base leading-relaxed text-slate-700">{post.excerpt}</p>
     <time dateTime={post.createdAt} className="mt-2 block text-xs text-slate-500">{dateLabel(post.createdAt)}</time>
   </li>)}</ol>;
   return <div aria-label="Assistant response">
-    <p className="text-sm leading-6 text-slate-800">{posts.length ? `Found ${posts.length} matching post${posts.length === 1 ? '' : 's'}.` : result.unanswered[0] || 'No matching posts found. Try a visa type, location, or another keyword.'}</p>
+    <p className="text-base leading-relaxed text-slate-800">{posts.length ? `Found ${posts.length} matching post${posts.length === 1 ? '' : 's'}.` : result.unanswered[0] || 'No matching posts found. Try a visa type, location, or another keyword.'}</p>
     {cards(posts.slice(0, 8))}
     {posts.length > 8 && <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-teal-700">{`Show ${posts.length - 8} more posts`}</summary>{cards(posts.slice(8), 8)}</details>}
     {result.coverage.partial && <p className="mt-3 text-xs leading-5 text-amber-800">More posts may match. Narrow your search to see more specific results.</p>}
@@ -73,7 +73,7 @@ function Result({ result, catchup }: { result: AssistantResult; catchup: boolean
     : coverageReasons.includes('unindexed-replies') ? 'Some recent replies are not available to search yet, so this answer may miss relevant updates.'
     : !coverageReasons.length ? 'I could only review part of these discussions. Try a more specific question.' : null;
   return <div aria-label="Assistant response">
-    {result.status === 'insufficient' && <p className="text-sm leading-6 text-slate-800">{result.unanswered[0] || (catchup ? 'No updates found for this time range.' : 'I couldn’t find enough relevant discussions to answer. Try a more specific question.')}</p>}
+    {result.status === 'insufficient' && <p className="text-base leading-relaxed text-slate-800">{result.unanswered[0] || (catchup ? 'No updates found for this time range.' : 'I couldn’t find enough relevant discussions to answer. Try a more specific question.')}</p>}
     <Claims claims={result.claims} sources={result.sources} />
     {!!result.disagreements.length && <div className="mt-3 border-l-2 border-amber-300 pl-3"><p className="mb-2 text-xs font-semibold text-amber-900">Related perspectives</p><Claims claims={result.disagreements} sources={result.sources} /></div>}
     {result.status !== 'insufficient' && !!result.unanswered.length && <details className="mt-3 text-xs text-slate-500"><summary className="cursor-pointer">Still unclear</summary><ul className="mt-2 list-disc space-y-1 pl-4 leading-5">{result.unanswered.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
@@ -83,7 +83,7 @@ function Result({ result, catchup }: { result: AssistantResult; catchup: boolean
       <div className="mt-3 space-y-3 leading-5">{citedSources.map(({ source, index, href, quotes }) => <div key={source.id} className="border-l-2 border-teal-100 pl-3">
           <a href={href} className="font-semibold text-teal-700 underline">[{index + 1}] {source.title}</a>
           <p className="mt-1">{source.provenance === 'archive' ? 'Imported community' : 'Community'} {source.kind === 'reply' ? 'reply' : 'post'}{source.kind === 'reply' && source.speakerRole === 'original-poster' && ' · Original poster'}</p>
-          {quotes.map((quote, quoteIndex) => <blockquote key={quoteIndex} className="mt-1 whitespace-pre-wrap">“{quote}”</blockquote>)}
+          {quotes.map((quote, quoteIndex) => <blockquote key={quoteIndex} className="mt-1 whitespace-pre-wrap text-base leading-relaxed text-slate-700">“{quote}”</blockquote>)}
           <p className="mt-1"><time dateTime={source.createdAt}>{dateLabel(source.createdAt)}</time>{source.updatedAt !== source.createdAt && <> · Updated {dateLabel(source.updatedAt)}</>}</p>
           {source.kind === 'reply' && <p>Use “Load more” in the discussion for older replies.</p>}
         </div>)}
@@ -252,7 +252,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
         <div role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions text" className="max-h-[60vh] min-h-40 space-y-5 overflow-y-auto px-4 py-5 sm:px-5">
           {!turns.length && <div className="py-6 text-center"><p className="text-base font-semibold text-slate-800">{mode === 'catchup' ? 'What did you miss?' : mode === 'summary' ? 'Get the key points' : 'What would you like to know?'}</p><p className="mt-1 text-xs text-slate-500">{mode === 'catchup' ? 'Choose a time range below.' : mode === 'summary' ? 'A short summary with sources.' : 'Ask a question. Follow up naturally.'}</p></div>}
           {turns.map((turn) => <div key={turn.id} className="space-y-3">
-            <div className="ml-auto w-fit max-w-[90%] rounded-2xl rounded-br-sm bg-teal-700 px-4 py-2.5 text-sm leading-6 text-white" aria-label="Your message"><p className="whitespace-pre-wrap break-words">{turn.prompt}</p></div>
+            <div className="ml-auto w-fit max-w-[90%] rounded-2xl rounded-br-sm bg-teal-700 px-4 py-2.5 text-base leading-relaxed text-white" aria-label="Your message"><p className="whitespace-pre-wrap break-words">{turn.prompt}</p></div>
             <div className="flex gap-2.5" aria-label="AI message"><span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-teal-50 text-teal-700"><Sparkles size={13} aria-hidden="true" /></span><div className="min-w-0 flex-1 pt-0.5">
               {turn.state === 'pending' ? <p role="status" className="flex items-center gap-2 text-sm text-slate-500"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-500 motion-reduce:animate-none" aria-hidden="true" />Thinking…</p> : turn.result ? <Result result={turn.result} catchup={turn.mode === 'catchup'} /> : <p className="text-xs text-slate-500">{turn.state === 'cancelled' ? 'Stopped.' : 'No answer received.'}</p>}
             </div></div>
@@ -262,13 +262,13 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
         <form onSubmit={submit} className="border-t border-slate-100 p-3 sm:p-4">
           {mode === 'catchup' && <div className="mb-3"><label className="text-xs font-medium text-slate-600">Time range<select value={period} disabled={busy} onChange={(event) => { setPeriod(event.target.value as Period); setError(''); }} className={`ml-2 ${controlClass}`}><option value="hour">Past hour</option><option value="six-hours">Past 6 hours</option><option value="day">Past 24 hours</option><option value="week">Past 7 days</option><option value="last">Since last catch-up</option></select></label>{period === 'last' && <p className="mt-2 text-xs text-slate-500">{staleCheckpoint ? 'Your last catch-up is older than 31 days. Choose a recent range.' : checkpoint ? `From ${dateLabel(checkpoint)}.` : 'No previous catch-up. Choose a time range first.'}</p>}</div>}
           <div className={`flex items-end gap-2 ${mode === 'ask' ? 'rounded-2xl border border-slate-300 bg-white p-2 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-50' : ''}`}>
-            {mode === 'ask' && <textarea aria-label="Your question" value={question} disabled={busy} onChange={(event) => { if (!busy) { setDraft({ identity, text: event.target.value }); setError(''); } }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (canSubmit) event.currentTarget.form?.requestSubmit(); } }} required minLength={3} maxLength={1200} rows={2} placeholder="Ask a question…" className="block min-h-12 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 text-slate-800 outline-none disabled:opacity-60" />}
+            {mode === 'ask' && <textarea aria-label="Your question" value={question} disabled={busy} onChange={(event) => { if (!busy) { setDraft({ identity, text: event.target.value }); setError(''); } }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (canSubmit) event.currentTarget.form?.requestSubmit(); } }} required minLength={3} maxLength={1200} rows={2} placeholder="Ask a question…" className="block min-h-12 w-full resize-none bg-transparent px-2 py-1 text-base leading-6 text-slate-800 outline-none disabled:opacity-60" />}
             {busy ? <button type="button" onClick={cancel} aria-label="Stop response" title="Stop response" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-700 text-white hover:bg-slate-900"><Square size={14} fill="currentColor" aria-hidden="true" /></button> : <button type="submit" disabled={!canSubmit} aria-label={mode === 'ask' ? error ? 'Retry answer' : 'Send message' : mode === 'summary' ? 'Summarize discussion' : 'Create catch-up'} className={`${mode === 'ask' ? 'grid h-9 w-9 place-items-center' : 'px-4 py-2 text-sm font-semibold'} shrink-0 rounded-xl bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-40`}>
               {mode === 'ask' ? <ArrowUp size={19} aria-hidden="true" /> : mode === 'summary' ? 'Summarize discussion' : 'Create catch-up'}
             </button>}
           </div>
           {error && conversation.identity === identity && <p role="alert" className="mt-2 text-xs leading-5 text-amber-800">{error}{error.startsWith('Your session has expired') && <> <a href={`/login?next=${encodeURIComponent(pathname || '/assistant')}#sign-in`} className="font-semibold underline">Sign in</a></>}</p>}
-          <p className="mt-2 text-center text-[11px] leading-4 text-slate-400">Community experiences, not official visa advice. Don’t share personal identifiers.</p>
+          <p className="mt-2 text-center text-xs leading-5 text-slate-600">Community experiences, not official visa advice. Don’t share personal identifiers.</p>
         </form>
       </>}
     </div>}

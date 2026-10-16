@@ -24,7 +24,7 @@ test('ten isolated users exchange private messages using post topics', { timeout
     // Supabase-owned auth/realtime interfaces are emulated; application tables,
     // triggers, functions, grants and RLS come from the actual migrations.
     await db.exec(`create role anon; create role authenticated; create role service_role;
-      create schema auth; create table auth.users(id uuid primary key);
+      create schema auth; create table auth.users(id uuid primary key, raw_user_meta_data jsonb default '{}'::jsonb);
       create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
       grant usage on schema auth to anon,authenticated; grant execute on function auth.uid() to anon,authenticated;
       create schema realtime; create table realtime.messages(topic text, extension text, payload jsonb);
@@ -42,15 +42,33 @@ test('ten isolated users exchange private messages using post topics', { timeout
       '20260910035131_imported_comment_discovery.sql',
       '20260910055528_launch_safety_and_moderation.sql',
       '20260911050812_community_write_guard_gaps.sql',
+      '20261003175714_messaging_delivery_reliability.sql',
+      '20261004221850_policy_acceptance_receipts.sql',
+      '20261006042952_public_avatar_initials.sql',
+      '20261006043113_avatar_name_policy_v2.sql',
     ]) await db.exec(await readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'));
 
     await t.test('signup trigger generates ten distinct valid usernames', async () => {
-      for (const user of users) {
-        await db.query('insert into auth.users values($1)', [user.id]);
+      for (const [index, user] of users.entries()) {
+        await db.query('insert into auth.users(id,raw_user_meta_data) values($1,$2)', [user.id, { first_name: `${String.fromCharCode(65 + index)} fixture` }]);
         user.username = await scalar('select username from public.profiles where id=$1', [user.id]);
         assert.match(user.username, /^[a-z][a-z0-9-]{4,31}$/);
+        assert.match(await scalar('select avatar_seed from public.profiles where id=$1', [user.id]), new RegExp(`^initial:${String.fromCharCode(65 + index)}:`));
       }
       assert.equal(new Set(users.map((u) => u.username)).size, 10);
+    });
+
+    await t.test('new identities cannot publish or request a chat until they explicitly acknowledge the current policy', async () => {
+      const version = '2026-10-06-preview-v2';
+      assert((await readFile(new URL('../src/lib/policy.ts', import.meta.url), 'utf8')).includes(version));
+      for (const [index, user] of users.entries()) {
+        await asUser(user.id);
+        await assert.rejects(() => db.query(`insert into public.questions(author_id,title,body)
+          values($1,'Policy acknowledgement fixture question','A valid question must remain blocked until the member acknowledges policy.')`, [user.id]), /acknowledge/);
+        await assert.rejects(() => db.query('select public.start_direct_conversation($1)', [users[(index + 1) % users.length].username]), /acknowledge/);
+        await db.query(`insert into public.policy_acceptances(user_id,policy_version,market,terms_accepted,privacy_acknowledged,adult_confirmed)
+          values($1,$2,'US',true,true,true)`, [user.id, version]);
+      }
     });
 
     for (let i = 0; i < users.length; i++) {
@@ -78,7 +96,7 @@ test('ten isolated users exchange private messages using post topics', { timeout
         await assert.rejects(() => db.query('select public.send_direct_message($1,$2,$3)', [conversation, 'Reply before acceptance', randomUUID()]), /accepted/);
         await db.query("select public.respond_to_conversation($1,'accepted')", [conversation]);
         await db.query('select public.send_direct_message($1,$2,$3)', [conversation, 'Accepted. Let us compare the experiences in that discussion.', randomUUID()]);
-        await db.query('update public.direct_messages set read_at=now() where id=$1', [message]);
+        await db.query('select public.mark_direct_messages_read($1,$2)', [conversation, [message]]);
         await asUser(sender.id);
         assert(await scalar('select read_at from public.direct_messages where id=$1', [message]));
         await db.query('select public.send_direct_message($1,$2,$3)', [conversation, 'Thanks for responding to the test conversation.', randomUUID()]);
@@ -127,6 +145,6 @@ test('ten isolated users exchange private messages using post topics', { timeout
       await db.exec('set role anon');
       await assert.rejects(() => db.query('select public.start_direct_conversation($1)', [users[0].username]), /permission/);
     });
-    console.log(`Ten-user local PostgreSQL test: 10 generated usernames, 10 posts, 10 private conversations, 30 messages, 80 outsider combinations; ${references.length} post references. Hosted email signup, browsers and WebSocket transport are not covered.`);
+    console.log(`Ten-user local PostgreSQL test: 10 generated usernames and first-name initials, 10 current-policy receipts, 10 posts, 10 private conversations, 30 messages, 80 outsider combinations; ${references.length} post references. Hosted email signup, browsers and WebSocket transport are not covered.`);
   } finally { await db.close(); }
 });

@@ -42,6 +42,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   const [inboxError, setInboxError] = useState('');
   const [folderCounts, setFolderCounts] = useState<ConversationCounts | null>(null);
   const [messageTotal, setMessageTotal] = useState<number | null>(null);
+  const [messageError, setMessageError] = useState('');
   const folderRef = useRef(tab);
   folderRef.current = tab;
   const inboxRef = useRef(conversations);
@@ -54,6 +55,8 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   const activeRef = useRef(activeId);
   activeRef.current = activeId;
   const pendingSend = useRef<{ id: string; body: string; conversation: string } | null>(null);
+  const sendLock = useRef(false);
+  const retryMessages = useRef<(() => Promise<void>) | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   const openConversation = useCallback((conversation: Conversation, selectFolder = true) => {
@@ -63,7 +66,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
     if (activeRef.current !== conversation.id) {
       ++messageGeneration.current;
       messageRef.current = [];
-      setMessages([]); setBody(''); setHasOlder(false); setMessagesLoading(true); setMessageTotal(null);
+      setMessages([]); setBody(''); setHasOlder(false); setMessagesLoading(true); setMessageTotal(null); setMessageError('');
     }
     activeRef.current = conversation.id;
     setSelectedConversation(conversation);
@@ -125,8 +128,8 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
         // Following an author link only reads. A new request needs the explicit
         // Start request action; an existing incoming request opens its own folder.
         if (existing && navigation === navigationGeneration.current) openConversation(existing);
-      } catch (reason) {
-        if (valid) { setResolvedRecipient(null); setError(reason instanceof Error ? reason.message : 'Could not find this member.'); }
+      } catch {
+        if (valid) { setResolvedRecipient(null); setError('We couldn’t find this member. Check their public username and try again.'); }
       } finally { if (valid) setResolvingRecipient(false); }
     })();
     return () => { valid = false; };
@@ -137,7 +140,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
     let valid = true;
     messageGeneration.current++;
     messageRef.current = [];
-    setMessages([]); setBody(''); setHasOlder(false); setMessagesLoading(true); setMessageTotal(null); setHistoryNotice('');
+    setMessages([]); setBody(''); setHasOlder(false); setMessagesLoading(true); setMessageTotal(null); setHistoryNotice(''); setMessageError('');
     const reload = async () => {
       const current = ++messageGeneration.current;
       try {
@@ -147,6 +150,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
         messageRef.current = result.messages;
         setMessages(result.messages);
         setMessageTotal(total);
+        setMessageError('');
         if (result.reset) {
           setHasOlder(result.hasOlder && result.messages.length < total);
           if (previous.length && result.hasOlder) setHistoryNotice('You have newer messages. Load earlier messages to continue through the full history.');
@@ -165,12 +169,13 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
             if (valid && current === messageGeneration.current) setError(receiptError);
           }
         }
-      } catch (reason) { if (valid && current === messageGeneration.current) { setMessageTotal(null); setError(reason instanceof Error ? reason.message : 'Could not load messages.'); } }
+      } catch { if (valid && current === messageGeneration.current) { setMessageTotal(null); setMessageError('We couldn’t refresh this conversation. Please try again.'); } }
       finally { if (valid && current === messageGeneration.current) setMessagesLoading(false); }
     };
+    retryMessages.current = async () => { if (valid) { setMessagesLoading(true); await reload(); } };
     void reload();
     const stop = subscribeLive([`conversation:${activeId}`], () => { void reload(); }, setLive);
-    return () => { valid = false; stop(); };
+    return () => { valid = false; retryMessages.current = null; stop(); };
   }, [activeId, loadInbox, user]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [messages.at(-1)?.id]);
@@ -191,34 +196,53 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
       setLinkedRecipientId('');
       setResolvedRecipient(null);
       await loadInbox(id);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not start conversation.'); }
+    } catch { setError('We couldn’t start this conversation. Check the member’s public username and try again.'); }
     finally { setActing(false); }
   }
 
   async function send(event: FormEvent) {
     event.preventDefault();
-    if (!user || !activeId || !body.trim() || sending) return;
+    if (!user || !activeId || !body.trim() || sending || sendLock.current) return;
+    sendLock.current = true;
     const conversation = activeId;
     const text = body.trim();
     if (pendingSend.current?.body !== text || pendingSend.current.conversation !== conversation) pendingSend.current = { id: crypto.randomUUID(), body: text, conversation };
     setSending(true); setError('');
+    let confirmed = false;
+    let refreshGeneration: number | undefined;
     try {
       await sendMessage(conversation, user.id, text, pendingSend.current.id);
+      confirmed = true;
       pendingSend.current = null;
       if (activeRef.current === conversation) {
         setBody('');
         const generation = ++messageGeneration.current;
+        refreshGeneration = generation;
         const [result, total] = await Promise.all([refreshMessages(conversation, messageRef.current), getConversationMessageCount(conversation)]);
         if (activeRef.current === conversation && generation === messageGeneration.current) {
           messageRef.current = result.messages;
           setMessages(result.messages);
           setMessageTotal(total);
+          setMessageError('');
           if (result.reset) setHasOlder(result.hasOlder && result.messages.length < total);
         }
       }
       await loadInbox();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Send failed. Your text is saved; retry to send.'); }
-    finally { setSending(false); }
+    } catch {
+      if (activeRef.current === conversation) {
+        if (confirmed && refreshGeneration === messageGeneration.current) {
+          setMessageTotal(null);
+          setMessageError('Your message was sent, but this conversation could not refresh. Retry to see the latest messages.');
+        } else if (!confirmed) setError('Your message could not be sent. Your text is saved. Refresh the conversation and try again.');
+      }
+      if (confirmed) await loadInbox();
+    }
+    finally {
+      // A confirmed send can supersede a manual history retry. The operation
+      // that owns the current generation must settle its loading indicator.
+      if (activeRef.current === conversation && refreshGeneration === messageGeneration.current) setMessagesLoading(false);
+      sendLock.current = false; setSending(false);
+    }
   }
 
   async function respond(decision: 'accepted' | 'declined' | 'blocked') {
@@ -230,7 +254,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
       await loadInbox();
       if (activeRef.current === conversation) setTab(decision === 'accepted' ? 'chats' : 'closed');
     }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update this request.'); }
+    catch { setError('We couldn’t update this request. Refresh the conversation and try again.'); }
     finally { setActing(false); }
   }
 
@@ -250,7 +274,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
         await markConversationRead(conversation, user.id, rows);
         if (activeRef.current === conversation && generation === messageGeneration.current) await loadInbox();
       }
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load older messages.'); }
+    } catch { setError('We couldn’t load earlier messages. Please try again.'); }
     finally { setOlderLoading(false); if (activeRef.current === conversation) setMessagesLoading(false); }
   }
 
@@ -265,7 +289,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
       inboxRef.current = merged;
       setConversations(merged);
       setInboxHasOlder(result.hasOlder);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load earlier conversations.'); }
+    } catch { setError('We couldn’t load earlier conversations. Please try again.'); }
     finally { setInboxOlderLoading(false); }
   }
 
@@ -308,6 +332,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
           {active ? <>
             <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4"><Avatar seed={active.other_avatar_seed} /><div><b className="text-sm text-slate-900">u/{active.other_username}</b><p role="status" className="text-xs text-slate-500">{demoMode ? 'Browser preview' : live === 'live' ? 'Connected · live messages' : 'Reconnecting · checking for missed messages'}</p></div>{!closed(active) && <button disabled={acting} onClick={() => void respond('blocked')} className="ml-auto text-xs text-slate-500 hover:text-rose-700">Block</button>}</div>
             {!messagesLoading && <p role="status" className="border-b border-slate-100 px-5 py-2 text-xs text-slate-500">{messages.length} of {messageTotal ?? '—'} messages shown{hasOlder ? ' · Earlier messages available' : ''}</p>}
+            {messageError && <div role="alert" className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700"><p>{messageError}</p><button type="button" disabled={messagesLoading} onClick={() => void retryMessages.current?.()} className="mt-2 font-semibold underline disabled:opacity-50">Retry conversation</button></div>}
             <div aria-label="Conversation messages" className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50/60 p-5">
               {historyNotice && <p role="status" className="text-center text-xs text-slate-500">{historyNotice}</p>}
               {hasOlder && <button onClick={() => void older()} disabled={olderLoading} className="mx-auto block text-xs font-bold text-blue-700">{olderLoading ? 'Loading…' : 'Load earlier messages'}</button>}
@@ -327,7 +352,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
           </> : <div className="grid flex-1 place-items-center p-8 text-center"><div><MessageCircle className="mx-auto text-slate-300" size={42} /><h2 className="mt-3 text-xl font-black text-slate-800">Choose a conversation</h2><p className="mt-1 text-sm text-slate-500">Or start one with a public username.</p></div></div>}
         </section>
       </div>
-      {error && <p className="mt-4 rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
+      {error && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
     </main>
   );
 }
