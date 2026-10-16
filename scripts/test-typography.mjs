@@ -111,10 +111,8 @@ test('component text never reintroduces unreadable arbitrary sizes below the 12p
 });
 
 test('logo geometry and narrow-screen behavior remain unchanged by typography', () => {
-  const logo = rules.find(rule => rule.selector === '.integrated-brand-logo');
-  assert.equal(property(logo, 'width'), '172px');
-  assert.equal(property(logo, 'height'), '60px');
-  assert.equal(property(logo, 'object-fit'), 'contain');
+  assert.match(source, /\.integrated-brand-logo-frame\s*\{[^}]*width: 172px;[^}]*aspect-ratio: 3\.86 \/ 1;[^}]*overflow: hidden;/);
+  assert.match(source, /\.integrated-brand-logo\s*\{[^}]*left: -17%;[^}]*width: 131%;[^}]*transform: translateY\(-50%\);/);
   assert.match(source, /\.site-brand:focus-visible\s*\{[^}]*outline:/);
   assert.match(source, /@media \(prefers-reduced-motion: reduce\)/);
 });
@@ -124,8 +122,8 @@ test('phone header keeps account controls on the first row and the complete logo
   assert.equal(property(phone('.site-brand'), 'min-width'), '130px');
   assert.equal(property(phone('.site-brand'), 'max-width'), '172px');
   assert.equal(property(phone('.site-brand'), 'flex'), '1 1 130px');
-  assert.equal(property(phone('.integrated-brand-logo'), 'width'), '100%');
-  assert.equal(property(phone('.integrated-brand-logo'), 'height'), 'auto');
+  assert.equal(property(phone('.integrated-brand-logo-frame'), 'width'), '100%');
+  assert.equal(property(phone('.integrated-brand-logo-frame'), 'max-width'), '172px');
   assert.equal(property(phone('.header-secondary-action'), 'display'), 'none');
   assert.equal(property(phone('.header-account, .header-login'), 'flex-shrink'), '0');
   const navigation = await readFile(new URL('src/components/CommunityNavigation.tsx', root), 'utf8');

@@ -50,8 +50,10 @@ export function SiteHeader() {
         </details>
         <Link href="/" className="site-brand" aria-label="VisaThreads home">
           {/* Local brand asset: no remote request or image-processing service. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/brand/visathreads-integrated-logo.png" width={172} height={60} alt="VisaThreads" className="integrated-brand-logo" decoding="async" />
+          <span className="integrated-brand-logo-frame">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/assets/brand/visathreads-integrated-logo.png" width={172} height={60} alt="VisaThreads" className="integrated-brand-logo" decoding="async" />
+          </span>
         </Link>
         <form action="/" method="get" role="search" className="header-search">
           <Search size={19} aria-hidden="true"/>
