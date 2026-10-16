@@ -1,21 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { setTimeout } from 'node:timers/promises';
 import { LIVE_SITE, sha256 } from './live-preview-archive.mjs';
 import { canonicalJson } from './recover-worker-archive.mjs';
-import { assertHealthProvenance, smokeSite } from './smoke-site.mjs';
+import { waitForHealthProvenance, smokeSite } from './smoke-site.mjs';
 import { readFeatureBuildProvenance } from './production-feature-release.mjs';
 
 const receipt = JSON.parse(await readFile('.cache/visaflow/live-preview/receipt.json', 'utf8'));
 const expected = await readFeatureBuildProvenance();
 const request = (path, options = {}) => fetch(LIVE_SITE + path, { ...options, redirect: 'error', signal: AbortSignal.timeout(20_000), cache: 'no-store' });
-let health;
-for (let attempt = 0; attempt < 10; attempt++) {
-  const response = await request(`/api/health?feature-release=${Date.now()}`);
-  if (response.ok) { health = await response.json(); if (health.build?.gitSha === expected.gitSha) break; }
-  if (attempt < 9) await setTimeout(5000);
-}
-assertHealthProvenance(health, expected);
+const health = await waitForHealthProvenance(LIVE_SITE, expected);
 assert.equal(health.environment, 'development', 'Launch state must remain the existing early preview.');
 const feedResponse = await request('/api/community');
 assert.equal(feedResponse.status, 200);

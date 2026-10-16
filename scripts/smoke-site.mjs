@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { setTimeout } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 
 export const smokeRoutes = ['/account', '/cookies', '/privacy-choices', '/countries', '/us', '/experiences', '/experiences/new', '/', '/login', '/signup', '/account/recovery', '/account/update-password', '/messages', '/moderation', '/community-safety', '/privacy', '/terms', '/contact', '/tags', '/explore', '/my-communities', '/communities/new', '/news', '/api/health'];
@@ -19,13 +21,41 @@ export function assertHealthProvenance(health, expected) {
   assert.equal(health.environment, expected.appEnvironment, 'Runtime environment does not match the build');
 }
 
+/** Propagation may be transient; neither endpoint may bypass exact provenance. */
+export async function waitForHealthProvenance(origin, expected, { attempts = 10, delayMs = 5000, fetchImpl = fetch, wait = setTimeout } = {}) {
+  assert(Number.isInteger(attempts) && attempts >= 2 && attempts <= 10, 'Health verification needs 2–10 bounded rounds');
+  assert(Number.isFinite(delayMs) && delayMs >= 0 && delayMs <= 5000, 'Health verification delay must be bounded');
+  let consecutive = 0, lastFailure;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const bare = new URL('/api/health', origin);
+    const fresh = new URL(bare);
+    fresh.searchParams.set('smoke-provenance', randomUUID());
+    const results = await Promise.allSettled([bare, fresh].map(async url => {
+      const response = await fetchImpl(url, { cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000) });
+      try {
+        assert.equal(response.status, 200, 'Health endpoint must be available');
+        assert(response.headers.get('cache-control')?.includes('no-store'), 'Build provenance must not be cached');
+        const health = await response.json();
+        assertHealthProvenance(health, expected);
+        return health;
+      } finally { await response.body?.cancel().catch(() => {}); }
+    }));
+    const failed = results.find(result => result.status === 'rejected');
+    if (failed) { consecutive = 0; lastFailure = failed.reason; }
+    else if (++consecutive >= 2) return results[0].value;
+    if (attempt < attempts - 1) await wait(delayMs);
+  }
+  throw new Error('Bare and cache-busted health endpoints did not match the reviewed build in two consecutive rounds.', { cause: lastFailure });
+}
+
 export async function smokeSite(origin, expected) {
 const site = new URL(origin);
 assert(['https:', 'http:'].includes(site.protocol) && site.pathname === '/' && !site.search && !site.hash && !site.username && !site.password, 'Pass the exact site origin to test.');
 if (expected.appEnvironment === 'production') assert.equal(site.origin, expected.siteOrigin, 'Production smoke target must match the configured public origin');
+await waitForHealthProvenance(site.origin, expected);
 let firstNonce;
 for (const path of smokeRoutes) {
-  const response = await fetch(new URL(path,origin), { signal:AbortSignal.timeout(15000),redirect:'error' });
+  const response = await fetch(new URL(path,origin), { cache:'no-store',signal:AbortSignal.timeout(15000),redirect:'error' });
   assert.equal(response.status,200,`${path}: unexpected status`);
   assert.equal(response.headers.get('x-content-type-options'),'nosniff',`${path}: missing nosniff`);
   assert.equal(response.headers.get('x-frame-options'),'DENY',`${path}: framing allowed`);
@@ -57,7 +87,7 @@ for (const path of smokeRoutes) {
   }
   console.log(`PASS ${path}`);
 }
-const injected=await fetch(new URL('/',origin),{signal:AbortSignal.timeout(15000),redirect:'error',headers:{
+const injected=await fetch(new URL('/',origin),{cache:'no-store',signal:AbortSignal.timeout(15000),redirect:'error',headers:{
   'content-security-policy':"script-src 'nonce-attacker'",'x-nonce':'attacker',
   'x-middleware-subrequest':'middleware:middleware:middleware:middleware:middleware',
 }});
@@ -66,7 +96,7 @@ const secondNonce=injected.headers.get('content-security-policy')?.match(/'nonce
 assert(secondNonce && secondNonce!==firstNonce && secondNonce!=='attacker','Nonce must be fresh and not caller-controlled');
 await injected.body?.cancel();
 console.log('PASS fresh nonce and untrusted-header replacement');
-const missing = await fetch(new URL('/a-page-that-does-not-exist',origin),{signal:AbortSignal.timeout(15000),redirect:'error'});
+const missing = await fetch(new URL('/a-page-that-does-not-exist',origin),{cache:'no-store',signal:AbortSignal.timeout(15000),redirect:'error'});
 assert.equal(missing.status,404,'Unknown route must be a real 404');
 await missing.body?.cancel();
 console.log('PASS real 404 and exact build provenance; smoke checks do not verify email delivery or production capacity.');
