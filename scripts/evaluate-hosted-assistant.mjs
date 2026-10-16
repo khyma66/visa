@@ -18,7 +18,7 @@ const account = process.env.CLOUDFLARE_ACCOUNT_ID;
 assert(token && account && /^[a-f0-9]{32}$/i.test(account), 'Cloudflare account and token are required');
 const apiRoot = `https://api.cloudflare.com/client/v4/accounts/${account}`;
 const workerPattern = /^visathreads-ai-eval-[a-f0-9]{20}$/;
-const cases = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context'];
+const cases = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context', 'thank-you-confirmation', 'public-multiple-thread-synthesis'];
 
 async function api(path, options = {}) {
   const reply = await fetch(`${apiRoot}${path}`, { ...options, headers: { Authorization: `Bearer ${token}`, ...options.headers }, redirect: 'error', signal: AbortSignal.timeout(20_000) });
@@ -73,26 +73,33 @@ try {
   await waitForAcceptanceReady(baseUrl, secret, sourceSha, cases);
   console.log('PASS authenticated Worker readiness and unauthenticated denial');
   for (const id of cases) {
-    const samples = [];
     // Establish the exact authenticated route once per fixture; all three
     // independent samples use that same proven URL. Repeating four propagation
     // probes before every sample wastes most of the expiring fixture window.
     const url = await waitForAcceptanceReady(baseUrl, secret, sourceSha, cases);
     // Fixed independent samples, never retrying a failed inference or replacing
     // a failure with a later success. Every sample remains in the receipt.
-    for (let sample = 0; sample < repetitions; sample++) {
-      const reply = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }, body: JSON.stringify({ id }), redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(35_000) });
+    // Only three concurrent fixed samples; no retries. This keeps two-stage
+    // answer checks inside the temporary Worker's short authorization window.
+    const samples = await Promise.all(Array.from({ length: repetitions }, async (_, sample) => {
+      try {
+      const reply = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }, body: JSON.stringify({ id }), redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(60_000) });
       if (!reply.ok) {
         const syntheticDiagnostic = await readAcceptanceFailureDiagnostic(reply, id, receipt.model);
-        samples.push({ id, passed: false, checks: [{ name: 'hosted_inference_and_validation', passed: false }], httpStatus: reply.status, workerMarker: reply.headers.get('X-Assistant-Acceptance') === 'v1', ...(syntheticDiagnostic ? { syntheticDiagnostic } : {}) });
         console.log(`FAIL ${id} sample ${sample + 1}/${repetitions} HTTP ${reply.status} worker-marker=${reply.headers.get('X-Assistant-Acceptance') === 'v1'}`);
-        continue;
+        return { id, model: receipt.model, passed: false, checks: [{ name: 'hosted_inference_and_validation', passed: false }], httpStatus: reply.status, workerMarker: reply.headers.get('X-Assistant-Acceptance') === 'v1', ...(syntheticDiagnostic ? { syntheticDiagnostic } : {}) };
       }
       const value = await reply.json();
       assert(value.id === id && value.model === receipt.model && Array.isArray(value.checks), 'Evaluation returned an unexpected fixture or model');
-      samples.push(value);
       console.log(`${value.passed ? 'PASS' : 'FAIL'} ${id} sample ${sample + 1}/${repetitions}`);
-    }
+      return value;
+      } catch {
+        // Retain transport/schema failures too; wait for every in-flight sample
+        // before deleting the temporary Worker. Never log a secret-bearing URL.
+        console.log(`FAIL ${id} sample ${sample + 1}/${repetitions} transport-or-schema`);
+        return { id, model: receipt.model, passed: false, checks: [{ name: 'hosted_transport_and_schema', passed: false }] };
+      }
+    }));
     receipt.cases.push({ id, model: receipt.model, passed: samples.length === repetitions && samples.every(sample => sample.passed === true), checks: samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed }))), samples });
   }
   receipt.passed = receipt.cases.length === cases.length && receipt.cases.every(item => item.passed === true && item.checks.every(check => check.passed === true));

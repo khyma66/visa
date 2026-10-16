@@ -20,6 +20,7 @@ const core = await import(dependencies['./assistant-core']);
 dependencies['./assistant-provider'] = await compile('assistant-provider');
 const provider = await import(dependencies['./assistant-provider']);
 dependencies['./assistant-search'] = await compile('assistant-search');
+dependencies['./assistant-review'] = await compile('assistant-review');
 const serviceModule = await compile('assistant-service');
 const service = await import(serviceModule);
 
@@ -107,7 +108,7 @@ function harness(overrides = {}) {
   const handler = service.createAssistantHandler({
     availability: () => ({ posts: true, communities: true, catchup: true }), model: 'test-model',
     authenticate: async () => session,
-    generate: async () => { state.generations++; return JSON.stringify(output); },
+    generate: async prompt => { if (prompt.outputKind === 'review') return JSON.stringify({ answersQuestion: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) }); state.generations++; return JSON.stringify(output); },
     reportFailure: event => failures.push(event), ...overrides,
   });
   return { handler, state, session, failures };

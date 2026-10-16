@@ -1,6 +1,6 @@
 import { AssistantError, readBoundedJson } from './assistant-core';
 
-export type AssistantPrompt = { system: string; user: string; sourceIds?: string[] };
+export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[] };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
 export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'timeout' | 'cancelled' | 'provider_error' | 'incomplete_output' | 'empty_output' | 'oversized_output';
 export const WORKERS_ASSISTANT_MODEL = '@cf/openai/gpt-oss-120b';
@@ -16,6 +16,17 @@ export const ASSISTANT_OUTPUT_SCHEMA = { type: 'object', additionalProperties: f
 
 /** Constrain citations to the server-selected corpus before generation. */
 export function assistantOutputSchema(prompt: AssistantPrompt) {
+  if (prompt.outputKind === 'review') {
+    const ids = [...new Set(prompt.reviewIds ?? [])];
+    if (!ids.length || ids.length > 9) throw new AssistantError(502, 'The assistant could not verify this answer. Please try again.');
+    return { type: 'object', additionalProperties: false, required: ['checks', 'answersQuestion'], properties: {
+      checks: { type: 'array', minItems: ids.length, maxItems: ids.length, items: {
+        type: 'object', additionalProperties: false, required: ['id', 'supported'],
+        properties: { id: { type: 'string', enum: ids }, supported: { type: 'boolean' } },
+      } },
+      answersQuestion: { type: 'boolean' },
+    } };
+  }
   if (!prompt.sourceIds?.length) return ASSISTANT_OUTPUT_SCHEMA;
   const sourceId = { ...evidence.properties.sourceId, enum: [...new Set(prompt.sourceIds)] };
   const boundedEvidence = { ...evidence, properties: { ...evidence.properties, sourceId } };
@@ -39,6 +50,8 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
 }): Promise<string> {
   const model = providerModel(options.provider);
   const schema = assistantOutputSchema(prompt);
+  const review = prompt.outputKind === 'review';
+  const schemaName = review ? 'discussion_answer_review' : 'discussion_answer';
   const timeout = AbortSignal.timeout(25_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   const unavailable = () => new AssistantError(503, 'The assistant is temporarily unavailable. Please try again shortly.');
@@ -54,8 +67,8 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       try {
         const value = await Promise.race([options.binding.run(model, {
           messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
-          max_tokens: 4096, reasoning_effort: 'low', temperature: 0, seed: 39173, store: false,
-          response_format: { type: 'json_schema', json_schema: { name: 'discussion_answer', strict: true, schema } },
+          max_tokens: review ? 1200 : 4096, reasoning_effort: 'low', temperature: 0, seed: 39173, store: false,
+          response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } },
         }), aborted]);
         if (value && typeof value === 'object') {
           const payload = value as { response?: unknown; choices?: { finish_reason?: string; message?: { content?: unknown } }[] };
@@ -73,9 +86,9 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
     const response = await (options.fetcher ?? fetch)('https://api.openai.com/v1/responses', {
       method: 'POST', redirect: 'error', signal,
       headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, store: false, reasoning: { effort: 'none' }, max_output_tokens: 1600,
+      body: JSON.stringify({ model, store: false, reasoning: { effort: 'none' }, max_output_tokens: review ? 1200 : 1600,
         input: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
-        text: { format: { type: 'json_schema', name: 'discussion_answer', strict: true, schema } },
+        text: { format: { type: 'json_schema', name: schemaName, strict: true, schema } },
       }),
     });
     if (!response.ok) { await response.body?.cancel(); throw unavailable(); }

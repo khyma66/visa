@@ -32,7 +32,10 @@ export type AssistantSource = {
   updatedAt: string;
   url: string;
   provenance: 'member' | 'archive';
+  /** Derived from server-read author IDs, never inferred from reply wording. */
+  speakerRole?: 'original-poster' | 'member';
 };
+export type AssistantCoverageReason = 'retrieval-limit' | 'context-limit' | 'missing-replies' | 'unindexed-replies';
 export type AssistantEvidence = { sourceId: string; quote: string };
 export type AssistantClaim = { text: string; evidence: AssistantEvidence[] };
 export type AssistantPostMatch = {
@@ -52,10 +55,10 @@ export type AssistantResult = {
   disagreements: AssistantClaim[];
   unanswered: string[];
   sources: AssistantSource[];
-  coverage: { sourceCount: number; partial: boolean; since?: string; until?: string };
+  coverage: { sourceCount: number; partial: boolean; reasons?: AssistantCoverageReason[]; since?: string; until?: string };
   generatedAt: string;
   cached: boolean;
   notice: string;
 };
 export type AssistantAvailability = { posts: boolean; communities: boolean; catchup: boolean };
-export type AssistantCorpus = { sources: AssistantSource[]; partial: boolean; since?: string; until?: string };
+export type AssistantCorpus = { sources: AssistantSource[]; partial: boolean; coverageReasons?: AssistantCoverageReason[]; since?: string; until?: string };

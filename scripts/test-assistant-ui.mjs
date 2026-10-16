@@ -53,6 +53,7 @@ class Harness {
 }
 function nodes(node) { if (Array.isArray(node)) return node.flatMap(nodes); if (!node || typeof node !== 'object') return []; if (typeof node.type === 'function') return nodes(node.type(node.props)); return [node, ...nodes(node.props?.children)]; }
 function textOf(node) { if (Array.isArray(node)) return node.map(textOf).join(' '); if (node == null || typeof node === 'boolean') return ''; if (typeof node !== 'object') return String(node); return textOf(typeof node.type === 'function' ? node.type(node.props) : node.props?.children); }
+function visibleTextOf(node) { if (Array.isArray(node)) return node.map(visibleTextOf).join(' '); if (node == null || typeof node === 'boolean') return ''; if (typeof node !== 'object') return String(node); if (typeof node.type === 'function') return visibleTextOf(node.type(node.props)); if (node.type === 'details' && !node.props.open) return visibleTextOf(nodes(node.props.children).find(child => child.type === 'summary')); return visibleTextOf(node.props?.children); }
 function button(h, label) { const value = nodes(h.tree).find(node => node.type === 'button' && (node.props['aria-label'] ?? textOf(node).trim()) === label); assert(value, `Missing button ${label}`); return value; }
 function changeQuestion(h, value) { nodes(h.tree).find(node => node.type === 'textarea').props.onChange({ target: { value } }); h.render(); }
 function choose(h, label) { button(h, label).props.onClick(); h.render(); }
@@ -177,32 +178,92 @@ test('evidence renders as escaped text with dates and only internal discussion l
     h.render(); await h.settle(); changeQuestion(h, 'What happened?'); await submit(h); await h.settle();
     const html = renderToStaticMarkup(h.tree);
     assert.match(html, /&lt;img/); assert.match(html, /&lt;script&gt;/); assert.doesNotMatch(html, /<script|javascript:/);
-    assert.match(html, /href="\/questions\/post-a#answer-reply-a"/); assert.match(textOf(h.tree), /Partial coverage/); assert.match(textOf(h.tree), /2026-10-01 10:00 UTC/);
+    assert.match(html, /href="\/questions\/post-a#answer-reply-a"/); assert.match(visibleTextOf(h.tree), /I could only review part of these discussions/); assert.match(textOf(h.tree), /2026-10-01 10:00 UTC/);
+    assert.match(visibleTextOf(h.tree), /Sources · 1/); assert.doesNotMatch(textOf(h.tree), /Partial coverage/);
   } finally { h.close(); }
 });
 
-test('compatible public excerpts are compared without asserting a conflict', async () => {
-  const coreSource = await readFile(new URL('../src/lib/assistant-core.ts', import.meta.url), 'utf8');
-  const coreModule = ts.transpileModule(coreSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText
-    .replace("'./assistant-context'", JSON.stringify(context));
-  const { validateAssistantOutput } = await import(dataUrl(coreModule));
-  const quote = 'At my visit, staff allowed phones inside the venue.';
-  const sources = ['one', 'two'].map(name => ({ ...fixture().sources[0], id: `q:apify-report-${name}`, kind: 'question',
-    questionId: `apify-report-${name}`, communityId: null, body: quote, url: `/questions/apify-report-${name}` }));
-  const evidence = sources.map(item => ({ sourceId: item.id, quote }));
-  const result = validateAssistantOutput(JSON.stringify({ status: 'answered',
+test('complete answers keep evidence metadata in collapsed sources without a coverage warning', async () => {
+  const h = new Harness();
+  h.post = async () => reply(fixture({ sources: [{ ...fixture().sources[0], provenance: 'archive' }] }));
+  try {
+    h.render(); await h.settle(); changeQuestion(h, 'What documents were requested?'); await submit(h); await h.settle();
+    const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
+    assert.match(visibleTextOf(response), /Members reported document requests/);
+    assert.match(visibleTextOf(response), /\[1\]|Sources · 1/);
+    assert.doesNotMatch(visibleTextOf(response), /Imported community|source checked|2026-10-01|only review part|Partial coverage/);
+    const details = nodes(response).find(node => node.type === 'details');
+    assert(!details.props.open);
+    assert.match(textOf(details), /Imported community\s+reply/);
+    assert.match(textOf(details), /1\s+source\s+checked/);
+    assert.match(textOf(details), /They asked for documents/);
+    assert.match(renderToStaticMarkup(details), /href="\/questions\/post-a#answer-reply-a"/);
+  } finally { h.close(); }
+});
+
+test('incomplete catch-up explains the limitation visibly and keeps the saved position', async () => {
+  const h = new Harness();
+  const storageKey = 'visathreads:assistant-catchup:v1:user-a:community:community-a';
+  h.storage.set(storageKey, '2026-10-01T00:00:00.000Z');
+  h.post = async () => reply(fixture({ coverage: { ...fixture().coverage, partial: true } }));
+  try {
+    h.render({ scope: { kind: 'community', id: 'community-a' }, defaultOpen: true }); await h.settle();
+    choose(h, 'Catch me up'); await submit(h); await h.settle();
+    const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
+    assert.match(visibleTextOf(response), /I could only review part of this time range/);
+    assert.match(visibleTextOf(response), /your last catch-up hasn’t advanced/);
+    assert.doesNotMatch(visibleTextOf(response), /Checkpoint|Partial coverage/);
+    assert.equal(h.storage.get(storageKey), '2026-10-01T00:00:00.000Z');
+  } finally { h.close(); }
+});
+
+test('related perspectives preserve the reviewed narrative, quotes and inline citations', async () => {
+  const quotes = ['At my visit, staff allowed phones inside the venue.', 'I was asked to leave my phone outside.'];
+  const sources = ['one', 'two'].map((name, index) => ({ ...fixture().sources[0], id: `q:apify-report-${name}`, kind: 'question',
+    questionId: `apify-report-${name}`, communityId: null, body: quotes[index], url: `/questions/apify-report-${name}` }));
+  const evidence = sources.map((item, index) => ({ sourceId: item.id, quote: quotes[index] }));
+  const result = fixture({ sources,
     claims: [{ text: 'One visitor reported that phones were allowed.', evidence: [evidence[0]] }],
-    disagreements: [{ text: 'These sources contradict each other.', evidence }], unanswered: [],
-  }), { sources, partial: false }, Date.now(), { mode: 'ask', scope: { kind: 'public' }, question: 'What did these visitors report about phones?' });
-  assert.equal(result.disagreements.length, 1, 'Exercise a comparison retained by the real public validator');
+    disagreements: [{ text: 'Another visitor was asked to leave their phone outside. These visits may have had different circumstances.', evidence }],
+  });
   const h = new Harness(); h.post = async () => reply(result);
   try {
     h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
     changeQuestion(h, 'What did these visitors report about phones?'); await submit(h); await h.settle();
-    assert.match(textOf(h.tree), /Compare source excerpts/);
-    assert.doesNotMatch(textOf(h.tree), /Reports differ|These sources contradict each other/);
-    assert.deepEqual(nodes(h.tree).filter(node => node.type === 'blockquote').map(node => textOf(node).replace(/[“”]/g, '').trim()), [quote, quote]);
+    assert.match(visibleTextOf(h.tree), /One visitor reported that phones were allowed/);
+    assert.match(visibleTextOf(h.tree), /Related perspectives/);
+    assert.match(visibleTextOf(h.tree), /These visits may have had different circumstances/);
+    assert.doesNotMatch(visibleTextOf(h.tree), /A discussion excerpt|Compare source excerpts/);
+    assert.deepEqual(nodes(h.tree).filter(node => node.type === 'blockquote').map(node => textOf(node).replace(/[“”]/g, '').trim()), quotes);
     for (const item of sources) assert(nodes(h.tree).some(node => node.type === 'a' && node.props.href === item.url));
+  } finally { h.close(); }
+});
+
+test('ranked source selection explains its scope in source details without a missing-data banner', async () => {
+  const h = new Harness();
+  h.post = async () => reply(fixture({ coverage: { sourceCount: 1, partial: true, reasons: ['retrieval-limit', 'context-limit'] } }));
+  try {
+    h.render(); await h.settle(); changeQuestion(h, 'What documents were requested?'); await submit(h); await h.settle();
+    const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
+    assert.doesNotMatch(visibleTextOf(response), /only review part|Partial coverage|selection of|discussion text/);
+    const details = nodes(response).find(node => node.type === 'details');
+    assert.match(textOf(details), /selection of relevant matching discussions/);
+    assert.match(textOf(details), /Only part of the available discussion text could be reviewed/);
+  } finally { h.close(); }
+});
+
+test('missing imported replies remain visible and original-poster replies are attributed in sources', async () => {
+  const h = new Harness();
+  h.post = async () => reply(fixture({
+    sources: [{ ...fixture().sources[0], provenance: 'archive', speakerRole: 'original-poster' }],
+    coverage: { sourceCount: 1, partial: true, reasons: ['retrieval-limit', 'missing-replies'] },
+  }));
+  try {
+    h.render(); await h.settle(); changeQuestion(h, 'Can you explain this reply?'); await submit(h); await h.settle();
+    const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
+    assert.match(visibleTextOf(response), /Some replies were not included in the imported discussion/);
+    assert.doesNotMatch(visibleTextOf(response), /Original poster|Partial coverage/);
+    assert.match(textOf(nodes(response).find(node => node.type === 'details')), /Imported community\s+reply\s+· Original poster/);
   } finally { h.close(); }
 });
 

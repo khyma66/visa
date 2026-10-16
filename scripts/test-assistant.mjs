@@ -13,6 +13,7 @@ const core = await import(dependencies['./assistant-core']);
 dependencies['./assistant-provider'] = await compile('assistant-provider');
 const provider = await import(dependencies['./assistant-provider']);
 dependencies['./assistant-search'] = await compile('assistant-search');
+dependencies['./assistant-review'] = await compile('assistant-review');
 const service = await import(await compile('assistant-service'));
 const id = '00000000-0000-4000-8000-000000000001';
 const now = Date.parse('2026-10-13T18:00:00Z');
@@ -21,11 +22,12 @@ const input = { mode:'ask',scope:{kind:'post',id},question:'What did the member 
 const output = {status:'answered',claims:[{text:'The member reported a Monday appointment.',evidence:[{sourceId:source.id,quote:'I attended my appointment on Monday.'}]}],disagreements:[],unanswered:[]};
 const request = (value=input, headers={}) => new Request('https://visathreads.com/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40),...headers},body:JSON.stringify(value)});
 function harness(overrides={}) {
-  const state={actor:'alice',sources:[source],reserved:0,generated:0,reads:0,cache:new Map()};
+  const state={actor:'alice',sources:[source],reserved:0,generated:0,reviewed:0,reads:0,cache:new Map()};
+  const generate = overrides.generate ?? (async()=>{state.generated++;return JSON.stringify(output);});
   const handler=service.createAssistantHandler({availability:()=>({posts:true,communities:true,catchup:true}),model:'test-model',
     authenticate:async()=>({actor:state.actor,corpus:async()=>{state.reads++;return {sources:structuredClone(state.sources),partial:false};},reserve:async()=>{state.reserved++;return true;}}),
-    generate:async()=>{state.generated++;return JSON.stringify(output);},
-    cache:{get:async key=>state.cache.get(key)??null,put:async(key,value)=>{state.cache.set(key,value);}},...overrides});
+    cache:{get:async key=>state.cache.get(key)??null,put:async(key,value)=>{state.cache.set(key,value);}},...overrides,
+    generate:async(prompt,signal)=>{if(prompt.outputKind==='review'){state.reviewed++;return JSON.stringify({answersQuestion:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))});}return generate(prompt,signal);}});
   return {state,handler};
 }
 test('explicit post search answers from sources without waiting for or charging model generation', async () => {
@@ -174,6 +176,7 @@ test('cache saves inference but is scoped by actor and fresh source contents',as
   const {handler,state}=harness();
   const response=await handler(request());assert.equal(response.status,200);assert.match(response.headers.get('Cache-Control'),/private, no-store/);
   assert.equal((await (await handler(request())).json()).cached,true);assert.equal(state.generated,1);
+  assert.equal(state.reviewed,1,'Cached approved answers need no additional inference');
   state.actor='bob';await handler(request());assert.equal(state.generated,2);
   state.sources=[{...source,body:source.body+' Another update.'}];await handler(request());assert.equal(state.generated,3);
   state.sources=[];const empty=await (await handler(request())).json();assert.equal(empty.status,'insufficient');assert.equal(empty.sources.length,0);assert.equal(state.generated,3);

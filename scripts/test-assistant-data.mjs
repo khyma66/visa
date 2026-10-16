@@ -33,16 +33,17 @@ function client(tables = {}, rpcResult = { data: [], error: null }) {
     calls,
     from(table) {
       const call = { table, filters: {}, orders: [] }; calls.push(call);
-      const response = tables[table] ?? { data: [], error: null };
+      const response = () => typeof tables[table] === 'function' ? tables[table](call) : tables[table] ?? { data: [], error: null };
       const chain = {
         select(fields) { call.fields = fields; return chain; },
         eq(key, value) { call.filters[key] = value; return chain; },
+        or(value) { call.or = value; return chain; },
         gte(key, value) { call.filters[`${key}_gte`] = value; return chain; },
         lt(key, value) { call.filters[`${key}_lt`] = value; return chain; },
         order(key, options) { call.orders.push([key, options]); return chain; },
         limit(limit) { call.limit = limit; return chain; },
-        maybeSingle() { return Promise.resolve(response); },
-        then(resolve, reject) { return Promise.resolve(response).then(resolve, reject); },
+        maybeSingle() { return Promise.resolve(response()); },
+        then(resolve, reject) { return Promise.resolve(response()).then(resolve, reject); },
       };
       return chain;
     },
@@ -119,7 +120,8 @@ test('public asks search approved archive and carry prior user questions into fo
   const db = client();
   const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question: 'What about that?', previousQuestions: ['What did people say about Chennai H-1B appointments?'] });
   assert.equal(result.sources[0].questionId, 'apify-test');
-  assert.equal(result.partial, true, 'Global keyword search does not yet include live member replies on archive posts');
+  assert.equal(result.partial, false, 'Both archive and live imported replies were searched successfully');
+  assert(db.calls.some(call => call.table === 'imported_answer_feed' && call.or));
   assert.match(db.calls[0].args.query_text, /Chennai H-1B/);
   assert(db.calls[0].args.query_tags.includes('h1b'));
 });
@@ -128,7 +130,8 @@ test('public archive scanning stops at 5000 source records and marks incomplete 
   process.env.APP_ENV = 'production'; process.env.COMMUNITY_SOURCE_MODE = 'snapshot'; process.env.IMPORTED_CONTENT_APPROVED = 'true';
   globalThis.__assistantArchive = { questions: Array.from({ length: 5100 }, (_, i) => q({ id: `apify-${i}` })), answersByQuestionId: {} };
   const result = await retrieveAssistantCorpus(client(), { mode: 'ask', scope: { kind: 'public' }, question: 'Chennai appointments?' });
-  assert.equal(result.sources.length, 48); assert.equal(result.partial, true);
+  assert(result.sources.length > 0 && result.sources.length <= 48); assert.equal(result.partial, true);
+  assert(result.coverageReasons.includes('retrieval-limit'));
 });
 
 test('community retrieval checks current directory visibility and never guesses archive community membership', async () => {
@@ -183,6 +186,159 @@ function reviewedArchive(questions, answersByQuestionId = {}) {
   process.env.APP_ENV = 'production'; process.env.COMMUNITY_SOURCE_MODE = 'snapshot'; process.env.IMPORTED_CONTENT_APPROVED = 'true';
   globalThis.__assistantArchive = { questions, answersByQuestionId };
 }
+
+test('public answers retain the question and clarification behind an original-poster acknowledgment', async () => {
+  const postId = 'apify-stem-opt-stamping';
+  const original = q({ id: postId, author_id: 'apify-author-questioner', title: 'STEM OPT and future H1B stamping', answer_count: 4,
+    body: 'I am on STEM OPT and my H1B was approved via consular processing. Can I continue working while waiting for a visa slot? '.repeat(10) + 'I have not filed a change of status petition yet.' });
+  reviewedArchive([original], { [postId]: [
+    a(1, { id: 'apify-comment-acknowledgment', question_id: postId, author_id: original.author_id,
+      body: 'Thank you! So, I can go for stamping when I get a visa slot and can continue to work on H1B while remaining in the US.' }),
+    a(2, { id: 'apify-comment-clarification', question_id: postId, author_id: 'apify-author-other', body: 'Did your employer file a change of status or consular processing?' }),
+    a(3, { id: 'apify-comment-hidden', question_id: postId, status: 'archived', body: 'This hidden comment must not reach the assistant.' }),
+  ] });
+  const result = await retrieveAssistantCorpus(client(), { mode: 'ask', scope: { kind: 'public' }, question: 'Can I continue to work on H1B while waiting for a stamping slot?' });
+  assert.equal(result.sources[0].id, `q:${postId}`);
+  assert.match(result.sources[0].body, /not filed a change of status petition yet/);
+  assert.equal(result.sources.find(source => source.id === 'a:apify-comment-acknowledgment').speakerRole, 'original-poster');
+  assert.equal(result.sources.find(source => source.id === 'a:apify-comment-clarification').speakerRole, 'member');
+  assert(!result.sources.some(source => source.id === 'a:apify-comment-hidden'));
+  assert.equal(result.partial, true); assert(result.coverageReasons.includes('missing-replies'));
+  assert.doesNotMatch(JSON.stringify(result), /apify-author-questioner|apify-author-other/);
+});
+
+test('busy archive threads cannot crowd out other relevant discussions before context is assembled', async () => {
+  const busy = q({ id: 'apify-busy', title: 'Chennai H1B stamping interview', body: 'How did the Chennai H1B stamping interview go?' });
+  const other = q({ id: 'apify-other', title: 'A second Chennai report', body: 'My Chennai stamping interview was completed on Tuesday.' });
+  reviewedArchive([busy, other], { [busy.id]: Array.from({ length: 60 }, (_, i) => a(i, { question_id: busy.id,
+    body: 'My Chennai H1B stamping interview was completed on Monday.' })), [other.id]: [a(90, { question_id: other.id,
+      body: 'My passport arrived on Thursday.' })] });
+  const result = await retrieveAssistantCorpus(client(), { mode: 'ask', scope: { kind: 'public' }, question: 'What did members report about Chennai H1B stamping interviews?' });
+  assert.deepEqual(new Set(result.sources.slice(0, 6).map(source => source.questionId)), new Set([busy.id, other.id]));
+  assert(result.sources.some(source => source.questionId === other.id && /passport arrived/.test(source.body)), 'A contextual reply without the query keywords must still be available');
+  assert(result.sources.length <= 48); assert.equal(result.partial, true);
+  assert(result.coverageReasons.includes('retrieval-limit'));
+});
+
+test('native search context rechecks parent visibility and includes non-keyword replies through caller views', async () => {
+  delete process.env.COMMUNITY_SOURCE_MODE;
+  const source = { source_id: `q:${id}`, source_kind: 'question', question_id: id, community_id: null,
+    title: q().title, body: q().body, created_at: q().created_at, updated_at: q().updated_at, parent_context: null, parent_updated_at: null };
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'Chennai biometrics?' };
+  const invisible = client({ question_feed: { data: null, error: null } }, { data: [source], error: null });
+  assert.equal((await retrieveAssistantCorpus(invisible, input)).sources.length, 0);
+  assert.equal(invisible.calls.some(call => call.table === 'answer_feed'), false);
+  const db = client({ question_feed: { data: q({ author_id: 'question-author' }), error: null }, answer_feed: { data: [a(1, { author_id: 'different-member', body: 'The scanner failed so it was rescheduled.' })], error: null } }, { data: [source], error: null });
+  const result = await retrieveAssistantCorpus(db, input);
+  assert.equal(result.sources.length, 2); assert.equal(result.sources[1].speakerRole, 'member');
+  assert.match(result.sources[1].body, /scanner failed/);
+  assert.equal(result.partial, false);
+  assert.equal(db.calls.find(call => call.table === 'question_feed').filters.id, id);
+  assert.equal(db.calls.find(call => call.table === 'answer_feed').filters.question_id, id);
+});
+
+test('public expansion reuses native matches without multiplying rate-limited search RPCs', async () => {
+  delete process.env.COMMUNITY_SOURCE_MODE;
+  const parents = Array.from({ length: 8 }, (_, i) => q({ id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}` }));
+  const matches = parents.map((parent, i) => ({ source_id: `a:${a(i + 100).id}`, source_kind: 'reply', question_id: parent.id, community_id: null,
+    title: parent.title, body: 'My Chennai biometrics appointment took seventeen minutes.', created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z',
+    parent_context: parent.body, parent_updated_at: parent.updated_at }));
+  const db = client({
+    question_feed: call => ({ data: parents.find(parent => parent.id === call.filters.id) ?? null, error: null }),
+    answer_feed: call => ({ data: Array.from({ length: 48 }, (_, i) => a(i, { question_id: call.filters.question_id, body: 'Thank you for sharing the visit.' })), error: null }),
+  }, { data: matches, error: null });
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'How many minutes did Chennai biometrics take?' };
+  for (let read = 0; read < 3; read++) {
+    const result = await retrieveAssistantCorpus(db, input);
+    assert(result.sources.length <= 48);
+    assert(matches.every(match => result.sources.slice(0, 24).some(source => source.id === match.source_id)), 'Every chosen thread keeps its actual match inside the primary context budget');
+    assert.equal(db.calls.filter(call => call.rpc).length, read + 1, 'One global RPC per corpus read, including revalidation');
+  }
+});
+
+test('missing author identifiers never identify a reply as an original-poster confirmation', async () => {
+  for (const [parentAuthor, replyAuthor] of [[undefined, undefined], ['', ''], [' ', ' '], ['question-author', undefined]]) {
+    const db = client({ question_feed: { data: q({ author_id: parentAuthor }), error: null }, answer_feed: { data: [a(1, { author_id: replyAuthor })], error: null } });
+    const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'post', id }, question: 'How long?' });
+    assert.equal(result.sources[1].speakerRole, undefined);
+  }
+});
+
+test('global search includes live imported replies only when their approved parent is visible', async () => {
+  const visible = q({ id: 'apify-visible', author_id: 'private-parent-id', title: 'An appointment report', body: 'My visit was completed.' });
+  const hidden = q({ id: 'apify-hidden', title: 'Hidden parent', status: 'archived' });
+  reviewedArchive([visible, hidden]);
+  const rows = [
+    a(1, { question_id: visible.id, author_id: 'private-member-id', body: 'My Chennai biometrics appointment happened Monday.' }),
+    a(2, { question_id: hidden.id, body: 'Hidden Chennai biometrics response.' }),
+    a(3, { question_id: 'apify-missing', body: 'Missing-parent Chennai biometrics response.' }),
+  ];
+  const db = client({ imported_answer_feed: call => ({ data: call.or ? rows : rows.filter(row => row.question_id === call.filters.question_id), error: null }) });
+  const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question: 'What happened during Chennai biometrics?' });
+  assert.equal(result.sources.length, 2); assert(result.sources.every(source => source.questionId === visible.id));
+  assert.equal(result.sources[1].speakerRole, 'member'); assert.equal(result.partial, false);
+  assert(!result.coverageReasons?.includes('unindexed-replies'));
+  assert.doesNotMatch(JSON.stringify(result), /private-parent-id|private-member-id|Hidden Chennai|Missing-parent/);
+  const lookup = db.calls.find(call => call.or);
+  assert.equal(lookup.table, 'imported_answer_feed'); assert.equal(lookup.limit, 49);
+  assert.match(lookup.or, /body\.ilike\.%chennai%/);
+});
+
+test('an older low-vote imported keyword hit survives the popular reply context window', async () => {
+  const parent = q({ id: 'apify-old-reply', title: 'An appointment report', body: 'I attended my appointment and shared the details.' });
+  reviewedArchive([parent]);
+  const match = a(100, { question_id: parent.id, body: 'My Chennai biometrics appointment took seventeen minutes.',
+    vote_score: -5, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' });
+  const popular = Array.from({ length: 48 }, (_, i) => a(i, { question_id: parent.id, vote_score: 10,
+    body: 'Thank you for sharing your visit.' }));
+  const db = client({ imported_answer_feed: call => ({ data: call.or ? [match] : popular, error: null }) });
+  const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question: 'How many minutes did Chennai biometrics take?' });
+  assert.equal(result.sources[0].id, `q:${parent.id}`);
+  assert.equal(result.sources[1].id, `a:${match.id}`);
+  assert.match(result.sources[1].body, /seventeen minutes/);
+  assert.equal(result.sources[1].parentContext, parent.body);
+  assert.equal(result.sources.length, 48); assert.equal(result.partial, true);
+  assert.equal(result.sources.filter(source => source.id === `a:${match.id}`).length, 1);
+});
+
+test('matching reply deduplication preserves newer context text rather than an earlier search body', async () => {
+  const parent = q({ id: 'apify-reply-update', title: 'Chennai appointment', body: 'My Chennai appointment report.' });
+  reviewedArchive([parent]);
+  const earlier = a(1, { question_id: parent.id, body: 'My Chennai visit took seventeen minutes.', updated_at: '2026-10-10T00:00:00Z' });
+  const updated = { ...earlier, body: 'Correction: my Chennai visit took seventy minutes.', updated_at: '2026-10-11T00:00:00Z' };
+  const db = client({ imported_answer_feed: call => ({ data: [call.or ? earlier : updated], error: null }) });
+  const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question: 'How many minutes was the Chennai visit?' });
+  const sources = result.sources.filter(source => source.id === `a:${earlier.id}`);
+  assert.equal(sources.length, 1); assert.equal(sources[0].body, updated.body);
+  assert.equal(sources[0].updatedAt, updated.updated_at);
+});
+
+test('imported-reply lookup builds bounded literal filters rather than accepting query syntax', async () => {
+  reviewedArchive([]);
+  const db = client();
+  await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question: 'Chennai H-1B %),status.eq.archived,body.ilike.*( ' + Array.from({ length: 40 }, (_, i) => `token${i}`).join(' ') });
+  const filter = db.calls.find(call => call.or).or;
+  assert(filter.split(',').length <= 24);
+  assert.match(filter, /^body\.ilike\.%[\p{L}\p{N}][\p{L}\p{M}\p{N}-]*%(?:,body\.ilike\.%[\p{L}\p{N}][\p{L}\p{M}\p{N}-]*%)*$/u);
+  assert.doesNotMatch(filter, /\(|\)|\*|status\.eq/);
+});
+
+test('imported-reply search reports real limits and outages without suppressing authorization errors', async () => {
+  reviewedArchive([q({ id: 'apify-available', title: 'Chennai appointment', body: 'My Chennai appointment happened Monday.' })]);
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'Chennai?' };
+  const limited = client({ imported_answer_feed: { data: Array.from({ length: 49 }, (_, i) => a(i, { question_id: 'apify-no-parent' })), error: null } });
+  const capped = await retrieveAssistantCorpus(limited, input);
+  assert.equal(capped.partial, true); assert(capped.coverageReasons.includes('retrieval-limit'));
+  const outage = client({ imported_answer_feed: { data: null, error: { code: '57014', message: 'private internal details' } } });
+  const unavailable = await retrieveAssistantCorpus(outage, input);
+  assert.equal(unavailable.partial, true); assert(unavailable.coverageReasons.includes('unindexed-replies'));
+  assert.equal(unavailable.sources[0].questionId, 'apify-available', 'The available archive source remains usable with its gap explicitly recorded');
+  assert.doesNotMatch(JSON.stringify(unavailable), /private internal details/);
+  for (const [code, status] of [['42501', 403], ['PT429', 429]]) {
+    const denied = client({ imported_answer_feed: { data: null, error: { code } } });
+    await assert.rejects(() => retrieveAssistantCorpus(denied, input), error => error.status === status);
+  }
+});
 
 test('a new chat topic retrieves its answer instead of carrying old appointment terms forward', async () => {
   reviewedArchive([
@@ -439,7 +595,7 @@ test('exact production query retrieves only relevant posts, deduplicates replies
   assert.doesNotMatch(db.calls[0].args.query_text, /give|all posts|related/);
   const result = buildAssistantPostSearchResult(postSearchRequest(), corpus);
   assert.equal(result.kind, 'posts'); assert.equal(result.status, 'answered');
-  assert.equal(result.posts.length, 2); assert.equal(result.coverage.partial, true);
+  assert.equal(result.posts.length, 2); assert.equal(result.coverage.partial, false);
   assert.deepEqual(result.claims, []); assert.deepEqual(result.disagreements, []);
   for (const post of result.posts) assert.equal(post.url, `/questions/${post.questionId}`);
 });
