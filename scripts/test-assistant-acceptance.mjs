@@ -125,7 +125,7 @@ test('explicit stamping post search returns verified links without a model, mode
   assert.equal(reply.status, 200, await reply.clone().text());
   const value = await reply.json();
   assert.equal(value.passed, true, JSON.stringify(value));
-  for (const name of ['matching_posts_deduplicated', 'original_links_preserved', 'excerpts_from_visible_sources', 'no_generated_claims', 'partial_coverage_disclosed', 'application_request_parsed', 'application_authentication_used', 'application_model_quota_not_used', 'application_runtime_binding_not_loaded', 'application_provider_not_called', 'application_sources_revalidated', 'application_response_private']) {
+  for (const name of ['matching_posts_deduplicated', 'original_links_preserved', 'excerpts_from_visible_sources', 'no_generated_claims', 'partial_coverage_disclosed', 'application_request_parsed', 'application_authentication_used', 'application_model_quota_not_used', 'application_runtime_binding_not_loaded', 'application_provider_not_called', 'application_evidence_reviewed_when_needed', 'application_sources_revalidated', 'application_response_private']) {
     assert(value.checks.some(check => check.name === name && check.passed), name);
   }
   assert.equal(value.syntheticDiagnostic, undefined);
@@ -274,7 +274,21 @@ test('independent review rejects fabricated meaning without replacing it with a 
   assert.equal(evaluation.syntheticDiagnostic.output.status, 'insufficient');
   assert.deepEqual(evaluation.syntheticDiagnostic.output.claims, []);
   assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawModelOutput), draft, 'Diagnostics retain the draft, not the review response');
+  assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawReviewOutput), { checks: [{ id: 'claim:0', supported: false }], answersQuestion: false });
   assert(evaluation.checks.some(check => check.name === 'application_evidence_reviewed_when_needed' && check.passed));
+});
+
+test('a malformed review preserves separate draft and review diagnostics on the failed HTTP response', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
+  const draft = { status: 'answered', claims: [{ text: 'The member received their passport on Friday.', evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] };
+  const rawReviewOutput = JSON.stringify({ checks: [], answersQuestion: true });
+  const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => ({ response: input.response_format.json_schema.name === 'discussion_answer_review' ? rawReviewOutput : JSON.stringify(draft) }) } };
+  const reply = await worker.fetch(request({ id: fixture.id }), settings);
+  assert.equal(reply.status, 502);
+  const result = await reply.json();
+  assert.equal(result.syntheticDiagnostic.serviceFailure.stage, 'review');
+  assert.deepEqual(result.syntheticDiagnostic.output, draft);
+  assert.equal(result.syntheticDiagnostic.rawReviewOutput, rawReviewOutput);
 });
 
 test('unsupported policy is rejected by the core without a needless second inference', async () => {
@@ -322,12 +336,41 @@ test('thank-you fixture accepts a qualified explanation without accepting affirm
     'Yes, the author can keep working on H-1B.',
     'The reply is unconfirmed, but the author may continue working.',
     'The reply does not independently confirm permission. The original poster can keep working.',
+    'The reply does not itself prove permission. The author was actually authorized to keep working.',
+    'The reply only expresses an understanding, but the author has permission to work.',
   ]) {
     const result = { ...draft, claims: [{ ...draft.claims[0], text: unsafe }], sources: [source], coverage: { sourceCount: 1, partial: true, reasons: ['missing-replies'] } };
     const unsafeEvaluation = evaluateAcceptance(fixture, result);
     assert.equal(unsafeEvaluation.passed, false, unsafe);
     assert(unsafeEvaluation.checks.some(check => check.name === 'no_authorization_inferred' && !check.passed), unsafe);
   }
+});
+
+test('captured legitimate hosted paraphrases retain qualifier meaning and Unicode-spaced dates', () => {
+  const examples = [
+    { id: 'thank-you-confirmation', text: "The thank‑you reply only expresses the author's understanding and does not provide any evidence that they were actually authorized to keep working." },
+    { id: 'thank-you-confirmation', text: 'The thank‑you reply is only the author’s own statement of understanding and does not itself prove that they were authorized to keep working.' },
+    { id: 'public-ordinal-context', text: 'The poster reports that their visa stamping interview in Chennai was rescheduled to October 28 because the consular officer was unavailable.' },
+  ];
+  const makeResult = (fixture, text) => ({ status: 'answered', claims: [{ text, evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: fixture.corpus.sources[0].body }] }], disagreements: [], unanswered: [], sources: fixture.corpus.sources, coverage: { sourceCount: fixture.corpus.sources.length, partial: fixture.corpus.partial, reasons: fixture.corpus.coverageReasons } });
+  for (const example of examples) {
+    const fixture = acceptanceFixtures.find(item => item.id === example.id);
+    const evaluation = evaluateAcceptance(fixture, makeResult(fixture, example.text));
+    assert.equal(evaluation.passed, true, `${example.id}: ${JSON.stringify(evaluation)}`);
+  }
+  const ordinal = acceptanceFixtures.find(item => item.id === 'public-ordinal-context');
+  for (const [text, check] of [
+    ['The Chennai stamping interview was rescheduled to November 28 because the officer was unavailable.', 'selected_post_explained'],
+    ['The Chennai stamping interview was rescheduled to October 28 because the member missed their train.', 'selected_reason_preserved'],
+    ['The member’s Hyderabad passport arrived on Friday.', 'selected_post_explained'],
+  ]) {
+    const evaluation = evaluateAcceptance(ordinal, makeResult(ordinal, text));
+    assert.equal(evaluation.passed, false, text);
+    assert(evaluation.checks.some(item => item.name === check && !item.passed), text);
+  }
+  const wrongSource = makeResult(ordinal, examples[2].text);
+  wrongSource.sources = [{ ...wrongSource.sources[0], questionId: '00000000-0000-4000-8000-000000000050' }];
+  assert(evaluateAcceptance(ordinal, wrongSource).checks.some(check => check.name === 'only_resolved_discussion_cited' && !check.passed));
 });
 
 test('multiple discussion synthesis preserves separate people, timelines and citations', async () => {
@@ -438,6 +481,12 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
   const validation = { ...expected, stage: 'source-validation', serviceFailure: { stage: 'validation', status: 502, code: 'citation_length' }, output: { status: 'answered', claims: [] } };
   delete validation.providerReason;
   assert.deepEqual(await readAcceptanceFailureDiagnostic(reply(validation), id, model), validation);
+  const rawReviewOutput = JSON.stringify({ checks: [{ id: 'claim:0', supported: false }], answersQuestion: false });
+  assert.deepEqual(await readAcceptanceFailureDiagnostic(reply({ ...validation, rawReviewOutput }), id, model), { ...validation, rawReviewOutput });
+  assert.equal((await readAcceptanceFailureDiagnostic(reply({ ...validation, rawReviewOutput: 'x'.repeat(12_000) }), id, model)).rawReviewOutput.length, 12_000);
+  for (const invalid of ['x'.repeat(12_001), null, false, 7, {}, []]) {
+    assert.equal(await readAcceptanceFailureDiagnostic(reply({ ...validation, rawReviewOutput: invalid }), id, model), undefined);
+  }
   for (const diagnostic of [
     { ...expected, providerReason: 'SECRET PROVIDER MESSAGE' },
     { ...expected, serviceFailure: { stage: 'SECRET', status: 503 } },
