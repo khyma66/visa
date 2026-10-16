@@ -1,36 +1,42 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { LIVE_SITE, sha256 } from './live-preview-archive.mjs';
 import { canonicalJson } from './recover-worker-archive.mjs';
-import { waitForHealthProvenance, smokeSite } from './smoke-site.mjs';
+import { smokeSite } from './smoke-site.mjs';
 import { readFeatureBuildProvenance } from './production-feature-release.mjs';
+import { createRolloutProbe, probeRolloutHealth, publicClientAssets, verifyClientAssets, verifyStableRollout } from './rollout-verification.mjs';
 
 const receipt = JSON.parse(await readFile('.cache/visaflow/live-preview/receipt.json', 'utf8'));
 const expected = await readFeatureBuildProvenance();
-const request = (path, options = {}) => fetch(LIVE_SITE + path, { ...options, redirect: 'error', signal: AbortSignal.timeout(20_000), cache: 'no-store' });
-const health = await waitForHealthProvenance(LIVE_SITE, expected);
-assert.equal(health.environment, 'development', 'Launch state must remain the existing early preview.');
-const feedResponse = await request('/api/community');
-assert.equal(feedResponse.status, 200);
-const feed = await feedResponse.json();
-assert.equal(sha256(canonicalJson(feed)), receipt.publishedArchiveSha256, 'Published content changed during feature deployment.');
-const flagsResponse = await request('/api/assistant');
-assert.equal(flagsResponse.status, 200);
+const assets = await publicClientAssets('dist/client');
 const features = { posts: process.env.ASSISTANT_ENABLED === 'true', communities: process.env.ASSISTANT_COMMUNITIES_ENABLED === 'true', catchup: process.env.ASSISTANT_CATCHUP_ENABLED === 'true' };
-assert.deepEqual(await flagsResponse.json(), features);
-const assistant = await request('/assistant'); assert.equal(assistant.status, 200);
-assert.match(assistant.headers.get('x-robots-tag') ?? '', /noindex/);
-await assistant.body?.cancel();
-const question = JSON.stringify({ mode: 'ask', scope: { kind: 'public' }, question: 'What experiences have members reported?' });
-const anonymous = await request('/api/assistant', { method: 'POST', headers: { 'content-type': 'application/json' }, body: question });
-assert.equal(anonymous.status, 401, 'Anonymous inference must be denied.');
-assert.match(anonymous.headers.get('cache-control') ?? '', /private, no-store/);
-await anonymous.body?.cancel();
-const crossOrigin = await request('/api/assistant', { method: 'POST', headers: { 'content-type': 'application/json', Origin: 'https://untrusted.example' }, body: question });
-assert.equal(crossOrigin.status, 403, 'Cross-origin inference must be denied.');
-await crossOrigin.body?.cancel();
-const invalidToken = await request('/api/assistant', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: `Bearer ${'invalid-test'.repeat(4)}` }, body: question });
-assert.equal(invalidToken.status, 401, 'An invalid session must be denied before inference.');
-await invalidToken.body?.cancel();
-await smokeSite(LIVE_SITE, expected);
-console.log(JSON.stringify({ status: 'verified', source: expected.gitSha, features, archiveUnchanged: true, questions: receipt.questionCount, replies: receipt.replyCount, signedInAcceptance: 'requires real user session; not established by this smoke check' }));
+await verifyStableRollout({ expected, previous: receipt.health,
+  persist: report => writeFile('.cache/visaflow/live-preview/rollout-verification.json', JSON.stringify(report, null, 2), { mode: 0o600 }),
+  runRound: async ({ signal, record }) => {
+    const probe = createRolloutProbe({ origin: LIVE_SITE, expected, previous: receipt.health, signal, record });
+    await probeRolloutHealth(probe, 'start');
+    assert.equal(expected.appEnvironment, 'development', 'Launch state must remain the existing early preview.');
+    const feedResponse = await probe.request('archive', '/api/community');
+    const feed = await feedResponse.json();
+    assert.equal(sha256(canonicalJson(feed)), receipt.publishedArchiveSha256, 'Published content changed during feature deployment.');
+    const flagsResponse = await probe.request('assistant-flags', '/api/assistant', {}, { marked: true });
+    assert.deepEqual(await flagsResponse.json(), features);
+    const assistant = await probe.request('assistant-page', '/assistant');
+    assert.match(assistant.headers.get('x-robots-tag') ?? '', /noindex/);
+    await assistant.body?.cancel();
+    const question = JSON.stringify({ mode: 'ask', scope: { kind: 'public' }, question: 'What experiences have members reported?' });
+    for (const [check, headers, status] of [
+      ['anonymous-denial', {}, 401],
+      ['cross-origin-denial', { Origin: 'https://untrusted.example' }, 403],
+      ['invalid-session-denial', { Authorization: `Bearer ${'invalid-test'.repeat(4)}` }, 401],
+    ]) {
+      const response = await probe.request(check, '/api/assistant', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: question }, { status, denial: true, marked: true });
+      assert.match(response.headers.get('cache-control') ?? '', /private, no-store/);
+      await response.body?.cancel();
+    }
+    await smokeSite(LIVE_SITE, expected, { fetchImpl: probe.siteFetch, skipHealthWait: true });
+    await verifyClientAssets(probe, assets);
+    await probeRolloutHealth(probe, 'end');
+  },
+});
+console.log(JSON.stringify({ status: 'verified', source: expected.gitSha, features, archiveUnchanged: true, questions: receipt.questionCount, replies: receipt.replyCount, assetsVerified: assets.length, signedInAcceptance: 'requires real user session; not established by this smoke check' }));

@@ -18,7 +18,7 @@
     "test:message-entry": "node --test --test-timeout=60000 scripts/test-message-entry.mjs scripts/test-messages-presentation.mjs",
     "test:presentation": "node --test --test-timeout=60000 scripts/test-community-presentation.mjs scripts/test-avatar.mjs scripts/test-post-presentation.mjs scripts/test-us-market.mjs scripts/test-brand-assets.mjs",
     "test:tags": "node --test --test-timeout=60000 scripts/test-tag-directory.mjs",
-    "test:release": "node --test scripts/test-release.mjs scripts/test-provenance.mjs scripts/test-production-feature-release.mjs",
+    "test:release": "node --test scripts/test-release.mjs scripts/test-provenance.mjs scripts/test-production-feature-release.mjs scripts/test-rollout-verification.mjs",
     "test:archive": "node --test scripts/test-archive.mjs scripts/test-demo-reply-counts.mjs",
     "test:notices": "node --test scripts/test-notices.mjs scripts/test-policy.mjs",
     "test:security": "node --test scripts/test-security.mjs",

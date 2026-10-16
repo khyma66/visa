@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import build from '@visa/build-provenance';
 import { AssistantError } from '@/lib/assistant-core';
 import { retrieveAssistantCorpus } from '@/lib/assistant-data';
 import { runAssistantModel, providerModel, type WorkersAiBinding } from '@/lib/assistant-provider';
@@ -6,6 +7,12 @@ import { assistantResponse, assistantProductionRequest, configuredAvailability, 
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
+
+function identifyBuild(response: Response) {
+  // Public health already exposes this immutable revision; never echo request headers.
+  response.headers.set('X-VisaThreads-Build', build.gitSha ?? 'unconfigured');
+  return response;
+}
 
 function availability() {
   // Public build values require direct references so Vite/Next can inline them.
@@ -23,7 +30,7 @@ function availability() {
   });
 }
 export async function GET(request: Request) {
-  return assistantResponse(assistantProductionRequest(request) ? availability() : { posts: false, communities: false, catchup: false });
+  return identifyBuild(assistantResponse(assistantProductionRequest(request) ? availability() : { posts: false, communities: false, catchup: false }));
 }
 
 const handle = createAssistantHandler({
@@ -64,4 +71,6 @@ const handle = createAssistantHandler({
   },
 });
 
-export const POST = handle;
+export async function POST(request: Request) {
+  return identifyBuild(await handle(request));
+}

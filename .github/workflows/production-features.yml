@@ -81,7 +81,7 @@ jobs:
         run: |
           ROLLBACK_VERSION=$(node scripts/production-feature-release.mjs rollback-version)
           npx --no-install wrangler rollback "$ROLLBACK_VERSION" --name visaflow-dev --config dist/server/wrangler.json --message "Restore captured version after failed AI feature smoke verification"
-      - name: Preserve source and model acceptance only
+      - name: Preserve release and model acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -89,6 +89,7 @@ jobs:
           path: |
             .cache/visaflow/live-preview/build-provenance.json
             .cache/visaflow/assistant-acceptance.json
+            .cache/visaflow/live-preview/rollout-verification.json
           include-hidden-files: true
           if-no-files-found: warn
       - name: Ensure temporary evaluation Worker is removed
