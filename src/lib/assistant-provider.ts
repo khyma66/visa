@@ -1,9 +1,12 @@
 import { AssistantError, readBoundedJson } from './assistant-core';
+import models from './assistant-models.json';
 
 export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[] };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
 export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'timeout' | 'cancelled' | 'provider_error' | 'incomplete_output' | 'empty_output' | 'oversized_output';
-export const WORKERS_ASSISTANT_MODEL = '@cf/openai/gpt-oss-120b';
+export const WORKERS_ASSISTANT_MODEL = models.answer;
+export const WORKERS_ASSISTANT_PROFILE = JSON.stringify(models);
+export type AssistantUsage = { model: string; stage: 'answer' | 'review'; inputTokens?: number; outputTokens?: number; durationMs: number };
 export const OPENAI_ASSISTANT_MODEL = 'gpt-6-luna';
 const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], properties: { sourceId: { type: 'string', minLength: 1 }, quote: { type: 'string', minLength: 12, maxLength: 400 } } };
 const claim = { type: 'object', additionalProperties: false, required: ['text', 'evidence'], properties: { text: { type: 'string', minLength: 1, maxLength: 700 }, evidence: { type: 'array', minItems: 1, maxItems: 4, items: evidence } } };
@@ -43,10 +46,37 @@ export function providerModel(provider: string | undefined): string {
   throw new AssistantError(503, 'The assistant is not configured yet.');
 }
 
+export function providerCacheKey(provider: string | undefined): string {
+  return provider === 'workers-ai' ? WORKERS_ASSISTANT_PROFILE : providerModel(provider);
+}
+
+/** Route complete large/multilingual inputs before inference, never truncate evidence or retry. */
+export function workersAssistantRequest(prompt: AssistantPrompt) {
+  const review = prompt.outputKind === 'review';
+  const schema = assistantOutputSchema(prompt);
+  const schemaName = review ? 'discussion_answer_review' : 'discussion_answer';
+  const selected = review ? models.review : models.answer;
+  const response_format = { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } };
+  const messages = [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }];
+  // UTF-8 bytes conservatively bound byte-pair input tokens, including the
+  // schema. Leave room in Qwen's 32K window for output and template overhead.
+  const inputBytes = new TextEncoder().encode(JSON.stringify({ messages, response_format })).byteLength;
+  const model = selected === '@cf/qwen/qwen3-30b-a3b-fp8' && inputBytes > models.qwenInputByteLimit ? models.longContext : selected;
+  const qwen = model === '@cf/qwen/qwen3-30b-a3b-fp8';
+  if (qwen) messages[0].content += '\n/no_think';
+  return { model, input: {
+    messages, response_format,
+    max_tokens: review ? models.reviewMaxTokens : models.answerMaxTokens,
+    ...(qwen ? {} : { reasoning_effort: 'low', store: false }),
+    temperature: 0, seed: 39173,
+  } };
+}
+
 export async function runAssistantModel(prompt: AssistantPrompt, options: {
   provider: string | undefined; apiKey?: string; binding?: WorkersAiBinding; signal?: AbortSignal;
   fetcher?: typeof fetch;
   reportFailure?(reason: AssistantProviderFailure): void;
+  reportUsage?(usage: AssistantUsage): void;
 }): Promise<string> {
   const model = providerModel(options.provider);
   const schema = assistantOutputSchema(prompt);
@@ -61,17 +91,18 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
     signal.throwIfAborted();
     if (options.provider === 'workers-ai') {
       if (!options.binding) return fail('missing_binding');
+      const request = workersAssistantRequest(prompt);
+      const started = Date.now();
       // Bounded single inference. No retries or automatic escalation multiplying costs.
       let stop: (() => void) | undefined;
       const aborted = new Promise<never>((_, reject) => { stop = () => reject(unavailable()); signal.addEventListener('abort', stop, { once: true }); });
       try {
-        const value = await Promise.race([options.binding.run(model, {
-          messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
-          max_tokens: review ? 1200 : 4096, reasoning_effort: 'low', temperature: 0, seed: 39173, store: false,
-          response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } },
-        }), aborted]);
+        const value = await Promise.race([options.binding.run(request.model, request.input), aborted]);
         if (value && typeof value === 'object') {
-          const payload = value as { response?: unknown; choices?: { finish_reason?: string; message?: { content?: unknown } }[] };
+          const payload = value as { response?: unknown; choices?: { finish_reason?: string; message?: { content?: unknown } }[]; usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
+          const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000 ? value : undefined;
+          // Numbers and fixed labels only: no questions, evidence, identities or model reasoning.
+          try { options.reportUsage?.({ model: request.model, stage: review ? 'review' : 'answer', inputTokens: count(payload.usage?.prompt_tokens), outputTokens: count(payload.usage?.completion_tokens), durationMs: Date.now() - started }); } catch { /* metrics cannot change the answer */ }
           const first = payload.choices?.[0];
           if (first && first.finish_reason !== 'stop') fail('incomplete_output');
           const content = first?.message?.content ?? payload.response;

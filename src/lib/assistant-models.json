@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "answer": "@cf/qwen/qwen3-30b-a3b-fp8",
+  "review": "@cf/qwen/qwen3-30b-a3b-fp8",
+  "longContext": "@cf/openai/gpt-oss-120b",
+  "qwenInputByteLimit": 24000,
+  "answerMaxTokens": 4096,
+  "reviewMaxTokens": 1200
+}

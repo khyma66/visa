@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
 
 // Only the inference-free readiness operation is retried. Test inference itself
 // is never retried, so a failing model response cannot become a hidden pass.
@@ -22,7 +23,7 @@ export async function waitForAcceptanceReady(url, secret, sourceSha, cases, opti
       lastStatus = String(reply.status);
       if (reply.ok && reply.headers.get('X-Assistant-Acceptance') === 'v1') {
         const result = await reply.json();
-        if (result.ready === true && result.protocol === 'visathreads-assistant-acceptance-v1' && result.sourceSha === sourceSha && result.model === '@cf/openai/gpt-oss-120b' && JSON.stringify(result.cases) === JSON.stringify(cases)) {
+        if (result.ready === true && result.protocol === 'visathreads-assistant-acceptance-v1' && result.sourceSha === sourceSha && result.model === modelProfile.answer && result.modelProfile === JSON.stringify(modelProfile) && JSON.stringify(result.cases) === JSON.stringify(cases)) {
           const rejected = await fetcher(candidate, { ...init, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(Math.max(1, Math.min(5000, deadline - now()))) });
           const provenRejection = rejected.status === 404 && rejected.headers.get('X-Assistant-Acceptance') === 'v1';
           await rejected.body?.cancel();

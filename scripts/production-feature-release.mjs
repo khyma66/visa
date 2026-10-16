@@ -9,6 +9,7 @@ import { checkedLiveArchive, LIVE_SITE, LIVE_DATABASE, LIVE_WORKER, sha256 } fro
 import { buildProvenance, sourceProvenance } from './build-provenance.mjs';
 import { recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 import { pinnedChatbotRecovery, verifyRecoveryFiles } from './pinned-chatbot-recovery.mjs';
+import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const privateDirectory = resolve(root, '.cache/visaflow/live-preview');
@@ -254,7 +255,8 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
   assert.equal(receipt?.schemaVersion, 1);
   assert.equal(receipt.sourceSha, sourceSha, 'Model acceptance must match the exact release commit.');
   assert.equal(receipt.provider, 'workers-ai');
-  assert.equal(receipt.model, '@cf/openai/gpt-oss-120b');
+  assert.equal(receipt.model, modelProfile.answer);
+  assert.deepEqual(receipt.modelProfile, modelProfile, 'Hosted acceptance must cover the exact answer, review and long-context model configuration.');
   assert.equal(receipt.passed, true, 'Hosted model acceptance did not pass.');
   assert.equal(receipt.workerDeleted, true, 'Temporary evaluation Worker must be removed before release.');
   assert.equal(receipt.features?.posts, true);

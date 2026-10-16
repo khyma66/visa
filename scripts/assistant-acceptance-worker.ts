@@ -1,7 +1,7 @@
 import { prepareAssistantCorpus, readBoundedJson, validateAssistantOutput, type AssistantValidationCode } from '../src/lib/assistant-core';
 import type { AssistantRequest, AssistantResult } from '../src/lib/assistant-contract';
 import { createAssistantHandler, type AssistantFailureStage } from '../src/lib/assistant-service';
-import { runAssistantModel, WORKERS_ASSISTANT_MODEL, type WorkersAiBinding, type AssistantProviderFailure } from '../src/lib/assistant-provider';
+import { runAssistantModel, WORKERS_ASSISTANT_MODEL, WORKERS_ASSISTANT_PROFILE, type WorkersAiBinding, type AssistantProviderFailure, type AssistantUsage } from '../src/lib/assistant-provider';
 import { acceptanceFixtures, evaluateAcceptance } from './assistant-acceptance-fixtures';
 
 type Env = { ASSISTANT_AI: WorkersAiBinding; ACCEPTANCE_SECRET?: string; ACCEPTANCE_EXPIRES?: string; ACCEPTANCE_SOURCE_SHA?: string };
@@ -28,7 +28,7 @@ export default {
       if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'id')) return response({ error: 'Invalid fixture' }, 400);
       // Probe the exact inference method/path without invoking the model. A
       // separate /ready route cannot establish /evaluate route propagation.
-      if ((body as { id?: unknown }).id === '__ready__') return response({ ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: env.ACCEPTANCE_SOURCE_SHA, model: WORKERS_ASSISTANT_MODEL, cases: acceptanceFixtures.map(fixture => fixture.id) });
+      if ((body as { id?: unknown }).id === '__ready__') return response({ ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: env.ACCEPTANCE_SOURCE_SHA, model: WORKERS_ASSISTANT_MODEL, modelProfile: WORKERS_ASSISTANT_PROFILE, cases: acceptanceFixtures.map(fixture => fixture.id) });
       const fixture = acceptanceFixtures.find(item => item.id === (body as { id?: unknown }).id);
       if (!fixture) return response({ error: 'Invalid fixture' }, 400);
       const started = Date.now();
@@ -38,13 +38,14 @@ export default {
       // select a compiled fixture ID, never an identity, corpus or user prompt.
       const syntheticToken = 'compiled-synthetic-fixture-session';
       const events: string[] = [];
+      const usage: AssistantUsage[] = [];
       const receivedInputs: AssistantRequest[] = [];
       let raw: string | undefined;
       let rawReview: string | undefined;
       let serviceFailure: { stage: AssistantFailureStage; status: number; code?: AssistantValidationCode } | undefined;
       let providerReason: AssistantProviderFailure | undefined;
       const handler = createAssistantHandler({
-        model: WORKERS_ASSISTANT_MODEL,
+        model: WORKERS_ASSISTANT_PROFILE,
         reportFailure: event => { serviceFailure = event; },
         availability: () => ({ posts: true, communities: true, catchup: true }),
         authenticate: async token => {
@@ -72,7 +73,7 @@ export default {
             if (!binding || typeof binding.run !== 'function' || binding !== env.ASSISTANT_AI) throw Error('Runtime AI binding mismatch');
           } catch { providerReason = 'missing_binding'; throw Error('Runtime AI binding unavailable'); }
           events.push('runtime-binding');
-          const output = await runAssistantModel(prompt, { provider: 'workers-ai', binding, signal, reportFailure: reason => { providerReason = reason; } });
+          const output = await runAssistantModel(prompt, { provider: 'workers-ai', binding, signal, reportFailure: reason => { providerReason = reason; }, reportUsage: value => usage.push(value) });
           if (review) rawReview = output;
           else raw = output;
           return output;
@@ -139,7 +140,7 @@ export default {
       // Only failed, fixed COMPILED SYNTHETIC fixtures may include diagnostic
       // output. This Worker has no database, production content or free-form
       // prompt input. Production API responses/logging are completely unchanged.
-      return response({ ...evaluation, model: WORKERS_ASSISTANT_MODEL, durationMs: Date.now() - started,
+      return response({ ...evaluation, model: WORKERS_ASSISTANT_MODEL, durationMs: Date.now() - started, usage,
         ...(!evaluation.passed ? { syntheticDiagnostic: {
           source: 'compiled-synthetic-fixture-only', fixtureId: fixture.id,
           failedChecks: evaluation.checks.filter(check => !check.passed).map(check => check.name),

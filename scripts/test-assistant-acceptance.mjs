@@ -4,8 +4,10 @@ import { test } from 'node:test';
 import ts from 'typescript';
 import { waitForAcceptanceReady } from './assistant-acceptance-readiness.mjs';
 import { readAcceptanceFailureDiagnostic } from './assistant-acceptance-diagnostics.mjs';
+import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
 
 const dependencies = { 'cloudflare:workers': `data:text/javascript;base64,${Buffer.from('export const env = {};').toString('base64')}` };
+dependencies['./assistant-models.json'] = `data:text/javascript;base64,${Buffer.from('export default '+JSON.stringify(modelProfile)).toString('base64')}`;
 const { env: runtimeEnvironment } = await import(dependencies['cloudflare:workers']);
 async function compile(path) {
   const raw = await readFile(new URL(`../${path}.ts`, import.meta.url), 'utf8');
@@ -64,7 +66,7 @@ test('authenticated readiness proves the actual build and requires no model infe
 test('readiness retries only propagation and fails closed on a platform page or wrong build', async () => {
   const cases = acceptanceFixtures.map(fixture => fixture.id);
   let clock = 0, calls = 0;
-  const value = { ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: 'a'.repeat(40), model: '@cf/openai/gpt-oss-120b', cases };
+  const value = { ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: 'a'.repeat(40), model: modelProfile.answer, modelProfile: JSON.stringify(modelProfile), cases };
   const options = { now: () => clock, pause: async amount => { clock += amount; }, fetcher: async (url, init) => {
     calls++; assert.equal(url.pathname, '/evaluate'); assert.equal(init.method, 'POST'); assert.deepEqual(JSON.parse(init.body), { id: '__ready__' });
     if (!init.headers.Authorization) return new Response('', { status: 404, headers: { 'X-Assistant-Acceptance': 'v1' } });
@@ -94,8 +96,8 @@ test('successful evaluation executes exact production model and returns no gener
   const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
   const settings = { ...env(), ASSISTANT_AI: { run: async (model, input) => {
     calls++;
-    assert.equal(model, '@cf/openai/gpt-oss-120b');
-    assert.equal(input.reasoning_effort, 'low');
+    assert.equal(model, modelProfile.answer);
+    assert.equal(input.reasoning_effort, undefined);
     assert.equal(input.response_format.json_schema.strict, true);
     assert.equal(input.temperature, 0);
     assert.equal(input.seed, 39173);
@@ -112,7 +114,7 @@ test('successful evaluation executes exact production model and returns no gener
   for (const name of ['application_request_parsed', 'application_authentication_used', 'application_quota_reserved', 'application_runtime_binding_loaded', 'application_provider_called_once', 'application_evidence_reviewed_when_needed', 'application_sources_revalidated', 'application_response_private']) {
     assert(value.checks.some(check => check.name === name && check.passed));
   }
-  assert.deepEqual(Object.keys(value).sort(), ['checks', 'durationMs', 'id', 'model', 'passed']);
+  assert.deepEqual(Object.keys(value).sort(), ['checks', 'durationMs', 'id', 'model', 'passed', 'usage']);
   assert.doesNotMatch(JSON.stringify(value), /passport|Monday|Friday/);
 });
 

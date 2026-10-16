@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import ts from 'typescript';
 
-const dependencies = {};
+const dependencies = { './assistant-models.json': `data:text/javascript;base64,${Buffer.from('export default '+await readFile(new URL('../src/lib/assistant-models.json', import.meta.url), 'utf8')).toString('base64')}` };
 async function compile(name) {
   const source = await readFile(new URL(`../src/lib/${name}.ts`, import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;

@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import build from '@visa/build-provenance';
 import { AssistantError } from '@/lib/assistant-core';
 import { retrieveAssistantCorpus } from '@/lib/assistant-data';
-import { runAssistantModel, providerModel, type WorkersAiBinding } from '@/lib/assistant-provider';
+import { runAssistantModel, providerCacheKey, type WorkersAiBinding } from '@/lib/assistant-provider';
 import { assistantResponse, assistantProductionRequest, configuredAvailability, createAssistantHandler, cloudflareAssistantCache } from '@/lib/assistant-service';
 
 export const runtime = 'edge';
@@ -37,7 +37,7 @@ const handle = createAssistantHandler({
   availability,
   reportFailure: event => console.warn('assistant_request_failed', event),
   // The provider is read again during inference; deployments set immutable environment values.
-  get model() { try { return providerModel(process.env.ASSISTANT_PROVIDER); } catch { return 'disabled'; } },
+  get model() { try { return providerCacheKey(process.env.ASSISTANT_PROVIDER); } catch { return 'disabled'; } },
   cache: cloudflareAssistantCache(),
   async authenticate(token) {
     const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
@@ -67,6 +67,7 @@ const handle = createAssistantHandler({
     }
     return runAssistantModel(prompt, { provider: process.env.ASSISTANT_PROVIDER, apiKey: process.env.OPENAI_API_KEY, binding, signal,
       reportFailure: reason => console.warn('assistant_provider_failed', { reason }),
+      reportUsage: usage => console.info('assistant_model_usage', usage),
     });
   },
 });
