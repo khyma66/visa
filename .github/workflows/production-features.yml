@@ -85,7 +85,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: production-ai-feature-evidence-${{ github.sha }}
+          name: production-ai-feature-evidence-${{ github.sha }}-attempt-${{ github.run_attempt }}
           path: |
             .cache/visaflow/live-preview/build-provenance.json
             .cache/visaflow/assistant-acceptance.json
