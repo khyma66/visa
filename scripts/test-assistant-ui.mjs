@@ -135,6 +135,33 @@ test('ordinal follow-ups send displayed post order as IDs only, never source tex
   } finally { h.close(); }
 });
 
+test('numbered search references survive summaries and refusals but reset for empty searches and new topics', async () => {
+  const h = new Harness();
+  const posts = ['one', 'two', 'three'].map(name => ({ questionId: `apify-${name}`, sourceId: `q:apify-${name}`, title: 'Source title', excerpt: 'Source text must not be replayed.', url: `/questions/apify-${name}`, createdAt: '2026-10-01T10:00:00Z' }));
+  const refs = posts.map(({ questionId, sourceId }) => ({ questionId, sourceId }));
+  h.post = async () => reply(fixture({ kind: 'posts', posts, sources: [], claims: [] }));
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    changeQuestion(h, 'Find posts about Chennai stamping'); await submit(h); await h.settle();
+    h.post = async () => reply(fixture({ claims: [{ text: 'A reported event.', evidence: [{ sourceId: refs[0].sourceId, quote: 'A reported event in the source.' }] }], sources: [{ ...fixture().sources[0], id: refs[0].sourceId, questionId: refs[0].questionId }] }));
+    changeQuestion(h, 'Explain the first post.'); await submit(h); await h.settle();
+    assert.deepEqual(h.calls.at(-1).body.previousPosts, refs);
+    h.post = async () => reply(fixture({ status: 'insufficient', claims: [], sources: [], unanswered: ['No supported answer.'] }));
+    for (const prompt of ['Explain the first post.', ...Array(21).fill('Why?'), 'Explain the third post.']) {
+      changeQuestion(h, prompt); await submit(h); await h.settle();
+      assert.deepEqual(h.calls.at(-1).body.previousPosts, refs);
+      assert.doesNotMatch(JSON.stringify(h.calls.at(-1).body), /Source title|Source text/);
+    }
+    assert.deepEqual(h.calls.at(-1).body.focusedPost, refs[2]);
+    h.post = async () => reply(fixture({ kind: 'posts', posts: [], sources: [], claims: [] }));
+    changeQuestion(h, 'Show more posts'); await submit(h); await h.settle();
+    changeQuestion(h, 'Explain the first post.'); await submit(h); await h.settle();
+    assert.equal(h.calls.at(-1).body.previousPosts, undefined, 'An empty new result list must not revive old results');
+    changeQuestion(h, 'New topic: Schengen delivery'); await submit(h); await h.settle();
+    assert.equal(h.calls.at(-1).body.previousPosts, undefined);
+  } finally { h.close(); }
+});
+
 test('selected-post focus persists past transcript rollover and resets on new topics or broader searches', async () => {
   const h = new Harness(); let requests = 0;
   const selected = { questionId: 'apify-two', sourceId: 'q:apify-two' };
