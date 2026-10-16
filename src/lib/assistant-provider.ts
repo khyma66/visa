@@ -3,9 +3,12 @@ import models from './assistant-models.json';
 
 export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[] };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
-export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'timeout' | 'cancelled' | 'provider_error' | 'incomplete_output' | 'empty_output' | 'oversized_output';
+export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
 export const WORKERS_ASSISTANT_MODEL = models.answer;
 export const WORKERS_ASSISTANT_PROFILE = JSON.stringify(models);
+export const GROQ_ASSISTANT_MODEL = models.groq.answer;
+export const GROQ_ASSISTANT_PROFILE = JSON.stringify(models.groq);
+export type AssistantTransport = { status: number; tokenLimit?: number; remainingTokens?: number; retryAfterSeconds?: number };
 export type AssistantUsage = { model: string; stage: 'answer' | 'review'; inputTokens?: number; outputTokens?: number; durationMs: number };
 export const OPENAI_ASSISTANT_MODEL = 'gpt-6-luna';
 const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], properties: { sourceId: { type: 'string', minLength: 1 }, quote: { type: 'string', minLength: 12, maxLength: 400 } } };
@@ -42,11 +45,13 @@ export function assistantOutputSchema(prompt: AssistantPrompt) {
 
 export function providerModel(provider: string | undefined): string {
   if (provider === 'workers-ai') return WORKERS_ASSISTANT_MODEL;
+  if (provider === 'groq') return GROQ_ASSISTANT_MODEL;
   if (provider === 'openai') return OPENAI_ASSISTANT_MODEL;
   throw new AssistantError(503, 'The assistant is not configured yet.');
 }
 
 export function providerCacheKey(provider: string | undefined): string {
+  if (provider === 'groq') return `groq:${GROQ_ASSISTANT_PROFILE}`;
   return provider === 'workers-ai' ? WORKERS_ASSISTANT_PROFILE : providerModel(provider);
 }
 
@@ -77,6 +82,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
   fetcher?: typeof fetch;
   reportFailure?(reason: AssistantProviderFailure): void;
   reportUsage?(usage: AssistantUsage): void;
+  reportTransport?(value: AssistantTransport): void;
 }): Promise<string> {
   const model = providerModel(options.provider);
   const schema = assistantOutputSchema(prompt);
@@ -114,6 +120,41 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       } finally { if (stop) signal.removeEventListener('abort', stop); }
     }
     if (!options.apiKey) fail('missing_key');
+    if (options.provider === 'groq') {
+      const selected = review ? models.groq.review : models.groq.answer;
+      const started = Date.now();
+      const response = await (options.fetcher ?? fetch)('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST', redirect: 'error', signal,
+        headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: selected,
+          messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
+          response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } },
+          reasoning_effort: models.groq.reasoningEffort, include_reasoning: false,
+          max_completion_tokens: review ? models.groq.reviewMaxTokens : models.groq.answerMaxTokens,
+          temperature: 0, seed: 39173,
+        }),
+      });
+      const numberHeader = (name: string) => {
+        const raw = response.headers.get(name);
+        const value = raw === null ? NaN : Number(raw);
+        return Number.isFinite(value) && value >= 0 && value <= 1_000_000_000 ? value : undefined;
+      };
+      // Fixed numeric telemetry only. Never retain provider error bodies or credentials.
+      try { options.reportTransport?.({ status: response.status, tokenLimit: numberHeader('x-ratelimit-limit-tokens'), remainingTokens: numberHeader('x-ratelimit-remaining-tokens'), retryAfterSeconds: numberHeader('retry-after') }); } catch { /* optional metrics */ }
+      if (!response.ok) {
+        await response.body?.cancel();
+        return fail(response.status === 429 ? 'rate_limited' : response.status === 401 || response.status === 403 ? 'authentication_failed' : response.status === 400 ? 'invalid_request' : 'provider_error');
+      }
+      const data = await readBoundedJson(response, 100_000) as { choices?: { finish_reason?: string; message?: { content?: unknown } }[]; usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
+      const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000 ? value : undefined;
+      try { options.reportUsage?.({ model: selected, stage: review ? 'review' : 'answer', inputTokens: count(data.usage?.prompt_tokens), outputTokens: count(data.usage?.completion_tokens), durationMs: Date.now() - started }); } catch { /* optional metrics */ }
+      const first = data.choices?.[0];
+      if (first?.finish_reason !== 'stop') return fail('incomplete_output');
+      const content = first.message?.content;
+      if (typeof content !== 'string' || !content.trim()) return fail('empty_output');
+      if (content.length > 24_000) return fail('oversized_output');
+      return content;
+    }
     const response = await (options.fetcher ?? fetch)('https://api.openai.com/v1/responses', {
       method: 'POST', redirect: 'error', signal,
       headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },

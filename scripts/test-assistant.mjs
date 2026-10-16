@@ -21,6 +21,53 @@ const source = { id:`q:${id}`, questionId:id, communityId:null, kind:'question',
 const input = { mode:'ask',scope:{kind:'post',id},question:'What did the member report?' };
 const output = {status:'answered',claims:[{text:'The member reported a Monday appointment.',evidence:[{sourceId:source.id,quote:'I attended my appointment on Monday.'}]}],disagreements:[],unanswered:[]};
 const request = (value=input, headers={}) => new Request('https://visathreads.com/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40),...headers},body:JSON.stringify(value)});
+test('Groq uses the fixed server endpoint, strict source IDs, bounded answer/review and numeric-only telemetry', async () => {
+  const usage = [], transport = [], calls = [];
+  const fetcher = async (url, init) => {
+    calls.push({url, init, body:JSON.parse(init.body)});
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(output),reasoning:'must never leak'}}],usage:{prompt_tokens:2300,completion_tokens:180}}, {headers:{'x-ratelimit-limit-tokens':'250000','x-ratelimit-remaining-tokens':'247700'}});
+  };
+  const options={provider:'groq',apiKey:'synthetic-groq-secret',fetcher,reportUsage:value=>usage.push(value),reportTransport:value=>transport.push(value)};
+  assert.equal(await provider.runAssistantModel({system:'System',user:'Question',sourceIds:[source.id]},options),JSON.stringify(output));
+  await provider.runAssistantModel({system:'Review',user:'Evidence',outputKind:'review',reviewIds:['claim:0']},options);
+  for(const call of calls) {
+    assert.equal(call.url,'https://api.groq.com/openai/v1/chat/completions'); assert.equal(call.init.redirect,'error');
+    assert.equal(call.init.headers.Authorization,'Bearer synthetic-groq-secret');
+    assert.equal(call.body.model,'openai/gpt-oss-120b'); assert.equal(call.body.response_format.json_schema.strict,true);
+    assert.equal(call.body.include_reasoning,false); assert.equal(call.body.reasoning_effort,'low');
+    assert.equal(call.body.tools,undefined); assert.equal(call.body.stream,undefined);
+  }
+  assert.equal(calls[0].body.max_completion_tokens,4096); assert.equal(calls[1].body.max_completion_tokens,1200);
+  assert.deepEqual(calls[0].body.response_format.json_schema.schema.properties.claims.items.properties.evidence.items.properties.sourceId.enum,[source.id]);
+  assert.deepEqual(calls[1].body.response_format.json_schema.schema.properties.checks.items.properties.id.enum,['claim:0']);
+  assert.deepEqual(usage.map(value=>value.stage),['answer','review']);
+  assert.equal(transport[0].tokenLimit,250000);
+  assert.doesNotMatch(JSON.stringify({usage,transport}),/synthetic-groq-secret|must never leak/);
+  assert.notEqual(provider.providerCacheKey('groq'),provider.providerCacheKey('workers-ai'));
+});
+test('Groq errors fail closed without retries, provider body disclosure or model fallback', async () => {
+  for(const [status,reason] of [[400,'invalid_request'],[401,'authentication_failed'],[403,'authentication_failed'],[429,'rate_limited'],[500,'provider_error']]) {
+    let calls=0, observed;
+    await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'}, {provider:'groq',apiKey:'synthetic-key',reportFailure:value=>{observed=value;},fetcher:async()=>{calls++;return new Response('private provider diagnostic synthetic-key',{status});}}),error=>error.status===503&&!error.message.includes('private'));
+    assert.equal(calls,1); assert.equal(observed,reason);
+  }
+  let calls=0;
+  await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',fetcher:async()=>{calls++;throw Error('Must not call');}}));
+  assert.equal(calls,0);
+});
+test('Groq rejects truncated, empty, oversized and invalid responses', async () => {
+  for(const data of [
+    {choices:[{finish_reason:'length',message:{content:JSON.stringify(output)}}]},
+    {choices:[{finish_reason:'stop',message:{content:''}}]},
+    {choices:[{finish_reason:'stop',message:{content:'x'.repeat(24001)}}]},
+    {choices:[]},
+  ]) await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',apiKey:'synthetic-key',fetcher:async()=>Response.json(data)}));
+});
+test('Groq rollout requires its own server secret and production project/domain boundary',()=>{
+  const env={ASSISTANT_ENABLED:'true',ASSISTANT_PROVIDER:'groq',GROQ_API_KEY:'synthetic-key',NEXT_PUBLIC_SITE_URL:'https://visathreads.com',ASSISTANT_PROJECT_REF:'cycnichledvqbxevrwnt',NEXT_PUBLIC_SUPABASE_URL:'https://cycnichledvqbxevrwnt.supabase.co',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'public-key'};
+  assert.equal(service.configuredAvailability(env).posts,true);
+  for(const changes of [{GROQ_API_KEY:undefined,OPENAI_API_KEY:'wrong-secret'},{NEXT_PUBLIC_SITE_URL:'https://visa-central.com'},{NEXT_PUBLIC_SUPABASE_URL:'https://ppdwysmeistjxzjpmxyk.supabase.co'}]) assert.equal(service.configuredAvailability({...env,...changes}).posts,false);
+});
 function harness(overrides={}) {
   const state={actor:'alice',sources:[source],reserved:0,generated:0,reviewed:0,reads:0,cache:new Map()};
   const generate = overrides.generate ?? (async()=>{state.generated++;return JSON.stringify(output);});

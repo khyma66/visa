@@ -1,10 +1,10 @@
 import { prepareAssistantCorpus, readBoundedJson, validateAssistantOutput, type AssistantValidationCode } from '../src/lib/assistant-core';
 import type { AssistantRequest, AssistantResult } from '../src/lib/assistant-contract';
 import { createAssistantHandler, type AssistantFailureStage } from '../src/lib/assistant-service';
-import { runAssistantModel, WORKERS_ASSISTANT_MODEL, WORKERS_ASSISTANT_PROFILE, type WorkersAiBinding, type AssistantProviderFailure, type AssistantUsage } from '../src/lib/assistant-provider';
+import { runAssistantModel, providerModel, providerCacheKey, GROQ_ASSISTANT_PROFILE, WORKERS_ASSISTANT_PROFILE, type WorkersAiBinding, type AssistantProviderFailure, type AssistantUsage, type AssistantTransport } from '../src/lib/assistant-provider';
 import { acceptanceFixtures, evaluateAcceptance } from './assistant-acceptance-fixtures';
 
-type Env = { ASSISTANT_AI: WorkersAiBinding; ACCEPTANCE_SECRET?: string; ACCEPTANCE_EXPIRES?: string; ACCEPTANCE_SOURCE_SHA?: string };
+type Env = { ASSISTANT_AI?: WorkersAiBinding; GROQ_API_KEY?: string; ACCEPTANCE_PROVIDER?: string; ACCEPTANCE_SECRET?: string; ACCEPTANCE_EXPIRES?: string; ACCEPTANCE_SOURCE_SHA?: string };
 const response = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'X-Assistant-Acceptance': 'v1' } });
 async function authorized(request: Request, env: Env): Promise<boolean> {
   const expires = Number(env.ACCEPTANCE_EXPIRES);
@@ -24,11 +24,14 @@ export default {
     const path = new URL(request.url).pathname;
     if (path !== '/evaluate' || request.method !== 'POST' || !await authorized(request, env)) return response({ error: 'Not found' }, 404);
     try {
+      const provider = env.ACCEPTANCE_PROVIDER === 'groq' ? 'groq' : 'workers-ai';
+      const model = providerModel(provider);
+      const profile = provider === 'groq' ? GROQ_ASSISTANT_PROFILE : WORKERS_ASSISTANT_PROFILE;
       const body = await readBoundedJson(request, 128);
       if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'id')) return response({ error: 'Invalid fixture' }, 400);
       // Probe the exact inference method/path without invoking the model. A
       // separate /ready route cannot establish /evaluate route propagation.
-      if ((body as { id?: unknown }).id === '__ready__') return response({ ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: env.ACCEPTANCE_SOURCE_SHA, model: WORKERS_ASSISTANT_MODEL, modelProfile: WORKERS_ASSISTANT_PROFILE, cases: acceptanceFixtures.map(fixture => fixture.id) });
+      if ((body as { id?: unknown }).id === '__ready__') return response({ ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: env.ACCEPTANCE_SOURCE_SHA, model, modelProfile: profile, cases: acceptanceFixtures.map(fixture => fixture.id) });
       const fixture = acceptanceFixtures.find(item => item.id === (body as { id?: unknown }).id);
       if (!fixture) return response({ error: 'Invalid fixture' }, 400);
       const started = Date.now();
@@ -39,13 +42,14 @@ export default {
       const syntheticToken = 'compiled-synthetic-fixture-session';
       const events: string[] = [];
       const usage: AssistantUsage[] = [];
+      const transport: AssistantTransport[] = [];
       const receivedInputs: AssistantRequest[] = [];
       let raw: string | undefined;
       let rawReview: string | undefined;
       let serviceFailure: { stage: AssistantFailureStage; status: number; code?: AssistantValidationCode } | undefined;
       let providerReason: AssistantProviderFailure | undefined;
       const handler = createAssistantHandler({
-        model: WORKERS_ASSISTANT_PROFILE,
+        model: providerCacheKey(provider),
         reportFailure: event => { serviceFailure = event; },
         availability: () => ({ posts: true, communities: true, catchup: true }),
         authenticate: async token => {
@@ -67,13 +71,20 @@ export default {
           // Match the production route's runtime binding lookup. Directly
           // injecting the fetch environment would miss loader/binding errors.
           let binding: WorkersAiBinding | undefined;
+          let apiKey: string | undefined;
           try {
             const { env: runtimeEnv } = await import(/* webpackIgnore: true */ 'cloudflare:workers');
-            binding = (runtimeEnv as unknown as { ASSISTANT_AI?: WorkersAiBinding }).ASSISTANT_AI;
-            if (!binding || typeof binding.run !== 'function' || binding !== env.ASSISTANT_AI) throw Error('Runtime AI binding mismatch');
+            const runtimeBindings = runtimeEnv as unknown as { ASSISTANT_AI?: WorkersAiBinding; GROQ_API_KEY?: string };
+            if (provider === 'groq') {
+              apiKey = runtimeBindings.GROQ_API_KEY;
+              if (!apiKey || apiKey !== env.GROQ_API_KEY) throw Error('Runtime secret binding unavailable');
+            } else {
+              binding = runtimeBindings.ASSISTANT_AI;
+              if (!binding || typeof binding.run !== 'function' || binding !== env.ASSISTANT_AI) throw Error('Runtime AI binding mismatch');
+            }
           } catch { providerReason = 'missing_binding'; throw Error('Runtime AI binding unavailable'); }
           events.push('runtime-binding');
-          const output = await runAssistantModel(prompt, { provider: 'workers-ai', binding, signal, reportFailure: reason => { providerReason = reason; }, reportUsage: value => usage.push(value) });
+          const output = await runAssistantModel(prompt, { provider, apiKey, binding, signal, reportFailure: reason => { providerReason = reason; }, reportUsage: value => usage.push(value), reportTransport: value => transport.push(value) });
           if (review) rawReview = output;
           else raw = output;
           return output;
@@ -95,7 +106,7 @@ export default {
           try { output = JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); }
           catch { output = undefined; }
         }
-        return response({ id: fixture.id, passed: false, model: WORKERS_ASSISTANT_MODEL,
+        return response({ id: fixture.id, passed: false, model, usage, transport,
           error: 'Hosted application service failed', serviceStatus: serviceResponse.status, durationMs: Date.now() - started,
           syntheticDiagnostic: { source: 'compiled-synthetic-fixture-only', fixtureId: fixture.id,
             stage: raw === undefined ? 'application-service' : 'source-validation',
@@ -140,7 +151,7 @@ export default {
       // Only failed, fixed COMPILED SYNTHETIC fixtures may include diagnostic
       // output. This Worker has no database, production content or free-form
       // prompt input. Production API responses/logging are completely unchanged.
-      return response({ ...evaluation, model: WORKERS_ASSISTANT_MODEL, durationMs: Date.now() - started, usage,
+      return response({ ...evaluation, model, durationMs: Date.now() - started, usage, ...(transport.length ? { transport } : {}),
         ...(!evaluation.passed ? { syntheticDiagnostic: {
           source: 'compiled-synthetic-fixture-only', fixtureId: fixture.id,
           failedChecks: evaluation.checks.filter(check => !check.passed).map(check => check.name),

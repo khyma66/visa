@@ -5,5 +5,13 @@
   "longContext": "@cf/openai/gpt-oss-120b",
   "qwenInputByteLimit": 24000,
   "answerMaxTokens": 4096,
-  "reviewMaxTokens": 1200
+  "reviewMaxTokens": 1200,
+  "groq": {
+    "version": 1,
+    "answer": "openai/gpt-oss-120b",
+    "review": "openai/gpt-oss-120b",
+    "answerMaxTokens": 4096,
+    "reviewMaxTokens": 1200,
+    "reasoningEffort": "low"
+  }
 }

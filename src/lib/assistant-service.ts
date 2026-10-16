@@ -153,6 +153,6 @@ export function configuredAvailability(env: Record<string, string | undefined>) 
     valid = env.NEXT_PUBLIC_SITE_URL === 'https://visathreads.com' && env.ASSISTANT_PROJECT_REF === 'cycnichledvqbxevrwnt' && url.origin === `https://${env.ASSISTANT_PROJECT_REF}.supabase.co`
       && !url.username && !url.password && url.pathname === '/' && !url.search && !url.hash && !!env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   } catch { /* Fail closed until this deployment explicitly selects a project. */ }
-  if (!valid || !['workers-ai', 'openai'].includes(env.ASSISTANT_PROVIDER ?? '') || (env.ASSISTANT_PROVIDER === 'openai' && !env.OPENAI_API_KEY)) return { posts: false, communities: false, catchup: false };
+  if (!valid || !['workers-ai', 'openai', 'groq'].includes(env.ASSISTANT_PROVIDER ?? '') || (env.ASSISTANT_PROVIDER === 'openai' && !env.OPENAI_API_KEY) || (env.ASSISTANT_PROVIDER === 'groq' && !env.GROQ_API_KEY)) return { posts: false, communities: false, catchup: false };
   return assistantAvailability(env);
 }
