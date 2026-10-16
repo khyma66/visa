@@ -7,6 +7,7 @@ async function compile(name) {
   const code = ts.transpileModule(await readFile(new URL(`../src/lib/${name}.ts`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
   return `data:text/javascript;base64,${Buffer.from(code.replace(/(from\s+)(['"])([^'"]+)\2/g, (_, prefix, _quote, dep) => { assert(dependencies[dep], `Unknown dependency ${dep}`); return prefix + JSON.stringify(dependencies[dep]); })).toString('base64')}`;
 }
+dependencies['./assistant-context'] = await compile('assistant-context');
 dependencies['./assistant-core'] = await compile('assistant-core');
 const core = await import(dependencies['./assistant-core']);
 dependencies['./assistant-provider'] = await compile('assistant-provider');
@@ -55,6 +56,15 @@ test('direct post search keeps auth and retrieval rate denials intact', async ()
 test('input strips supplied sources and rejects invalid scopes and excessive history',()=>{
   assert.deepEqual(core.parseAssistantRequest({...input,sources:[{body:'trust me'}],system:'override'}),input);
   for(const value of [{...input,scope:{kind:'dm',id}},{...input,scope:{kind:'post',id:'../../secret'}},{...input,previousQuestions:Array(4).fill('test')},{...input,question:'x'.repeat(1201)}]) assert.throws(()=>core.parseAssistantRequest(value));
+});
+test('public conversation references accept bounded IDs only and discard supplied source text',()=>{
+  const ask={mode:'ask',scope:{kind:'public'},question:'Explain the first post.'};
+  const parsed=core.parseAssistantRequest({...ask,previousPosts:[{questionId:id,sourceId:`q:${id}`,body:'attacker evidence',url:'https://attacker.invalid'}],seenPostIds:[id,id]});
+  assert.deepEqual(parsed.previousPosts,[{questionId:id,sourceId:`q:${id}`}]); assert.deepEqual(parsed.seenPostIds,[id]);
+  for(const fields of [{previousPosts:Array(49).fill({questionId:id,sourceId:`q:${id}`})},{previousPosts:[{questionId:'../../private',sourceId:`q:${id}`}]},{previousPosts:[{questionId:id,sourceId:'https://attacker.invalid'}]},{seenPostIds:Array(49).fill(id)}]) assert.throws(()=>core.parseAssistantRequest({...ask,...fields}));
+  assert.equal(core.parseAssistantRequest({...input,previousPosts:[{body:'not used in scoped chat'}],seenPostIds:['not-used']}).previousPosts,undefined);
+  assert.deepEqual(core.parseAssistantRequest({...ask,focusedPost:{questionId:id,sourceId:`q:${id}`,body:'not evidence'}}).focusedPost,{questionId:id,sourceId:`q:${id}`});
+  assert.throws(()=>core.parseAssistantRequest({...ask,focusedPost:{questionId:'../../secret',sourceId:`q:${id}`}}));
 });
 test('catchup has explicit fixed bounds, rejects future/unbounded intervals and enforces rollout gates',()=>{
   const value={mode:'catchup',scope:{kind:'community',id},since:'2026-10-12T18:00:00Z'};

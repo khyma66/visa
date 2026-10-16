@@ -14,6 +14,7 @@ async function compile(name) {
   });
   return `data:text/javascript;base64,${Buffer.from(resolved).toString('base64')}`;
 }
+dependencies['./assistant-context'] = await compile('assistant-context');
 dependencies['./assistant-core'] = await compile('assistant-core');
 const core = await import(dependencies['./assistant-core']);
 dependencies['./assistant-provider'] = await compile('assistant-provider');

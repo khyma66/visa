@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pinnedChatbotRecovery } from './pinned-chatbot-recovery.mjs';
 
 export const LIVE_SITE = 'https://visathreads.com';
 export const LIVE_DATABASE = 'https://cycnichledvqbxevrwnt.supabase.co';
@@ -20,7 +21,7 @@ export function checkedLiveArchive(root, env) {
   assert.equal(receipt.worker, LIVE_WORKER);
   assert.equal(receipt.databaseOrigin, LIVE_DATABASE);
   assert.equal(receipt.health?.environment, 'development');
-  assert.equal(receipt.health?.build?.dirty, false);
+  assert(receipt.health?.build?.dirty === false || pinnedChatbotRecovery(receipt.health?.build, receipt), 'Unreviewed dirty archive baseline.');
   assert.match(receipt.health?.build?.gitSha ?? '', /^[a-f0-9]{40}$/);
   assert.match(receipt.deploymentId ?? '', /^[a-f0-9-]{36}$/);
   assert.equal(receipt.questionCount, 563, 'Existing archive baseline changed; review before deployment.');

@@ -10,6 +10,40 @@ import { featureEnvironment, verifyFeatureWorker, verifyAssistantAcceptance, ver
 import { buildProvenance, sourceProvenance } from './build-provenance.mjs';
 import { assertHealthProvenance } from './smoke-site.mjs';
 import { archiveFromWorkerModule, recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
+import { CHATBOT_RECOVERY, pinnedChatbotRecovery, verifyRecoveryFiles } from './pinned-chatbot-recovery.mjs';
+
+test('only the exact owner-reviewed dirty chatbot deployment can enter recovery', () => {
+  const health = { environment: 'development', releaseStatus: 'configured', build: { ...CHATBOT_RECOVERY.build } };
+  const deployment = { id: CHATBOT_RECOVERY.deploymentId, versions: [{ version_id: CHATBOT_RECOVERY.previousVersion, percentage: 100 }] };
+  verifyExistingLiveProvenance(health, deployment);
+  assert(pinnedChatbotRecovery(health.build, CHATBOT_RECOVERY));
+  for (const [field, value] of Object.entries(CHATBOT_RECOVERY.build)) {
+    const changed = { ...health, build: { ...health.build, [field]: typeof value === 'boolean' ? !value : 'changed' } };
+    assert.throws(() => verifyExistingLiveProvenance(changed, deployment), field);
+  }
+  for (const changed of [{ ...deployment, id: 'unobserved-deployment' }, { ...deployment, versions: [] },
+    { ...deployment, versions: [{ version_id: CHATBOT_RECOVERY.previousVersion, percentage: 50 }] },
+    { ...deployment, versions: [{ version_id: 'unobserved-version', percentage: 100 }] },
+    { ...deployment, versions: [...deployment.versions, ...deployment.versions] }]) {
+    assert.throws(() => verifyExistingLiveProvenance(health, changed));
+  }
+  for (const key of ['deploymentId', 'previousVersion', 'worker', 'siteOrigin', 'databaseOrigin']) {
+    assert.equal(pinnedChatbotRecovery(health.build, { ...CHATBOT_RECOVERY, [key]: 'different' }), false);
+  }
+  verifyRecoveryFiles(new URL('../', import.meta.url).pathname);
+});
+
+test('recovery refuses lost branding and never treats arbitrary dirty ancestry as clean', async () => {
+  const root = await mkdtemp(resolve(tmpdir(), 'visa-chat-recovery-'));
+  try {
+    assert.throws(() => verifyRecoveryFiles(root));
+    const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    git('init'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Isolated test');
+    await writeFile(resolve(root, 'app.js'), 'source'); git('add', '.'); git('commit', '-m', 'source');
+    const original = sourceProvenance(root);
+    assert.throws(() => verifySourceAncestry(root, { ...original, dirty: true }), /Unreviewed dirty/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 const values = { NEXT_PUBLIC_SITE_URL: LIVE_SITE, NEXT_PUBLIC_SUPABASE_URL: LIVE_DATABASE, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: `sb_publishable_${'fixture'.repeat(5)}` };
 const config = enabled => ({ name: 'visaflow-dev', routes: ['visathreads.com', 'www.visathreads.com'].map(pattern => ({ pattern, custom_domain: true })), vars: featureEnvironment(values, enabled), ai: { binding: 'ASSISTANT_AI' } });
@@ -117,7 +151,7 @@ test('Worker archive recovery interprets only static literals and never executes
 });
 
 function acceptanceReceipt() {
-  const ids = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context'];
+  const ids = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context'];
   const model = '@cf/openai/gpt-oss-120b';
   return { schemaVersion: 1, sourceSha: 'a'.repeat(40), provider: 'workers-ai', model, createdAt: new Date().toISOString(), passed: true, repetitions: 3, features: { posts: true, communities: true, catchup: true }, workerDeleted: true, cases: ids.map(id => ({
     id, model, passed: true,

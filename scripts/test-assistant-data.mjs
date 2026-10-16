@@ -6,13 +6,15 @@ import ts from 'typescript';
 const compile = (source) => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 const tagging = moduleUrl(compile(await readFile(new URL('../src/lib/tagging.ts', import.meta.url), 'utf8')));
-const core = moduleUrl(compile(await readFile(new URL('../src/lib/assistant-core.ts', import.meta.url), 'utf8')));
-const search = moduleUrl(compile(await readFile(new URL('../src/lib/assistant-search.ts', import.meta.url), 'utf8')).replace("'./assistant-core'", JSON.stringify(core)));
+const context = moduleUrl(compile(await readFile(new URL('../src/lib/assistant-context.ts', import.meta.url), 'utf8')));
+const core = moduleUrl(compile(await readFile(new URL('../src/lib/assistant-core.ts', import.meta.url), 'utf8')).replace("'./assistant-context'", JSON.stringify(context)));
+const search = moduleUrl(compile(await readFile(new URL('../src/lib/assistant-search.ts', import.meta.url), 'utf8')).replace("'./assistant-core'", JSON.stringify(core)).replace("'./assistant-context'", JSON.stringify(context)));
 const source = compile(await readFile(new URL('../src/lib/assistant-data.ts', import.meta.url), 'utf8'))
   .replace("import archive from '@visa/archive';", 'const archive = new Proxy({}, { get: (_, key) => globalThis.__assistantArchive[key] });')
-  .replace("'./tagging'", JSON.stringify(tagging)).replace("'./assistant-core'", JSON.stringify(core)).replace("'./assistant-search'", JSON.stringify(search));
+  .replace("'./tagging'", JSON.stringify(tagging)).replace("'./assistant-core'", JSON.stringify(core)).replace("'./assistant-search'", JSON.stringify(search)).replace("'./assistant-context'", JSON.stringify(context));
 const { retrieveAssistantCorpus } = await import(moduleUrl(source));
 const { assistantPostSearchQuery, assistantPostSearchScore, buildAssistantPostSearchResult } = await import(search);
+const { assistantBoundedHistory } = await import(context);
 const saved = Object.fromEntries(['COMMUNITY_SOURCE_MODE', 'APP_ENV', 'IMPORTED_CONTENT_APPROVED'].map((name) => [name, process.env[name]]));
 afterEach(() => {
   for (const [name, value] of Object.entries(saved)) value === undefined ? delete process.env[name] : process.env[name] = value;
@@ -251,6 +253,94 @@ test('Why, How, and What happened next follow the latest answered topic without 
     assert.equal(db.calls[0].args.query_text, previousQuestions[1], 'Native search must also use the latest topic, not generic continuation wording');
     assert.doesNotMatch(db.calls[0].args.query_text, /Chennai|H-1B/);
   }
+});
+
+test('a long chain of tiny follow-ups retains the topic anchor and never searches next as a topic', async () => {
+  reviewedArchive([
+    q({ id: 'apify-chennai', title: 'H-1B stamping in Chennai', body: 'My H-1B stamping in Chennai completed after seven days.' }),
+    q({ id: 'apify-unrelated', title: 'Canadian permit', body: 'The next appointment is for my Canadian work permit.' }),
+  ]);
+  const anchor = 'What did members report about H-1B stamping in Chennai?';
+  let history = [anchor];
+  for (const question of ['What happened next?', 'Why?', 'How long?', ...Array(24).fill('Why?')]) {
+    const db = client();
+    const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question, previousQuestions: history });
+    assert.deepEqual(result.sources.map(source => source.questionId), ['apify-chennai']);
+    assert.equal(db.calls[0].args.query_text, anchor);
+    history = assistantBoundedHistory([...history, question]);
+    assert.equal(history[0], anchor); assert(history.length <= 3);
+  }
+  assert.deepEqual(assistantBoundedHistory([...history, 'New topic: Schengen passport delivery?']), ['New topic: Schengen passport delivery?']);
+});
+
+test('ordinal references use the displayed post order and fresh caller-visible reads', async () => {
+  const second = '33333333-3333-4333-8333-333333333333';
+  const db = client({ question_feed: { data: q({ id: second }), error: null }, answer_feed: { data: [a(2, { question_id: second })], error: null } });
+  const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question: 'Explain the second post.',
+    previousQuestions: ['Find posts about Chennai appointments'], previousPosts: [{ questionId: id, sourceId: `q:${id}` }, { questionId: second, sourceId: `q:${second}` }] });
+  assert.equal(db.calls[0].filters.id, second); assert.equal(db.calls[1].filters.question_id, second);
+  assert(result.sources.every(source => source.questionId === second));
+  assert.equal(db.calls.some(call => call.rpc), false, 'An ordinal is a current authorized post read, not an unrelated lexical search');
+});
+
+test('selected post focus survives follow-ups, revalidates its source, and is ignored on a new topic', async () => {
+  reviewedArchive([
+    q({ id: 'apify-one', title: 'Chennai stamping', body: 'My Chennai stamping took ten days.' }),
+    q({ id: 'apify-two', title: 'Chennai stamping', body: 'My Chennai stamping took seven days.' }),
+    q({ id: 'apify-schengen', title: 'Schengen update', body: 'My Schengen post-interview update arrived on Thursday.' }),
+  ]);
+  const focusedPost = { questionId: 'apify-two', sourceId: 'q:apify-two' };
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'How long?', previousQuestions: ['Find posts about Chennai stamping', 'Explain the second post.'], focusedPost,
+    previousPosts: [focusedPost] };
+  for (const question of ['How long?', 'Why?', 'What happened next?']) {
+    const result = await retrieveAssistantCorpus(client(), { ...input, question });
+    assert.deepEqual(result.sources.map(source => source.questionId), ['apify-two']);
+  }
+  for (const question of ['When did Schengen updates arrive?', 'New topic: How did the first post-interview update look for Schengen?']) {
+    const db = client(); const result = await retrieveAssistantCorpus(db, { ...input, question });
+    assert.equal(db.calls[0].rpc, 'assistant_sources');
+    assert.deepEqual(result.sources.map(source => source.questionId), ['apify-schengen']);
+    assert.doesNotMatch(db.calls[0].args.query_text, /Chennai/);
+  }
+  const unavailable = await retrieveAssistantCorpus(client(), { ...input, focusedPost: { questionId: 'apify-two', sourceId: 'a:apify-deleted' } });
+  assert.equal(unavailable.sources.length, 0);
+});
+
+test('missing, hidden, deleted, and mismatched ordinal references never recover prior source text', async () => {
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'Explain the first post.', previousPosts: [{ questionId: id, sourceId: `q:${id}` }] };
+  const missing = client();
+  assert.equal((await retrieveAssistantCorpus(missing, { ...input, previousPosts: [] })).sources.length, 0); assert.equal(missing.calls.length, 0);
+  for (const question of ['Explain post 0.', 'Explain the 50th post.', 'Explain post 999.']) {
+    assert.equal((await retrieveAssistantCorpus(missing, { ...input, question })).sources.length, 0); assert.equal(missing.calls.length, 0);
+  }
+  const hidden = client({ question_feed: { data: null, error: null } });
+  assert.equal((await retrieveAssistantCorpus(hidden, input)).sources.length, 0); assert.equal(hidden.calls.length, 1);
+  const visible = client({ question_feed: { data: q(), error: null }, answer_feed: { data: [], error: null } });
+  assert.equal((await retrieveAssistantCorpus(visible, { ...input, previousPosts: [{ questionId: id, sourceId: `a:${a().id}` }] })).sources.length, 0);
+  assert.equal((await retrieveAssistantCorpus(visible, { ...input, previousPosts: [{ questionId: id, sourceId: 'q:33333333-3333-4333-8333-333333333333' }] })).sources.length, 0);
+});
+
+test('archive ordinal reads retain the same approval boundary and no arbitrary source URL is fetched', async () => {
+  reviewedArchive([q({ id: 'apify-first' }), q({ id: 'apify-second', body: 'My Chennai appointment was Wednesday.' })]);
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'Explain post 2.', previousPosts: [{ questionId: 'apify-first', sourceId: 'q:apify-first' }, { questionId: 'apify-second', sourceId: 'q:apify-second' }] };
+  const result = await retrieveAssistantCorpus(client(), input);
+  assert.equal(result.sources[0].questionId, 'apify-second');
+  delete process.env.IMPORTED_CONTENT_APPROVED;
+  const db = client(); await assert.rejects(() => retrieveAssistantCorpus(db, input), /not available/); assert.equal(db.calls.length, 0);
+});
+
+test('more posts reuses the topic and excludes seen posts without cycling outside the bounded search window', async () => {
+  reviewedArchive(Array.from({ length: 4 }, (_, i) => q({ id: `apify-${i}`, title: 'Chennai stamping delay', body: 'My Chennai visa stamping is still pending after the interview.' })));
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'Show me more posts.', previousQuestions: ['Find posts about Chennai stamping delay', 'Show me more posts.'],
+    previousPosts: [{ questionId: 'apify-1', sourceId: 'q:apify-1' }], seenPostIds: ['apify-0', 'apify-1'] };
+  const db = client(); const corpus = await retrieveAssistantCorpus(db, input); const result = buildAssistantPostSearchResult(input, corpus);
+  assert.deepEqual(result.posts.map(post => post.questionId), ['apify-2', 'apify-3']);
+  assert.equal(db.calls[0].args.query_text.includes('more'), false);
+  const exhausted = { ...input, seenPostIds: Array.from({ length: 48 }, (_, i) => `apify-${i}`) };
+  const exhaustedDb = client(); const exhaustedCorpus = await retrieveAssistantCorpus(exhaustedDb, exhausted);
+  const noMore = buildAssistantPostSearchResult(exhausted, exhaustedCorpus);
+  assert.equal(exhaustedDb.calls.length, 0); assert.equal(noMore.posts.length, 0); assert.equal(noMore.coverage.partial, true);
+  assert.match(noMore.unanswered[0], /No additional posts in this search window/);
 });
 
 const postSearchRequest = (question = 'give all posts related to stamping delay') => ({ mode: 'ask', scope: { kind: 'public' }, question });

@@ -53,8 +53,8 @@ test('brand uses the local mascot with stable dimensions and a named home link f
   for (const auth of [{}, { user: null, profile: null }, { loading: true, user: null, profile: null }]) {
     const html = render(SiteHeader, { auth });
     assert.match(html, /<a[^>]*href="\/"[^>]*aria-label="VisaThreads home"/);
-    assert.match(html, /<img[^>]*src="\/assets\/brand\/visathreads-mark-v1.webp"[^>]*width="40"[^>]*height="40"[^>]*alt=""/);
-    assert.match(html, /class="brand-wordmark">VisaThreads<\/span>/);
+    assert.match(html, /<img[^>]*src="\/assets\/brand\/visathreads-integrated-logo.png"[^>]*width="172"[^>]*height="60"[^>]*alt="VisaThreads"/);
+    assert.match(html, /class="integrated-brand-logo"/);
     assert.doesNotMatch(html, /brand-wood|circle-help|loading="lazy"/);
   }
 });

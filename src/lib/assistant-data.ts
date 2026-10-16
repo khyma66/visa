@@ -7,6 +7,7 @@ import type { Answer, CommunityFeed, Question } from './types';
 import { detectTopics } from './tagging';
 import { AssistantError, assistantPreviousQuestions, assistantRetrievalQuestion, assistantSearchTerms } from './assistant-core';
 import { assistantPostSearchQuery, assistantPostSearchScore } from './assistant-search';
+import { assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantSeenPostIds } from './assistant-context';
 
 export const ASSISTANT_SOURCE_LIMIT = 48;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -77,8 +78,10 @@ function publicArchiveMatches(input: AssistantRequest): AssistantCorpus {
   const postSearch = assistantPostSearchQuery(input);
   const matches: Array<{ source: AssistantSource; score: number }> = [];
   const matchedQuestions = new Set<string>();
+  const excluded = new Set(assistantSeenPostIds(input));
   let scanned = 0, matched = 0, partial = false;
   const consider = (source: AssistantSource) => {
+    if (excluded.has(source.questionId)) return;
     if (!Number.isFinite(Date.parse(source.createdAt))) return;
     const rank = input.mode === 'ask' ? score(source) : 1;
     if (!rank) return;
@@ -129,7 +132,8 @@ async function searchSources(client: SupabaseClient, input: AssistantRequest): P
   if (error?.code === '42501') throw new AssistantError(403, 'This account cannot use the assistant.');
   if (error || !Array.isArray(data)) throw new Error('Assistant sources are temporarily unavailable.');
   const rows = data as SourceRow[];
-  const sources = rows.slice(0, ASSISTANT_SOURCE_LIMIT).map(rowSource);
+  const excluded = new Set(input.scope.kind === 'public' ? assistantSeenPostIds(input) : []);
+  const sources = rows.slice(0, ASSISTANT_SOURCE_LIMIT).map(rowSource).filter(source => !excluded.has(source.questionId));
   return {
     sources: postSearch ? sources.filter(source => assistantPostSearchScore(source, postSearch) > 0) : sources,
     partial: rows.length > ASSISTANT_SOURCE_LIMIT,
@@ -200,6 +204,21 @@ export async function retrieveAssistantCorpus(client: SupabaseClient, input: Ass
   if (input.scope.kind === 'post') {
     return postCorpus(client, { ...input, scope: input.scope });
   }
+  if (input.mode === 'ask' && input.scope.kind === 'public' && assistantMorePosts(input.question ?? '')) {
+    if (!assistantPreviousQuestions(input).length) return { sources: [], partial: false };
+    if (assistantSeenPostIds(input).length >= ASSISTANT_SOURCE_LIMIT) return { sources: [], partial: true };
+  }
+  if (input.mode === 'ask' && input.scope.kind === 'public' && assistantRefersToEarlierTurn(input.question ?? '')
+    && !assistantMorePosts(input.question ?? '') && (assistantPostOrdinal(input.question ?? '') !== null || input.focusedPost)) {
+    const reference = assistantPreviousPost(input);
+    if (!reference) return { sources: [], partial: false };
+    // A browser-provided ID is only a locator. Fetch current parent and replies
+    // through the caller's invoker views (or approved archive); no old text is
+    // accepted, and a removed/hidden source cannot be resurrected by history.
+    const corpus = await postCorpus(client, { ...input, scope: { kind: 'post', id: reference.questionId } });
+    if (!corpus.sources.some(source => source.id === reference.sourceId && source.questionId === reference.questionId)) return { sources: [], partial: false };
+    return corpus;
+  }
   if (input.scope.kind === 'community') {
     if (!UUID.test(input.scope.id)) return { sources: [], partial: false };
     const { data, error } = await client.from('community_directory').select('id').eq('id', input.scope.id).maybeSingle();
@@ -219,11 +238,11 @@ export async function retrieveAssistantCorpus(client: SupabaseClient, input: Ass
     }) : combined;
     return {
       ...corpus,
-      sources: selected.slice(0, ASSISTANT_SOURCE_LIMIT),
+      sources: selected.slice(0, ASSISTANT_SOURCE_LIMIT - assistantSeenPostIds(input).length),
       // Global keyword search has no indexed path for live imported_answers
       // yet. They are included in specific-post asks; do
       // not claim exhaustive global coverage until that index is deployed.
-      partial: corpus.partial || historical.partial || selected.length > ASSISTANT_SOURCE_LIMIT
+      partial: corpus.partial || historical.partial || selected.length > ASSISTANT_SOURCE_LIMIT - assistantSeenPostIds(input).length
         || (input.mode === 'ask' && archiveEnabled()),
     };
   }

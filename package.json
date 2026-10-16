@@ -47,7 +47,7 @@
     "build:dev": "CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development vinext build && CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development npm run check:archive-bundle",
     "deploy:dev": "vinext-cloudflare deploy --config wrangler.jsonc --env development",
     "test:feed-ui": "node --test scripts/test-feed-ui.mjs",
-    "test:assistant": "node --test scripts/test-assistant.mjs scripts/test-assistant-ui.mjs scripts/test-assistant-deploy.mjs scripts/test-assistant-data.mjs scripts/test-assistant-acceptance.mjs scripts/test-assistant-runtime.mjs",
+    "test:assistant": "node --test scripts/test-assistant.mjs scripts/test-assistant-ui.mjs scripts/test-assistant-deploy.mjs scripts/test-assistant-data.mjs scripts/test-assistant-acceptance.mjs scripts/test-assistant-runtime.mjs scripts/test-assistant-grounding.mjs",
     "build:assistant": "node scripts/assistant-dev.mjs",
     "deploy:assistant": "node scripts/assistant-dev.mjs --deploy",
     "build:devsite": "node scripts/development-site.mjs",

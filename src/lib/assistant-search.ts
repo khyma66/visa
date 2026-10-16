@@ -1,5 +1,6 @@
 import type { AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource } from './assistant-contract';
-import { assistantSearchTerms, redactAssistantText } from './assistant-core';
+import { assistantPreviousQuestions, assistantSearchTerms, redactAssistantText } from './assistant-core';
+import { assistantMorePosts, assistantSeenPostIds } from './assistant-context';
 
 export const ASSISTANT_POST_SEARCH_LIMIT = 48;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -18,7 +19,9 @@ const termsFor = (text: string) => [...new Set(assistantSearchTerms(text).map(no
 /** Only explicit requests for posts take the non-generative search path. */
 export function assistantPostSearchQuery(input: AssistantRequest): AssistantPostSearchQuery | null {
   if (input.mode !== 'ask' || input.scope.kind === 'post') return null;
-  const question = (input.question ?? '').trim();
+  const rawQuestion = (input.question ?? '').trim();
+  const previous = assistantMorePosts(rawQuestion) ? assistantPreviousQuestions(input) : [];
+  const question = previous.length ? `Find posts about ${previous.join(' ')}` : rawQuestion;
   const noun = /\b(?:posts?|threads?|discussions?)\b/i.exec(question);
   if (!noun) return null;
   const selection = /^(?:(?:please|can you|could you|would you)\s+)*(?:give|show|find|list|get|search|look|i want|i need)\b/i.exec(question);
@@ -140,15 +143,16 @@ function searchExcerpt(source: AssistantSource, query: AssistantPostSearchQuery)
 /** Authorized server sources are the answer to a post lookup; no model needed. */
 export function buildAssistantPostSearchResult(input: AssistantRequest, corpus: AssistantCorpus, now = Date.now()): AssistantResult {
   const query = assistantPostSearchQuery(input);
+  const seen = new Set(assistantSeenPostIds(input));
   const ranked = query ? corpus.sources
-    .filter(source => POST_ID.test(source.questionId) && ['question', 'reply'].includes(source.kind) && source.body?.trim() && Number.isFinite(Date.parse(source.createdAt)))
+    .filter(source => !seen.has(source.questionId) && POST_ID.test(source.questionId) && ['question', 'reply'].includes(source.kind) && source.body?.trim() && Number.isFinite(Date.parse(source.createdAt)))
     .map(source => ({ source, score: assistantPostSearchScore(source, query) }))
     .filter(row => row.score > 0)
     .sort((a, b) => b.score - a.score || (a.source.kind === b.source.kind ? 0 : a.source.kind === 'question' ? -1 : 1)
       || b.source.createdAt.localeCompare(a.source.createdAt) || a.source.id.localeCompare(b.source.id)) : [];
   const unique = new Map<string, AssistantSource>();
   for (const { source } of ranked) if (!unique.has(source.questionId)) unique.set(source.questionId, source);
-  const selected = [...unique.values()].slice(0, ASSISTANT_POST_SEARCH_LIMIT);
+  const selected = [...unique.values()].slice(0, ASSISTANT_POST_SEARCH_LIMIT - seen.size);
   const sources = selected.map(source => ({
     ...source, title: redactAssistantText(source.title).slice(0, 240), body: searchExcerpt(source, query!),
     parentContext: undefined, parentUpdatedAt: undefined, url: `/questions/${encodeURIComponent(source.questionId)}`,
@@ -157,8 +161,8 @@ export function buildAssistantPostSearchResult(input: AssistantRequest, corpus: 
     kind: 'posts', status: sources.length ? 'answered' : 'insufficient',
     posts: sources.map(source => ({ questionId: source.questionId, sourceId: source.id, title: source.title,
       url: source.url, excerpt: source.body, createdAt: source.createdAt })),
-    claims: [], disagreements: [], unanswered: sources.length ? [] : ['No matching posts found. Try a broader topic.'], sources,
-    coverage: { sourceCount: sources.length, partial: corpus.partial || unique.size > ASSISTANT_POST_SEARCH_LIMIT },
+    claims: [], disagreements: [], unanswered: sources.length ? [] : [assistantMorePosts(input.question ?? '') ? 'No additional posts in this search window. Try a more specific topic.' : 'No matching posts found. Try a broader topic.'], sources,
+    coverage: { sourceCount: sources.length, partial: corpus.partial || unique.size > ASSISTANT_POST_SEARCH_LIMIT - seen.size },
     generatedAt: new Date(now).toISOString(), cached: false, notice: 'Matching community posts. These are member reports, not verified immigration guidance.',
   };
 }

@@ -1,6 +1,7 @@
 /** Shared wire types only: never put provider secrets or server imports here. */
 export type AssistantMode = 'ask' | 'summary' | 'catchup';
 export type AssistantScope = { kind: 'post'; id: string } | { kind: 'community'; id: string } | { kind: 'public' };
+export type AssistantPostReference = { questionId: string; sourceId: string };
 export type AssistantRequest = {
   mode: AssistantMode;
   scope: AssistantScope;
@@ -9,6 +10,12 @@ export type AssistantRequest = {
   until?: string;
   /** Previous user questions only. Assistant text is never trusted as evidence. */
   previousQuestions?: string[];
+  /** Ordered previously displayed IDs, re-read under the caller's permissions. */
+  previousPosts?: AssistantPostReference[];
+  /** Selected-post focus is only a locator; the server rechecks its source. */
+  focusedPost?: AssistantPostReference;
+  /** Exclusion-only history, capped at one bounded search window. */
+  seenPostIds?: string[];
 };
 export type AssistantSource = {
   id: string;

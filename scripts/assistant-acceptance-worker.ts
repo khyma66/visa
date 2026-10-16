@@ -106,6 +106,7 @@ export default {
         && JSON.stringify(input.scope) === JSON.stringify(fixture.input.scope)
         && input.question === fixture.input.question
         && JSON.stringify(input.previousQuestions) === JSON.stringify(fixture.input.previousQuestions)
+        && JSON.stringify(input.previousPosts) === JSON.stringify(fixture.input.previousPosts)
         && (input.since ? Date.parse(input.since) : undefined) === (fixture.input.since ? Date.parse(fixture.input.since) : undefined)
         && (input.until ? Date.parse(input.until) : undefined) === (fixture.input.until ? Date.parse(fixture.input.until) : undefined);
       evaluation.checks.push(

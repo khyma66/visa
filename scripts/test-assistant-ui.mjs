@@ -9,7 +9,9 @@ process.env.NEXT_PUBLIC_SITE_URL = 'https://visathreads.com';
 // Run the real component handlers; only hooks, identity and network are fake.
 const dataUrl = (text) => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
 const source = await readFile(new URL('../src/components/AssistantPanel.tsx', import.meta.url), 'utf8');
+const context = dataUrl(ts.transpileModule(await readFile(new URL('../src/lib/assistant-context.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText);
 const dependencies = {
+  '@/lib/assistant-context': context,
   react: dataUrl(['useState', 'useRef', 'useEffect'].map(name => `export function ${name}(...args){return globalThis.__assistantHarness.${name}(...args);}`).join('\n')),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'),
   'next/navigation': dataUrl('export function usePathname(){return globalThis.__assistantHarness.pathname;}'),
@@ -89,10 +91,83 @@ test('bounded questions use the current bearer token and never submit client evi
     const calls = h.calls.filter(call => call.method === 'POST');
     assert.equal(calls[0].headers.Authorization, 'Bearer fixture-token');
     assert.deepEqual(calls[0].body, { mode: 'ask', scope: { kind: 'post', id: 'post-a' }, question: 'Question number 0' });
-    assert.deepEqual(calls[4].body.previousQuestions, ['Question number 1', 'Question number 2', 'Question number 3']);
+    assert.deepEqual(calls[4].body.previousQuestions, ['Question number 3']);
     assert.equal(h.storage.size, 0, 'Chat contents must not be persisted');
     choose(h, 'New chat'); changeQuestion(h, 'A fresh topic'); await submit(h); await h.settle();
     assert.equal(h.calls.at(-1).body.previousQuestions, undefined);
+  } finally { h.close(); }
+});
+
+test('the topic anchor survives more than twenty short follow-ups and resets for an explicit new topic', async () => {
+  const h = new Harness();
+  const anchor = 'What did members report about H-1B stamping in Chennai?';
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    for (const prompt of [anchor, 'What happened next?', ...Array(22).fill('Why?'), 'How long?']) {
+      changeQuestion(h, prompt); await submit(h); await h.settle();
+    }
+    assert.equal(h.calls.at(-1).body.previousQuestions[0], anchor);
+    assert(h.calls.at(-1).body.previousQuestions.length <= 3);
+    assert.equal(nodes(h.tree).filter(node => node.props?.['aria-label'] === 'Your message').length, 20);
+    changeQuestion(h, 'New topic: Schengen passport delivery?'); await submit(h); await h.settle();
+    assert.equal(h.calls.at(-1).body.previousPosts, undefined);
+    changeQuestion(h, 'How long?'); await submit(h); await h.settle();
+    assert.deepEqual(h.calls.at(-1).body.previousQuestions, ['New topic: Schengen passport delivery?']);
+    choose(h, 'New chat'); changeQuestion(h, 'Why?'); await submit(h); await h.settle();
+    assert.equal(h.calls.at(-1).body.previousQuestions, undefined);
+    assert.equal(h.calls.at(-1).body.previousPosts, undefined);
+  } finally { h.close(); }
+});
+
+test('ordinal follow-ups send displayed post order as IDs only, never source text or assistant claims', async () => {
+  const h = new Harness();
+  const posts = ['first', 'second'].map(name => ({ questionId: `apify-${name}`, sourceId: `q:apify-${name}`, title: `Post ${name}`, excerpt: 'Sensitive source text stays out of the follow-up request.', url: `/questions/apify-${name}`, createdAt: '2026-10-01T10:00:00Z' }));
+  h.post = async () => reply(fixture({ kind: 'posts', posts, sources: [], claims: [] }));
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    changeQuestion(h, 'Find posts about Chennai stamping'); await submit(h); await h.settle();
+    changeQuestion(h, 'Explain the second post.'); await submit(h); await h.settle();
+    assert.deepEqual(h.calls.at(-1).body.previousPosts, posts.map(({ questionId, sourceId }) => ({ questionId, sourceId })));
+    assert.doesNotMatch(JSON.stringify(h.calls.at(-1).body), /Sensitive source text|Post first|Post second/);
+    changeQuestion(h, 'When did Schengen passports arrive?'); await submit(h); await h.settle();
+    assert.equal(h.calls.at(-1).body.previousPosts, undefined);
+  } finally { h.close(); }
+});
+
+test('selected-post focus persists past transcript rollover and resets on new topics or broader searches', async () => {
+  const h = new Harness(); let requests = 0;
+  const selected = { questionId: 'apify-two', sourceId: 'q:apify-two' };
+  const posts = ['one', 'two'].map(name => ({ questionId: `apify-${name}`, sourceId: `q:apify-${name}`, title: 'Chennai stamping', excerpt: 'My appointment completed after seven days.', url: `/questions/apify-${name}`, createdAt: '2026-10-01T10:00:00Z' }));
+  h.post = async () => ++requests === 1 ? reply(fixture({ kind: 'posts', posts, sources: [], claims: [] }))
+    : reply(fixture({ claims: [{ text: 'A member wrote: seven days.', evidence: [{ sourceId: selected.sourceId, quote: 'My appointment completed after seven days.' }] }], sources: [{ ...fixture().sources[0], id: selected.sourceId, questionId: selected.questionId }] }));
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    for (const prompt of ['Find posts about Chennai stamping', 'Explain the second post.', 'How long?', ...Array(21).fill('Why?')]) {
+      changeQuestion(h, prompt); await submit(h); await h.settle();
+      if (requests > 1) assert.deepEqual(h.calls.at(-1).body.focusedPost, selected);
+    }
+    changeQuestion(h, 'Show more posts'); await submit(h); await h.settle();
+    assert.equal(h.calls.at(-1).body.focusedPost, undefined);
+    changeQuestion(h, 'New topic: How did the first post-interview update look for Schengen?'); await submit(h); await h.settle();
+    assert.equal(h.calls.at(-1).body.focusedPost, undefined); assert.equal(h.calls.at(-1).body.previousPosts, undefined);
+    changeQuestion(h, 'How long?'); await submit(h); await h.settle();
+    assert.equal(h.calls.at(-1).body.focusedPost, undefined);
+    assert.deepEqual(h.calls.at(-1).body.previousQuestions, ['New topic: How did the first post-interview update look for Schengen?']);
+  } finally { h.close(); }
+});
+
+test('repeated more requests carry a bounded seen-post exclusion list instead of cycling back to old results', async () => {
+  const h = new Harness(); let page = 0;
+  h.post = async () => {
+    const questionId = `apify-page-${page++}`;
+    return reply(fixture({ kind: 'posts', posts: [{ questionId, sourceId: `q:${questionId}`, title: 'Chennai stamping', excerpt: 'My stamping appointment was Monday.', url: `/questions/${questionId}`, createdAt: '2026-10-01T10:00:00Z' }], sources: [], claims: [] }));
+  };
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    for (const prompt of ['Find posts about Chennai stamping', 'Show more posts', 'Show me more posts']) { changeQuestion(h, prompt); await submit(h); await h.settle(); }
+    assert.deepEqual(h.calls.at(-1).body.seenPostIds, ['apify-page-0', 'apify-page-1']);
+    assert.deepEqual(h.calls.at(-1).body.previousPosts, [{ questionId: 'apify-page-1', sourceId: 'q:apify-page-1' }]);
+    assert.equal(h.storage.size, 0);
   } finally { h.close(); }
 });
 
