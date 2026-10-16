@@ -49,10 +49,9 @@ export function SiteHeader() {
           <div className="mobile-menu-panel"><CommunityNavigation mobile onNavigate={() => { if (mobileMenu.current) mobileMenu.current.open = false; }}/></div>
         </details>
         <Link href="/" className="site-brand" aria-label="VisaThreads home">
-          {/* Pre-sized local asset: no remote request or image-processing service. */}
+          {/* Local brand asset: no remote request or image-processing service. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/brand/visathreads-mark-v1.webp" width={40} height={40} alt="" className="brand-mark" decoding="async" />
-          <span className="brand-wordmark">VisaThreads</span>
+          <img src="/assets/brand/visathreads-integrated-logo.png" width={172} height={60} alt="VisaThreads" className="integrated-brand-logo" decoding="async" />
         </Link>
         <form action="/" method="get" role="search" className="header-search">
           <Search size={19} aria-hidden="true"/>

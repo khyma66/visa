@@ -1,5 +1,5 @@
 name: Release current VisaThreads AI features
-# Release feedback copy updates through the same content and access checks.
+# Restore regular chat with reviewed context, grounding and deployment recovery.
 
 on:
   workflow_dispatch:
@@ -22,8 +22,8 @@ jobs:
     environment: production
     env:
       ASSISTANT_ENABLED: 'true'
-      ASSISTANT_COMMUNITIES_ENABLED: 'true'
-      ASSISTANT_CATCHUP_ENABLED: 'true'
+      ASSISTANT_COMMUNITIES_ENABLED: 'false'
+      ASSISTANT_CATCHUP_ENABLED: 'false'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,7 +43,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
-      - name: Evaluate 48 hosted chat, post search and community samples through the request handler
+      - name: Evaluate hosted chatbot regressions with three independent samples per case
         run: node scripts/evaluate-hosted-assistant.mjs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

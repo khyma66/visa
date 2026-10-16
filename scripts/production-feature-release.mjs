@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { checkedLiveArchive, LIVE_SITE, LIVE_DATABASE, LIVE_WORKER, sha256 } from './live-preview-archive.mjs';
 import { buildProvenance, sourceProvenance } from './build-provenance.mjs';
 import { recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
+import { pinnedChatbotRecovery, verifyRecoveryFiles } from './pinned-chatbot-recovery.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const privateDirectory = resolve(root, '.cache/visaflow/live-preview');
@@ -95,11 +96,15 @@ export function verifyFeatureWorker(config, enabled, features = {}) {
 export function verifyExistingLiveProvenance(health, deployment) {
   assert.equal(health.environment, 'development', 'Existing live site is no longer an early preview.');
   assert.equal(health.releaseStatus, 'configured', 'Current site backend is not configured.');
-  assert.equal(health.build?.dirty, false, 'Current site was not built from clean committed source.');
+  const recovery = deployment?.versions?.length === 1 && deployment.versions[0].percentage === 100 && pinnedChatbotRecovery(health.build, {
+    deploymentId: deployment.id, previousVersion: deployment.versions[0].version_id,
+    worker: LIVE_WORKER, siteOrigin: LIVE_SITE, databaseOrigin: LIVE_DATABASE,
+  });
+  assert(health.build?.dirty === false || recovery, 'Current site was not built from clean committed source and is not the reviewed recovery target.');
   assert.match(health.build?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Current site provenance lacks a Git SHA.');
   const legacyOrigin = health.build?.siteOrigin === null && pinnedLegacySource(health.build) && LEGACY_BASELINE_DEPLOYMENTS.has(deployment.id) &&
     deployment.versions?.length === 1 && deployment.versions[0].version_id === LEGACY_BASELINE_VERSION && deployment.versions[0].percentage === 100;
-  assert(health.build?.siteOrigin === LIVE_SITE || legacyOrigin, 'Current site provenance has an unexpected origin.');
+  assert(health.build?.siteOrigin === LIVE_SITE || legacyOrigin || recovery, 'Current site provenance has an unexpected origin.');
 }
 
 async function liveState() {
@@ -192,6 +197,14 @@ export function verifySourceAncestry(repository, build, baseline) {
   assert.match(build?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Live source commit is missing.');
   assert.match(build?.sourceSha256 ?? '', /^[a-f0-9]{64}$/, 'Live tracked-source fingerprint is missing.');
   const git = (...args) => execFileSync('git', args, { cwd: repository, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (build.dirty !== false) {
+    assert(pinnedChatbotRecovery(build, baseline), 'Unreviewed dirty live source cannot establish ancestry.');
+    git('merge-base', '--is-ancestor', build.gitSha, 'HEAD');
+    verifyRecoveryFiles(repository);
+    return { method: 'pinned-chatbot-recovery', liveSource: build.gitSha, previousVersion: baseline.previousVersion,
+      sourceEquivalence: 'not-established', retainedBranding: true,
+      rationale: 'Owner-authorized repair of exact observed misconfigured deployment; committed base and reviewed branding retained. Archive independently verified.' };
+  }
   try {
     git('merge-base', '--is-ancestor', build.gitSha, 'HEAD');
     return { method: 'git-ancestor', liveSource: build.gitSha, ancestor: build.gitSha };
@@ -247,7 +260,7 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
   assert.equal(receipt.features?.posts, true);
   for (const feature of ['communities', 'catchup']) if (features[feature] === 'true') assert.equal(receipt.features?.[feature], true, `${feature} needs hosted model acceptance.`);
   assert.equal(receipt.repetitions, 3, 'Hosted acceptance requires three independent samples per case.');
-  const requiredCases = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context'];
+  const requiredCases = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context'];
   assert(Array.isArray(receipt.cases) && receipt.cases.length === requiredCases.length && requiredCases.every(id => receipt.cases.some(row => row.id === id)), 'Every required hosted case must occur exactly once.');
   for (const row of receipt.cases) {
     assert.equal(row.model, receipt.model);

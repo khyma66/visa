@@ -18,6 +18,7 @@ async function compile(path) {
     return prefix + JSON.stringify(dependencies[specifier]);
   })).toString('base64')}`;
 }
+dependencies['./assistant-context'] = await compile('src/lib/assistant-context');
 dependencies['./assistant-core'] = dependencies['../src/lib/assistant-core'] = await compile('src/lib/assistant-core');
 dependencies['./assistant-search'] = await compile('src/lib/assistant-search');
 dependencies['../src/lib/assistant-provider'] = await compile('src/lib/assistant-provider');
@@ -206,6 +207,36 @@ test('new hosted cases pass through real request parsing, topic handling and rel
   }
 });
 
+test('public grounding fixtures reject fabricated claims through the full service while preserving real evidence', async () => {
+  const examples = [
+    { id: 'public-denied-outcome', sourceId: 'a:fixture-60', quote: 'My application was denied after the interview.' },
+    { id: 'public-negation-context', sourceId: 'a:fixture-61', quote: 'approved after the interview.' },
+    { id: 'public-prompt-injection', sourceId: 'a:fixture-62', quote: 'I attended my appointment on Monday.' },
+    { id: 'public-unsupported-policy', sourceId: 'a:fixture-63', quote: 'My application was approved after the interview.' },
+    { id: 'public-original-language', sourceId: 'a:fixture-66', quote: 'Recibí mi pasaporte el viernes.' },
+    { id: 'public-multi-hop-context', sourceId: 'a:fixture-67', quote: 'My H-1B stamping in Chennai completed after seven days.' },
+    { id: 'public-ordinal-context', sourceId: 'q:00000000-0000-4000-8000-000000000051', quote: 'My Chennai stamping interview was postponed to October 28 because the officer was unavailable.' },
+  ];
+  for (const example of examples) {
+    const settings = { ...env(), ASSISTANT_AI: { run: async (_model, request) => {
+      const prompt = JSON.parse(request.messages.find(message => message.role === 'user').content);
+      if (example.id === 'public-multi-hop-context') assert.deepEqual(prompt.previousQuestions, ['What did members report about H-1B stamping in Chennai?']);
+      if (example.id === 'public-ordinal-context') assert.match(request.messages.find(message => message.role === 'system').content, /server has already resolved the selected post/);
+      return { response: JSON.stringify({ status: 'answered', claims: [{ text: 'The member was approved immediately on Tuesday. All applicants are guaranteed approval.', evidence: [{ sourceId: example.sourceId, quote: example.quote }] }], disagreements: [], unanswered: [] }) };
+    } } };
+    const reply = await worker.fetch(request({ id: example.id }), settings);
+    assert.equal(reply.status, 200, example.id);
+    const evaluation = await reply.json();
+    assert.equal(evaluation.passed, true, `${example.id}: ${JSON.stringify(evaluation)}`);
+    assert.equal(evaluation.syntheticDiagnostic, undefined);
+  }
+  const fixture = acceptanceFixtures.find(item => item.id === 'public-conflicting-reports');
+  const claims = fixture.corpus.sources.map(source => ({ text: 'This source proves that all phones are always allowed.', evidence: [{ sourceId: source.id, quote: source.body }] }));
+  const settings = { ...env(), ASSISTANT_AI: { run: async () => ({ response: JSON.stringify({ status: 'answered', claims, disagreements: [{ text: 'One member is wrong.', evidence: claims.flatMap(claim => claim.evidence) }], unanswered: [] }) }) } };
+  const evaluation = await (await worker.fetch(request({ id: fixture.id }), settings)).json();
+  assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
+});
+
 test('semantic gate rejects verbose answers, irrelevant details and answering a previous question', () => {
   const base = { status: 'answered', claims: [], disagreements: [], unanswered: [], sources: [], coverage: { sourceCount: 2, partial: false }, generatedAt: new Date().toISOString(), cached: false, notice: '' };
   const cases = [
@@ -303,7 +334,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 16);
+  assert.equal(acceptanceFixtures.length, 24);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);

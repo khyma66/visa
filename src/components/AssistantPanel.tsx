@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { usePathname } from 'next/navigation';
 import { ArrowUp, ChevronDown, Clock3, Sparkles, Square } from 'lucide-react';
 import { getSupabase } from '@/lib/supabase/client';
-import type { AssistantAvailability, AssistantClaim, AssistantMode, AssistantRequest, AssistantResult, AssistantScope, AssistantSource } from '@/lib/assistant-contract';
+import type { AssistantAvailability, AssistantClaim, AssistantMode, AssistantPostReference, AssistantRequest, AssistantResult, AssistantScope, AssistantSource } from '@/lib/assistant-contract';
+import { assistantBoundedHistory, assistantDisplayedPosts, assistantMorePosts, assistantPreviousPost, assistantRefersToEarlierTurn } from '@/lib/assistant-context';
 import { useAuth } from './AuthProvider';
 
 type Props = { scope: AssistantScope; title?: string; defaultOpen?: boolean };
 type Period = 'hour' | 'six-hours' | 'day' | 'week' | 'last';
-type Turn = { id: number; prompt: string; mode: AssistantMode; state: 'pending' | 'complete' | 'failed' | 'cancelled'; result?: AssistantResult };
+type Turn = { id: number; prompt: string; mode: AssistantMode; state: 'pending' | 'complete' | 'failed' | 'cancelled'; result?: AssistantResult; history?: string[]; seenPostIds?: string[]; focusedPost?: AssistantPostReference };
 const periodHours = { hour: 1, 'six-hours': 6, day: 24, week: 168 } as const;
 const periodLabels: Record<Period, string> = { hour: 'the past hour', 'six-hours': 'the past 6 hours', day: 'the past 24 hours', week: 'the past 7 days', last: 'since my last catch-up' };
 const disabledAvailability: AssistantAvailability = { posts: false, communities: false, catchup: false };
@@ -38,15 +39,15 @@ function Claims({ claims, sources }: { claims: AssistantClaim[]; sources: Assist
 
 function PostResults({ result }: { result: AssistantResult }) {
   const posts = (result.posts ?? []).filter(post => sourceHref(post));
-  const cards = (items: typeof posts) => <ol className="mt-3 space-y-3">{items.map(post => <li key={post.questionId} className="rounded-xl border border-slate-200 p-3">
-    <a href={sourceHref(post)!} className="text-sm font-semibold leading-5 text-teal-700 underline decoration-teal-200 underline-offset-2">{post.title}</a>
+  const cards = (items: typeof posts, offset = 0) => <ol start={offset + 1} className="mt-3 space-y-3">{items.map((post, index) => <li key={post.questionId} className="rounded-xl border border-slate-200 p-3">
+    <a href={sourceHref(post)!} className="text-sm font-semibold leading-5 text-teal-700 underline decoration-teal-200 underline-offset-2">{offset + index + 1}. {post.title}</a>
     <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-5 text-slate-700">{post.excerpt}</p>
     <time dateTime={post.createdAt} className="mt-2 block text-xs text-slate-500">{dateLabel(post.createdAt)}</time>
   </li>)}</ol>;
   return <div aria-label="Assistant response">
-    <p className="text-sm leading-6 text-slate-800">{posts.length ? `Found ${posts.length} matching post${posts.length === 1 ? '' : 's'}.` : 'No matching posts found. Try a visa type, location, or another keyword.'}</p>
+    <p className="text-sm leading-6 text-slate-800">{posts.length ? `Found ${posts.length} matching post${posts.length === 1 ? '' : 's'}.` : result.unanswered[0] || 'No matching posts found. Try a visa type, location, or another keyword.'}</p>
     {cards(posts.slice(0, 8))}
-    {posts.length > 8 && <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-teal-700">{`Show ${posts.length - 8} more posts`}</summary>{cards(posts.slice(8))}</details>}
+    {posts.length > 8 && <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-teal-700">{`Show ${posts.length - 8} more posts`}</summary>{cards(posts.slice(8), 8)}</details>}
     {result.coverage.partial && <p className="mt-3 text-xs leading-5 text-amber-800">More posts may match. Narrow your search to see more specific results.</p>}
   </div>;
 }
@@ -106,7 +107,8 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
   const endOfChat = useRef<HTMLDivElement | null>(null);
   const turns = conversation.identity === identity ? conversation.turns : [];
   const question = draft.identity === identity ? draft.text : '';
-  const previousQuestions = turns.filter((turn) => turn.mode === 'ask' && turn.state === 'complete').slice(-3).map((turn) => turn.prompt);
+  const completedAsks = turns.filter((turn) => turn.mode === 'ask' && turn.state === 'complete');
+  const previousQuestions = completedAsks.at(-1)?.history ?? [];
 
   function cancel() {
     ++operation.current; request.current?.abort(); request.current = null;
@@ -164,9 +166,21 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
     const prompt = mode === 'ask' ? submittedQuestion : mode === 'summary' ? 'Summarize this discussion.' : `Catch me up ${period === 'last' ? '' : 'on '}${periodLabels[period]}.`;
     const last = turns.at(-1);
     const turnId = last && (last.state === 'failed' || last.state === 'cancelled') && last.prompt === prompt && last.mode === mode ? last.id : currentOperation;
-    const turn: Turn = { id: turnId, prompt, mode, state: 'pending' };
+    const turn: Turn = { id: turnId, prompt, mode, state: 'pending', ...(mode === 'ask' ? { history: assistantBoundedHistory([...previousQuestions, prompt]) } : {}) };
     const body: AssistantRequest = { scope, mode };
-    if (mode === 'ask') { body.question = submittedQuestion; if (previousQuestions.length) body.previousQuestions = previousQuestions; }
+    if (mode === 'ask') {
+      body.question = submittedQuestion;
+      if (previousQuestions.length) body.previousQuestions = previousQuestions;
+      if (scope.kind === 'public' && assistantRefersToEarlierTurn(submittedQuestion)) {
+        const previous = completedAsks.at(-1);
+        const previousPosts = assistantDisplayedPosts(previous?.result);
+        if (previousPosts.length) body.previousPosts = previousPosts;
+        turn.focusedPost = assistantPreviousPost({ ...body, focusedPost: previous?.focusedPost }) ?? undefined;
+        if (turn.focusedPost) body.focusedPost = turn.focusedPost;
+        turn.seenPostIds = [...new Set([...(previous?.seenPostIds ?? []), ...previousPosts.map(post => post.questionId)])].slice(0, 48);
+        if (assistantMorePosts(submittedQuestion) && turn.seenPostIds.length) body.seenPostIds = turn.seenPostIds;
+      }
+    }
     if (mode === 'catchup') body.since = period === 'last' && checkpoint ? checkpoint : new Date(Date.now() - (period === 'last' ? 24 : periodHours[period]) * 3600000).toISOString();
     setConversation({ identity: actor, turns: [...turns.filter((item) => item.id !== turnId), turn].slice(-20) });
     if (mode === 'ask') setDraft({ identity: actor, text: '' });

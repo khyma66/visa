@@ -6,6 +6,15 @@ import sharp from 'sharp';
 const root = new URL('../', import.meta.url);
 const asset = name => new URL(`public/assets/brand/${name}`, root);
 
+test('current integrated logo retains its aspect ratio, transparency and small payload', async () => {
+  const path = asset('visathreads-integrated-logo.png').pathname;
+  const info = await sharp(path).metadata();
+  assert.equal(info.width, 687); assert.equal(info.height, 240);
+  assert.equal(info.hasAlpha, true); assert((await stat(path)).size < 35_000);
+  const css = await readFile(new URL('src/styles/globals.css', root), 'utf8');
+  assert.match(css, /\.integrated-brand-logo\s*\{[^}]*object-fit: contain;/);
+});
+
 test('brand assets are small, correctly sized and transparent where needed', async () => {
   for (const [file, size, alpha, maxBytes] of [
     ['visathreads-mark-v1.webp', 120, true, 15_000],

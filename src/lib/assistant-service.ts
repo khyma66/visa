@@ -77,7 +77,7 @@ export function createAssistantHandler(deps: AssistantDependencies) {
           const cachedTime = Date.parse(cached.generatedAt);
           if (cachedTime <= Date.now() && Date.now() - cachedTime < 300_000) {
             // Revalidate model structure and source quotes rather than blindly trusting stored JSON.
-            const verified = validateAssistantOutput(JSON.stringify(cached), corpus, cachedTime);
+            const verified = validateAssistantOutput(JSON.stringify(cached), corpus, cachedTime, input);
             await revalidate();
             return assistantResponse({ ...verified, cached: true });
           }
@@ -92,7 +92,7 @@ export function createAssistantHandler(deps: AssistantDependencies) {
           stage = 'generation';
           const raw = await deps.generate(assistantPrompt(input, corpus), request.signal);
           stage = 'validation';
-          const result = validateAssistantOutput(raw, corpus);
+          const result = validateAssistantOutput(raw, corpus, Date.now(), input);
           await revalidate();
           try { await deps.cache?.put(key, result); } catch { /* caching is optional */ }
           return result;
