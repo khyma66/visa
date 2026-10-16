@@ -127,7 +127,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         body: JSON.stringify({ model: selected,
           messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
           response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } },
-          reasoning_effort: models.groq.reasoningEffort, include_reasoning: false,
+          reasoning_effort: review ? models.groq.reviewReasoningEffort : models.groq.reasoningEffort, include_reasoning: false,
           max_completion_tokens: review ? models.groq.reviewMaxTokens : models.groq.answerMaxTokens,
           temperature: 0, seed: 39173,
         }),

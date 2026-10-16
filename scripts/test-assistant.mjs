@@ -34,16 +34,18 @@ test('Groq uses the fixed server endpoint, strict source IDs, bounded answer/rev
     assert.equal(call.url,'https://api.groq.com/openai/v1/chat/completions'); assert.equal(call.init.redirect,'manual');
     assert.equal(call.init.headers.Authorization,'Bearer synthetic-groq-secret');
     assert.equal(call.body.model,'openai/gpt-oss-120b'); assert.equal(call.body.response_format.json_schema.strict,true);
-    assert.equal(call.body.include_reasoning,false); assert.equal(call.body.reasoning_effort,'low');
+    assert.equal(call.body.include_reasoning,false);
     assert.equal(call.body.tools,undefined); assert.equal(call.body.stream,undefined);
   }
-  assert.equal(calls[0].body.max_completion_tokens,4096); assert.equal(calls[1].body.max_completion_tokens,1200);
+  assert.equal(calls[0].body.reasoning_effort,'low'); assert.equal(calls[1].body.reasoning_effort,'medium');
+  assert.equal(calls[0].body.max_completion_tokens,4096); assert.equal(calls[1].body.max_completion_tokens,2048);
   assert.deepEqual(calls[0].body.response_format.json_schema.schema.properties.claims.items.properties.evidence.items.properties.sourceId.enum,[source.id]);
   assert.deepEqual(calls[1].body.response_format.json_schema.schema.properties.checks.items.properties.id.enum,['claim:0']);
   assert.deepEqual(usage.map(value=>value.stage),['answer','review']);
   assert.equal(transport[0].tokenLimit,250000);
   assert.doesNotMatch(JSON.stringify({usage,transport}),/synthetic-groq-secret|must never leak/);
   assert.notEqual(provider.providerCacheKey('groq'),provider.providerCacheKey('workers-ai'));
+  assert.equal(JSON.parse(provider.providerCacheKey('groq').slice(5)).reviewReasoningEffort,'medium');
 });
 test('Groq errors fail closed without retries, provider body disclosure or model fallback', async () => {
   for(const [status,reason] of [[302,'provider_error'],[307,'provider_error'],[400,'invalid_request'],[401,'authentication_failed'],[403,'permission_denied'],[429,'rate_limited'],[500,'provider_error']]) {
