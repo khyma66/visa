@@ -23,6 +23,16 @@ original archive, an unchanged active deployment, model acceptance, and a
 post-deployment smoke check. Automatic rollback may replace only this release's
 own exact uploaded version, never another actor's later deployment.
 
+Guarded run `38833072583` passed all 72 hosted samples and uploaded version
+`4d68157c-de5c-4903-8b46-a9054e93b021`. Its fresh health probe, feature checks,
+content hash and authentication denials passed, but the later default-cache
+bare health request returned the old source. The workflow restored the captured
+version at deployment `c89cfee1-1f7c-46c3-b5d1-7d33ff43d970`. Wrangler and public
+hash checks independently confirmed that exact rollback, unchanged archive and
+unchanged branding. The recovery pin now identifies only that observed rollback
+event; it does not allow arbitrary redeployments. Release probes must use fresh
+requests and require both bare and cache-busted health URLs to agree repeatedly.
+
 ## Answer behavior
 
 - Bounded conversation context preserves the topic across brief follow-ups.

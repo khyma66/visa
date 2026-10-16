@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import ts from 'typescript';
 import { buildProvenance, buildProvenanceSource, sourceProvenance } from './build-provenance.mjs';
 import { releaseProblems, requiredReviews } from './release-check.mjs';
-import { assertHealthProvenance, smokeRoutes } from './smoke-site.mjs';
+import { assertHealthProvenance, smokeRoutes, smokeSite, waitForHealthProvenance } from './smoke-site.mjs';
 
 const env = { NEXT_PUBLIC_SUPABASE_URL: 'https://fixture.supabase.co', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: `sb_publishable_${'x'.repeat(30)}`, NEXT_PUBLIC_APP_ENV: 'production', NEXT_PUBLIC_SITE_URL: 'https://visaflow.example.org', CLOUDFLARE_ENV: 'production' };
 const source = { gitSha: 'a'.repeat(40), gitTree: 'b'.repeat(40), sourceSha256: 'c'.repeat(64), dirty: false };
@@ -96,6 +96,96 @@ test('smoke checks require exact immutable build provenance, not just a healthy 
   assert.throws(() => assertHealthProvenance(health, { ...build, dirty: true }), /clean reviewed build/);
   assert.throws(() => assertHealthProvenance({ ...health, releaseStatus: 'not-ready' }, build), /approval is missing/);
   for (const path of ['/explore', '/my-communities', '/communities/new', '/news']) assert(smokeRoutes.includes(path));
+});
+
+function healthProbe(rounds) {
+  const calls = [], waits = [];
+  return { calls, waits, run: () => waitForHealthProvenance(env.NEXT_PUBLIC_SITE_URL, build, {
+    attempts: rounds.length,
+    wait: async delay => { waits.push(delay); },
+    fetchImpl: async (input, options) => {
+      const index = calls.length;
+      const url = new URL(input);
+      calls.push({ url, options });
+      assert.equal(options.cache, 'no-store');
+      assert.equal(options.redirect, 'error');
+      assert(options.signal instanceof AbortSignal);
+      assert.equal(url.pathname, '/api/health');
+      assert.equal(Boolean(url.search), index % 2 === 1, 'Every round checks the bare endpoint and a unique query');
+      return Response.json(rounds[Math.floor(index / 2)][index % 2], { headers: { 'Cache-Control': 'no-store' } });
+    },
+  }) };
+}
+
+test('health freshness requires both exact builds in two consecutive rounds after stale or mixed responses', async () => {
+  const current = { environment: 'production', releaseStatus: 'configured', build };
+  const stale = { ...current, build: { ...build, gitSha: 'e'.repeat(40) } };
+  const probe = healthProbe([[stale, stale], [current, current], [stale, current], [current, current], [current, current]]);
+  assert.deepEqual(await probe.run(), current);
+  assert.equal(probe.calls.length, 10, 'One successful round followed by stale data must reset stability');
+  assert.deepEqual(probe.waits, [5000, 5000, 5000, 5000]);
+  assert.equal(new Set(probe.calls.filter(call => call.url.search).map(call => call.url.search)).size, 5);
+});
+
+test('health freshness fails closed on persistent old, alternating, or any wrong provenance field', async () => {
+  const current = { environment: 'production', releaseStatus: 'configured', build };
+  const stale = { ...current, build: { ...build, gitSha: 'e'.repeat(40) } };
+  for (const rounds of [
+    [[stale, stale], [stale, stale]],
+    [[stale, current], [stale, current]],
+    [[current, stale], [stale, current]],
+    [[current, current], [stale, current], [current, current]],
+  ]) {
+    const probe = healthProbe(rounds);
+    await assert.rejects(probe.run(), /two consecutive rounds/);
+    assert.equal(probe.calls.length, rounds.length * 2);
+    assert.equal(probe.waits.length, rounds.length - 1);
+  }
+  for (const field of ['schemaVersion', 'gitSha', 'gitTree', 'sourceSha256', 'configSha256', 'appEnvironment', 'siteOrigin', 'dirty']) {
+    const wrong = { ...current, build: { ...build, [field]: 'wrong' } };
+    const probe = healthProbe([[current, wrong], [current, wrong]]);
+    await assert.rejects(probe.run(), /two consecutive rounds/, field);
+  }
+  for (const wrong of [{ ...current, environment: 'development' }, { ...current, releaseStatus: 'not-ready' }]) {
+    await assert.rejects(healthProbe([[wrong, current], [wrong, current]]).run(), /two consecutive rounds/);
+  }
+});
+
+test('health freshness bounds retries and rejects failed, malformed, or cacheable health responses', async () => {
+  const current = { environment: 'production', releaseStatus: 'configured', build };
+  for (const response of [
+    () => new Response('Unavailable', { status: 503 }),
+    () => new Response('<html>Not health</html>', { headers: { 'Cache-Control': 'no-store' } }),
+    () => Response.json(current, { headers: { 'Cache-Control': 'public, max-age=60' } }),
+  ]) {
+    let calls = 0;
+    await assert.rejects(waitForHealthProvenance(env.NEXT_PUBLIC_SITE_URL, build, {
+      attempts: 2, wait: async () => {}, fetchImpl: async () => { calls++; return response(); },
+    }), /two consecutive rounds/);
+    assert.equal(calls, 4);
+  }
+  for (const attempts of [1, 11, Infinity]) await assert.rejects(waitForHealthProvenance(env.NEXT_PUBLIC_SITE_URL, build, { attempts }), /bounded rounds/);
+});
+
+test('all site smoke requests opt out of caches and retain the final bare health assertion', async () => {
+  const originalFetch = globalThis.fetch, calls = [];
+  globalThis.fetch = async (input, options) => {
+    const url = new URL(input); calls.push({ url, options });
+    assert.equal(options.cache, 'no-store', url.pathname);
+    const nonce = `fixture-${calls.length}`;
+    const headers = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex', 'Content-Security-Policy': `script-src 'self' 'nonce-${nonce}'` };
+    if (url.pathname === '/api/health') return Response.json({ environment: 'production', releaseStatus: 'configured', build }, { headers });
+    if (url.pathname === '/a-page-that-does-not-exist') return new Response('Not found', { status: 404, headers });
+    return new Response(`<html><script nonce="${nonce}"></script></html>`, { headers: { ...headers, 'Content-Type': 'text/html' } });
+  };
+  try {
+    await smokeSite(env.NEXT_PUBLIC_SITE_URL, build);
+    assert.equal(calls.filter(call => call.url.pathname === '/api/health' && !call.url.search).length, 3);
+    for (const path of smokeRoutes) assert(calls.some(call => call.url.pathname === path));
+    assert(calls.some(call => call.options.headers?.['x-nonce'] === 'attacker'));
+    assert(calls.some(call => call.url.pathname === '/a-page-that-does-not-exist'));
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test('health publishes bundled metadata and retains production approval and provenance gates', async () => {
