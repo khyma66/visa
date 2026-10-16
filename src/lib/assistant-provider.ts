@@ -3,7 +3,7 @@ import models from './assistant-models.json';
 
 export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[] };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
-export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'invalid_key_format' | 'network_error' | 'unsupported_redirect' | 'illegal_invocation' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
+export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'invalid_key_format' | 'network_error' | 'unsupported_redirect' | 'illegal_invocation' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'permission_denied' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
 export const WORKERS_ASSISTANT_MODEL = models.answer;
 export const WORKERS_ASSISTANT_PROFILE = JSON.stringify(models);
 export const GROQ_ASSISTANT_MODEL = models.groq.answer;
@@ -161,7 +161,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       // Fixed labels and numeric telemetry only; no provider error text.
       try { options.reportTransport?.({ status: response.status, tokenLimit: numberHeader('x-ratelimit-limit-tokens'), remainingTokens: numberHeader('x-ratelimit-remaining-tokens'), retryAfterSeconds: numberHeader('retry-after'), ...(denial ? { denial } : {}), responseFormat }); } catch { /* optional metrics */ }
       if (!response.ok) {
-        return fail(response.status === 429 ? 'rate_limited' : response.status === 401 || response.status === 403 ? 'authentication_failed' : response.status === 400 ? 'invalid_request' : 'provider_error');
+        return fail(response.status === 429 ? 'rate_limited' : response.status === 401 ? 'authentication_failed' : response.status === 403 ? 'permission_denied' : response.status === 400 ? 'invalid_request' : 'provider_error');
       }
       const data = await readBoundedJson(response, 100_000) as { choices?: { finish_reason?: string; message?: { content?: unknown } }[]; usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
       const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000 ? value : undefined;

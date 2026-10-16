@@ -70,7 +70,8 @@ try {
   console.log('PASS exact model/profile readiness and unauthenticated denial; no active version changed');
   if (process.argv.includes('--transport')) {
     const probe = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: '__transport__' }), redirect: 'error', signal: AbortSignal.timeout(15000) });
-    console.log(JSON.stringify(await probe.json()));
+    receipt.transportProbe = await probe.json();
+    console.log(JSON.stringify(receipt.transportProbe));
   }
   // Serial samples bound spending and make account rate limits visible. A
   // failed sample is retained, never replaced by a successful retry.
@@ -86,7 +87,7 @@ try {
         samples.push({ ...value, httpStatus: response.status, roundTripMs: Date.now() - started });
         console.log(`${value.passed ? 'PASS' : 'FAIL'} ${id} sample ${sample + 1}/${repetitions} ${Date.now() - started}ms${value.syntheticDiagnostic?.providerReason ? ` ${value.syntheticDiagnostic.providerReason}` : ''}`);
         if (smoke && value.transport) console.log(JSON.stringify({ providerTransport: value.transport }));
-        if (['rate_limited', 'authentication_failed', 'invalid_key_format', 'network_error', 'unsupported_redirect', 'illegal_invocation', 'invalid_request'].includes(value.syntheticDiagnostic?.providerReason)) {
+        if (['rate_limited', 'authentication_failed', 'permission_denied', 'invalid_key_format', 'network_error', 'unsupported_redirect', 'illegal_invocation', 'invalid_request'].includes(value.syntheticDiagnostic?.providerReason)) {
           receipt.cases.push({ id, passed: false, samples });
           throw Error(`Groq ${value.syntheticDiagnostic.providerReason}; stop additional inference until configuration/capacity is resolved`);
         }

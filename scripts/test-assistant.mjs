@@ -46,7 +46,7 @@ test('Groq uses the fixed server endpoint, strict source IDs, bounded answer/rev
   assert.notEqual(provider.providerCacheKey('groq'),provider.providerCacheKey('workers-ai'));
 });
 test('Groq errors fail closed without retries, provider body disclosure or model fallback', async () => {
-  for(const [status,reason] of [[302,'provider_error'],[307,'provider_error'],[400,'invalid_request'],[401,'authentication_failed'],[403,'authentication_failed'],[429,'rate_limited'],[500,'provider_error']]) {
+  for(const [status,reason] of [[302,'provider_error'],[307,'provider_error'],[400,'invalid_request'],[401,'authentication_failed'],[403,'permission_denied'],[429,'rate_limited'],[500,'provider_error']]) {
     let calls=0, observed;
     await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'}, {provider:'groq',apiKey:'synthetic-key',reportFailure:value=>{observed=value;},fetcher:async()=>{calls++;return new Response('private provider diagnostic synthetic-key',{status});}}),error=>error.status===503&&!error.message.includes('private'));
     assert.equal(calls,1); assert.equal(observed,reason);
@@ -54,6 +54,14 @@ test('Groq errors fail closed without retries, provider body disclosure or model
   let calls=0;
   await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',fetcher:async()=>{calls++;throw Error('Must not call');}}));
   assert.equal(calls,0);
+});
+test('Groq permission diagnostics retain only allowlisted categories, never error bodies',async()=>{
+  for(const [code,denial] of [['model_permission_blocked_org','model-org'],['model_permission_blocked_project','model-project'],['private-arbitrary-code','other']]) {
+    let transport, reason;
+    await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',apiKey:'synthetic-key',reportTransport:value=>{transport=value;},reportFailure:value=>{reason=value;},fetcher:async()=>Response.json({error:{code,message:'private synthetic-key provider text'}},{status:403})}));
+    assert.equal(reason,'permission_denied'); assert.equal(transport.denial,denial); assert.equal(transport.responseFormat,'json');
+    assert.doesNotMatch(JSON.stringify(transport),/private|synthetic-key/);
+  }
 });
 test('Groq rejects truncated, empty, oversized and invalid responses', async () => {
   for(const data of [
