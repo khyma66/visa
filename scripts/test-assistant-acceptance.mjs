@@ -356,6 +356,7 @@ test('captured legitimate hosted paraphrases retain qualifier meaning and Unicod
     { id: 'thank-you-confirmation', text: 'The thank‑you reply is only the author’s own statement of understanding and does not itself prove that they were authorized to keep working.' },
     { id: 'thank-you-confirmation', text: "The thank‑you reply is only the author's expression of gratitude and their understanding of the situation; it does not constitute evidence that they were actually authorized to keep working." },
     { id: 'public-ordinal-context', text: 'The poster reports that their visa stamping interview in Chennai was rescheduled to October 28 because the consular officer was unavailable.' },
+    { id: 'public-ordinal-context', text: 'The member says their stamping interview in Chennai was moved to October 28 because the officer was unavailable.' },
   ];
   const makeResult = (fixture, text) => ({ status: 'answered', claims: [{ text, evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: fixture.corpus.sources[0].body }] }], disagreements: [], unanswered: [], sources: fixture.corpus.sources, coverage: { sourceCount: fixture.corpus.sources.length, partial: fixture.corpus.partial, reasons: fixture.corpus.coverageReasons } });
   for (const example of examples) {
@@ -375,6 +376,9 @@ test('captured legitimate hosted paraphrases retain qualifier meaning and Unicod
   const ordinal = acceptanceFixtures.find(item => item.id === 'public-ordinal-context');
   for (const [text, check] of [
     ['The Chennai stamping interview was rescheduled to November 28 because the officer was unavailable.', 'selected_post_explained'],
+    ['The Chennai stamping interview was moved to November 28 because the officer was unavailable.', 'selected_post_explained'],
+    ['The Chennai stamping interview was moved from October 28 to November 28 because the officer was unavailable.', 'selected_post_explained'],
+    ['The Chennai stamping interview was moved to another venue on October 28 because the officer was unavailable.', 'selected_post_explained'],
     ['The Chennai stamping interview was rescheduled to October 28 because the member missed their train.', 'selected_reason_preserved'],
     ['The member’s Hyderabad passport arrived on Friday.', 'selected_post_explained'],
   ]) {
