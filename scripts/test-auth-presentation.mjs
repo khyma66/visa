@@ -161,17 +161,19 @@ test('email signup passes entered names and safe return target; verification doe
   assert.deepEqual(state.redirects,['/messages']);
   assert(!state.redirects.some(path=>path.includes('update-password')));
 });
-test('typography uses Stacks system font, compact scale and responsive headings',async()=>{
+test('typography uses a local system font, readable shared scale and responsive headings',async()=>{
   const {fontFamily,fontSize,fontWeight}=typography.theme.extend;
   assert.equal(fontFamily.sans[0],'-apple-system');
   assert(fontFamily.sans.includes('"Segoe UI"'));
-  assert.equal(fontSize.base[0],'0.875rem');
-  assert.equal(fontSize.sm[0],'0.8125rem');
+  assert.equal(fontSize.base[0],'var(--type-body)');
+  assert.equal(fontSize.sm[0],'var(--type-ui)');
   assert.equal(fontSize['3xl'][0],'var(--type-headline)');
   assert.equal(fontWeight.bold,'600');
   const css=await readFile(new URL('../src/styles/globals.css',import.meta.url),'utf8');
   assert(css.includes('--type-headline: 1.75rem;'));
-  assert(css.includes('--type-headline: 1.4375rem;'));
+  assert(css.includes('--type-headline: 1.5rem;'));
+  assert(css.includes('--type-body: 1rem;'));
+  assert(css.includes('--type-ui: 0.875rem;'));
   assert(css.includes('font-sans text-base'));
-  assert(css.includes('font-size: 1rem'));
+  assert(css.includes('font-size: max(1rem, 16px)'));
 });

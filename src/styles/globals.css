@@ -6,13 +6,17 @@
   :root {
     --page-gutter: clamp(1rem, 1.7vw, 1.75rem);
     --sidebar-width: 220px;
-    --type-body-large: 0.9375rem;
-    --type-body-title: 1rem;
-    --type-subheading: 1.125rem;
-    --type-title: 1.25rem;
-    --type-headline: 1.4375rem;
-    --type-headline-large: 1.625rem;
-    --type-display: 1.8125rem;
+    /* Reading text stays comfortable on every screen; only headings scale. */
+    --type-meta: 0.75rem;
+    --type-ui: 0.875rem;
+    --type-body: 1rem;
+    --type-body-large: 1.125rem;
+    --type-body-title: 1.25rem;
+    --type-subheading: 1.25rem;
+    --type-title: 1.5rem;
+    --type-headline: 1.5rem;
+    --type-headline-large: 1.75rem;
+    --type-display: 1.75rem;
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -47,7 +51,7 @@
     @apply bg-background text-foreground font-sans text-base;
     overflow-wrap: anywhere;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    font-size: 14px;
+    font-size: var(--type-body);
     line-height: 1.5;
     letter-spacing: 0;
   }
@@ -71,19 +75,10 @@
 
 @media (min-width: 640px) {
   :root {
-    --type-body-large: 1rem;
-    --type-body-title: 1.125rem;
-    --type-subheading: 1.25rem;
-    --type-title: 1.375rem;
     --type-headline: 1.75rem;
-    --type-headline-large: 2.25rem;
-    --type-display: 2.875rem;
+    --type-headline-large: 2rem;
+    --type-display: 2rem;
   }
-}
-
-/* Keep phone form fields at 16px to avoid browser auto-zoom on focus. */
-@media (max-width: 639px) {
-  input:not([type='checkbox']):not([type='radio']), textarea, select { font-size: 1rem; }
 }
 
 @layer components {
@@ -102,28 +97,28 @@
   .integrated-brand-logo { display: block; width: 172px; height: 60px; max-width: none; object-fit: contain; object-position: left center; }
   .header-search { display: flex; min-width: 0; max-width: 660px; flex: 1; align-items: center; gap: 10px; border: 1px solid transparent; border-radius: 999px; background: #f0f3f4; padding-left: 16px; }
   .header-search:focus-within { border-color: #0f766e; background: #fff; box-shadow: 0 0 0 3px #ccfbf1; }
-  .header-search input { width: 100%; height: 42px; border: 0; background: transparent; font-size: 14px; outline: none; box-shadow: none; }
+  .header-search input { width: 100%; height: 42px; border: 0; background: transparent; font-size: var(--type-ui); outline: none; box-shadow: none; }
   .icon-control { display: inline-flex; height: 44px; width: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; cursor: pointer; }
   .icon-control:hover { background: #e5ebee; }
-  .header-ask { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 6px; margin-left: auto; border-radius: 999px; padding: 8px 14px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .header-ask { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 6px; margin-left: auto; border-radius: 999px; padding: 8px 14px; font-size: var(--type-ui); font-weight: 600; white-space: nowrap; }
   .header-ask { background: #f0fdfa; color: #115e59; }
   .header-ask:hover { background: #ccfbf1; }
-  .header-login { display: inline-flex; min-height: 42px; flex-shrink: 0; align-items: center; border-radius: 999px; background: #0f766e; padding: 8px 20px; font-size: 14px; font-weight: 700; color: #fff; }
+  .header-login { display: inline-flex; min-height: 42px; flex-shrink: 0; align-items: center; border-radius: 999px; background: #0f766e; padding: 8px 20px; font-size: var(--type-ui); font-weight: 600; color: #fff; }
   .header-login:hover { background: #115e59; }
   .brand-wordmark { color: #1e293b; white-space: nowrap; text-transform: none; letter-spacing: -0.65px; }
   .brand-mark { display: block; width: 40px; height: 40px; flex-shrink: 0; object-fit: contain; }
   .app-layout { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); margin-inline: auto; }
   .app-content { min-width: 0; background: #f7f9fb; }
   .desktop-sidebar { position: sticky; top: 65px; height: calc(100dvh - 65px); overflow-y: auto; border-right: 1px solid #e2e8f0; background: #fff; }
-  .community-navigation { padding: 8px 14px; font-size: 14px; }
+  .community-navigation { padding: 8px 14px; font-size: var(--type-ui); }
   .nav-section { padding: 14px 0; border-bottom: 1px solid #e2e8f0; }
   .nav-section:last-child { border: 0; }
-  .nav-section-title { margin: 0 12px 8px; font-size: 12px; font-weight: 600; color: #64748b; }
+  .nav-section-title { margin: 0 12px 8px; font-size: var(--type-meta); font-weight: 600; color: #64748b; }
   .nav-item { display: flex; min-height: 44px; align-items: center; gap: 10px; border-radius: 9px; padding: 10px 10px; color: #334155; }
   .nav-item svg { flex-shrink: 0; }
   .nav-item:hover { background: #f3f5f6; }
   .nav-item-active { background: #e7f4f1; color: #115e59; font-weight: 700; box-shadow: inset 3px 0 #0f766e; }
-  .nav-policy-links { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 12px; font-size: 12px; color: #64748b; }
+  .nav-policy-links { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 12px; font-size: var(--type-meta); color: #64748b; }
   .nav-policy-links a:hover { text-decoration: underline; }
   .mobile-menu, .community-shortcuts { display: none; }
   .feed-card { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; box-shadow: 0 2px 4px #0f172a03; }
@@ -147,16 +142,26 @@
 
 @media (max-width: 639px) {
   .header-content { padding: 8px 12px; gap: 4px; }
-  .site-brand { gap: 5px; font-size: 16px; }
+  .site-brand { flex: 1 1 130px; min-width: 130px; max-width: 172px; gap: 5px; font-size: 16px; }
+  .integrated-brand-logo { width: 100%; height: auto; max-width: 172px; }
+  .header-secondary-action { display: none; }
+  .header-account, .header-login { margin-left: auto; flex-shrink: 0; }
   .brand-mark { width: 32px; height: 32px; }
   .header-search { order: 5; flex-basis: 100%; max-width: none; }
   .header-login { padding-inline: 16px; }
   .header-ask { padding: 8px; }
   .community-shortcuts nav { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 8px 12px; scrollbar-width: thin; }
-  .community-shortcuts a { flex-shrink: 0; min-height: 40px; padding: 7px 12px; border-radius: 999px; font-size: 12px; }
+  .community-shortcuts a { flex-shrink: 0; min-height: 40px; padding: 7px 12px; border-radius: 999px; font-size: var(--type-ui); }
   .feed-card { border-radius: 12px; }
   .feed-heading { padding: 18px; }
   main { scroll-margin-top: 122px; }
+}
+
+/* After utilities, with explicit header specificity: small form classes and
+   the desktop search rule must not defeat the phone's readable input size. */
+@media (max-width: 639px) {
+  :root input:not([type='checkbox']):not([type='radio']), :root textarea, :root select,
+  .header-search input { font-size: max(1rem, 16px); }
 }
 
 /* Keep the mark and all header actions usable on narrow phones. */

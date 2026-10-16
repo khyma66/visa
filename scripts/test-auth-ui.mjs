@@ -189,6 +189,28 @@ test('shared navigation retains working community, feed, tags and messaging dest
   } finally { h.close(); }
 });
 
+test('mobile navigation retains the creation and production assistant actions moved out of the narrow header', () => {
+  const previousOrigin = process.env.NEXT_PUBLIC_SITE_URL;
+  const h = setup();
+  try {
+    for (const [origin, assistant] of [['https://visathreads.com', true], ['https://visa-central.com', false]]) {
+      process.env.NEXT_PUBLIC_SITE_URL = origin;
+      let navigated = false;
+      h.render(CommunityNavigation, { mobile: true, onNavigate: () => { navigated = true; } });
+      const links = nodes(h.tree).filter(node => node.props?.href);
+      const ask = links.find(node => node.props.href === '/ask');
+      assert(ask, 'Mobile users can always reach the post composer');
+      ask.props.onClick();
+      assert(navigated, 'Selecting the composer closes the mobile menu');
+      assert.equal(links.some(node => node.props.href === '/assistant'), assistant);
+    }
+  } finally {
+    if (previousOrigin === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+    else process.env.NEXT_PUBLIC_SITE_URL = previousOrigin;
+    h.close();
+  }
+});
+
 test('Popular selection reflects URL sort and mobile Escape restores the navigation trigger', () => {
   const h = setup();
   try {
