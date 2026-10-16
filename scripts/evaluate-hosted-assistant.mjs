@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { waitForAcceptanceReady } from './assistant-acceptance-readiness.mjs';
 import { readAcceptanceFailureDiagnostic } from './assistant-acceptance-diagnostics.mjs';
+import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cache = join(root, '.cache/visaflow');
@@ -58,7 +59,7 @@ const secretsPath = join(temporary, 'secrets.json');
 await writeFile(configPath, JSON.stringify({ name, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), account_id: account, compatibility_date: '2026-10-01', workers_dev: true, preview_urls: false, routes: [], ai: { binding: 'ASSISTANT_AI' }, vars: { ACCEPTANCE_EXPIRES: String(Date.now() + 15 * 60_000), ACCEPTANCE_SOURCE_SHA: sourceSha }, observability: { enabled: false } }));
 await writeFile(secretsPath, JSON.stringify({ ACCEPTANCE_SECRET: secret }), { mode: 0o600 });
 const repetitions = 3;
-const receipt = { schemaVersion: 1, sourceSha, provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', createdAt: new Date().toISOString(), passed: false, repetitions, features: { posts: true, communities: true, catchup: true }, cases: [], workerDeleted: false };
+const receipt = { schemaVersion: 1, sourceSha, provider: 'workers-ai', model: modelProfile.answer, modelProfile, createdAt: new Date().toISOString(), passed: false, repetitions, features: { posts: true, communities: true, catchup: true }, cases: [], workerDeleted: false };
 let failure;
 try {
   const subdomain = await api('/workers/subdomain');

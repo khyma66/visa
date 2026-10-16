@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 35
     environment: production
     env:
+      ASSISTANT_PROVIDER: 'groq'
       ASSISTANT_ENABLED: 'true'
       ASSISTANT_COMMUNITIES_ENABLED: 'false'
       ASSISTANT_CATCHUP_ENABLED: 'false'
@@ -46,7 +47,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
       - name: Evaluate hosted chatbot regressions with three independent samples per case
-        run: node scripts/evaluate-hosted-assistant.mjs
+        run: node scripts/evaluate-groq-assistant.mjs --release
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -93,9 +94,9 @@ jobs:
             .cache/visaflow/live-preview/rollout-verification.json
           include-hidden-files: true
           if-no-files-found: warn
-      - name: Ensure temporary evaluation Worker is removed
+      - name: Restore isolated Groq evaluation preview routing
         if: always()
-        run: node scripts/evaluate-hosted-assistant.mjs --cleanup
+        run: node scripts/evaluate-groq-assistant.mjs --cleanup
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

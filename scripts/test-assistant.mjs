@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
-const dependencies = {};
+const dependencies = { './assistant-models.json': `data:text/javascript;base64,${Buffer.from('export default '+await readFile(new URL('../src/lib/assistant-models.json', import.meta.url), 'utf8')).toString('base64')}` };
 async function compile(name) {
   const code = ts.transpileModule(await readFile(new URL(`../src/lib/${name}.ts`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
   return `data:text/javascript;base64,${Buffer.from(code.replace(/(from\s+)(['"])([^'"]+)\2/g, (_, prefix, _quote, dep) => { assert(dependencies[dep], `Unknown dependency ${dep}`); return prefix + JSON.stringify(dependencies[dep]); })).toString('base64')}`;
@@ -21,6 +21,71 @@ const source = { id:`q:${id}`, questionId:id, communityId:null, kind:'question',
 const input = { mode:'ask',scope:{kind:'post',id},question:'What did the member report?' };
 const output = {status:'answered',claims:[{text:'The member reported a Monday appointment.',evidence:[{sourceId:source.id,quote:'I attended my appointment on Monday.'}]}],disagreements:[],unanswered:[]};
 const request = (value=input, headers={}) => new Request('https://visathreads.com/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40),...headers},body:JSON.stringify(value)});
+test('Groq uses the fixed server endpoint, strict source IDs, bounded answer/review and numeric-only telemetry', async () => {
+  const usage = [], transport = [], calls = [];
+  const fetcher = async (url, init) => {
+    calls.push({url, init, body:JSON.parse(init.body)});
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(output),reasoning:'must never leak'}}],usage:{prompt_tokens:2300,completion_tokens:180}}, {headers:{'x-ratelimit-limit-tokens':'250000','x-ratelimit-remaining-tokens':'247700'}});
+  };
+  const options={provider:'groq',apiKey:'synthetic-groq-secret',fetcher,reportUsage:value=>usage.push(value),reportTransport:value=>transport.push(value)};
+  assert.equal(await provider.runAssistantModel({system:'System',user:'Question',sourceIds:[source.id]},options),JSON.stringify(output));
+  await provider.runAssistantModel({system:'Review',user:'Evidence',outputKind:'review',reviewIds:['claim:0']},options);
+  for(const call of calls) {
+    assert.equal(call.url,'https://api.groq.com/openai/v1/chat/completions'); assert.equal(call.init.redirect,'manual');
+    assert.equal(call.init.headers.Authorization,'Bearer synthetic-groq-secret');
+    assert.equal(call.body.model,'openai/gpt-oss-120b'); assert.equal(call.body.response_format.json_schema.strict,true);
+    assert.equal(call.body.include_reasoning,false); assert.equal(call.body.reasoning_effort,'low');
+    assert.equal(call.body.tools,undefined); assert.equal(call.body.stream,undefined);
+  }
+  assert.equal(calls[0].body.max_completion_tokens,4096); assert.equal(calls[1].body.max_completion_tokens,1200);
+  assert.deepEqual(calls[0].body.response_format.json_schema.schema.properties.claims.items.properties.evidence.items.properties.sourceId.enum,[source.id]);
+  assert.deepEqual(calls[1].body.response_format.json_schema.schema.properties.checks.items.properties.id.enum,['claim:0']);
+  assert.deepEqual(usage.map(value=>value.stage),['answer','review']);
+  assert.equal(transport[0].tokenLimit,250000);
+  assert.doesNotMatch(JSON.stringify({usage,transport}),/synthetic-groq-secret|must never leak/);
+  assert.notEqual(provider.providerCacheKey('groq'),provider.providerCacheKey('workers-ai'));
+});
+test('Groq errors fail closed without retries, provider body disclosure or model fallback', async () => {
+  for(const [status,reason] of [[302,'provider_error'],[307,'provider_error'],[400,'invalid_request'],[401,'authentication_failed'],[403,'permission_denied'],[429,'rate_limited'],[500,'provider_error']]) {
+    let calls=0, observed;
+    await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'}, {provider:'groq',apiKey:'synthetic-key',reportFailure:value=>{observed=value;},fetcher:async()=>{calls++;return new Response('private provider diagnostic synthetic-key',{status});}}),error=>error.status===503&&!error.message.includes('private'));
+    assert.equal(calls,1); assert.equal(observed,reason);
+  }
+  let calls=0;
+  await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',fetcher:async()=>{calls++;throw Error('Must not call');}}));
+  assert.equal(calls,0);
+});
+test('Groq permission diagnostics retain only allowlisted categories, never error bodies',async()=>{
+  for(const [code,denial] of [['model_permission_blocked_org','model-org'],['model_permission_blocked_project','model-project'],['private-arbitrary-code','other']]) {
+    let transport, reason;
+    await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',apiKey:'synthetic-key',reportTransport:value=>{transport=value;},reportFailure:value=>{reason=value;},fetcher:async()=>Response.json({error:{code,message:'private synthetic-key provider text'}},{status:403})}));
+    assert.equal(reason,'permission_denied'); assert.equal(transport.denial,denial); assert.equal(transport.responseFormat,'json');
+    assert.doesNotMatch(JSON.stringify(transport),/private|synthetic-key/);
+  }
+});
+test('Groq rejects truncated, empty, oversized and invalid responses', async () => {
+  for(const data of [
+    {choices:[{finish_reason:'length',message:{content:JSON.stringify(output)}}]},
+    {choices:[{finish_reason:'stop',message:{content:''}}]},
+    {choices:[{finish_reason:'stop',message:{content:'x'.repeat(24001)}}]},
+    {choices:[]},
+  ]) await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',apiKey:'synthetic-key',fetcher:async()=>Response.json(data)}));
+});
+test('Groq distinguishes malformed secrets and network failures without disclosing either',async()=>{
+  for(const apiKey of ['key\n',' key','key\u0000']) {
+    let observed, calls=0;
+    await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',apiKey,reportFailure:value=>{observed=value;},fetcher:async()=>{calls++;throw Error('Do not call');}}));
+    assert.equal(observed,'invalid_key_format'); assert.equal(calls,0);
+  }
+  let observed;
+  await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'},{provider:'groq',apiKey:'synthetic-key',reportFailure:value=>{observed=value;},fetcher:async()=>{throw new TypeError('Secret request detail');}}),error=>!error.message.includes('Secret'));
+  assert.equal(observed,'network_error');
+});
+test('Groq rollout requires its own server secret and production project/domain boundary',()=>{
+  const env={ASSISTANT_ENABLED:'true',ASSISTANT_PROVIDER:'groq',GROQ_API_KEY:'synthetic-key',NEXT_PUBLIC_SITE_URL:'https://visathreads.com',ASSISTANT_PROJECT_REF:'cycnichledvqbxevrwnt',NEXT_PUBLIC_SUPABASE_URL:'https://cycnichledvqbxevrwnt.supabase.co',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'public-key'};
+  assert.equal(service.configuredAvailability(env).posts,true);
+  for(const changes of [{GROQ_API_KEY:undefined,OPENAI_API_KEY:'wrong-secret'},{NEXT_PUBLIC_SITE_URL:'https://visa-central.com'},{NEXT_PUBLIC_SUPABASE_URL:'https://ppdwysmeistjxzjpmxyk.supabase.co'}]) assert.equal(service.configuredAvailability({...env,...changes}).posts,false);
+});
 function harness(overrides={}) {
   const state={actor:'alice',sources:[source],reserved:0,generated:0,reviewed:0,reads:0,cache:new Map()};
   const generate = overrides.generate ?? (async()=>{state.generated++;return JSON.stringify(output);});
@@ -206,16 +271,46 @@ test('production-only target rejects dev and incomplete configuration',()=>{
 test('OpenAI adapter uses bounded structured request, no provider state, and no retries',async()=>{
   let calls=0;
   const text=await provider.runAssistantModel({system:'test',user:'test'},{provider:'openai',apiKey:'test-only',fetcher:async(url,init)=>{
-    calls++;assert.equal(url,'https://api.openai.com/v1/responses');const data=JSON.parse(init.body);assert.equal(data.store,false);assert.equal(data.max_output_tokens,1600);assert.equal(data.text.format.strict,true);assert.equal(init.redirect,'error');
+    calls++;assert.equal(url,'https://api.openai.com/v1/responses');const data=JSON.parse(init.body);assert.equal(data.store,false);assert.equal(data.max_output_tokens,1600);assert.equal(data.text.format.strict,true);assert.equal(init.redirect,'manual');
     return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(output)}]}]});
   }});assert.equal(text,JSON.stringify(output));assert.equal(calls,1);
   await assert.rejects(()=>provider.runAssistantModel({system:'test',user:'test'},{provider:'openai',apiKey:'test-only',fetcher:async()=>{calls++;return new Response('',{status:429});}}));assert.equal(calls,2);
 });
 test('Workers AI uses structured reasoning responses and rejects truncated chat completions',async()=>{
-  const run=async finish_reason=>provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async(model,input)=>{assert.equal(model,'@cf/openai/gpt-oss-120b');assert.equal(input.max_tokens,4096);assert.equal(input.reasoning_effort,'low');assert.equal(input.response_format.json_schema.strict,true);assert.deepEqual(input.response_format.json_schema.schema,provider.ASSISTANT_OUTPUT_SCHEMA);assert.equal(input.store,false);assert.equal(input.temperature,0);assert.equal(input.seed,39173);assert.equal(input.messages[1].content,'test');return {choices:[{finish_reason,message:{content:JSON.stringify(output)}}]};}}});
+  const run=async finish_reason=>provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async(model,input)=>{assert.equal(model,'@cf/openai/gpt-oss-120b');assert.equal(input.max_tokens,4096);assert.equal(input.reasoning_effort,'low');assert.equal(input.store,false);assert.equal(input.response_format.json_schema.strict,true);assert.deepEqual(input.response_format.json_schema.schema,provider.ASSISTANT_OUTPUT_SCHEMA);assert.equal(input.temperature,0);assert.equal(input.seed,39173);assert.equal(input.messages[1].content,'test');assert.equal(input.messages[0].content,'test');return {choices:[{finish_reason,message:{content:JSON.stringify(output)}}]};}}});
   assert.equal(await run('stop'),JSON.stringify(output));await assert.rejects(()=>run('length'));
   const text=await provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async()=>({response:JSON.stringify(output)})}});
   assert.equal(text,JSON.stringify(output));
+});
+
+test('large and multilingual prompts route once before inference without dropping source text', async () => {
+  for (const user of ['complete evidence '.repeat(2000), '完整的原始证据。'.repeat(1200)]) {
+    const prompt = { system: 'Check all evidence', user, sourceIds: ['q:example'] };
+    const selected = provider.workersAssistantRequest(prompt);
+    assert.equal(selected.model, '@cf/openai/gpt-oss-120b');
+    assert.equal(selected.input.messages[1].content, user);
+    assert.equal(selected.input.reasoning_effort, 'low');
+    assert.deepEqual(selected.input.response_format.json_schema.schema.properties.claims.items.properties.evidence.items.properties.sourceId.enum, ['q:example']);
+    let calls = 0;
+    await provider.runAssistantModel(prompt, { provider: 'workers-ai', binding: { run: async model => { calls++; assert.equal(model, selected.model); return { response: JSON.stringify(output) }; } } });
+    assert.equal(calls, 1);
+  }
+  const profile = JSON.parse(provider.providerCacheKey('workers-ai'));
+  assert.equal(profile.answer, provider.WORKERS_ASSISTANT_MODEL);
+  assert(profile.review && profile.answerMaxTokens && profile.reviewMaxTokens && profile.version, 'Every model choice and parameter participates in cache identity');
+});
+
+test('usage metrics contain only bounded counts and fixed labels and cannot break answers', async () => {
+  const usage = [];
+  const prompt = { system: 'private system', user: 'private question' };
+  const binding = { run: async () => ({ response: JSON.stringify(output), usage: { prompt_tokens: 123, completion_tokens: 45, reasoning: 'private reasoning', user: 'private identity' } }) };
+  await provider.runAssistantModel(prompt, { provider: 'workers-ai', binding, reportUsage: value => usage.push(value) });
+  assert.equal(usage.length, 1);
+  assert.deepEqual(Object.keys(usage[0]).sort(), ['durationMs', 'inputTokens', 'model', 'outputTokens', 'stage']);
+  assert.equal(usage[0].inputTokens, 123); assert.equal(usage[0].outputTokens, 45); assert.equal(usage[0].stage, 'answer');
+  assert.doesNotMatch(JSON.stringify(usage), /private/);
+  assert.equal(await provider.runAssistantModel(prompt, { provider: 'workers-ai', binding, reportUsage: () => { throw Error('metrics unavailable'); } }), JSON.stringify(output));
+  await provider.runAssistantModel(prompt, { provider: 'workers-ai', binding: { run: async () => ({ response: JSON.stringify(output), usage: { prompt_tokens: 'private value', completion_tokens: -1 } }) }, reportUsage: value => { assert.equal(value.inputTokens, undefined); assert.equal(value.outputTokens, undefined); } });
 });
 
 test('catch-up is community-only at the request and handler boundary', async()=>{

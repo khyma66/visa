@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import build from '@visa/build-provenance';
 import { AssistantError } from '@/lib/assistant-core';
 import { retrieveAssistantCorpus } from '@/lib/assistant-data';
-import { runAssistantModel, providerModel, type WorkersAiBinding } from '@/lib/assistant-provider';
+import { runAssistantModel, providerCacheKey, type WorkersAiBinding } from '@/lib/assistant-provider';
 import { assistantResponse, assistantProductionRequest, configuredAvailability, createAssistantHandler, cloudflareAssistantCache } from '@/lib/assistant-service';
 
 export const runtime = 'edge';
@@ -11,6 +11,8 @@ export const dynamic = 'force-dynamic';
 function identifyBuild(response: Response) {
   // Public health already exposes this immutable revision; never echo request headers.
   response.headers.set('X-VisaThreads-Build', build.gitSha ?? 'unconfigured');
+  const provider = process.env.ASSISTANT_PROVIDER;
+  response.headers.set('X-VisaThreads-Assistant-Provider', provider === 'groq' || provider === 'workers-ai' || provider === 'openai' ? provider : 'disabled');
   return response;
 }
 
@@ -27,6 +29,7 @@ function availability() {
     ASSISTANT_COMMUNITIES_ENABLED: process.env.ASSISTANT_COMMUNITIES_ENABLED,
     ASSISTANT_CATCHUP_ENABLED: process.env.ASSISTANT_CATCHUP_ENABLED,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    GROQ_API_KEY: process.env.GROQ_API_KEY,
   });
 }
 export async function GET(request: Request) {
@@ -37,7 +40,7 @@ const handle = createAssistantHandler({
   availability,
   reportFailure: event => console.warn('assistant_request_failed', event),
   // The provider is read again during inference; deployments set immutable environment values.
-  get model() { try { return providerModel(process.env.ASSISTANT_PROVIDER); } catch { return 'disabled'; } },
+  get model() { try { return providerCacheKey(process.env.ASSISTANT_PROVIDER); } catch { return 'disabled'; } },
   cache: cloudflareAssistantCache(),
   async authenticate(token) {
     const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
@@ -65,8 +68,9 @@ const handle = createAssistantHandler({
         binding = (env as unknown as { ASSISTANT_AI?: WorkersAiBinding }).ASSISTANT_AI;
       } catch { /* Local Next preview has no Workers AI binding. */ }
     }
-    return runAssistantModel(prompt, { provider: process.env.ASSISTANT_PROVIDER, apiKey: process.env.OPENAI_API_KEY, binding, signal,
+    return runAssistantModel(prompt, { provider: process.env.ASSISTANT_PROVIDER, apiKey: process.env.ASSISTANT_PROVIDER === 'groq' ? process.env.GROQ_API_KEY : process.env.OPENAI_API_KEY, binding, signal,
       reportFailure: reason => console.warn('assistant_provider_failed', { reason }),
+      reportUsage: usage => console.info('assistant_model_usage', usage),
     });
   },
 });

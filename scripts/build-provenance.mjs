@@ -44,6 +44,7 @@ export function buildProvenance(root = process.cwd(), env = process.env) {
     workerConfigDigest: sha256(readFileSync(resolve(root, 'wrangler.jsonc'))),
     ...(env.VISATHREADS_EXISTING_PREVIEW === 'true' ? { existingPreviewFeatures: {
       assistant: env.ASSISTANT_ENABLED, communities: env.ASSISTANT_COMMUNITIES_ENABLED, catchup: env.ASSISTANT_CATCHUP_ENABLED,
+      provider: env.ASSISTANT_PROVIDER,
       archiveSha256: JSON.parse(readFileSync(resolve(root, '.cache/visaflow/live-preview/receipt.json'), 'utf8')).archiveSha256,
     } } : {}),
   };

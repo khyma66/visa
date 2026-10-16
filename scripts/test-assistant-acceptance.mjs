@@ -4,8 +4,10 @@ import { test } from 'node:test';
 import ts from 'typescript';
 import { waitForAcceptanceReady } from './assistant-acceptance-readiness.mjs';
 import { readAcceptanceFailureDiagnostic } from './assistant-acceptance-diagnostics.mjs';
+import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
 
 const dependencies = { 'cloudflare:workers': `data:text/javascript;base64,${Buffer.from('export const env = {};').toString('base64')}` };
+dependencies['./assistant-models.json'] = `data:text/javascript;base64,${Buffer.from('export default '+JSON.stringify(modelProfile)).toString('base64')}`;
 const { env: runtimeEnvironment } = await import(dependencies['cloudflare:workers']);
 async function compile(path) {
   const raw = await readFile(new URL(`../${path}.ts`, import.meta.url), 'utf8');
@@ -64,7 +66,7 @@ test('authenticated readiness proves the actual build and requires no model infe
 test('readiness retries only propagation and fails closed on a platform page or wrong build', async () => {
   const cases = acceptanceFixtures.map(fixture => fixture.id);
   let clock = 0, calls = 0;
-  const value = { ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: 'a'.repeat(40), model: '@cf/openai/gpt-oss-120b', cases };
+  const value = { ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: 'a'.repeat(40), model: modelProfile.answer, modelProfile: JSON.stringify(modelProfile), cases };
   const options = { now: () => clock, pause: async amount => { clock += amount; }, fetcher: async (url, init) => {
     calls++; assert.equal(url.pathname, '/evaluate'); assert.equal(init.method, 'POST'); assert.deepEqual(JSON.parse(init.body), { id: '__ready__' });
     if (!init.headers.Authorization) return new Response('', { status: 404, headers: { 'X-Assistant-Acceptance': 'v1' } });
@@ -94,7 +96,7 @@ test('successful evaluation executes exact production model and returns no gener
   const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
   const settings = { ...env(), ASSISTANT_AI: { run: async (model, input) => {
     calls++;
-    assert.equal(model, '@cf/openai/gpt-oss-120b');
+    assert.equal(model, modelProfile.answer);
     assert.equal(input.reasoning_effort, 'low');
     assert.equal(input.response_format.json_schema.strict, true);
     assert.equal(input.temperature, 0);
@@ -112,7 +114,7 @@ test('successful evaluation executes exact production model and returns no gener
   for (const name of ['application_request_parsed', 'application_authentication_used', 'application_quota_reserved', 'application_runtime_binding_loaded', 'application_provider_called_once', 'application_evidence_reviewed_when_needed', 'application_sources_revalidated', 'application_response_private']) {
     assert(value.checks.some(check => check.name === name && check.passed));
   }
-  assert.deepEqual(Object.keys(value).sort(), ['checks', 'durationMs', 'id', 'model', 'passed']);
+  assert.deepEqual(Object.keys(value).sort(), ['checks', 'durationMs', 'id', 'model', 'passed', 'usage']);
   assert.doesNotMatch(JSON.stringify(value), /passport|Monday|Friday/);
 });
 
@@ -354,6 +356,7 @@ test('captured legitimate hosted paraphrases retain qualifier meaning and Unicod
     { id: 'thank-you-confirmation', text: 'The thank‑you reply is only the author’s own statement of understanding and does not itself prove that they were authorized to keep working.' },
     { id: 'thank-you-confirmation', text: "The thank‑you reply is only the author's expression of gratitude and their understanding of the situation; it does not constitute evidence that they were actually authorized to keep working." },
     { id: 'public-ordinal-context', text: 'The poster reports that their visa stamping interview in Chennai was rescheduled to October 28 because the consular officer was unavailable.' },
+    { id: 'public-ordinal-context', text: 'The member says their stamping interview in Chennai was moved to October 28 because the officer was unavailable.' },
   ];
   const makeResult = (fixture, text) => ({ status: 'answered', claims: [{ text, evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: fixture.corpus.sources[0].body }] }], disagreements: [], unanswered: [], sources: fixture.corpus.sources, coverage: { sourceCount: fixture.corpus.sources.length, partial: fixture.corpus.partial, reasons: fixture.corpus.coverageReasons } });
   for (const example of examples) {
@@ -373,6 +376,9 @@ test('captured legitimate hosted paraphrases retain qualifier meaning and Unicod
   const ordinal = acceptanceFixtures.find(item => item.id === 'public-ordinal-context');
   for (const [text, check] of [
     ['The Chennai stamping interview was rescheduled to November 28 because the officer was unavailable.', 'selected_post_explained'],
+    ['The Chennai stamping interview was moved to November 28 because the officer was unavailable.', 'selected_post_explained'],
+    ['The Chennai stamping interview was moved from October 28 to November 28 because the officer was unavailable.', 'selected_post_explained'],
+    ['The Chennai stamping interview was moved to another venue on October 28 because the officer was unavailable.', 'selected_post_explained'],
     ['The Chennai stamping interview was rescheduled to October 28 because the member missed their train.', 'selected_reason_preserved'],
     ['The member’s Hyderabad passport arrived on Friday.', 'selected_post_explained'],
   ]) {

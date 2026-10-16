@@ -9,6 +9,7 @@ import { checkedLiveArchive, LIVE_SITE, LIVE_DATABASE, LIVE_WORKER, sha256 } fro
 import { buildProvenance, sourceProvenance } from './build-provenance.mjs';
 import { recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 import { pinnedChatbotRecovery, verifyRecoveryFiles } from './pinned-chatbot-recovery.mjs';
+import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const privateDirectory = resolve(root, '.cache/visaflow/live-preview');
@@ -17,6 +18,11 @@ const configPath = resolve(root, 'dist/server/wrangler.json');
 const deploymentOutputPath = resolve(privateDirectory, 'wrangler-deploy.ndjson');
 const hosts = ['visathreads.com', 'www.visathreads.com'];
 const publicVariableNames = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SITE_URL', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'GOOGLE_NEWS_RSS_ENABLED'];
+function releaseProvider(features) {
+  const provider = features.provider ?? 'workers-ai';
+  assert(['workers-ai', 'groq'].includes(provider), 'Unsupported release provider.');
+  return provider;
+}
 const LEGACY_BASELINE_SHA = '0624c651cb252436c47c5f2b020baecfec0bfbd0';
 const LEGACY_BASELINE_VERSION = '879503b4-e947-420e-8ad8-e1f2f7082ae5';
 // Original deployment and the independently observed guarded rollback from run 38582002973.
@@ -69,7 +75,7 @@ export function featureEnvironment(values, enabled, features = {}) {
     NEXT_PUBLIC_APP_ENV: 'development', APP_ENV: 'development', CLOUDFLARE_ENV: 'development',
     VISATHREADS_EXISTING_PREVIEW: 'true', PUBLIC_LAUNCH_APPROVED: 'false', IMPORTED_CONTENT_APPROVED: 'false',
     COMMUNITY_SOURCE_MODE: 'snapshot', APIFY_LIVE_FETCH_ENABLED: 'false',
-    ASSISTANT_PROJECT_REF: 'cycnichledvqbxevrwnt', ASSISTANT_PROVIDER: 'workers-ai',
+    ASSISTANT_PROJECT_REF: 'cycnichledvqbxevrwnt', ASSISTANT_PROVIDER: releaseProvider(features),
     ASSISTANT_ENABLED: enabled, ASSISTANT_COMMUNITIES_ENABLED: communities, ASSISTANT_CATCHUP_ENABLED: catchup,
   };
 }
@@ -85,7 +91,8 @@ export function verifyFeatureWorker(config, enabled, features = {}) {
   assert.equal(config.vars.NEXT_PUBLIC_SUPABASE_URL, LIVE_DATABASE);
   assert.equal(config.vars.ASSISTANT_ENABLED, enabled);
   assert.equal(config.vars.ASSISTANT_PROJECT_REF, 'cycnichledvqbxevrwnt');
-  assert.equal(config.vars.ASSISTANT_PROVIDER, 'workers-ai');
+  assert.equal(config.vars.ASSISTANT_PROVIDER, releaseProvider(features));
+  assert.equal(config.vars.GROQ_API_KEY, undefined, 'Provider credentials must remain stored secrets.');
   assert.equal(config.vars.ASSISTANT_COMMUNITIES_ENABLED, features.communities ?? 'false');
   assert.equal(config.vars.ASSISTANT_CATCHUP_ENABLED, features.catchup ?? 'false');
   assert.deepEqual(config.ai, { binding: 'ASSISTANT_AI' });
@@ -253,10 +260,17 @@ export async function buildFeatureRelease(enabled, features = {}) {
 export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
   assert.equal(receipt?.schemaVersion, 1);
   assert.equal(receipt.sourceSha, sourceSha, 'Model acceptance must match the exact release commit.');
-  assert.equal(receipt.provider, 'workers-ai');
-  assert.equal(receipt.model, '@cf/openai/gpt-oss-120b');
+  const provider = releaseProvider(features);
+  const expectedProfile = provider === 'groq' ? modelProfile.groq : modelProfile;
+  assert.equal(receipt.provider, provider);
+  assert.equal(receipt.model, expectedProfile.answer);
+  assert.deepEqual(receipt.modelProfile, expectedProfile, 'Hosted acceptance must cover the exact answer and review model configuration.');
   assert.equal(receipt.passed, true, 'Hosted model acceptance did not pass.');
-  assert.equal(receipt.workerDeleted, true, 'Temporary evaluation Worker must be removed before release.');
+  if (provider === 'groq') {
+    assert.equal(receipt.evaluationWorker, 'visaflow', 'Groq evaluation must use the isolated, unbound Worker.');
+    assert.equal(receipt.previewRoutingRestored, true, 'Evaluation preview routing must be restored.');
+    assert.equal(receipt.activeDeploymentsUnchanged, true, 'Evaluation must not change any active deployment.');
+  } else assert.equal(receipt.workerDeleted, true, 'Temporary evaluation Worker must be removed before release.');
   assert.equal(receipt.features?.posts, true);
   for (const feature of ['communities', 'catchup']) if (features[feature] === 'true') assert.equal(receipt.features?.[feature], true, `${feature} needs hosted model acceptance.`);
   assert.equal(receipt.repetitions, 3, 'Hosted acceptance requires three independent samples per case.');
@@ -289,6 +303,10 @@ export async function predeployFeatureCheck(enabled, features = {}, requireAccep
   const config = JSON.parse(await readFile(configPath, 'utf8'));
   await readFeatureBuildProvenance(root);
   verifyFeatureWorker(config, enabled, features);
+  if (enabled === 'true' && releaseProvider(features) === 'groq') {
+    const secrets = await cloudflare(`/workers/scripts/${LIVE_WORKER}/secrets`);
+    assert(secrets.some(secret => secret.name === 'GROQ_API_KEY' && secret.type === 'secret_text'), 'Live Worker is missing its stored GROQ_API_KEY.');
+  }
   checkedLiveArchive(root, { ...config.vars, CLOUDFLARE_ENV: 'development', VISATHREADS_EXISTING_PREVIEW: 'true' });
   if (enabled === 'true' && requireAcceptance) verifyAssistantAcceptance(JSON.parse(await readFile(resolve(root, '.cache/visaflow/assistant-acceptance.json'), 'utf8')), sourceProvenance(root).gitSha, features);
   console.log('Live route, deployment baseline, archive and production-only assistant target verified.');
@@ -346,7 +364,7 @@ export async function checkedRollbackVersion() {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const command = process.argv[2];
   const enabled = process.env.ASSISTANT_ENABLED ?? 'false';
-  const features = { communities: process.env.ASSISTANT_COMMUNITIES_ENABLED ?? 'false', catchup: process.env.ASSISTANT_CATCHUP_ENABLED ?? 'false' };
+  const features = { provider: process.env.ASSISTANT_PROVIDER ?? 'workers-ai', communities: process.env.ASSISTANT_COMMUNITIES_ENABLED ?? 'false', catchup: process.env.ASSISTANT_CATCHUP_ENABLED ?? 'false' };
   try {
     if (command === 'capture') await captureFeatureBaseline();
     else if (command === 'build') await buildFeatureRelease(enabled, features);
