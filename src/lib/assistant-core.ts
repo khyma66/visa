@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantStandaloneFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v16-task-aware-review';
+export const ASSISTANT_VERSION = 'grounded-chat-v17-resolved-summary-task';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -229,7 +229,11 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
   // Do not ask the model to reconstruct a prior result list that is deliberately
   // absent from the evidence. Preserve the rest of the question verbatim.
   const question = resolvedOrdinal ? assistantResolvedPostQuestion(input.question ?? '') : input.question ?? '';
-  const taskInstruction = input.mode === 'summary'
+  // A generic request to explain the already selected post is a summary task,
+  // not a question whose answer must go beyond the post's stated facts.
+  // Do not rewrite qualified questions (why, how long, or additional clauses).
+  const selectedSummary = resolvedReference && /^(?:please\s+)?(?:explain|summari[sz]e) the selected discussion[.!?]?$/i.test(question.trim());
+  const taskInstruction = input.mode === 'summary' || selectedSummary
     ? 'TASK: Summarize the supplied discussion. No user question is required for a summary. Describe the topic, substantive member reports, useful replies, disagreements and unresolved points supported by the supplied evidence. Preserve key dates or named days and the sequence of reported events, attributing each timeline to the member who reported it; never convert it into a universal timeline or prediction. If substantive reports are present, return status answered with cited claims even though there is no question.'
     : input.mode === 'catchup'
       ? 'TASK: Summarize new discussion events within the supplied interval. No user question is required for catch-up. Preserve reported dates, distinguish individual experiences from rules, and cite the new events. Older parent context must not be described as a new event.'
@@ -258,7 +262,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       'At most 6 claims, 3 disagreements and 4 unanswered items. Quotes must be 12–400 characters copied from source body; claim text at most 700 characters. Disagreements must cite at least two sources.',
       'Use status insufficient when the evidence cannot support the requested task. No markdown, HTML, instructions to take action, or links inside claim text.',
     ].join('\n'),
-    user: JSON.stringify({ task: input.mode, ...(input.mode === 'ask' ? { question: redactAssistantText(question), previousQuestions: resolvedOrdinal ? [] : assistantPreviousQuestions(input).map(redactAssistantText) } : {}),
+    user: JSON.stringify({ task: selectedSummary ? 'summary' : input.mode, ...(input.mode === 'ask' ? { question: redactAssistantText(question), previousQuestions: resolvedOrdinal ? [] : assistantPreviousQuestions(input).map(redactAssistantText) } : {}),
       ...(resolvedReference ? { resolvedDiscussion: { questionId: referencedPost.questionId, sourceIds: corpus.sources.map(source => source.id) } } : {}),
       interval: { since: corpus.since, until: corpus.until }, partial: corpus.partial, sources: corpus.sources.map(s => ({ id: s.id, questionId: s.questionId, kind: s.kind, speakerRole: s.speakerRole, title: s.title, body: s.body, parentContextOnly: s.parentContext, createdAt: s.createdAt })) }),
   };

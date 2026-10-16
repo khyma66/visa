@@ -5,11 +5,12 @@
   "answerMaxTokens": 4096,
   "reviewMaxTokens": 1200,
   "groq": {
-    "version": 1,
+    "version": 2,
     "answer": "openai/gpt-oss-120b",
     "review": "openai/gpt-oss-120b",
     "answerMaxTokens": 4096,
-    "reviewMaxTokens": 1200,
-    "reasoningEffort": "low"
+    "reviewMaxTokens": 2048,
+    "reasoningEffort": "low",
+    "reviewReasoningEffort": "medium"
   }
 }

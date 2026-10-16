@@ -110,10 +110,14 @@ try {
     const samples = [];
     for (let sample = 0; sample < repetitions; sample++) {
       const started = Date.now();
+      let transport = { stage: 'fetch' };
       try {
         const response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ id }), redirect: 'error', signal: AbortSignal.timeout(60_000) });
+        transport = { stage: 'response-marker', httpStatus: response.status, recognized: response.headers.get('X-Assistant-Acceptance') === 'v1', json: (response.headers.get('content-type') ?? '').includes('application/json') };
         assert(response.headers.get('X-Assistant-Acceptance') === 'v1', 'Unrecognized evaluation response');
+        transport.stage = 'json';
         const value = await response.json();
+        transport.stage = 'fixture-model';
         assert(value.id === id && value.model === models.groq.answer, 'Unexpected model or fixture');
         samples.push({ ...value, httpStatus: response.status, roundTripMs: Date.now() - started });
         console.log(`${value.passed ? 'PASS' : 'FAIL'} ${id} sample ${sample + 1}/${repetitions} ${Date.now() - started}ms${value.syntheticDiagnostic?.providerReason ? ` ${value.syntheticDiagnostic.providerReason}` : ''}`);
@@ -124,8 +128,8 @@ try {
         }
       } catch (error) {
         if (receipt.cases.some(item => item.id === id)) throw error;
-        samples.push({ id, passed: false, checks: [{ name: 'transport_and_schema', passed: false }], roundTripMs: Date.now() - started });
-        console.log(`FAIL ${id} sample ${sample + 1}/${repetitions} transport-or-schema`);
+        samples.push({ id, passed: false, checks: [{ name: 'transport_and_schema', passed: false }], transportFailure: transport, roundTripMs: Date.now() - started });
+        console.log(`FAIL ${id} sample ${sample + 1}/${repetitions} transport-or-schema ${JSON.stringify(transport)}`);
       }
     }
     receipt.cases.push({ id, passed: samples.length === repetitions && samples.every(sample => sample.passed), samples });
