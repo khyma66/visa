@@ -100,6 +100,7 @@ export default {
             stage: raw === undefined ? 'application-service' : 'source-validation',
             ...(serviceFailure ? { serviceFailure } : {}), ...(providerReason ? { providerReason } : {}),
             ...(raw === undefined ? {} : output === undefined ? { rawOutput: raw } : { output }),
+            ...(rawReview !== undefined && rawReview.length <= 12_000 ? { rawReviewOutput: rawReview } : {}),
           },
         }, 502);
       }
@@ -122,6 +123,7 @@ export default {
           { name: 'application_model_quota_not_used', passed: events.filter(event => event === 'reserve').length === 0 },
           { name: 'application_runtime_binding_not_loaded', passed: events.filter(event => event === 'runtime-binding').length === 0 },
           { name: 'application_provider_not_called', passed: events.filter(event => event === 'generate' || event === 'review').length === 0 },
+          { name: 'application_evidence_reviewed_when_needed', passed: events.filter(event => event === 'review').length === 0 },
           { name: 'application_sources_revalidated', passed: events[1] === 'corpus' && events.filter(event => event === 'corpus').length >= 2 },
         ] : [
           { name: 'application_quota_reserved', passed: events.filter(event => event === 'reserve').length === 1 },
@@ -145,6 +147,7 @@ export default {
           // Preserve the distinction between model abstention and a rejected
           // citation only for a failed, fixed synthetic case. Never production.
           ...(raw !== undefined && raw.length <= 24_000 ? { rawModelOutput: raw } : {}),
+          ...(rawReview !== undefined && rawReview.length <= 12_000 ? { rawReviewOutput: rawReview } : {}),
         } } : {}),
       });
     } catch { return response({ error: 'Hosted inference or source validation failed' }, 502); }

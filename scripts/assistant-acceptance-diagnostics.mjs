@@ -42,6 +42,10 @@ export async function readAcceptanceFailureDiagnostic(reply, id, model) {
       if (diagnostic.output !== undefined) result.output = diagnostic.output;
       else if (typeof diagnostic.rawOutput === 'string' && diagnostic.rawOutput.length <= 24_000) result.rawOutput = diagnostic.rawOutput;
       else return undefined;
+      if (diagnostic.rawReviewOutput !== undefined) {
+        if (typeof diagnostic.rawReviewOutput !== 'string' || diagnostic.rawReviewOutput.length > 12_000) return undefined;
+        result.rawReviewOutput = diagnostic.rawReviewOutput;
+      }
     } else if (!result.serviceFailure && !result.providerReason) return undefined;
     return result;
   } catch { return undefined; }

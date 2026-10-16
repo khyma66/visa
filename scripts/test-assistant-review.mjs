@@ -182,6 +182,22 @@ test('review asks the same resolved selected-post question as generation', () =>
   const selected = { questionId: source.questionId, sourceId: source.id };
   const prompt = assistantReviewPrompt({ ...input, question: 'Explain the second post.', previousPosts: [{ questionId: 'apify-other', sourceId: 'q:apify-other' }, selected] }, corpus, result);
   assert.equal(JSON.parse(prompt.user).question, 'Explain the selected discussion.');
+  assert.match(prompt.system, /server has already resolved the selected discussion/);
+  assert.match(prompt.system, /Do not reconstruct an ordinal or earlier result list/);
+  const unselected = assistantReviewPrompt(input, corpus, result);
+  assert.doesNotMatch(unselected.system, /server has already resolved the selected discussion/);
+});
+
+test('post-record clarification preserves the distinction between stated events and unconfirmed premises', () => {
+  const prompt = assistantReviewPrompt(input, corpus, result);
+  const data = JSON.parse(prompt.user);
+  assert.equal(data.sources[0].kind, 'question');
+  assert.equal(data.sources[0].body, source.body);
+  assert.match(prompt.system, /kind of "question" identifies a discussion post record/);
+  assert.match(prompt.system, /declarative first-person report.*support an attributed event/);
+  assert.match(prompt.system, /interrogative, hypothetical or uncertain statements still cannot prove their premises/);
+  assert.match(prompt.system, /EVERY factual assertion/);
+  assert.match(prompt.system, /Any unsupported part makes that whole check false/);
 });
 
 test('review schema constrains IDs and count without changing the generation schema', () => {
