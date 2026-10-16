@@ -6,10 +6,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export const CHATBOT_RECOVERY = Object.freeze({
-  // Exact rollback event from guarded run 38833072583, independently checked
+  // Exact rollback event from guarded run 38835621996, independently checked
   // with Wrangler after smoke verification failed. Immutable version, source,
   // archive and branding are unchanged; no arbitrary rollback event is allowed.
-  deploymentId: 'c89cfee1-1f7c-46c3-b5d1-7d33ff43d970',
+  deploymentId: 'eb792c35-e02f-4878-9041-a77527a19f50',
   previousVersion: '9be26341-637e-4384-9e53-712d5fa27e5a',
   worker: 'visaflow-dev', siteOrigin: 'https://visathreads.com',
   databaseOrigin: 'https://cycnichledvqbxevrwnt.supabase.co',

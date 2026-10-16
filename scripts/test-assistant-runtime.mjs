@@ -20,7 +20,8 @@ const core = await import(dependencies['./assistant-core']);
 dependencies['./assistant-provider'] = await compile('assistant-provider');
 const provider = await import(dependencies['./assistant-provider']);
 dependencies['./assistant-search'] = await compile('assistant-search');
-const service = await import(await compile('assistant-service'));
+const serviceModule = await compile('assistant-service');
+const service = await import(serviceModule);
 
 const id = '00000000-0000-4000-8000-000000000001';
 const secret = 'private-diagnostic-marker';
@@ -41,6 +42,54 @@ const request = () => new Request('https://visathreads.com/api/assistant', {
   method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(input),
 });
 const privateError = () => new Error(`${secret} ${token} private-user@example.invalid`);
+
+test('deployed assistant responses identify their compiled build without trusting caller headers', async () => {
+  const moduleUrl = value => `data:text/javascript;base64,${Buffer.from(value).toString('base64')}`;
+  const buildSha = 'a'.repeat(40);
+  const imports = {
+    '@supabase/supabase-js': moduleUrl('export function createClient() { throw Error("Authentication must not run for these probes"); }'),
+    '@visa/build-provenance': moduleUrl(`export default { gitSha: ${JSON.stringify(buildSha)} };`),
+    '@/lib/assistant-core': dependencies['./assistant-core'],
+    '@/lib/assistant-data': moduleUrl('export function retrieveAssistantCorpus() { throw Error("Retrieval must not run"); }'),
+    '@/lib/assistant-provider': dependencies['./assistant-provider'],
+    '@/lib/assistant-service': serviceModule,
+  };
+  const code = ts.transpileModule(await readFile(new URL('../src/app/api/assistant/route.ts', import.meta.url), 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
+  }).outputText.replace(/(from\s+)(['"])([^'"]+)\2/g, (_, prefix, _quote, name) => {
+    assert(imports[name], `Unknown route dependency ${name}`);
+    return prefix + JSON.stringify(imports[name]);
+  });
+  const route = await import(moduleUrl(code));
+  const configured = {
+    NEXT_PUBLIC_SITE_URL: 'https://visathreads.com',
+    NEXT_PUBLIC_SUPABASE_URL: 'https://cycnichledvqbxevrwnt.supabase.co',
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'public-fixture-key',
+    ASSISTANT_PROJECT_REF: 'cycnichledvqbxevrwnt', ASSISTANT_PROVIDER: 'workers-ai',
+    ASSISTANT_ENABLED: 'true', ASSISTANT_COMMUNITIES_ENABLED: 'false', ASSISTANT_CATCHUP_ENABLED: 'false',
+  };
+  const previous = Object.fromEntries(Object.keys(configured).map(key => [key, process.env[key]]));
+  Object.assign(process.env, configured);
+  try {
+    const response = await route.GET(new Request('https://visathreads.com/api/assistant'));
+    assert.equal(response.headers.get('x-visathreads-build'), buildSha);
+    assert.deepEqual(await response.json(), { posts: true, communities: false, catchup: false });
+    for (const [origin, enabled, status] of [[undefined, 'true', 401], ['https://untrusted.example', 'true', 403], [undefined, 'false', 503]]) {
+      process.env.ASSISTANT_ENABLED = enabled;
+      const result = await route.POST(new Request('https://visathreads.com/api/assistant', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-VisaThreads-Build': 'attacker', ...(origin ? { Origin: origin } : {}) },
+        body: JSON.stringify({ mode: 'ask', scope: { kind: 'public' }, question: 'Find posts about stamping.' }),
+      }));
+      assert.equal(result.status, status);
+      assert.equal(result.headers.get('x-visathreads-build'), buildSha);
+      assert.match(result.headers.get('cache-control'), /private, no-store/);
+    }
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
 function assertPrivate(value) {
   const serialized = JSON.stringify(value);
   for (const forbidden of [secret, token, 'private-user@example.invalid', 'actor-private-id', source.id, source.body]) {

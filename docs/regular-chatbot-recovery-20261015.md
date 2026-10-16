@@ -33,6 +33,19 @@ unchanged branding. The recovery pin now identifies only that observed rollback
 event; it does not allow arbitrary redeployments. Release probes must use fresh
 requests and require both bare and cache-busted health URLs to agree repeatedly.
 
+Run `38835621996` also passed all 72 hosted samples, then uploaded version
+`cbfcc4b7-8c6e-45cc-aa76-735daff7af61`. The fresh health, archive, feature flags,
+assistant page and anonymous denial checks passed; a subsequent cross-origin
+probe returned 503 instead of 403. The guard restored the same captured immutable
+version at deployment `eb792c35-e02f-4878-9041-a77527a19f50`, independently checked
+with Wrangler. A browser also observed a failed lazy-script fetch during that
+rollout; the script returned 200 when inspected later. Neither observation proves
+the failure was propagation. The recovery pin now selects only this observed
+rollback event. Assistant responses identify their compiled source revision so
+later failures can be attributed more precisely. Rollout checks retain failed
+round metadata and verify all public client scripts/styles, without changing
+answer acceptance or bypassing authentication, content, or provenance checks.
+
 ## Answer behavior
 
 - Bounded conversation context preserves the topic across brief follow-ups.

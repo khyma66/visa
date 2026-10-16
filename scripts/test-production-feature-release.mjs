@@ -213,6 +213,7 @@ test('recording and rollback refuse unrelated deployments and accept a provable 
 test('production workflow captures structured deploy output and attempts guarded recovery after upload failure', async () => {
   const workflow = await readFile(new URL('../.github/workflows/production-features.yml', import.meta.url), 'utf8');
   assert(workflow.includes('name: production-ai-feature-evidence-${{ github.sha }}-attempt-${{ github.run_attempt }}'), 'Retries retain separate evidence instead of overwriting or colliding with failed attempts');
+  assert(workflow.includes('.cache/visaflow/live-preview/rollout-verification.json'), 'Every release preserves failed rollout rounds as well as the final result');
   assert.match(workflow, /WRANGLER_OUTPUT_FILE_PATH: \$\{\{ github.workspace \}\}\/\.cache\/visaflow\/live-preview\/wrangler-deploy\.ndjson/);
   assert.match(workflow, /if: always\(\) && \(steps\.deploy\.outcome == 'success' \|\| steps\.deploy\.outcome == 'failure'\)\n\s+run: node scripts\/production-feature-release\.mjs record-deployment/);
   assert.match(workflow, /if: failure\(\) && \(steps\.deploy\.outcome == 'success' \|\| steps\.deploy\.outcome == 'failure'\)/);
