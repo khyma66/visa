@@ -55,24 +55,18 @@ export function providerCacheKey(provider: string | undefined): string {
   return provider === 'workers-ai' ? WORKERS_ASSISTANT_PROFILE : providerModel(provider);
 }
 
-/** Route complete large/multilingual inputs before inference, never truncate evidence or retry. */
+/** Preserve complete evidence with the approved fixed model; never retry silently. */
 export function workersAssistantRequest(prompt: AssistantPrompt) {
   const review = prompt.outputKind === 'review';
   const schema = assistantOutputSchema(prompt);
   const schemaName = review ? 'discussion_answer_review' : 'discussion_answer';
-  const selected = review ? models.review : models.answer;
+  const model = review ? models.review : models.answer;
   const response_format = { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } };
   const messages = [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }];
-  // UTF-8 bytes conservatively bound byte-pair input tokens, including the
-  // schema. Leave room in Qwen's 32K window for output and template overhead.
-  const inputBytes = new TextEncoder().encode(JSON.stringify({ messages, response_format })).byteLength;
-  const model = selected === '@cf/qwen/qwen3-30b-a3b-fp8' && inputBytes > models.qwenInputByteLimit ? models.longContext : selected;
-  const qwen = model === '@cf/qwen/qwen3-30b-a3b-fp8';
-  if (qwen) messages[0].content += '\n/no_think';
   return { model, input: {
     messages, response_format,
     max_tokens: review ? models.reviewMaxTokens : models.answerMaxTokens,
-    ...(qwen ? {} : { reasoning_effort: 'low', store: false }),
+    reasoning_effort: 'low', store: false,
     temperature: 0, seed: 39173,
   } };
 }

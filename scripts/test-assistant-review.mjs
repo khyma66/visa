@@ -14,7 +14,7 @@ async function compile(name) {
 }
 dependencies['./assistant-context'] = await compile('assistant-context');
 dependencies['./assistant-core'] = await compile('assistant-core');
-const { AssistantError } = await import(dependencies['./assistant-core']);
+const { AssistantError, assistantPrompt } = await import(dependencies['./assistant-core']);
 const { assistantReviewCorpus, assistantReviewPrompt, validateAssistantReview } = await import(await compile('assistant-review'));
 const provider = await import(await compile('assistant-provider'));
 const source = {
@@ -31,6 +31,21 @@ const result = {
 };
 const verdict = (checks = [{ id: 'claim:0', supported: true }], fulfillsTask = true) => JSON.stringify({ checks, fulfillsTask });
 const fails = raw => assert.throws(() => validateAssistantReview(raw, result), error => error instanceof AssistantError && error.status === 502);
+
+test('reporting dates must not become original appointment dates and rejected drafts stay hidden', () => {
+  const datedSource = { ...source, body: 'Today, October 13, I reported that my appointment was rescheduled to October 20.' };
+  const datedCorpus = { sources: [datedSource], partial: false, since: '2026-10-13T00:00:00Z', until: '2026-10-14T00:00:00Z' };
+  const prompt = assistantPrompt({ mode: 'catchup', scope: { kind: 'community', id: 'test-community' } }, datedCorpus);
+  assert.match(prompt.system, /A posting or reporting date is not an original appointment date/);
+  assert.match(prompt.system, /include a previous date only when the source explicitly states it/);
+  assert.equal(JSON.parse(prompt.user).sources[0].body, datedSource.body);
+  // Captured live-model error: quote fidelity alone cannot establish entailment.
+  const draft = { ...result, sources: [datedSource], claims: [{ text: 'A member reported that their appointment, originally set for October 13, was rescheduled to October 20.', evidence: [{ sourceId: datedSource.id, quote: datedSource.body }] }] };
+  const rejected = validateAssistantReview(verdict([{ id: 'claim:0', supported: false }], false), draft);
+  assert.equal(rejected.status, 'insufficient');
+  assert.deepEqual(rejected.claims, []);
+  assert.deepEqual(rejected.sources, []);
+});
 
 test('approval preserves the original fluent answer and evidence without accepting reviewer prose', () => {
   assert.equal(validateAssistantReview(verdict(), result), result);

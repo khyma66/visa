@@ -277,7 +277,7 @@ test('OpenAI adapter uses bounded structured request, no provider state, and no 
   await assert.rejects(()=>provider.runAssistantModel({system:'test',user:'test'},{provider:'openai',apiKey:'test-only',fetcher:async()=>{calls++;return new Response('',{status:429});}}));assert.equal(calls,2);
 });
 test('Workers AI uses structured reasoning responses and rejects truncated chat completions',async()=>{
-  const run=async finish_reason=>provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async(model,input)=>{assert.equal(model,'@cf/qwen/qwen3-30b-a3b-fp8');assert.equal(input.max_tokens,4096);assert.equal(input.reasoning_effort,undefined);assert.equal(input.response_format.json_schema.strict,true);assert.deepEqual(input.response_format.json_schema.schema,provider.ASSISTANT_OUTPUT_SCHEMA);assert.equal(input.temperature,0);assert.equal(input.seed,39173);assert.equal(input.messages[1].content,'test');assert.match(input.messages[0].content,/\/no_think$/);return {choices:[{finish_reason,message:{content:JSON.stringify(output)}}]};}}});
+  const run=async finish_reason=>provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async(model,input)=>{assert.equal(model,'@cf/openai/gpt-oss-120b');assert.equal(input.max_tokens,4096);assert.equal(input.reasoning_effort,'low');assert.equal(input.store,false);assert.equal(input.response_format.json_schema.strict,true);assert.deepEqual(input.response_format.json_schema.schema,provider.ASSISTANT_OUTPUT_SCHEMA);assert.equal(input.temperature,0);assert.equal(input.seed,39173);assert.equal(input.messages[1].content,'test');assert.equal(input.messages[0].content,'test');return {choices:[{finish_reason,message:{content:JSON.stringify(output)}}]};}}});
   assert.equal(await run('stop'),JSON.stringify(output));await assert.rejects(()=>run('length'));
   const text=await provider.runAssistantModel({system:'test',user:'test'},{provider:'workers-ai',binding:{run:async()=>({response:JSON.stringify(output)})}});
   assert.equal(text,JSON.stringify(output));
@@ -297,7 +297,7 @@ test('large and multilingual prompts route once before inference without droppin
   }
   const profile = JSON.parse(provider.providerCacheKey('workers-ai'));
   assert.equal(profile.answer, provider.WORKERS_ASSISTANT_MODEL);
-  assert(profile.review && profile.longContext && profile.version, 'Every routing choice and parameter participates in cache identity');
+  assert(profile.review && profile.answerMaxTokens && profile.reviewMaxTokens && profile.version, 'Every model choice and parameter participates in cache identity');
 });
 
 test('usage metrics contain only bounded counts and fixed labels and cannot break answers', async () => {

@@ -97,7 +97,7 @@ test('successful evaluation executes exact production model and returns no gener
   const settings = { ...env(), ASSISTANT_AI: { run: async (model, input) => {
     calls++;
     assert.equal(model, modelProfile.answer);
-    assert.equal(input.reasoning_effort, undefined);
+    assert.equal(input.reasoning_effort, 'low');
     assert.equal(input.response_format.json_schema.strict, true);
     assert.equal(input.temperature, 0);
     assert.equal(input.seed, 39173);
