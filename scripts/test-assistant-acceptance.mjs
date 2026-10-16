@@ -39,7 +39,7 @@ function reviewResponse(input, supported = true) {
   const ids = input.response_format.json_schema.schema.properties.checks.items.properties.id.enum;
   assert.deepEqual(ids, prompt.candidate.checks.map(check => check.id));
   assert.equal(input.max_tokens, 1200);
-  return { response: JSON.stringify({ checks: ids.map(id => ({ id, supported })), answersQuestion: supported }) };
+  return { response: JSON.stringify({ checks: ids.map(id => ({ id, supported })), fulfillsTask: supported }) };
 }
 
 test('evaluation denies absent/wrong credentials and invalid/expired expiry before inference', async () => {
@@ -274,14 +274,14 @@ test('independent review rejects fabricated meaning without replacing it with a 
   assert.equal(evaluation.syntheticDiagnostic.output.status, 'insufficient');
   assert.deepEqual(evaluation.syntheticDiagnostic.output.claims, []);
   assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawModelOutput), draft, 'Diagnostics retain the draft, not the review response');
-  assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawReviewOutput), { checks: [{ id: 'claim:0', supported: false }], answersQuestion: false });
+  assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawReviewOutput), { checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false });
   assert(evaluation.checks.some(check => check.name === 'application_evidence_reviewed_when_needed' && check.passed));
 });
 
 test('a malformed review preserves separate draft and review diagnostics on the failed HTTP response', async () => {
   const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
   const draft = { status: 'answered', claims: [{ text: 'The member received their passport on Friday.', evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] };
-  const rawReviewOutput = JSON.stringify({ checks: [], answersQuestion: true });
+  const rawReviewOutput = JSON.stringify({ checks: [], fulfillsTask: true });
   const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => ({ response: input.response_format.json_schema.name === 'discussion_answer_review' ? rawReviewOutput : JSON.stringify(draft) }) } };
   const reply = await worker.fetch(request({ id: fixture.id }), settings);
   assert.equal(reply.status, 502);
@@ -338,6 +338,8 @@ test('thank-you fixture accepts a qualified explanation without accepting affirm
     'The reply does not independently confirm permission. The original poster can keep working.',
     'The reply does not itself prove permission. The author was actually authorized to keep working.',
     'The reply only expresses an understanding, but the author has permission to work.',
+    'The reply does not constitute evidence of permission. The author may continue working.',
+    'The reply does not provide any evidence of permission, but the author was authorized to keep working.',
   ]) {
     const result = { ...draft, claims: [{ ...draft.claims[0], text: unsafe }], sources: [source], coverage: { sourceCount: 1, partial: true, reasons: ['missing-replies'] } };
     const unsafeEvaluation = evaluateAcceptance(fixture, result);
@@ -350,6 +352,7 @@ test('captured legitimate hosted paraphrases retain qualifier meaning and Unicod
   const examples = [
     { id: 'thank-you-confirmation', text: "The thank‑you reply only expresses the author's understanding and does not provide any evidence that they were actually authorized to keep working." },
     { id: 'thank-you-confirmation', text: 'The thank‑you reply is only the author’s own statement of understanding and does not itself prove that they were authorized to keep working.' },
+    { id: 'thank-you-confirmation', text: "The thank‑you reply is only the author's expression of gratitude and their understanding of the situation; it does not constitute evidence that they were actually authorized to keep working." },
     { id: 'public-ordinal-context', text: 'The poster reports that their visa stamping interview in Chennai was rescheduled to October 28 because the consular officer was unavailable.' },
   ];
   const makeResult = (fixture, text) => ({ status: 'answered', claims: [{ text, evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: fixture.corpus.sources[0].body }] }], disagreements: [], unanswered: [], sources: fixture.corpus.sources, coverage: { sourceCount: fixture.corpus.sources.length, partial: fixture.corpus.partial, reasons: fixture.corpus.coverageReasons } });
@@ -357,6 +360,15 @@ test('captured legitimate hosted paraphrases retain qualifier meaning and Unicod
     const fixture = acceptanceFixtures.find(item => item.id === example.id);
     const evaluation = evaluateAcceptance(fixture, makeResult(fixture, example.text));
     assert.equal(evaluation.passed, true, `${example.id}: ${JSON.stringify(evaluation)}`);
+  }
+  const acknowledgement = acceptanceFixtures.find(item => item.id === 'thank-you-confirmation');
+  for (const text of [
+    'The thank-you reply does constitute evidence that the author was authorized to keep working.',
+    'The thank-you reply does provide evidence that the author was authorized to keep working.',
+  ]) {
+    const evaluation = evaluateAcceptance(acknowledgement, makeResult(acknowledgement, text));
+    assert.equal(evaluation.passed, false, text);
+    assert(evaluation.checks.some(check => check.name === 'unconfirmed_understanding_not_a_fact' && !check.passed));
   }
   const ordinal = acceptanceFixtures.find(item => item.id === 'public-ordinal-context');
   for (const [text, check] of [
@@ -368,7 +380,7 @@ test('captured legitimate hosted paraphrases retain qualifier meaning and Unicod
     assert.equal(evaluation.passed, false, text);
     assert(evaluation.checks.some(item => item.name === check && !item.passed), text);
   }
-  const wrongSource = makeResult(ordinal, examples[2].text);
+  const wrongSource = makeResult(ordinal, examples.at(-1).text);
   wrongSource.sources = [{ ...wrongSource.sources[0], questionId: '00000000-0000-4000-8000-000000000050' }];
   assert(evaluateAcceptance(ordinal, wrongSource).checks.some(check => check.name === 'only_resolved_discussion_cited' && !check.passed));
 });
@@ -481,7 +493,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
   const validation = { ...expected, stage: 'source-validation', serviceFailure: { stage: 'validation', status: 502, code: 'citation_length' }, output: { status: 'answered', claims: [] } };
   delete validation.providerReason;
   assert.deepEqual(await readAcceptanceFailureDiagnostic(reply(validation), id, model), validation);
-  const rawReviewOutput = JSON.stringify({ checks: [{ id: 'claim:0', supported: false }], answersQuestion: false });
+  const rawReviewOutput = JSON.stringify({ checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false });
   assert.deepEqual(await readAcceptanceFailureDiagnostic(reply({ ...validation, rawReviewOutput }), id, model), { ...validation, rawReviewOutput });
   assert.equal((await readAcceptanceFailureDiagnostic(reply({ ...validation, rawReviewOutput: 'x'.repeat(12_000) }), id, model)).rawReviewOutput.length, 12_000);
   for (const invalid of ['x'.repeat(12_001), null, false, 7, {}, []]) {

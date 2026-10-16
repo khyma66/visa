@@ -29,12 +29,12 @@ const result = {
   status: 'answered', claims: [claim], disagreements: [], unanswered: [], sources: [source],
   coverage: { sourceCount: 1, partial: false }, generatedAt: '2026-10-13T00:00:00Z', cached: false, notice: 'Community experiences only.',
 };
-const verdict = (checks = [{ id: 'claim:0', supported: true }], answersQuestion = true) => JSON.stringify({ checks, answersQuestion });
+const verdict = (checks = [{ id: 'claim:0', supported: true }], fulfillsTask = true) => JSON.stringify({ checks, fulfillsTask });
 const fails = raw => assert.throws(() => validateAssistantReview(raw, result), error => error instanceof AssistantError && error.status === 502);
 
 test('approval preserves the original fluent answer and evidence without accepting reviewer prose', () => {
   assert.equal(validateAssistantReview(verdict(), result), result);
-  fails(JSON.stringify({ checks: [{ id: 'claim:0', supported: true }], answersQuestion: true, answer: 'Everyone is approved.' }));
+  fails(JSON.stringify({ checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true, answer: 'Everyone is approved.' }));
   fails(verdict([{ id: 'claim:0', supported: true, text: 'Everyone is approved.' }]));
 });
 
@@ -58,7 +58,8 @@ test('review validation requires complete, unique, exact IDs and actual boolean 
     '', '{', 'null', '[]', JSON.stringify({}), verdict([]), verdict([{ id: 'claim:1', supported: true }]),
     verdict([{ id: 'claim:0', supported: 'true' }]), verdict([{ id: 'claim:0', supported: 1 }]),
     verdict([{ id: 'claim:0', supported: true }], 'true'), verdict([{ id: 'claim:0', supported: true }, { id: 'claim:0', supported: true }]),
-    JSON.stringify({ checks: [{ id: 'claim:0', supported: true }], answersQuestion: true, extra: false }),
+    JSON.stringify({ checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true, extra: false }),
+    JSON.stringify({ checks: [{ id: 'claim:0', supported: true }], answersQuestion: true }),
     ' '.repeat(12_001) + verdict(),
   ]) fails(malformed);
   const two = { ...result, claims: [claim, claim] };
@@ -84,7 +85,7 @@ test('review prompt carries full source context and treats candidate instruction
   assert.match(prompt.system, /thank-you/);
   assert.match(prompt.system, /negation, conditions, uncertainty/);
   assert.match(prompt.system, /An individual anecdote supports only an attributed report/);
-  assert.match(prompt.system, /A technically accurate but irrelevant quote or acknowledgment is not an answer/);
+  assert.match(prompt.system, /A technically accurate but irrelevant quote or acknowledgment does not fulfill the task/);
 });
 
 test('full-context review restores a correction outside the generation window and keeps comparison sources', () => {
@@ -182,10 +183,59 @@ test('review asks the same resolved selected-post question as generation', () =>
   const selected = { questionId: source.questionId, sourceId: source.id };
   const prompt = assistantReviewPrompt({ ...input, question: 'Explain the second post.', previousPosts: [{ questionId: 'apify-other', sourceId: 'q:apify-other' }, selected] }, corpus, result);
   assert.equal(JSON.parse(prompt.user).question, 'Explain the selected discussion.');
-  assert.match(prompt.system, /server has already resolved the selected discussion/);
+  assert.match(prompt.system, /^REVIEW TASK — SELECTED DISCUSSION/);
+  assert.match(prompt.system, /server has already selected the discussion/);
   assert.match(prompt.system, /Do not reconstruct an ordinal or earlier result list/);
   const unselected = assistantReviewPrompt(input, corpus, result);
-  assert.doesNotMatch(unselected.system, /server has already resolved the selected discussion/);
+  assert.match(unselected.system, /^REVIEW TASK — QUESTION/);
+  assert.doesNotMatch(unselected.system, /server has already selected the discussion/);
+});
+
+test('captured catch-up draft is judged against new interval events without inventing a missing question', () => {
+  const update = { ...source, id: 'a:fixture-2', kind: 'reply', body: 'Today, October 13, I reported that my appointment was rescheduled to October 20.', parentContext: 'An older July discussion asked about a July 25 appointment.' };
+  const caught = { ...result, claims: [{ text: 'On October 13, a member reported that their appointment, originally scheduled for an earlier date, was moved to October 20.', evidence: [{ sourceId: update.id, quote: update.body }] }], sources: [update] };
+  const interval = { since: '2026-10-13T00:00:00Z', until: '2026-10-14T00:00:00Z' };
+  const prompt = assistantReviewPrompt({ mode: 'catchup', scope: { kind: 'community', id: '00000000-0000-4000-8000-000000000099' }, ...interval }, { sources: [update], partial: false, ...interval }, caught);
+  const data = JSON.parse(prompt.user);
+  assert.match(prompt.system, /^REVIEW TASK — CATCH-UP:/);
+  assert.match(prompt.system.split('\n')[0], /No user question is required/);
+  assert.match(prompt.system.split('\n')[0], /keeps older parent context separate from new events/);
+  assert.equal(data.task, 'catchup');
+  assert.equal('question' in data, false);
+  assert.deepEqual(data.interval, interval);
+  assert.equal(data.candidate.checks[0].text, caught.claims[0].text);
+  assert.equal(validateAssistantReview(verdict([{ id: 'claim:0', supported: true }], false), caught).status, 'insufficient', 'Task rejection still fails closed for catch-up');
+  const summary = assistantReviewPrompt({ mode: 'summary', scope: { kind: 'post', id: source.questionId } }, corpus, result);
+  assert.match(summary.system, /^REVIEW TASK — DISCUSSION SUMMARY:/);
+  assert.match(summary.system.split('\n')[0], /No user question is required/);
+  assert.equal('question' in JSON.parse(summary.user), false);
+});
+
+test('captured ordinal draft receives the already resolved discussion task before the review rubric', () => {
+  const postId = '00000000-0000-4000-8000-000000000051';
+  const item = { ...source, id: `q:${postId}`, questionId: postId, title: 'My postponed Chennai stamping interview', body: 'My Chennai stamping interview was postponed to October 28 because the officer was unavailable.' };
+  const captured = { ...result, sources: [item], claims: [{ text: 'The poster reports that their visa stamping interview in Chennai was rescheduled to October 28 because the consular officer was unavailable.', evidence: [{ sourceId: item.id, quote: item.body }] }] };
+  const prompt = assistantReviewPrompt({ ...input, question: 'Explain the second post.', previousQuestions: ['Find posts about Chennai stamping'], previousPosts: [{ questionId: 'apify-first', sourceId: 'q:apify-first' }, { questionId: postId, sourceId: item.id }] }, { sources: [item], partial: false }, captured);
+  const data = JSON.parse(prompt.user);
+  assert.match(prompt.system, /^REVIEW TASK — SELECTED DISCUSSION:/);
+  assert.match(prompt.system.split('\n')[0], /actual reported events and stated reasons/);
+  assert.match(prompt.system.split('\n')[0], /otherwise it must answer the specific question asked/);
+  assert.equal(data.question, 'Explain the selected discussion.');
+  assert.equal(data.resolvedDiscussion.questionId, postId);
+  assert.deepEqual(data.previousQuestions, []);
+  assert.equal(data.candidate.checks[0].text, captured.claims[0].text);
+  assert.match(prompt.system, /EVERY factual assertion/);
+});
+
+test('a supported but unrelated candidate still fails task completion without a quote fallback', () => {
+  const irrelevant = { ...result, claims: [{ text: 'The member paid 500 rupees for parking.', evidence: [{ sourceId: source.id, quote: 'I paid 500 rupees for parking.' }] }] };
+  const prompt = assistantReviewPrompt({ ...input, question: 'On which day did the member receive their passport?' }, corpus, irrelevant);
+  assert.match(prompt.system, /^REVIEW TASK — QUESTION:/);
+  assert.match(prompt.system.split('\n')[0], /false for an irrelevant report/);
+  const rejected = validateAssistantReview(verdict([{ id: 'claim:0', supported: true }], false), irrelevant);
+  assert.equal(rejected.status, 'insufficient');
+  assert.deepEqual(rejected.claims, []);
+  assert.deepEqual(rejected.sources, []);
 });
 
 test('post-record clarification preserves the distinction between stated events and unconfirmed premises', () => {
@@ -203,7 +253,7 @@ test('post-record clarification preserves the distinction between stated events 
 test('review schema constrains IDs and count without changing the generation schema', () => {
   const prompt = assistantReviewPrompt(input, corpus, result);
   const schema = provider.assistantOutputSchema(prompt);
-  assert.deepEqual(schema.required, ['checks', 'answersQuestion']);
+  assert.deepEqual(schema.required, ['checks', 'fulfillsTask']);
   assert.equal(schema.additionalProperties, false);
   assert.equal(schema.properties.checks.minItems, 1);
   assert.equal(schema.properties.checks.maxItems, 1);

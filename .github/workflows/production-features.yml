@@ -1,5 +1,5 @@
 name: Release current VisaThreads AI features
-# Release reviewed synthesis with natural-language and selected-post regressions.
+# Release task-aware evidence review for questions, summaries and catch-up.
 # Both normal and cache-busted health requests must converge before verification.
 # Site quality release: shared readable typography and recoverable messaging.
 

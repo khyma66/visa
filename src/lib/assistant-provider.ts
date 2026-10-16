@@ -19,12 +19,12 @@ export function assistantOutputSchema(prompt: AssistantPrompt) {
   if (prompt.outputKind === 'review') {
     const ids = [...new Set(prompt.reviewIds ?? [])];
     if (!ids.length || ids.length > 9) throw new AssistantError(502, 'The assistant could not verify this answer. Please try again.');
-    return { type: 'object', additionalProperties: false, required: ['checks', 'answersQuestion'], properties: {
+    return { type: 'object', additionalProperties: false, required: ['checks', 'fulfillsTask'], properties: {
       checks: { type: 'array', minItems: ids.length, maxItems: ids.length, items: {
         type: 'object', additionalProperties: false, required: ['id', 'supported'],
         properties: { id: { type: 'string', enum: ids }, supported: { type: 'boolean' } },
       } },
-      answersQuestion: { type: 'boolean' },
+      fulfillsTask: { type: 'boolean', description: 'Whether the candidate satisfies the supplied task: answer, discussion summary, or interval catch-up. Summary and catch-up do not require a user question.' },
     } };
   }
   if (!prompt.sourceIds?.length) return ASSISTANT_OUTPUT_SCHEMA;

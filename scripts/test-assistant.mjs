@@ -27,7 +27,7 @@ function harness(overrides={}) {
   const handler=service.createAssistantHandler({availability:()=>({posts:true,communities:true,catchup:true}),model:'test-model',
     authenticate:async()=>({actor:state.actor,corpus:async()=>{state.reads++;return {sources:structuredClone(state.sources),partial:false};},reserve:async()=>{state.reserved++;return true;}}),
     cache:{get:async key=>state.cache.get(key)??null,put:async(key,value)=>{state.cache.set(key,value);}},...overrides,
-    generate:async(prompt,signal)=>{if(prompt.outputKind==='review'){state.reviewed++;return JSON.stringify({answersQuestion:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))});}return generate(prompt,signal);}});
+    generate:async(prompt,signal)=>{if(prompt.outputKind==='review'){state.reviewed++;return JSON.stringify({fulfillsTask:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))});}return generate(prompt,signal);}});
   return {state,handler};
 }
 test('explicit post search answers from sources without waiting for or charging model generation', async () => {
