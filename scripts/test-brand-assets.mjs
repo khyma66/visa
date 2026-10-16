@@ -12,7 +12,8 @@ test('current integrated logo retains its aspect ratio, transparency and small p
   assert.equal(info.width, 687); assert.equal(info.height, 240);
   assert.equal(info.hasAlpha, true); assert((await stat(path)).size < 35_000);
   const css = await readFile(new URL('src/styles/globals.css', root), 'utf8');
-  assert.match(css, /\.integrated-brand-logo\s*\{[^}]*object-fit: contain;/);
+  assert.match(css, /\.integrated-brand-logo-frame\s*\{[^}]*overflow: hidden;/);
+  assert.match(css, /\.integrated-brand-logo\s*\{[^}]*left: -17%;[^}]*width: 131%;/);
 });
 
 test('brand assets are small, correctly sized and transparent where needed', async () => {
