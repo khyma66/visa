@@ -31,7 +31,7 @@ test('Groq uses the fixed server endpoint, strict source IDs, bounded answer/rev
   assert.equal(await provider.runAssistantModel({system:'System',user:'Question',sourceIds:[source.id]},options),JSON.stringify(output));
   await provider.runAssistantModel({system:'Review',user:'Evidence',outputKind:'review',reviewIds:['claim:0']},options);
   for(const call of calls) {
-    assert.equal(call.url,'https://api.groq.com/openai/v1/chat/completions'); assert.equal(call.init.redirect,'error');
+    assert.equal(call.url,'https://api.groq.com/openai/v1/chat/completions'); assert.equal(call.init.redirect,'manual');
     assert.equal(call.init.headers.Authorization,'Bearer synthetic-groq-secret');
     assert.equal(call.body.model,'openai/gpt-oss-120b'); assert.equal(call.body.response_format.json_schema.strict,true);
     assert.equal(call.body.include_reasoning,false); assert.equal(call.body.reasoning_effort,'low');
@@ -46,7 +46,7 @@ test('Groq uses the fixed server endpoint, strict source IDs, bounded answer/rev
   assert.notEqual(provider.providerCacheKey('groq'),provider.providerCacheKey('workers-ai'));
 });
 test('Groq errors fail closed without retries, provider body disclosure or model fallback', async () => {
-  for(const [status,reason] of [[400,'invalid_request'],[401,'authentication_failed'],[403,'authentication_failed'],[429,'rate_limited'],[500,'provider_error']]) {
+  for(const [status,reason] of [[302,'provider_error'],[307,'provider_error'],[400,'invalid_request'],[401,'authentication_failed'],[403,'authentication_failed'],[429,'rate_limited'],[500,'provider_error']]) {
     let calls=0, observed;
     await assert.rejects(provider.runAssistantModel({system:'System',user:'Question'}, {provider:'groq',apiKey:'synthetic-key',reportFailure:value=>{observed=value;},fetcher:async()=>{calls++;return new Response('private provider diagnostic synthetic-key',{status});}}),error=>error.status===503&&!error.message.includes('private'));
     assert.equal(calls,1); assert.equal(observed,reason);
@@ -263,7 +263,7 @@ test('production-only target rejects dev and incomplete configuration',()=>{
 test('OpenAI adapter uses bounded structured request, no provider state, and no retries',async()=>{
   let calls=0;
   const text=await provider.runAssistantModel({system:'test',user:'test'},{provider:'openai',apiKey:'test-only',fetcher:async(url,init)=>{
-    calls++;assert.equal(url,'https://api.openai.com/v1/responses');const data=JSON.parse(init.body);assert.equal(data.store,false);assert.equal(data.max_output_tokens,1600);assert.equal(data.text.format.strict,true);assert.equal(init.redirect,'error');
+    calls++;assert.equal(url,'https://api.openai.com/v1/responses');const data=JSON.parse(init.body);assert.equal(data.store,false);assert.equal(data.max_output_tokens,1600);assert.equal(data.text.format.strict,true);assert.equal(init.redirect,'manual');
     return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(output)}]}]});
   }});assert.equal(text,JSON.stringify(output));assert.equal(calls,1);
   await assert.rejects(()=>provider.runAssistantModel({system:'test',user:'test'},{provider:'openai',apiKey:'test-only',fetcher:async()=>{calls++;return new Response('',{status:429});}}));assert.equal(calls,2);

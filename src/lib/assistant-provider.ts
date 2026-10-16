@@ -126,7 +126,9 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       const started = Date.now();
       reason = 'network_error';
       const response = await (options.fetcher ?? fetch)('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST', redirect: 'error', signal,
+        // Workers does not implement redirect:error. Return redirects without
+        // following them, then reject every non-2xx response below.
+        method: 'POST', redirect: 'manual', signal,
         headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: selected,
           messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
@@ -159,7 +161,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       return content;
     }
     const response = await (options.fetcher ?? fetch)('https://api.openai.com/v1/responses', {
-      method: 'POST', redirect: 'error', signal,
+      method: 'POST', redirect: 'manual', signal,
       headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, store: false, reasoning: { effort: 'none' }, max_output_tokens: review ? 1200 : 1600,
         input: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
@@ -177,7 +179,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
     // Allowlisted runtime categories only; never retain an exception message,
     // URL, authorization header, or provider response body.
     if (reason === 'network_error' && error instanceof Error) {
-      if (/unsupported redirect/i.test(error.message)) reason = 'unsupported_redirect';
+      if (/unsupported redirect|invalid redirect value/i.test(error.message)) reason = 'unsupported_redirect';
       else if (/illegal invocation|incorrect.*this.*reference/i.test(error.message)) reason = 'illegal_invocation';
     }
     if (options.signal?.aborted) reason = 'cancelled';
