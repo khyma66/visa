@@ -1,7 +1,7 @@
 // Failed hosted responses are retained only from our fixed-fixture evaluation
 // Worker. Do not save platform pages, credentials, or arbitrary error messages.
 const serviceStages = new Set(['request', 'authentication', 'retrieval', 'quota', 'generation', 'validation', 'review', 'revalidation']);
-const providerReasons = new Set(['missing_binding', 'missing_key', 'invalid_key_format', 'network_error', 'timeout', 'cancelled', 'provider_error', 'rate_limited', 'authentication_failed', 'invalid_request', 'incomplete_output', 'empty_output', 'oversized_output']);
+const providerReasons = new Set(['missing_binding', 'missing_key', 'invalid_key_format', 'network_error', 'unsupported_redirect', 'illegal_invocation', 'timeout', 'cancelled', 'provider_error', 'rate_limited', 'authentication_failed', 'invalid_request', 'incomplete_output', 'empty_output', 'oversized_output']);
 const validationCodes = new Set(['output_json', 'output_schema', 'claim_limit', 'claim_text', 'citation_missing', 'citation_schema', 'citation_length', 'citation_source', 'citation_quote', 'conflict_sources', 'unanswered_limit', 'answered_without_claims']);
 
 export async function readAcceptanceFailureDiagnostic(reply, id, model) {

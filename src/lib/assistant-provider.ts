@@ -3,7 +3,7 @@ import models from './assistant-models.json';
 
 export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[] };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
-export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'invalid_key_format' | 'network_error' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
+export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'invalid_key_format' | 'network_error' | 'unsupported_redirect' | 'illegal_invocation' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
 export const WORKERS_ASSISTANT_MODEL = models.answer;
 export const WORKERS_ASSISTANT_PROFILE = JSON.stringify(models);
 export const GROQ_ASSISTANT_MODEL = models.groq.answer;
@@ -173,7 +173,13 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
     if (!output) fail('empty_output');
     if (output.length > 24_000) fail('oversized_output');
     return output;
-  } catch {
+  } catch (error) {
+    // Allowlisted runtime categories only; never retain an exception message,
+    // URL, authorization header, or provider response body.
+    if (reason === 'network_error' && error instanceof Error) {
+      if (/unsupported redirect/i.test(error.message)) reason = 'unsupported_redirect';
+      else if (/illegal invocation|incorrect.*this.*reference/i.test(error.message)) reason = 'illegal_invocation';
+    }
     if (options.signal?.aborted) reason = 'cancelled';
     else if (timeout.aborted) reason = 'timeout';
     try { options.reportFailure?.(reason); } catch { /* telemetry cannot change the response */ }

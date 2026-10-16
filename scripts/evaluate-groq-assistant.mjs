@@ -82,7 +82,7 @@ try {
         samples.push({ ...value, httpStatus: response.status, roundTripMs: Date.now() - started });
         console.log(`${value.passed ? 'PASS' : 'FAIL'} ${id} sample ${sample + 1}/${repetitions} ${Date.now() - started}ms${value.syntheticDiagnostic?.providerReason ? ` ${value.syntheticDiagnostic.providerReason}` : ''}`);
         if (smoke && value.transport) console.log(JSON.stringify({ providerTransport: value.transport }));
-        if (['rate_limited', 'authentication_failed', 'invalid_key_format', 'network_error', 'invalid_request'].includes(value.syntheticDiagnostic?.providerReason)) {
+        if (['rate_limited', 'authentication_failed', 'invalid_key_format', 'network_error', 'unsupported_redirect', 'illegal_invocation', 'invalid_request'].includes(value.syntheticDiagnostic?.providerReason)) {
           receipt.cases.push({ id, passed: false, samples });
           throw Error(`Groq ${value.syntheticDiagnostic.providerReason}; stop additional inference until configuration/capacity is resolved`);
         }
