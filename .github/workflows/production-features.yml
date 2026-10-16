@@ -2,6 +2,7 @@ name: Release current VisaThreads AI features
 # Release task-aware evidence review for questions, summaries and catch-up.
 # Both normal and cache-busted health requests must converge before verification.
 # Site quality release: shared readable typography and recoverable messaging.
+# Keep credential-redacted upload diagnostics when isolated Groq setup fails.
 
 on:
   workflow_dispatch:
