@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { sourceProvenance } from './build-provenance.mjs';
 import { LIVE_SITE, LIVE_DATABASE, LIVE_WORKER } from './live-preview-archive.mjs';
 
-export const DASHBOARD_BASELINE = '9eca469b8d617df08c407a7041cce78921ca95cd';
+export const DASHBOARD_BASELINE = '970e457dd553ead80db72483a521ee81b796d51a';
 export const DASHBOARD_BRANCH = 'refs/heads/release/dashboard-production-20261016';
 export const DASHBOARD_PATHS = Object.freeze([
   'src/lib/analytics-types.ts', 'src/lib/analytics-server.ts',

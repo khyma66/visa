@@ -143,3 +143,20 @@ test('workflow is manual, merged-source gated, full-acceptance preserving and ro
   assert.match(workflow, /name: Restore isolated evaluation routing\n\s+if: always\(\) && \(steps\.evaluate\.outcome == 'success' \|\| steps\.evaluate\.outcome == 'failure'\)/);
   assert(!workflow.includes('deploy:dev')); assert(!workflow.includes('visa-central.com'));
 });
+
+test('wrapper retains shared release compatibility and verifies the candidate after upload', async () => {
+  const helper = await readFile(new URL('./dashboard-release.mjs', import.meta.url), 'utf8');
+  const shared = await readFile(new URL('./production-feature-release.mjs', import.meta.url), 'utf8');
+  const workflow = await readFile(new URL('../.github/workflows/dashboard-release.yml', import.meta.url), 'utf8');
+  // Shared false/default controls main identity plus automatic receipt checking.
+  // The wrapper supplies stricter merged branch proof and explicitly verifies
+  // the same fresh candidate-bound acceptance before invoking those checks.
+  assert.match(shared, /export async function predeployFeatureCheck\(enabled, features = \{\}, requireAcceptance = false\)/);
+  assert.match(shared, /if \(requireAcceptance\) assert\.equal\(process\.env\.GITHUB_REF, 'refs\/heads\/main'/);
+  const deployCheck = helper.slice(helper.indexOf("command === 'deploy-check'"), helper.indexOf("command === 'verify-runtime'"));
+  assert(deployCheck.indexOf('verifyAssistantAcceptance(') < deployCheck.indexOf("await predeployFeatureCheck('true', features)"));
+  assert.match(helper, /command === 'verify-runtime'[\s\S]*?const scope = await checkedScope\(\); await verifyLiveRuntime\(scope\.candidateSha\)/);
+  assert.match(helper, /async function verifyLiveRuntime\(expectedSource = DASHBOARD_BASELINE\)/);
+  assert.match(helper, /response\.headers\.get\('x-visathreads-build'\), expectedSource/);
+  assert(workflow.indexOf('vinext-cloudflare deploy') < workflow.indexOf('dashboard-release.mjs verify-runtime'));
+});

@@ -88,6 +88,11 @@ Do not use synthetic tests as evidence of real recovery-email delivery.
 
 ## Acceptance and rollback
 
+The isolated dashboard release is pinned to live source
+`970e457dd553ead80db72483a521ee81b796d51a`. Its newer assistant changes are retained
+in the candidate. A subsequent live release requires another reviewed merge and
+baseline update; the guard must not silently accept whichever version is active.
+
 Run the analytics HTTP/unit tests, analytics database tests, SEO tests, existing
 full suite, typecheck, dependency audit and guarded build. The isolated release
 must descend from the current live source, retain archive parity, preserve all
@@ -95,6 +100,13 @@ assistant configuration, keep schedules absent, and pass existing hosted
 assistant acceptance requirements. Recheck the active deployment immediately
 before release; stop if another task changed it. Rollback may target only the
 recorded previous version and only while this task's version remains active.
+
+The dedicated, immutable dashboard branch must already be merged into main.
+Its source allowlist replaces only the generic main-branch identity check;
+fresh candidate-bound Groq acceptance is verified separately before calling
+the unchanged shared predeployment checks. After upload, the saved capture
+receipt still identifies the prior baseline while runtime verification must
+identify the new candidate. Neither check changes or restarts schedules.
 
 Post-release check: anonymous API returns 401/no-store; ordinary member is denied;
 owner report loads; sign-out clears reports; 7/30/90 periods reconcile; a revoked

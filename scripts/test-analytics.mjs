@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
 const source = await readFile(new URL('../src/lib/analytics-server.ts', import.meta.url), 'utf8');
@@ -145,4 +147,122 @@ test('dashboard client uses no service secret, trackers or fabricated demo metri
   assert(client.includes('Sample activity is never presented as live data'));
   const route = await readFile(new URL('../src/app/api/admin/analytics/route.ts', import.meta.url), 'utf8');
   assert(route.indexOf("if ('response' in authorized)") < route.indexOf('summarizeImport(archive)'));
+});
+
+// Render the actual component with deterministic hook state and no network.
+// These verify UI semantics, not a claim of a hosted browser/session test.
+const moduleUrl = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
+const presentationDependencies = {
+  'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'),
+  react: moduleUrl(`export function useState(initial) {
+    const state = globalThis.__analyticsPresentation, index = state.index++;
+    return [Object.hasOwn(state.values, index) ? state.values[index] : initial, () => {}];
+  }
+  export function useEffect() {}`),
+  'next/link': moduleUrl(`import React from ${JSON.stringify(import.meta.resolve('react'))}; export default props => React.createElement('a', props, props.children);`),
+  'lucide-react': import.meta.resolve('lucide-react'),
+  './AuthProvider': moduleUrl('export const useAuth = () => globalThis.__analyticsPresentation.auth;'),
+  '@/lib/supabase/client': moduleUrl('export function getSupabase() { throw new Error("Network prohibited in presentation tests"); }'),
+};
+const componentSource = await readFile(new URL('../src/components/OwnerAnalyticsDashboard.tsx', import.meta.url), 'utf8');
+const componentJs = ts.transpileModule(componentSource, { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022, jsx: ts.JsxEmit.ReactJSX,
+} }).outputText.replace(/(from\s+)(['"])([^'"]+)\2/g, (_match, prefix, _quote, name) => {
+  assert(presentationDependencies[name], `Unmapped analytics dependency: ${name}`);
+  return prefix + JSON.stringify(presentationDependencies[name]);
+});
+const { OwnerAnalyticsDashboard } = await import(moduleUrl(componentJs));
+function reportFixture() {
+  return {
+    metrics: validMetrics(30),
+    imports: summarizeImport({ source: { name: 'Apify', capturedAt: '2026-10-03T00:00:00Z', duplicateItems: 2, emptyItems: 1 }, questions: [{ created_at: '2026-09-12T00:00:00Z' }] }, Date.parse('2026-10-16T12:00:00Z')),
+    release: { environment: 'development', publicLaunchApproved: false, checks: [
+      { key: 'backup_restore', status: 'pending' }, { key: 'source_parity', status: 'verified' },
+    ] },
+    private_message: 'sensitive-message-must-not-render', email: 'private-report@example.invalid',
+  };
+}
+function renderDashboard({ tab = 'Overview', data = null, busy = false, error = '', auth = {} } = {}) {
+  globalThis.__analyticsPresentation = {
+    index: 0, values: { 0: 30, 1: tab, 2: data, 3: busy, 4: error },
+    auth: { user: { id: 'designated-owner', email: 'private-owner@example.invalid' }, loading: false, demoMode: false, ...auth },
+  };
+  try {
+    const html = renderToStaticMarkup(React.createElement(OwnerAnalyticsDashboard));
+    assert.doesNotMatch(html, /private-owner@example|private-report@example|sensitive-message-must-not-render/);
+    return html;
+  } finally { delete globalThis.__analyticsPresentation; }
+}
+function cardValue(html, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = html.match(new RegExp(`<dt[^>]*>${escaped}</dt><dd[^>]*>([^<]*)</dd>`));
+  assert(match, `Missing metric card: ${label}`);
+  return match[1];
+}
+
+test('signed-out dashboard renders only the sign-in shell and preserves its return destination', () => {
+  const html = renderDashboard({ auth: { user: null }, data: reportFixture() });
+  assert.match(html, /Owner sign-in required/);
+  assert.match(html, /href="\/login\?next=%2Fadmin%2Fanalytics#sign-in"/);
+  assert.doesNotMatch(html, /<dd\b|Reporting period|Daily retained activity|Launch evidence/);
+  const loading = renderDashboard({ auth: { loading: true }, data: reportFixture() });
+  assert.match(loading, /Checking your account/); assert.doesNotMatch(loading, /<dd\b/);
+});
+test('demo and error states never display sample or stale report totals', () => {
+  const data = reportFixture(); data.metrics.overview.questions_created = 424242;
+  const demo = renderDashboard({ auth: { demoMode: true }, data });
+  assert.match(demo, /Sample activity is never presented as live data/);
+  assert.doesNotMatch(demo, /<dd\b|424,?242|Reporting period/);
+  const failure = renderDashboard({ error: 'Owner access required.' });
+  assert.match(failure, /role="alert"/); assert.match(failure, /No stale or placeholder totals are shown/);
+  assert.doesNotMatch(failure, /<dd\b/);
+});
+test('authorized overview renders genuine zero counts without inventing traffic metrics', () => {
+  const html = renderDashboard({ data: reportFixture() });
+  for (const label of ['New members', 'Distinct contributors', 'Questions', 'Experiences', 'Native replies', 'Replies to imported posts']) assert.equal(cardValue(html, label), '0');
+  assert.match(html, /Visitor analytics is not integrated/);
+  assert.match(html, /do not interpret missing traffic data as zero/);
+  assert.match(html, /not a sum of daily counts/);
+});
+test('community rendering distinguishes unavailable answer measurements from an observed zero rate', () => {
+  const data = reportFixture();
+  let html = renderDashboard({ tab: 'Community', data });
+  assert.equal(cardValue(html, 'Human answer rate'), '—');
+  assert.equal(cardValue(html, 'First human answer'), '—');
+  assert.equal(cardValue(html, 'Currently unanswered'), '0');
+  assert.match(html, /Daily retained activity · UTC/);
+  assert.equal((html.match(/<tr\b/g) ?? []).length, 31);
+  data.metrics.overview.questions_created = data.metrics.daily[0].questions_created = 1;
+  data.metrics.quality = { ...data.metrics.quality, questions_in_window: 1, answer_rate_percent: 0, unanswered_questions_current: 1 };
+  html = renderDashboard({ tab: 'Community', data });
+  assert.equal(cardValue(html, 'Human answer rate'), '0%');
+  assert.equal(cardValue(html, 'First human answer'), '—');
+  assert.equal(cardValue(html, 'Currently unanswered'), '1');
+});
+test('imports render source freshness honestly and never turn synthetic fixtures into live inventory', () => {
+  const data = reportFixture();
+  let html = renderDashboard({ tab: 'Imports', data });
+  assert.match(html, /Freshness needs attention/);
+  assert.match(html, /not confirmation of a new Apify run or database import/);
+  assert.match(html, /Import scheduling remains unchanged/);
+  assert.equal(cardValue(html, 'Source posts'), '1');
+  assert.equal(cardValue(html, 'Duplicate items'), '2');
+  assert.match(cardValue(html, 'Newest original post'), /Sep 12, 2026.*UTC/);
+  data.imports = summarizeImport({ source: { name: 'Synthetic fixture' }, questions: [{ created_at: '2026-10-16T00:00:00Z' }] });
+  html = renderDashboard({ tab: 'Imports', data });
+  assert.match(html, /No live import inventory \(fixture or unavailable source\)/);
+  for (const label of ['Source posts', 'Duplicate items', 'Empty items rejected', 'Invalid or future dates']) assert.equal(cardValue(html, label), '—');
+  assert.equal(cardValue(html, 'Newest original post'), 'Not available');
+  assert.equal(cardValue(html, 'Snapshot captured'), 'Not available');
+  assert.doesNotMatch(html, /The snapshot contains recent source posts/);
+});
+test('operations show saved historical checklist statuses without representing them as a new approval', () => {
+  const data = reportFixture();
+  const html = renderDashboard({ tab: 'Operations', data });
+  for (const label of ['Reports received', 'Reports pending', 'Feedback received', 'Feedback pending']) assert.equal(cardValue(html, label), '0');
+  assert.match(html, /Environment: development/); assert.match(html, /Public launch approval: not granted/);
+  assert.match(html, /saved release record, not a fresh audit or approval/);
+  assert.match(html, /backup restore<\/span><span[^>]*>pending<\/span>/);
+  assert.match(html, /source parity<\/span><span[^>]*>verified<\/span>/);
+  assert.match(html, /No D7 retention, revenue, AI savings or visitor counts are fabricated/);
 });
