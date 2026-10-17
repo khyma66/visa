@@ -183,6 +183,7 @@ test('Worker archive recovery interprets only static literals and never executes
 function acceptanceReceipt() {
   const ids = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context', 'thank-you-confirmation', 'public-multiple-thread-synthesis'];
   const model = modelProfile.answer;
+  ids.push('large-discussion-summary');
   return { schemaVersion: 1, sourceSha: 'a'.repeat(40), provider: 'workers-ai', model, modelProfile, createdAt: new Date().toISOString(), passed: true, repetitions: 3, features: { posts: true, communities: true, catchup: true }, workerDeleted: true, cases: ids.map(id => ({
     id, model, passed: true,
     samples: Array.from({ length: 3 }, () => ({ id, model, passed: true, checks: [{ name: 'supported', passed: true }, { name: 'application_evidence_reviewed_when_needed', passed: true }] })),

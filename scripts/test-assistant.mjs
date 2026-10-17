@@ -264,12 +264,13 @@ test('deletion during model execution suppresses completed result and cache writ
   const {handler,state}=harness({generate:async()=>{state.sources=[];return JSON.stringify(output);}});
   assert.equal((await handler(request())).status,409);assert.equal(state.cache.size,0);
 });
-test('simultaneous duplicate requests share a generation within an isolate',async()=>{
+test('simultaneous requests own independent generation and durable quota reservations',async()=>{
   let release;const paused=new Promise(resolve=>{release=resolve;});
   const {handler,state}=harness({generate:async()=>{state.generated++;await paused;return JSON.stringify(output);}});
   const a=handler(request()),b=handler(request());
-  while(state.generated===0) await new Promise(resolve=>setImmediate(resolve));
-  release();const responses=await Promise.all([a,b]);assert.deepEqual(responses.map(r=>r.status),[200,200]);assert.equal(state.generated,1);assert.equal(state.reserved,1);
+  while(state.generated<2) await new Promise(resolve=>setImmediate(resolve));
+  release();const responses=await Promise.all([a,b]);assert.deepEqual(responses.map(r=>r.status),[200,200]);assert.equal(state.generated,2);assert.equal(state.reserved,2);
+  assert.notEqual(responses[0].headers.get('x-visathreads-request-id'),responses[1].headers.get('x-visathreads-request-id'));
 });
 test('production-only target rejects dev and incomplete configuration',()=>{
   const env={ASSISTANT_ENABLED:'true',ASSISTANT_PROVIDER:'workers-ai',NEXT_PUBLIC_SITE_URL:'https://visathreads.com',ASSISTANT_PROJECT_REF:'cycnichledvqbxevrwnt',NEXT_PUBLIC_SUPABASE_URL:'https://cycnichledvqbxevrwnt.supabase.co',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'public-key'};
@@ -356,7 +357,7 @@ test('long posts retain the passage that answers the question rather than losing
 
 test('an empty community catch-up explains the time range instead of asking for a new visa question',()=>{
   const result=core.emptyAssistantResult({sources:[],partial:false,since:'2026-10-12T00:00:00Z',until:'2026-10-13T00:00:00Z'});
-  assert.match(result.unanswered[0],/No new posts or replies in this community/);
+  assert.match(result.unanswered[0],/matching posts or replies published during that time range/);
   assert.doesNotMatch(result.unanswered[0],/visa type|question/);
 });
 

@@ -209,7 +209,7 @@ test('public answers retain the question and clarification behind an original-po
 
 test('busy archive threads cannot crowd out other relevant discussions before context is assembled', async () => {
   const busy = q({ id: 'apify-busy', title: 'Chennai H1B stamping interview', body: 'How did the Chennai H1B stamping interview go?' });
-  const other = q({ id: 'apify-other', title: 'A second Chennai report', body: 'My Chennai stamping interview was completed on Tuesday.' });
+  const other = q({ id: 'apify-other', title: 'A second Chennai report', body: 'My Chennai H-1B stamping interview was completed on Tuesday.' });
   reviewedArchive([busy, other], { [busy.id]: Array.from({ length: 60 }, (_, i) => a(i, { question_id: busy.id,
     body: 'My Chennai H1B stamping interview was completed on Monday.' })), [other.id]: [a(90, { question_id: other.id,
       body: 'My passport arrived on Thursday.' })] });
@@ -318,9 +318,11 @@ test('imported-reply lookup builds bounded literal filters rather than accepting
   const db = client();
   await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'public' }, question: 'Chennai H-1B %),status.eq.archived,body.ilike.*( ' + Array.from({ length: 40 }, (_, i) => `token${i}`).join(' ') });
   const filter = db.calls.find(call => call.or).or;
-  assert(filter.split(',').length <= 24);
-  assert.match(filter, /^body\.ilike\.%[\p{L}\p{N}][\p{L}\p{M}\p{N}-]*%(?:,body\.ilike\.%[\p{L}\p{N}][\p{L}\p{M}\p{N}-]*%)*$/u);
-  assert.doesNotMatch(filter, /\(|\)|\*|status\.eq/);
+  const lexical = /^and\(or\(([^()]*)\)/.exec(filter)?.[1] ?? filter;
+  assert(lexical.split(',').length <= 24);
+  assert.match(lexical, /^body\.ilike\.%[\p{L}\p{N}][\p{L}\p{M}\p{N}-]*%(?:,body\.ilike\.%[\p{L}\p{N}][\p{L}\p{M}\p{N}-]*%)*$/u);
+  assert.doesNotMatch(filter, /\*|status\.eq/);
+  assert(filter.length < 12_000, 'Generated entity constraints are independently bounded');
 });
 
 test('imported-reply search reports real limits and outages without suppressing authorization errors', async () => {
@@ -367,7 +369,7 @@ test('OPT and CPT questions do not match unrelated words such as options and rec
 test('referential follow-ups keep context but current passport delivery evidence outranks old appointment detail', async () => {
   reviewedArchive([
     q({ id: 'apify-fingerprints', title: 'Chennai H-1B stamping appointment fingerprints', body: 'My Chennai H-1B stamping appointment and fingerprints happened Monday.' }),
-    q({ id: 'apify-delivery', title: 'Chennai delivery', body: 'My passport delivery happened Friday after the interview.' }),
+    q({ id: 'apify-delivery', title: 'Chennai delivery', body: 'My H-1B passport delivery happened Friday after the interview.' }),
   ]);
   const result = await retrieveAssistantCorpus(client(), { mode: 'ask', scope: { kind: 'public' }, question: 'What about passport delivery?', previousQuestions: ['Chennai H-1B stamping appointment fingerprints?'] });
   assert.equal(result.sources[0].questionId, 'apify-delivery');
@@ -507,13 +509,13 @@ const searchSource = (overrides = {}) => ({ id: 'q:apify-stamping', questionId: 
 test('explicit post requests use search intent; explanation questions and single-post asks do not', () => {
   for (const question of ['give all posts related to stamping delay', 'Can you show me posts about stamping delays?',
     'Can you show me all posts about stamping delay?', 'List discussions about passport delivery', 'posts related to Chennai stamping',
-    'find me posts about stamping delay', 'search for posts about stamping delay', 'look for posts about stamping delay', 'I want posts about stamping delay']) {
+    'find me posts about stamping delay', 'search for posts about stamping delay', 'look for posts about stamping delay', 'I want posts about stamping delay', 'Find stamping delay threads']) {
     assert(assistantPostSearchQuery(postSearchRequest(question)), question);
   }
   for (const question of ['Why is stamping delayed?', 'What do the posts say about stamping delays?', 'Explain this post about stamping',
     'Give me an answer about stamping delay', 'show all posts', 'show why posts about stamping delay have conflicting timelines',
     'give an explanation of why posts about stamping delay differ', 'Show me how posts on stamping delays differ', 'List differences between posts about stamping',
-    'show a synopsis of posts about stamping delay', 'give overview of posts about stamping delay', 'Find stamping delay threads']) {
+    'show a synopsis of posts about stamping delay', 'give overview of posts about stamping delay']) {
     assert.equal(assistantPostSearchQuery(postSearchRequest(question)), null, question);
   }
   assert.equal(assistantPostSearchQuery({ ...postSearchRequest(), scope: { kind: 'post', id } }), null);

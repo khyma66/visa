@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import build from '@visa/build-provenance';
-import { AssistantError } from '@/lib/assistant-core';
 import { retrieveAssistantCorpus } from '@/lib/assistant-data';
 import { runAssistantModel, providerCacheKey, type WorkersAiBinding } from '@/lib/assistant-provider';
-import { assistantResponse, assistantProductionRequest, configuredAvailability, createAssistantHandler, cloudflareAssistantCache } from '@/lib/assistant-service';
+import { assistantResponse, assistantProductionRequest, configuredAvailability, createAssistantHandler, cloudflareAssistantCache,
+  AssistantRequestError, assistantDatabaseFetch, assistantLimitError } from '@/lib/assistant-service';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -39,28 +39,41 @@ export async function GET(request: Request) {
 const handle = createAssistantHandler({
   availability,
   reportFailure: event => console.warn('assistant_request_failed', event),
+  reportTiming: event => console.info('assistant_request_completed', event),
   // The provider is read again during inference; deployments set immutable environment values.
   get model() { try { return providerCacheKey(process.env.ASSISTANT_PROVIDER); } catch { return 'disabled'; } },
   cache: cloudflareAssistantCache(),
-  async authenticate(token) {
+  async authenticate(token, context) {
     const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      global: { headers: { Authorization: `Bearer ${token}` }, fetch: (input, init) => fetch(input, { ...init, cache: 'no-store', signal: AbortSignal.timeout(8000) }) },
+      global: { headers: { Authorization: `Bearer ${token}` }, fetch: assistantDatabaseFetch(context) },
     });
     const { data, error } = await client.auth.getUser(token);
-    if (error || !data.user || data.user.is_anonymous) throw new AssistantError(401, 'Log in to use the assistant.');
+    context.signal.throwIfAborted();
+    if (error) throw new AssistantRequestError(error.status === 401 || error.status === 403 ? 401 : 503,
+      error.status === 401 || error.status === 403 ? 'authentication' : 'unavailable');
+    if (!data.user || data.user.is_anonymous) throw new AssistantRequestError(401, 'authentication');
     const { data: rate, error: rateError } = await client.rpc('check_assistant_request_rate');
-    if (rateError) throw new AssistantError(503, 'The assistant is completing its setup. Please try again later.');
+    context.signal.throwIfAborted();
+    if (rateError?.code === '42501') throw new AssistantRequestError(403, 'permission');
+    if (rateError?.code === 'PT429') throw assistantLimitError(null, 'rate_limit');
+    if (rateError) throw new AssistantRequestError(503, 'unavailable');
     const rateRow = Array.isArray(rate) ? rate[0] : rate;
-    if (rateRow?.allowed !== true) throw new AssistantError(429, 'Too many assistant requests. Please wait a minute.', 60);
-    return { actor: data.user.id, corpus: input => retrieveAssistantCorpus(client, input), async reserve() {
+    if (rateRow?.allowed === false) throw assistantLimitError(rateRow, 'rate_limit');
+    if (rateRow?.allowed !== true) throw new AssistantRequestError(503, 'unavailable');
+    return { actor: data.user.id, corpus: input => retrieveAssistantCorpus(client, input, context.startedAt), async reserve() {
       const { data: result, error: quotaError } = await client.rpc('reserve_assistant_request');
-      if (quotaError) throw new AssistantError(503, 'The assistant is completing its setup. Please try again later.');
+      context.signal.throwIfAborted();
+      if (quotaError?.code === '42501') throw new AssistantRequestError(403, 'permission');
+      if (quotaError?.code === 'PT429') throw assistantLimitError(null, 'rate_limit');
+      if (quotaError) throw new AssistantRequestError(503, 'unavailable');
       const row = Array.isArray(result) ? result[0] : result;
-      return row?.allowed === true;
+      if (row?.allowed === false) throw assistantLimitError(row, 'quota');
+      if (row?.allowed !== true) throw new AssistantRequestError(503, 'unavailable');
+      return true;
     } };
   },
-  async generate(prompt, signal) {
+  async generate(prompt, signal, context) {
     let binding: WorkersAiBinding | undefined;
     if (process.env.ASSISTANT_PROVIDER === 'workers-ai') {
       try {
@@ -69,8 +82,9 @@ const handle = createAssistantHandler({
       } catch { /* Local Next preview has no Workers AI binding. */ }
     }
     return runAssistantModel(prompt, { provider: process.env.ASSISTANT_PROVIDER, apiKey: process.env.ASSISTANT_PROVIDER === 'groq' ? process.env.GROQ_API_KEY : process.env.OPENAI_API_KEY, binding, signal,
-      reportFailure: reason => console.warn('assistant_provider_failed', { reason }),
-      reportUsage: usage => console.info('assistant_model_usage', usage),
+      reportFailure: reason => console.warn('assistant_provider_failed', { reason, requestId: context.requestId }),
+      reportTransport: transport => console.info('assistant_provider_transport', { ...transport, requestId: context.requestId }),
+      reportUsage: usage => console.info('assistant_model_usage', { ...usage, requestId: context.requestId }),
     });
   },
 });

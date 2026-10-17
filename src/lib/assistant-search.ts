@@ -1,42 +1,29 @@
 import type { AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource } from './assistant-contract';
-import { assistantPreviousQuestions, assistantSearchTerms, redactAssistantText } from './assistant-core';
-import { assistantMorePosts, assistantSeenPostIds } from './assistant-context';
+import { assistantSearchTerms, redactAssistantText } from './assistant-core';
+import { assistantCanonicalText, assistantMorePosts, assistantSearchIntent, assistantSeenPostIds, assistantSourceMatchesIntent, type AssistantSearchIntent } from './assistant-context';
 
 export const ASSISTANT_POST_SEARCH_LIMIT = 48;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
-const SEARCH_WORDS = new Set('give show find list get search look looking want need all every some relevant related relate relating regarding matching recent latest available post thread discussion question link result mention mentioning contain containing from like'.split(' '));
-const POST_REQUEST_PREFIX_WORDS = new Set('me us for all any some the relevant related matching recent latest available'.split(' '));
+const SEARCH_WORDS = new Set('give show find list get share search look looking want need all every some most relevant related relate relating regarding matching recent latest newest available post thread discussion question experience story link result mention mentioning contain containing from like'.split(' '));
 const STAMPING = /\bstamp(?:ing|ed|s)?\b|\bdrop[ -]?box\b|\b221[ ()-]*g\b|\badministrative processing\b|\bconsular processing\b|\bvisa (?:interview|issuance|issued|appointment)\b/i;
 const DELAY = /\bdelay(?:ed|ing|s)?\b|\bpending\b|\bwait(?:ing|ed|s)?\b|\bstuck\b|\bbacklog\b|\b(?:no|without|awaiting) (?:an? )?(?:updates?|response|passport)\b|\bnot (?:yet )?(?:been )?(?:received|returned|issued)\b|\badministrative processing\b|\b221[ ()-]*g\b/i;
 
-export type AssistantPostSearchQuery = { text: string; terms: string[]; stamping: boolean; delay: boolean };
+export type AssistantPostSearchQuery = { text: string; terms: string[]; stamping: boolean; delay: boolean; intent: AssistantSearchIntent };
 const normalizeTerm = (word: string) => /^(?:h-?1-?b|h-?4|f-?1|l-?1|l-?2|b-?1|b-?2)$/.test(word) ? word.replaceAll('-', '')
   : /^(?:stamp|stamping|stamped)$/.test(word) ? 'stamping'
   : /^(?:delay|delayed|delaying)$/.test(word) ? 'delay'
   : /^(?:wait|waiting|waited)$/.test(word) ? 'wait' : word;
-const termsFor = (text: string) => [...new Set(assistantSearchTerms(text).map(normalizeTerm))];
+const termsFor = (text: string) => [...new Set(assistantSearchTerms(assistantCanonicalText(text)).map(normalizeTerm))];
 
 /** Only explicit requests for posts take the non-generative search path. */
-export function assistantPostSearchQuery(input: AssistantRequest): AssistantPostSearchQuery | null {
+export function assistantPostSearchQuery(input: AssistantRequest, now = Date.now()): AssistantPostSearchQuery | null {
   if (input.mode !== 'ask' || input.scope.kind === 'post') return null;
-  const rawQuestion = (input.question ?? '').trim();
-  const previous = assistantMorePosts(rawQuestion) ? assistantPreviousQuestions(input) : [];
-  const question = previous.length ? `Find posts about ${previous.join(' ')}` : rawQuestion;
-  const noun = /\b(?:posts?|threads?|discussions?)\b/i.exec(question);
-  if (!noun) return null;
-  const selection = /^(?:(?:please|can you|could you|would you)\s+)*(?:give|show|find|list|get|search|look|i want|i need)\b/i.exec(question);
-  const barePostPhrase = /^(?:all\s+)?(?:posts|threads|discussions)\s+(?:about|on|related to|regarding)\b/i.test(question);
-  // Accept a positive post noun phrase, not every sentence containing a
-  // selection verb: "show a synopsis of posts" still requires synthesis.
-  if (!barePostPhrase) {
-    if (!selection || selection[0].length > noun.index) return null;
-    const prefixWords = question.slice(selection[0].length, noun.index).trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (prefixWords.some(word => !POST_REQUEST_PREFIX_WORDS.has(word))) return null;
-  }
-  const terms = termsFor(question).filter(term => !SEARCH_WORDS.has(term)).slice(0, 24);
+  const intent = assistantSearchIntent(input, now);
+  if (intent.task !== 'lookup') return null;
+  const terms = termsFor(intent.text).filter(term => !SEARCH_WORDS.has(term)).slice(0, 24);
   if (!terms.length) return null;
   const text = terms.join(' ');
-  return { text, terms, stamping: STAMPING.test(question), delay: DELAY.test(question) };
+  return { text, terms, stamping: STAMPING.test(intent.text), delay: DELAY.test(intent.text), intent };
 }
 
 function stampingContext(text: string) {
@@ -103,6 +90,7 @@ function sourceStampingDelayAssociation(source: AssistantSource): number {
 
 /** Stamping delay requires a related event, not whole-post keyword overlap. */
 export function assistantPostSearchScore(source: AssistantSource, query: AssistantPostSearchQuery): number {
+  if (!assistantSourceMatchesIntent(source, query.intent)) return 0;
   const own = `${source.title}\n${source.body}`;
   const full = `${own}\n${source.parentContext ?? ''}`;
   if (query.stamping && !stampingContext(full)) return 0;
@@ -118,7 +106,8 @@ export function assistantPostSearchScore(source: AssistantSource, query: Assista
     ...(query.stamping ? ['stamping', 'dropbox', 'drop', 'box', 'visa', 'interview', 'issuance', 'issued', 'appointment', 'administrative', 'processing', '221g', 'consular'] : []),
     ...(query.delay ? ['delay', 'pending', 'wait', 'stuck', 'backlog', 'update', 'response', 'yet', 'received', 'returned', 'issued', 'administrative', 'processing', '221g'] : []),
   ]);
-  const required = query.terms.filter(term => !conceptWords.has(term));
+  const entityWords = new Set([...query.intent.locations.flatMap(location => termsFor(location)), ...query.intent.visas]);
+  const required = query.terms.filter(term => !conceptWords.has(term) && !entityWords.has(term));
   if (required.some(term => !found.has(term))) return 0;
   const lexical = query.terms.reduce((score, term) => score + (body.has(term) ? 4 : 0) + (title.has(term) ? 3 : 0) + (found.has(term) ? 1 : 0), 0);
   return lexical + (query.stamping ? 8 : 0) + (query.delay ? 8 : 0) + linkedDelay;
@@ -142,13 +131,13 @@ function searchExcerpt(source: AssistantSource, query: AssistantPostSearchQuery)
 
 /** Authorized server sources are the answer to a post lookup; no model needed. */
 export function buildAssistantPostSearchResult(input: AssistantRequest, corpus: AssistantCorpus, now = Date.now()): AssistantResult {
-  const query = assistantPostSearchQuery(input);
+  const query = assistantPostSearchQuery(input, now);
   const seen = new Set(assistantSeenPostIds(input));
   const ranked = query ? corpus.sources
     .filter(source => !seen.has(source.questionId) && POST_ID.test(source.questionId) && ['question', 'reply'].includes(source.kind) && source.body?.trim() && Number.isFinite(Date.parse(source.createdAt)))
     .map(source => ({ source, score: assistantPostSearchScore(source, query) }))
     .filter(row => row.score > 0)
-    .sort((a, b) => b.score - a.score || (a.source.kind === b.source.kind ? 0 : a.source.kind === 'question' ? -1 : 1)
+    .sort((a, b) => (query.intent.order === 'newest' ? b.source.createdAt.localeCompare(a.source.createdAt) : 0) || b.score - a.score || (a.source.kind === b.source.kind ? 0 : a.source.kind === 'question' ? -1 : 1)
       || b.source.createdAt.localeCompare(a.source.createdAt) || a.source.id.localeCompare(b.source.id)) : [];
   const unique = new Map<string, AssistantSource>();
   for (const { source } of ranked) if (!unique.has(source.questionId)) unique.set(source.questionId, source);
@@ -161,8 +150,9 @@ export function buildAssistantPostSearchResult(input: AssistantRequest, corpus: 
     kind: 'posts', status: sources.length ? 'answered' : 'insufficient',
     posts: sources.map(source => ({ questionId: source.questionId, sourceId: source.id, title: source.title,
       url: source.url, excerpt: source.body, createdAt: source.createdAt })),
-    claims: [], disagreements: [], unanswered: sources.length ? [] : [assistantMorePosts(input.question ?? '') ? 'No additional posts in this search window. Try a more specific topic.' : 'No matching posts found. Try a broader topic.'], sources,
-    coverage: { sourceCount: sources.length, partial: corpus.partial || unique.size > ASSISTANT_POST_SEARCH_LIMIT - seen.size },
-    generatedAt: new Date(now).toISOString(), cached: false, notice: 'Matching community posts. These are member reports, not verified immigration guidance.',
+    claims: [], disagreements: [], unanswered: sources.length ? [] : [query?.intent.unsupportedWindow ? 'Choose a time window of at most 366 days.' : query?.intent.since ? 'No matching posts were found in the requested posting-date window. Older discussions may exist; ask for latest posts without a date limit to search them.' : assistantMorePosts(input.question ?? '') ? 'No additional posts in this search window. Try a more specific topic.' : 'No matching posts found. Try a broader topic.'], sources,
+    coverage: { sourceCount: sources.length, partial: corpus.partial || unique.size > ASSISTANT_POST_SEARCH_LIMIT - seen.size,
+      ...(query?.intent.since ? { since: query.intent.since, until: query.intent.until } : {}) },
+    generatedAt: new Date(now).toISOString(), cached: false, notice: `${query?.intent.since ? `Posts published between ${query.intent.since.slice(0, 10)} and ${query.intent.until!.slice(0, 10)} (UTC), newest first. ` : query?.intent.order === 'newest' ? 'Matching posts, newest first. ' : 'Matching community posts. '}These are member reports, not verified immigration guidance.`,
   };
 }

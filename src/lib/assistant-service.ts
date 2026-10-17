@@ -7,16 +7,67 @@ import { assistantReviewCorpus, assistantReviewPrompt, validateAssistantReview }
 type ReviewedCacheEntry = { result: AssistantResult; digest: string };
 export type AssistantCache = { get(key: string): Promise<ReviewedCacheEntry | null>; put(key: string, value: ReviewedCacheEntry): Promise<void> };
 export type AssistantFailureStage = 'request' | 'authentication' | 'retrieval' | 'quota' | 'generation' | 'validation' | 'review' | 'revalidation';
-class AssistantOperationFailure extends Error {
-  constructor(public original: unknown, public stage: AssistantFailureStage) { super('Assistant operation failed'); }
+export type AssistantFailureCategory = 'invalid_request' | 'authentication' | 'permission' | 'rate_limit' | 'quota'
+  | 'source_changed' | 'source_verification' | 'timeout' | 'cancelled' | 'unavailable';
+type AssistantQuotaReason = 'user_daily_limit' | 'global_daily_limit' | 'user_minute_limit';
+export type AssistantOperationContext = { signal: AbortSignal; requestId: string; startedAt: number };
+export const ASSISTANT_REQUEST_BUDGET_MS = 45_000;
+const failureMessages: Record<AssistantFailureCategory, string> = {
+  invalid_request: 'Check your question and try again.', authentication: 'Your session has expired. Sign in again.',
+  permission: 'You do not have access to this discussion.', rate_limit: 'Too many assistant requests. Please wait before trying again.',
+  quota: 'The assistant usage limit has been reached. Please try again after it resets.',
+  source_changed: 'The discussion changed while answering. Please ask again.',
+  source_verification: 'The assistant could not verify this answer. Please try again.',
+  timeout: 'The assistant took too long. Please try again.', cancelled: 'This assistant request was cancelled.',
+  unavailable: 'The assistant is temporarily unavailable. Please try again shortly.',
+};
+export class AssistantRequestError extends AssistantError {
+  constructor(public status: number, public category: AssistantFailureCategory,
+    public metadata: { retryAfterSeconds?: number; resetAt?: string; quotaReason?: AssistantQuotaReason } = {}) {
+    super(status, failureMessages[category], metadata.retryAfterSeconds);
+  }
+}
+/** Keep only fixed denial reasons and a bounded future reset; never echo RPC text. */
+export function assistantLimitError(value: unknown, fallback: 'rate_limit' | 'quota', now = Date.now()) {
+  const row = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const quotaReason = ['user_daily_limit', 'global_daily_limit', 'user_minute_limit'].includes(String(row.reason))
+    ? row.reason as AssistantQuotaReason : undefined;
+  const reset = typeof row.reset_at === 'string' ? Date.parse(row.reset_at) : NaN;
+  const validReset = Number.isFinite(reset) && reset > now && reset <= now + 86_400_000;
+  return new AssistantRequestError(429, quotaReason === 'user_minute_limit' ? 'rate_limit' : fallback, {
+    ...(validReset ? { resetAt: new Date(reset).toISOString(), retryAfterSeconds: Math.ceil((reset - now) / 1000) }
+      : fallback === 'rate_limit' || quotaReason === 'user_minute_limit' ? { retryAfterSeconds: 60 } : {}),
+    ...(quotaReason ? { quotaReason } : {}),
+  });
+}
+/** Every caller-JWT database/auth request observes both budgets and never redirects credentials. */
+export function assistantDatabaseFetch(context: AssistantOperationContext, fetcher: typeof fetch = fetch): typeof fetch {
+  return async (input, init) => {
+    context.signal.throwIfAborted();
+    const supplied = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const signal = AbortSignal.any([context.signal, AbortSignal.timeout(8000), ...(supplied ? [supplied] : [])]);
+    const response = await fetcher(input, { ...init, cache: 'no-store', redirect: 'manual', signal });
+    context.signal.throwIfAborted();
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      throw new AssistantRequestError(503, 'unavailable');
+    }
+    return response;
+  };
 }
 export type AssistantDependencies = {
   availability(): AssistantAvailability;
-  authenticate(token: string): Promise<{ actor: string; corpus(input: AssistantRequest): Promise<AssistantCorpus>; reserve(): Promise<boolean> }>;
-  generate(prompt: AssistantPrompt, signal: AbortSignal): Promise<string>;
+  authenticate(token: string, context: AssistantOperationContext): Promise<{
+    actor: string; corpus(input: AssistantRequest, signal: AbortSignal): Promise<AssistantCorpus>; reserve(signal: AbortSignal): Promise<boolean>;
+  }>;
+  generate(prompt: AssistantPrompt, signal: AbortSignal, context: AssistantOperationContext): Promise<string>;
   model: string;
   cache?: AssistantCache;
-  reportFailure?(event: { stage: AssistantFailureStage; status: number; code?: AssistantValidationCode }): void;
+  /** Tests may shorten, never extend, the production budget. Not request-controlled. */
+  deadlineMs?: number;
+  reportFailure?(event: { stage: AssistantFailureStage; status: number; code?: AssistantValidationCode;
+    category: AssistantFailureCategory; requestId: string; durationMs: number }): void;
+  reportTiming?(event: { stage: AssistantFailureStage; status: number; requestId: string; durationMs: number }): void;
 };
 const headers = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Vary': 'Authorization' };
 export function assistantResponse(value: unknown, status = 200, retryAfter?: number) {
@@ -30,11 +81,51 @@ export function assistantProductionRequest(request: Request) {
 }
 
 export function createAssistantHandler(deps: AssistantDependencies) {
-  // Coalesce duplicate clicks within an isolate; durable quota remains authoritative across instances.
-  const inflight = new Map<string, Promise<AssistantResult>>();
+  // A pending operation belongs to exactly one request. Sharing its promise
+  // also shares the owner's cancellation/lifetime. Durable quota still limits
+  // concurrent requests; only completed, verified data may cross requests.
   return async function handle(request: Request): Promise<Response> {
+    const started = Date.now(), requestId = crypto.randomUUID();
+    const controller = new AbortController();
+    const cancel = () => controller.abort(new AssistantRequestError(499, 'cancelled'));
+    if (request.signal.aborted) cancel();
+    else request.signal.addEventListener('abort', cancel, { once: true });
+    const configuredBudget = deps.deadlineMs;
+    const budget = typeof configuredBudget === 'number' && Number.isFinite(configuredBudget)
+      ? Math.max(1, Math.min(ASSISTANT_REQUEST_BUDGET_MS, Math.floor(configuredBudget))) : ASSISTANT_REQUEST_BUDGET_MS;
+    const timer = setTimeout(() => controller.abort(new AssistantRequestError(504, 'timeout')), budget);
+    // Relative date windows must remain identical across retrieval, rendering
+    // and final source verification, even when a request crosses midnight.
+    const signal = controller.signal, context = { signal, requestId, startedAt: started };
     let stage: AssistantFailureStage = 'request';
+    // Race each boundary, not just fetch: SDK/cache implementations may ignore
+    // abort. A late completion must never continue into quota/model/cache work.
+    const bounded = async <T>(work: () => Promise<T>): Promise<T> => {
+      signal.throwIfAborted();
+      let stop: (() => void) | undefined;
+      const aborted = new Promise<never>((_, reject) => {
+        stop = () => reject(signal.reason);
+        signal.addEventListener('abort', stop, { once: true });
+      });
+      try {
+        // Attach both rejection handlers before invoking a dependency. It may
+        // synchronously abort and throw, or reject after the race has settled.
+        const pending = Promise.resolve().then(() => { signal.throwIfAborted(); return work(); });
+        const result = await Promise.race([pending, aborted]);
+        signal.throwIfAborted();
+        return result;
+      } finally { if (stop) signal.removeEventListener('abort', stop); }
+    };
+    const respond = (value: unknown, status = 200, retryAfter?: number) => {
+      const durationMs = Math.max(0, Math.min(86_400_000, Date.now() - started));
+      const response = assistantResponse(value, status, retryAfter);
+      response.headers.set('X-VisaThreads-Request-Id', requestId);
+      response.headers.set('Server-Timing', `assistant;dur=${durationMs}`);
+      try { deps.reportTiming?.({ stage, status, requestId, durationMs }); } catch { /* Optional, fixed metadata only. */ }
+      return response;
+    };
     try {
+      signal.throwIfAborted();
       if (request.method !== 'POST') throw new AssistantError(405, 'Use POST for assistant requests.');
       if (!assistantProductionRequest(request) || !deps.availability().posts) throw new AssistantError(503, 'The assistant is not available yet.');
       const origin = request.headers.get('origin');
@@ -42,95 +133,106 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type') ?? '')) throw new AssistantError(415, 'Send a JSON request.');
       const token = request.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9._-]{20,8192})$/)?.[1];
       if (!token) throw new AssistantError(401, 'Log in to use the assistant.');
-      const input = parseAssistantRequest(await readBoundedJson(request, 12_000));
+      const input = parseAssistantRequest(await bounded(() => readBoundedJson(request, 12_000)), started);
       requireAssistantMode(input, deps.availability());
       stage = 'authentication';
-      const session = await deps.authenticate(token);
-      request.signal.throwIfAborted();
+      const session = await bounded(() => deps.authenticate(token, context));
       stage = 'retrieval';
-      const original = await session.corpus(input);
-      if (assistantPostSearchQuery(input)) {
+      const original = await bounded(() => session.corpus(input, signal));
+      if (assistantPostSearchQuery(input, started)) {
         // Finding existing posts does not require text generation or model quota.
         // Still authenticate, rate-limit and recheck the caller-visible corpus.
-        const fingerprint = await assistantFingerprint(original);
-        const result = buildAssistantPostSearchResult(input, original);
-        request.signal.throwIfAborted();
+        const fingerprint = await bounded(() => assistantFingerprint(original));
+        const result = buildAssistantPostSearchResult(input, original, started);
+        signal.throwIfAborted();
         stage = 'revalidation';
-        if (await assistantFingerprint(await session.corpus(input)) !== fingerprint) {
+        if (await bounded(async () => assistantFingerprint(await bounded(() => session.corpus(input, signal)))) !== fingerprint) {
           throw new AssistantError(409, 'The discussion changed while answering. Please ask again.');
         }
-        request.signal.throwIfAborted();
-        return assistantResponse(result);
+        signal.throwIfAborted();
+        return respond(result);
       }
       const corpus = prepareAssistantCorpus(original, input);
-      if (!corpus.sources.length) return assistantResponse(emptyAssistantResult(corpus));
-      const fingerprint = await assistantFingerprint(original);
+      if (!corpus.sources.length) return respond(emptyAssistantResult(corpus));
+      const fingerprint = await bounded(() => assistantFingerprint(original));
       // Include identity, full untruncated source contents, scope, prompt version and model.
       // Retrieval happens BEFORE every cache read, so removed/hidden data cannot return from cache.
-      const key = await assistantFingerprint({ actor: session.actor, input, fingerprint, version: ASSISTANT_VERSION, model: deps.model });
+      const key = await bounded(() => assistantFingerprint({ actor: session.actor, input, fingerprint, version: ASSISTANT_VERSION, model: deps.model }));
       const revalidate = async () => {
         stage = 'revalidation';
-        const current = await session.corpus(input);
-        if (await assistantFingerprint(current) !== fingerprint) throw new AssistantError(409, 'The discussion changed while answering. Please ask again.');
+        const current = await bounded(() => session.corpus(input, signal));
+        if (await bounded(() => assistantFingerprint(current)) !== fingerprint) throw new AssistantError(409, 'The discussion changed while answering. Please ask again.');
       };
+      let verifiedCache: AssistantResult | undefined;
       try {
-        const cached = await deps.cache?.get(key);
-        if (cached?.result && cached.digest === await assistantFingerprint({ key, result: cached.result })) {
+        const cached = deps.cache ? await bounded(() => deps.cache!.get(key)) : null;
+        if (cached?.result && cached.digest === await bounded(() => assistantFingerprint({ key, result: cached.result }))) {
           const cachedTime = Date.parse(cached.result.generatedAt);
           if (cachedTime <= Date.now() && Date.now() - cachedTime < 300_000) {
             // Revalidate model structure and source quotes rather than blindly trusting stored JSON.
-            const verified = validateAssistantOutput(JSON.stringify(cached.result), corpus, cachedTime, input);
-            await revalidate();
-            return assistantResponse({ ...verified, cached: true });
+            verifiedCache = validateAssistantOutput(JSON.stringify(cached.result), corpus, cachedTime, input);
           }
         }
-      } catch (error) { if (error instanceof AssistantError && error.status === 409) throw error; /* cache failures are misses */ }
-      let operation = inflight.get(key);
-      if (!operation) {
-        if (inflight.size >= 100) throw new AssistantError(429, 'The assistant is busy. Please retry shortly.', 30);
-        operation = (async () => {
-          stage = 'quota';
-          if (!await session.reserve()) throw new AssistantError(429, 'The assistant usage limit has been reached. Please try again later.', 60);
-          stage = 'generation';
-          const raw = await deps.generate(assistantPrompt(input, corpus), request.signal);
-          stage = 'validation';
-          let result = validateAssistantOutput(raw, corpus, Date.now(), input);
-          if (result.claims.length || result.disagreements.length) {
-            request.signal.throwIfAborted();
-            stage = 'review';
-            // A second, bounded inference checks meaning against full source
-            // context. It can reject text, never add unsupported facts. There
-            // are no automatic retries, model escalation or hidden quote fallback.
-            const reviewCorpus = assistantReviewCorpus(original, corpus, result);
-            if (!reviewCorpus) {
-              result = { ...result, status: 'insufficient', claims: [], disagreements: [], sources: [],
-                unanswered: ['I couldn’t check enough of the original discussion to answer that accurately. Try a more specific question.'] };
-            } else {
-              const review = await deps.generate(assistantReviewPrompt(input, reviewCorpus, result), request.signal);
-              result = validateAssistantReview(review, result);
-            }
-          }
-          await revalidate();
-          try { await deps.cache?.put(key, { result, digest: await assistantFingerprint({ key, result }) }); } catch { /* caching is optional */ }
-          return result;
-        })().catch(error => { throw new AssistantOperationFailure(error, stage); });
-        inflight.set(key, operation);
-        void operation.finally(() => inflight.delete(key)).catch(() => {});
+      } catch { signal.throwIfAborted(); /* Only cache storage/structure failures are misses. */ }
+      if (verifiedCache) {
+        // Permission, rate-limit and availability failures here must propagate:
+        // never treat a failed live access check as a cache miss and regenerate.
+        await revalidate();
+        return respond({ ...verifiedCache, cached: true });
       }
-      const result = await operation;
+      stage = 'quota';
+      if (!await bounded(() => session.reserve(signal))) throw new AssistantRequestError(429, 'quota');
+      stage = 'generation';
+      const raw = await bounded(() => deps.generate({ ...assistantPrompt(input, corpus),
+        validateOutput: (candidate: string) => { validateAssistantOutput(candidate, corpus, Date.now(), input); },
+      }, signal, context));
+      stage = 'validation';
+      let result = validateAssistantOutput(raw, corpus, Date.now(), input);
+      if (result.claims.length || result.disagreements.length) {
+        signal.throwIfAborted();
+        stage = 'review';
+        // Independent semantic verification stays mandatory; no model
+        // escalation or unreviewed quote fallback.
+        const reviewCorpus = assistantReviewCorpus(original, corpus, result);
+        if (!reviewCorpus) {
+          result = { ...result, status: 'insufficient', claims: [], disagreements: [], sources: [],
+            unanswered: ['I couldn’t check enough of the original discussion to answer that accurately. Try a more specific question.'] };
+        } else {
+          const review = await bounded(() => deps.generate(assistantReviewPrompt(input, reviewCorpus, result), signal, context));
+          result = validateAssistantReview(review, result);
+        }
+      }
+      // Exactly one post-generation, caller-scoped fingerprint/access check.
       await revalidate();
-      request.signal.throwIfAborted();
-      return assistantResponse(result);
+      try {
+        if (deps.cache) await bounded(async () => deps.cache!.put(key, { result, digest: await bounded(() => assistantFingerprint({ key, result })) }));
+      } catch { signal.throwIfAborted(); /* Caching is optional. */ }
+      signal.throwIfAborted();
+      return respond(result);
     } catch (failure) {
-      const error = failure instanceof AssistantOperationFailure ? failure.original : failure;
-      if (failure instanceof AssistantOperationFailure) stage = failure.stage;
+      const error = signal.aborted ? signal.reason : failure;
       const status = error instanceof AssistantError ? error.status : 503;
+      const category: AssistantFailureCategory = error instanceof AssistantRequestError ? error.category
+        : status === 401 ? 'authentication' : status === 403 ? 'permission' : status === 409 ? 'source_changed'
+        : status === 429 ? (stage === 'quota' ? 'quota' : 'rate_limit') : status === 502 ? 'source_verification'
+        : status >= 400 && status < 500 ? 'invalid_request' : 'unavailable';
+      const durationMs = Math.max(0, Math.min(86_400_000, Date.now() - started));
       if (status >= 500) {
         // Fixed metadata only: never expose prompts, source contents, tokens or provider errors.
-        try { deps.reportFailure?.({ stage, status, ...(error instanceof AssistantError && error.code ? { code: error.code } : {}) }); } catch { /* telemetry cannot change the response */ }
+        try { deps.reportFailure?.({ stage, status, category, requestId, durationMs,
+          ...(error instanceof AssistantError && error.code ? { code: error.code } : {}) }); } catch { /* telemetry cannot change the response */ }
       }
-      if (error instanceof AssistantError) return assistantResponse({ error: error.message }, error.status, error.retryAfter);
-      return assistantResponse({ error: 'The assistant could not complete this request. Please try again shortly.' }, 503);
+      const retry = error instanceof AssistantError ? error.retryAfter : undefined;
+      const retryAfterSeconds = typeof retry === 'number' && Number.isInteger(retry) && retry >= 1 && retry <= 86_400 ? retry : undefined;
+      const metadata = error instanceof AssistantRequestError ? error.metadata : {};
+      const reset = metadata.resetAt ? Date.parse(metadata.resetAt) : NaN;
+      const resetAt = Number.isFinite(reset) && reset > Date.now() && reset <= Date.now() + 86_400_000 ? new Date(reset).toISOString() : undefined;
+      const quotaReason = ['user_daily_limit', 'global_daily_limit', 'user_minute_limit'].includes(metadata.quotaReason ?? '') ? metadata.quotaReason : undefined;
+      return respond({ error: failureMessages[category], code: category, requestId,
+        ...(retryAfterSeconds ? { retryAfterSeconds } : {}), ...(resetAt ? { resetAt } : {}), ...(quotaReason ? { quotaReason } : {}) }, status, retryAfterSeconds);
+    } finally {
+      clearTimeout(timer);
+      request.signal.removeEventListener('abort', cancel);
     }
   };
 }

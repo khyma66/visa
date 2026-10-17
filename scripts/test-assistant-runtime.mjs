@@ -132,7 +132,11 @@ test('runtime failures identify the failing stage without logging inputs, accoun
     assert.equal(current.failures.length, 1, stage);
     assert.equal(current.failures[0].stage, stage);
     assert.equal(current.failures[0].status, 503);
-    assert.deepEqual(Object.keys(current.failures[0]).sort(), ['stage', 'status']);
+    assert.deepEqual(Object.keys(current.failures[0]).sort(), ['category', 'durationMs', 'requestId', 'stage', 'status']);
+    assert.equal(current.failures[0].category, 'unavailable');
+    assert.match(current.failures[0].requestId, /^[0-9a-f-]{36}$/);
+    assert.equal(current.failures[0].requestId, response.headers.get('x-visathreads-request-id'));
+    assert(Number.isSafeInteger(current.failures[0].durationMs) && current.failures[0].durationMs >= 0);
     assertPrivate(current.failures);
     assertPrivate(await response.json());
   }
@@ -144,7 +148,8 @@ test('malformed model JSON and unsupported citations report distinct controlled 
     const { handler, failures } = harness({ generate: async () => raw });
     const response = await handler(request());
     assert.equal(response.status, 502);
-    assert.deepEqual(failures, [{ stage: 'validation', status: 502, code }]);
+    assert.deepEqual(failures.map(({ stage, status, category, code }) => ({ stage, status, category, code })), [{ stage: 'validation', status: 502, category: 'source_verification', code }]);
+    assert.equal(failures[0].requestId, response.headers.get('x-visathreads-request-id'));
     assertPrivate(failures);
     assertPrivate(await response.json());
   }
@@ -158,7 +163,11 @@ test('diagnostic callback exceptions cannot replace the original safe response',
   const response = await broken.handler(request());
   assert.equal(calls, 1);
   assert.equal(response.status, expected.status);
-  assert.deepEqual(await response.json(), await expected.json());
+  const actualBody = await response.json(), expectedBody = await expected.json();
+  assert.match(actualBody.requestId, /^[0-9a-f-]{36}$/);
+  assert.notEqual(actualBody.requestId, expectedBody.requestId);
+  delete actualBody.requestId; delete expectedBody.requestId;
+  assert.deepEqual(actualBody, expectedBody);
 });
 
 test('successful, empty, and expected quota-denied requests do not report server failures', async () => {
@@ -177,7 +186,7 @@ test('successful, empty, and expected quota-denied requests do not report server
   assert.equal(quota.state.generations, 0);
 });
 
-test('duplicate requests sharing failed inference retain the same failure stage', async () => {
+test('independent concurrent requests retain their own failure stage and correlation', async () => {
   let release;
   const paused = new Promise(resolve => { release = resolve; });
   let generations = 0, lookups = 0;
@@ -186,14 +195,15 @@ test('duplicate requests sharing failed inference retain the same failure stage'
     cache: { get: async () => { lookups++; return null; }, put: async () => {} },
   });
   const first = handler(request()), second = handler(request());
-  while (generations === 0 || lookups < 2) await new Promise(resolve => setImmediate(resolve));
-  // Let both callers reach the shared operation before rejecting it.
-  await new Promise(resolve => setImmediate(resolve));
+  while (generations < 2 || lookups < 2) await new Promise(resolve => setImmediate(resolve));
   release();
   const responses = await Promise.all([first, second]);
   assert.deepEqual(responses.map(response => response.status), [503, 503]);
-  assert.equal(generations, 1);
-  assert.deepEqual(failures, [{ stage: 'generation', status: 503 }, { stage: 'generation', status: 503 }]);
+  assert.equal(generations, 2);
+  assert.deepEqual(failures.map(({ stage, status, category }) => ({ stage, status, category })), [
+    { stage: 'generation', status: 503, category: 'unavailable' }, { stage: 'generation', status: 503, category: 'unavailable' },
+  ]);
+  assert.equal(new Set(failures.map(event => event.requestId)).size, 2);
   assertPrivate(failures);
 });
 

@@ -10,8 +10,10 @@ process.env.NEXT_PUBLIC_SITE_URL = 'https://visathreads.com';
 const dataUrl = (text) => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
 const source = await readFile(new URL('../src/components/AssistantPanel.tsx', import.meta.url), 'utf8');
 const context = dataUrl(ts.transpileModule(await readFile(new URL('../src/lib/assistant-context.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText);
+const client = dataUrl(ts.transpileModule(await readFile(new URL('../src/lib/assistant-client.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText);
 const dependencies = {
   '@/lib/assistant-context': context,
+  '@/lib/assistant-client': client,
   react: dataUrl(['useState', 'useRef', 'useEffect'].map(name => `export function ${name}(...args){return globalThis.__assistantHarness.${name}(...args);}`).join('\n')),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'),
   'next/navigation': dataUrl('export function usePathname(){return globalThis.__assistantHarness.pathname;}'),
@@ -200,7 +202,7 @@ test('repeated more requests carry a bounded seen-post exclusion list instead of
 });
 
 test('evidence renders as escaped text with dates and only internal discussion links', async () => {
-  const h = new Harness(); h.post = async () => reply(fixture({ claims: [{ text: '<img src=x onerror=alert(1)>', evidence: [{ sourceId: 'reply-a', quote: '<script>danger()</script>' }, { sourceId: 'bad', quote: 'bad' }] }], sources: [...fixture().sources, { ...fixture().sources[0], id: 'bad', url: 'javascript:alert(1)' }], coverage: { sourceCount: 2, partial: true } }));
+  const h = new Harness(); h.post = async () => reply(fixture({ claims: [{ text: '<img src=x onerror=alert(1)>', evidence: [{ sourceId: 'reply-a', quote: '<script>danger()</script>' }, { sourceId: 'bad', quote: 'Untrusted source text.' }] }], sources: [...fixture().sources, { ...fixture().sources[0], id: 'bad', url: 'javascript:alert(1)' }], coverage: { sourceCount: 2, partial: true } }));
   try {
     h.render(); await h.settle(); changeQuestion(h, 'What happened?'); await submit(h); await h.settle();
     const html = renderToStaticMarkup(h.tree);
@@ -249,7 +251,7 @@ test('related perspectives preserve the reviewed narrative, quotes and inline ci
   const sources = ['one', 'two'].map((name, index) => ({ ...fixture().sources[0], id: `q:apify-report-${name}`, kind: 'question',
     questionId: `apify-report-${name}`, communityId: null, body: quotes[index], url: `/questions/apify-report-${name}` }));
   const evidence = sources.map((item, index) => ({ sourceId: item.id, quote: quotes[index] }));
-  const result = fixture({ sources,
+  const result = fixture({ sources, coverage: { sourceCount: sources.length, partial: false },
     claims: [{ text: 'One visitor reported that phones were allowed.', evidence: [evidence[0]] }],
     disagreements: [{ text: 'Another visitor was asked to leave their phone outside. These visits may have had different circumstances.', evidence }],
   });
@@ -322,7 +324,8 @@ test('stop cancels the active request, restores the draft, and rejects duplicate
     h.render(); await h.settle(); changeQuestion(h, 'Old question'); const first = submit(h); void submit(h); await h.settle();
     assert.equal(h.calls.filter(call => call.method === 'POST').length, 1);
     assert.match(textOf(h.tree), /Thinking/);
-    assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.disabled, true);
+    assert(!nodes(h.tree).find(node => node.type === 'textarea').props.disabled);
+    assert.equal(button(h, 'Send new message').props.disabled, true);
     const active = h.calls.at(-1); choose(h, 'Stop response'); assert.equal(active.signal.aborted, true);
     assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.value, 'Old question');
     changeQuestion(h, 'New question');
@@ -526,4 +529,83 @@ test('source verification and changed-discussion failures explain retry while re
       assert.doesNotMatch(textOf(h.tree), /private provider diagnostic/);
     } finally { h.close(); }
   }
+});
+
+test('malformed nested responses produce a retryable error without rendering unchecked evidence', async () => {
+  for (const broken of [null, { ...fixture(), claims: [{ text: 'Do not display this claim.', evidence: null }] }, { ...fixture(), sources: [null] }, { ...fixture(), coverage: { sourceCount: 1, partial: false, reasons: [null] } }]) {
+    const h = new Harness(); h.post = async () => reply(broken);
+    try {
+      h.render(); await h.settle(); changeQuestion(h, 'Which documents?'); await submit(h); await h.settle();
+      assert.match(textOf(h.tree), /answer was incomplete/); assert.doesNotMatch(textOf(h.tree), /Do not display|Members reported/);
+      assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.value, 'Which documents?');
+      assert.equal(button(h, 'Retry answer').props.disabled, false);
+    } finally { h.close(); }
+  }
+});
+
+test('typed failures show safe quota timing and distinguish timeout from source verification', async () => {
+  for (const [status, body, pattern] of [
+    [429, { code: 'quota', retryAfterSeconds: 120, error: 'private sentinel' }, /usage limit.*2 minutes/],
+    [429, { code: 'rate_limit', retryAfterSeconds: 7, error: 'private sentinel' }, /assistant limit.*7 seconds/],
+    [504, { code: 'timeout', error: 'private sentinel' }, /took too long/],
+    [503, { code: 'unavailable', error: 'private sentinel' }, /temporarily unavailable/],
+    [401, { code: 'quota', error: 'private sentinel' }, /session has expired/],
+  ]) {
+    const h = new Harness(); h.post = async () => reply(body, status);
+    try {
+      h.render(); await h.settle(); changeQuestion(h, 'Which documents?'); await submit(h); await h.settle();
+      assert.match(textOf(h.tree), pattern); assert.doesNotMatch(textOf(h.tree), /private|sentinel/);
+      assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.value, 'Which documents?');
+    } finally { h.close(); }
+  }
+});
+
+test('sending a new draft supersedes the active request atomically and ignores its late result', async () => {
+  const h = new Harness(), old = defer(), next = defer(); let count = 0;
+  h.post = () => ++count === 1 ? old.promise : next.promise;
+  try {
+    h.render(); await h.settle(); changeQuestion(h, 'Old pending question'); const first = submit(h); await h.settle();
+    const firstRequest = h.calls.find(call => call.method === 'POST');
+    changeQuestion(h, 'New independent question'); assert.equal(button(h, 'Send new message').props.disabled, false);
+    const submitHandler = nodes(h.tree).find(node => node.type === 'form').props.onSubmit;
+    const second = submitHandler({ preventDefault() {} }); void submitHandler({ preventDefault() {} }); h.render(); await h.settle();
+    assert.equal(firstRequest.signal.aborted, true); assert.equal(h.calls.filter(call => call.method === 'POST').length, 2);
+    assert.equal(h.calls.at(-1).body.question, 'New independent question'); assert.equal(h.calls.at(-1).body.previousQuestions, undefined);
+    old.resolve(reply(fixture())); await first; await h.settle(); assert.doesNotMatch(textOf(h.tree), /Members reported/); assert(button(h, 'Stop response'));
+    next.resolve(reply(fixture({ claims: [{ ...fixture().claims[0], text: 'The new answer is the only completed response.' }] })));
+    await second; await h.settle();
+    assert.match(textOf(h.tree), /The new answer is the only completed response/); assert.doesNotMatch(textOf(h.tree), /Members reported/);
+    assert.equal(nodes(h.tree).filter(node => node.props?.['aria-label'] === 'Your message').length, 2);
+    assert.match(textOf(h.tree), /Stopped\./);
+  } finally { old.resolve(reply(fixture())); next.resolve(reply(fixture())); h.close(); }
+});
+
+test('stop, failure and successful completion preserve a next-question draft', async () => {
+  for (const outcome of ['stop', 'failure', 'success']) {
+    const h = new Harness(), pending = defer(); h.post = () => pending.promise;
+    try {
+      h.render(); await h.settle(); changeQuestion(h, 'First question'); const first = submit(h); await h.settle();
+      changeQuestion(h, 'My next drafted question');
+      if (outcome === 'stop') choose(h, 'Stop response');
+      pending.resolve(outcome === 'failure' ? reply({ code: 'unavailable' }, 503) : reply(fixture()));
+      await first; await h.settle();
+      assert.equal(nodes(h.tree).find(node => node.type === 'textarea').props.value, 'My next drafted question');
+      assert.equal(button(h, 'Send message').props.disabled, false);
+    } finally { pending.resolve(reply(fixture())); h.close(); }
+  }
+});
+
+test('empty recent-post searches visibly preserve posting-date coverage and allow a new question', async () => {
+  const h = new Harness();
+  h.post = async () => reply(fixture({ kind: 'posts', posts: [], status: 'insufficient', claims: [], sources: [],
+    unanswered: ['No matching posts were published in this time range. Older matching discussions may still exist.'],
+    coverage: { sourceCount: 0, partial: false, since: '2026-09-17T00:00:00.000Z', until: '2026-10-17T00:00:00.000Z' },
+    notice: 'Posts published between 2026-09-17 and 2026-10-17 (UTC), newest first. These are member reports, not verified immigration guidance.' }));
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    changeQuestion(h, 'Find recent posts about appointments'); await submit(h); await h.settle();
+    assert.match(visibleTextOf(h.tree), /No matching posts were published/); assert.match(visibleTextOf(h.tree), /2026-09-17 and 2026-10-17/);
+    assert.doesNotMatch(visibleTextOf(h.tree), /No answer received|incomplete|temporarily unavailable/);
+    changeQuestion(h, 'Show latest posts without a date limit'); assert.equal(button(h, 'Send message').props.disabled, false);
+  } finally { h.close(); }
 });

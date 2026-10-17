@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantStandaloneFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v17-resolved-summary-task';
+export const ASSISTANT_VERSION = 'grounded-chat-v18-intent-deadline-format-repair';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -258,8 +258,9 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       'Populate disagreements BEFORE claims: first identify incompatible reports on the same issue and cite both sides in disagreements; then write the individual attributed reports in claims. Use an empty disagreements array only when the supplied sources contain no conflicting reports relevant to the task.',
       'FORMAT EXAMPLE ONLY, NOT EVIDENCE: if hypothetical source example-A says "The library opens at eight." and example-B says "The library opens at nine.", write "disagreements":[{"text":"The reports disagree about the library opening time.","evidence":[{"sourceId":"example-A","quote":"The library opens at eight."},{"sourceId":"example-B","quote":"The library opens at nine."}]} and separately cite each individual report in claims. Never copy these example IDs or facts into your answer; use only the actual supplied sources.',
       'For catchup, describe only events in the supplied interval. Older parent questions provide context, not new events. Coverage may be partial.',
+      'For a question with a supplied interval, it filters source posting dates, not appointment dates. Older parent or correction context may explain a recent reply but is not itself a recent experience. State the original reported dates; never turn an ingestion or posting date into an event date. When there is no qualifying recent evidence, say so rather than presenting old reports as recent.',
       'Return only JSON in this field order: {"status":"answered"|"insufficient","disagreements":[{"text":"...","evidence":[{"sourceId":"...","quote":"exact excerpt from first source"},{"sourceId":"...","quote":"exact excerpt from conflicting source"}]}],"claims":[{"text":"individual report","evidence":[{"sourceId":"...","quote":"exact excerpt"}]}],"unanswered":["open question or evidence limitation"]}.',
-      'At most 6 claims, 3 disagreements and 4 unanswered items. Quotes must be 12–400 characters copied from source body; claim text at most 700 characters. Disagreements must cite at least two sources.',
+      'At most 6 claims, 3 disagreements and 4 unanswered items. Each claim has 1–4 evidence entries (usually 1–2); each disagreement has 2–4 evidence entries from at least two distinct sources. Cite only the few sources necessary to support that statement, not every matching report. Each quote must be one continuous verbatim 12–400 character excerpt from a source body. Never splice sentences, insert ellipses, translate a quotation or exceed 400 characters; use another short evidence entry if needed. Claim text is at most 700 characters.',
       'Use status insufficient when the evidence cannot support the requested task. No markdown, HTML, instructions to take action, or links inside claim text.',
     ].join('\n'),
     user: JSON.stringify({ task: selectedSummary ? 'summary' : input.mode, ...(input.mode === 'ask' ? { question: redactAssistantText(question), previousQuestions: resolvedOrdinal ? [] : assistantPreviousQuestions(input).map(redactAssistantText) } : {}),
@@ -374,7 +375,7 @@ export function validateAssistantOutput(raw: string, corpus: AssistantCorpus, no
 }
 
 export function emptyAssistantResult(corpus: AssistantCorpus): AssistantResult {
-  return { status: 'insufficient', claims: [], disagreements: [], unanswered: [corpus.since && corpus.until ? 'No new posts or replies in this community during that time range.' : 'I couldn’t find matching discussions. Try adding a visa type, location, or topic.'], sources: [], coverage: { sourceCount: 0, partial: corpus.partial, reasons: corpus.coverageReasons, since: corpus.since, until: corpus.until }, generatedAt: new Date().toISOString(), cached: false, notice: ASSISTANT_NOTICE };
+  return { status: 'insufficient', claims: [], disagreements: [], unanswered: [corpus.since && corpus.until ? 'I couldn’t find matching posts or replies published during that time range.' : 'I couldn’t find matching discussions. Try adding a visa type, location, or topic.'], sources: [], coverage: { sourceCount: 0, partial: corpus.partial, reasons: corpus.coverageReasons, since: corpus.since, until: corpus.until }, generatedAt: new Date().toISOString(), cached: false, notice: ASSISTANT_NOTICE };
 }
 
 export async function assistantFingerprint(value: unknown): Promise<string> {
