@@ -461,7 +461,7 @@ test('invalid synthetic model output remains a failed HTTP response with protect
     assert.equal(value.syntheticDiagnostic.source, 'compiled-synthetic-fixture-only');
     assert.equal(value.syntheticDiagnostic.fixtureId, 'post-question');
     assert.equal(value.syntheticDiagnostic.stage, 'source-validation');
-    assert.deepEqual(value.syntheticDiagnostic.serviceFailure, { stage: 'validation', status: 502, code: raw === JSON.stringify(invalid) ? 'citation_quote' : 'output_json' });
+    assert.deepEqual(value.syntheticDiagnostic.serviceFailure, { stage: 'generation', status: 502, code: raw === JSON.stringify(invalid) ? 'citation_quote' : 'output_json' });
     if (raw === JSON.stringify(invalid)) assert.deepEqual(value.syntheticDiagnostic.output, invalid);
     else assert.equal(value.syntheticDiagnostic.rawOutput, raw);
     assert.equal((await worker.fetch(request(undefined, { Authorization: '' }), settings)).status, 404);
@@ -517,7 +517,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 26);
+  assert.equal(acceptanceFixtures.length, 27);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);

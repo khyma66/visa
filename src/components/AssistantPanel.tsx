@@ -6,6 +6,7 @@ import { ArrowUp, ChevronDown, Clock3, Sparkles, Square } from 'lucide-react';
 import { getSupabase } from '@/lib/supabase/client';
 import type { AssistantAvailability, AssistantClaim, AssistantMode, AssistantPostReference, AssistantRequest, AssistantResult, AssistantScope, AssistantSource } from '@/lib/assistant-contract';
 import { assistantBoundedHistory, assistantDisplayedPosts, assistantMorePosts, assistantPreviousPost, assistantRefersToEarlierTurn } from '@/lib/assistant-context';
+import { assistantFailureMessage, parseAssistantFailure, parseAssistantResult, readAssistantJson, safeAssistantHref } from '@/lib/assistant-client';
 import { useAuth } from './AuthProvider';
 
 type Props = { scope: AssistantScope; title?: string; defaultOpen?: boolean };
@@ -23,7 +24,7 @@ function dateLabel(value: string) {
 
 // Model text never controls external navigation, HTML, or script execution.
 function sourceHref(source: Pick<AssistantSource, 'url'>) {
-  return /^\/(?:questions|experiences)\/[a-zA-Z0-9_-]+(?:#answer-[a-zA-Z0-9_-]+)?$/.test(source.url) ? source.url : null;
+  return safeAssistantHref(source.url) ? source.url : null;
 }
 
 function Claims({ claims, sources }: { claims: AssistantClaim[]; sources: AssistantSource[] }) {
@@ -48,6 +49,7 @@ function PostResults({ result }: { result: AssistantResult }) {
     <p className="text-base leading-relaxed text-slate-800">{posts.length ? `Found ${posts.length} matching post${posts.length === 1 ? '' : 's'}.` : result.unanswered[0] || 'No matching posts found. Try a visa type, location, or another keyword.'}</p>
     {cards(posts.slice(0, 8))}
     {posts.length > 8 && <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-teal-700">{`Show ${posts.length - 8} more posts`}</summary>{cards(posts.slice(8), 8)}</details>}
+    <p className="mt-3 text-xs leading-5 text-slate-500">{result.notice}</p>
     {result.coverage.partial && <p className="mt-3 text-xs leading-5 text-amber-800">More posts may match. Narrow your search to see more specific results.</p>}
   </div>;
 }
@@ -117,6 +119,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
   const [settingsError, setSettingsError] = useState(false);
   const [retry, setRetry] = useState(0);
   const request = useRef<AbortController | null>(null);
+  const requestPrompt = useRef<string | null>(null);
   const operation = useRef(0);
   const endOfChat = useRef<HTMLDivElement | null>(null);
   const turns = conversation.identity === identity ? conversation.turns : [];
@@ -125,15 +128,16 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
   const previousQuestions = completedAsks.at(-1)?.history ?? [];
 
   function cancel() {
-    ++operation.current; request.current?.abort(); request.current = null;
+    if (identityRef.current !== identity) return;
+    ++operation.current; request.current?.abort(); request.current = null; requestPrompt.current = null;
     const pending = turns.find((turn) => turn.state === 'pending');
-    if (pending?.mode === 'ask') setDraft({ identity, text: pending.prompt });
+    if (pending?.mode === 'ask') setDraft((current) => current.identity === identity && !current.text.trim() ? { identity, text: pending.prompt } : current);
     setConversation((current) => current.identity === identity ? { ...current, turns: current.turns.map((turn) => turn.state === 'pending' ? { ...turn, state: 'cancelled' } : turn) } : current);
     setError(''); setBusy(false);
   }
 
   useEffect(() => {
-    ++operation.current; request.current?.abort(); request.current = null;
+    ++operation.current; request.current?.abort(); request.current = null; requestPrompt.current = null;
     setConversation({ identity, turns: [] }); setDraft({ identity, text: '' }); setError(''); setBusy(false); setMode('ask'); setPeriod('day'); setCheckpoint(null);
     if (scope.kind === 'community' && user && !demoMode) {
       try {
@@ -155,7 +159,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
     const timeout = setTimeout(() => { controller.abort(); setChecking(false); setSettingsError(true); }, 8000);
     void fetch('/api/assistant', { signal: controller.signal, cache: 'no-store' }).then(async (response) => {
       if (!response.ok) throw new Error('Unavailable');
-      const value = await response.json() as AssistantAvailability;
+      const value = await readAssistantJson(response) as AssistantAvailability;
       if (!controller.signal.aborted) setAvailability({ posts: value.posts === true, communities: value.communities === true, catchup: value.catchup === true });
     }).catch(() => { if (!controller.signal.aborted) setSettingsError(true); })
       .finally(() => { clearTimeout(timeout); if (!controller.signal.aborted) setChecking(false); });
@@ -166,17 +170,22 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
   const canCatchup = scope.kind === 'community' && available && availability.catchup;
   const firstCatchup = mode === 'catchup' && period === 'last' && !checkpoint;
   const staleCheckpoint = mode === 'catchup' && period === 'last' && !!checkpoint && Date.parse(checkpoint) < Date.now() - 31 * 86400000;
-  const canSubmit = !!user && !authLoading && !demoMode && available && !busy && !checking && !firstCatchup && !staleCheckpoint && (mode !== 'catchup' || canCatchup) && (mode !== 'summary' || scope.kind === 'post') && (mode !== 'ask' || (question.trim().length >= 3 && question.trim().length <= 1200));
+  const canSubmit = !!user && !authLoading && !demoMode && available && (!busy || (mode === 'ask' && question.trim() !== requestPrompt.current)) && !checking && !firstCatchup && !staleCheckpoint && (mode !== 'catchup' || canCatchup) && (mode !== 'summary' || scope.kind === 'post') && (mode !== 'ask' || (question.trim().length >= 3 && question.trim().length <= 1200));
+  const retryingQuestion = !!error && turns.at(-1)?.state === 'failed' && turns.at(-1)?.prompt === question.trim();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!canSubmit || request.current) return;
+    const submittedQuestion = question.trim();
+    if (!canSubmit || identityRef.current !== identity || (request.current && (mode !== 'ask' || requestPrompt.current === submittedQuestion))) return;
+    // Supersede atomically before any await. Old responses cannot update the
+    // conversation, error or draft even if their fetch ignores cancellation.
+    request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
+    requestPrompt.current = mode === 'ask' ? submittedQuestion : null;
     const currentOperation = ++operation.current;
     const actor = identity;
     const isCurrent = () => !controller.signal.aborted && operation.current === currentOperation && identityRef.current === actor;
-    const submittedQuestion = question.trim();
     const prompt = mode === 'ask' ? submittedQuestion : mode === 'summary' ? 'Summarize this discussion.' : `Catch me up ${period === 'last' ? '' : 'on '}${periodLabels[period]}.`;
     const last = turns.at(-1);
     const turnId = last && (last.state === 'failed' || last.state === 'cancelled') && last.prompt === prompt && last.mode === mode ? last.id : currentOperation;
@@ -201,19 +210,20 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
       }
     }
     if (mode === 'catchup') body.since = period === 'last' && checkpoint ? checkpoint : new Date(Date.now() - (period === 'last' ? 24 : periodHours[period]) * 3600000).toISOString();
-    setConversation({ identity: actor, turns: [...turns.filter((item) => item.id !== turnId), turn].slice(-20) });
+    setConversation({ identity: actor, turns: [...turns.filter((item) => item.id !== turnId).map((item) => item.state === 'pending' ? { ...item, state: 'cancelled' as const } : item), turn].slice(-20) });
     if (mode === 'ask') setDraft({ identity: actor, text: '' });
     setBusy(true); setError('');
     const fail = (message: string) => {
       if (!isCurrent()) return;
       setConversation((current) => current.identity === actor ? { ...current, turns: current.turns.map((item) => item.id === turnId ? { ...item, state: 'failed' } : item) } : current);
-      if (mode === 'ask') setDraft({ identity: actor, text: submittedQuestion });
+      if (mode === 'ask') setDraft((current) => current.identity === actor && !current.text.trim() ? { identity: actor, text: submittedQuestion } : current);
       setError(message);
     };
     const timeout = setTimeout(() => {
       if (!isCurrent()) return;
-      fail('That took too long. Try again.'); controller.abort(); request.current = null; setBusy(false);
+      fail(assistantFailureMessage({ code: 'timeout' })); controller.abort(); request.current = null; requestPrompt.current = null; setBusy(false);
     }, 65000);
+    controller.signal.addEventListener('abort', () => clearTimeout(timeout), { once: true });
     try {
       const { data, error: sessionError } = await getSupabase().auth.getSession();
       if (!isCurrent()) return;
@@ -221,13 +231,15 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
       const response = await fetch('/api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` }, body: JSON.stringify(body), signal: controller.signal, cache: 'no-store' });
       if (!isCurrent()) return;
       if (!response.ok) {
-        fail(response.status === 401 ? 'Your session has expired. Sign in again.' : response.status === 429 ? 'You’ve reached the assistant limit. Try again later.' : response.status === 403 ? 'You don’t have access to this discussion.' : response.status === 409 ? 'This discussion changed. Try again for the latest answer.' : response.status === 502 ? 'I couldn’t verify the sources for that answer. Try again.' : 'Couldn’t get an answer. Try again.');
+        // A proxy may return HTML or malformed JSON. Status remains a safe
+        // fallback, and raw provider/database error text is never rendered.
+        const failure = await readAssistantJson(response).catch(() => null);
+        fail(assistantFailureMessage(parseAssistantFailure(response.status, failure, response.headers?.get('retry-after') ?? null)));
         return;
       }
-      const value = await response.json() as AssistantResult;
+      const value = parseAssistantResult(await readAssistantJson(response));
       if (!isCurrent()) return;
-      if (!['answered', 'insufficient'].includes(value.status) || !Array.isArray(value.claims) || !Array.isArray(value.sources) || !Array.isArray(value.disagreements) || !Array.isArray(value.unanswered) || !value.coverage) throw new Error('Invalid response');
-      if (value.kind === 'posts' && (!Array.isArray(value.posts) || value.posts.some(post => !post || ['questionId', 'title', 'url', 'excerpt', 'sourceId', 'createdAt'].some(key => typeof post[key as keyof typeof post] !== 'string')))) throw new Error('Invalid post results');
+      if (!value) { fail('The answer was incomplete. Your question is saved; try again.'); return; }
       setConversation((current) => current.identity === actor ? { ...current, turns: current.turns.map((item) => item.id === turnId ? { ...item, state: 'complete', result: value } : item) } : current);
       // A partial digest cannot mark a whole interval as read.
       if (mode === 'catchup' && scope.kind === 'community' && value.status === 'answered' && !value.coverage.partial && value.coverage.until && Number.isFinite(Date.parse(value.coverage.until)) && Date.parse(value.coverage.until) <= Date.now() && (!checkpoint || Date.parse(value.coverage.until) > Date.parse(checkpoint))) {
@@ -235,8 +247,8 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
         setCheckpoint(until);
         try { window.localStorage.setItem(storageKey, until); } catch { /* Optional local checkpoint only. */ }
       }
-    } catch { fail('Couldn’t get an answer. Try again.'); }
-    finally { clearTimeout(timeout); if (isCurrent()) { request.current = null; setBusy(false); } }
+    } catch { fail(assistantFailureMessage({ code: 'unavailable' })); }
+    finally { clearTimeout(timeout); if (isCurrent()) { request.current = null; requestPrompt.current = null; setBusy(false); } }
   }
 
   if (!productionSite) return null;
@@ -267,8 +279,9 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
         <form onSubmit={submit} className="border-t border-slate-100 p-3 sm:p-4">
           {mode === 'catchup' && <div className="mb-3"><label className="text-xs font-medium text-slate-600">Time range<select value={period} disabled={busy} onChange={(event) => { setPeriod(event.target.value as Period); setError(''); }} className={`ml-2 ${controlClass}`}><option value="hour">Past hour</option><option value="six-hours">Past 6 hours</option><option value="day">Past 24 hours</option><option value="week">Past 7 days</option><option value="last">Since last catch-up</option></select></label>{period === 'last' && <p className="mt-2 text-xs text-slate-500">{staleCheckpoint ? 'Your last catch-up is older than 31 days. Choose a recent range.' : checkpoint ? `From ${dateLabel(checkpoint)}.` : 'No previous catch-up. Choose a time range first.'}</p>}</div>}
           <div className={`flex items-end gap-2 ${mode === 'ask' ? 'rounded-2xl border border-slate-300 bg-white p-2 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-50' : ''}`}>
-            {mode === 'ask' && <textarea aria-label="Your question" value={question} disabled={busy} onChange={(event) => { if (!busy) { setDraft({ identity, text: event.target.value }); setError(''); } }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (canSubmit) event.currentTarget.form?.requestSubmit(); } }} required minLength={3} maxLength={1200} rows={2} placeholder="Ask a question…" className="block min-h-12 w-full resize-none bg-transparent px-2 py-1 text-base leading-6 text-slate-800 outline-none disabled:opacity-60" />}
-            {busy ? <button type="button" onClick={cancel} aria-label="Stop response" title="Stop response" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-700 text-white hover:bg-slate-900"><Square size={14} fill="currentColor" aria-hidden="true" /></button> : <button type="submit" disabled={!canSubmit} aria-label={mode === 'ask' ? error ? 'Retry answer' : 'Send message' : mode === 'summary' ? 'Summarize discussion' : 'Create catch-up'} className={`${mode === 'ask' ? 'grid h-9 w-9 place-items-center' : 'px-4 py-2 text-sm font-semibold'} shrink-0 rounded-xl bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-40`}>
+            {mode === 'ask' && <textarea aria-label="Your question" value={question} onChange={(event) => { setDraft({ identity, text: event.target.value }); setError(''); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (canSubmit) event.currentTarget.form?.requestSubmit(); } }} required minLength={3} maxLength={1200} rows={2} placeholder={busy ? 'Draft another question…' : 'Ask a question…'} className="block min-h-12 w-full resize-none bg-transparent px-2 py-1 text-base leading-6 text-slate-800 outline-none" />}
+            {busy && <button type="button" onClick={cancel} aria-label="Stop response" title="Stop response" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-700 text-white hover:bg-slate-900"><Square size={14} fill="currentColor" aria-hidden="true" /></button>}
+            {(!busy || mode === 'ask') && <button type="submit" disabled={!canSubmit} aria-label={mode === 'ask' ? busy ? 'Send new message' : retryingQuestion ? 'Retry answer' : 'Send message' : mode === 'summary' ? 'Summarize discussion' : 'Create catch-up'} title={busy ? 'Stop the current response and send this question' : undefined} className={`${mode === 'ask' ? 'grid h-9 w-9 place-items-center' : 'px-4 py-2 text-sm font-semibold'} shrink-0 rounded-xl bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-40`}>
               {mode === 'ask' ? <ArrowUp size={19} aria-hidden="true" /> : mode === 'summary' ? 'Summarize discussion' : 'Create catch-up'}
             </button>}
           </div>

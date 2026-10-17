@@ -1,14 +1,17 @@
 import { AssistantError, readBoundedJson } from './assistant-core';
 import models from './assistant-models.json';
 
-export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[] };
+export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[];
+  /** In-process validation only; never serialized or supplied by the caller. */
+  validateOutput?(raw: string): void;
+};
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
 export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'invalid_key_format' | 'network_error' | 'unsupported_redirect' | 'illegal_invocation' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'permission_denied' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
 export const WORKERS_ASSISTANT_MODEL = models.answer;
 export const WORKERS_ASSISTANT_PROFILE = JSON.stringify(models);
 export const GROQ_ASSISTANT_MODEL = models.groq.answer;
 export const GROQ_ASSISTANT_PROFILE = JSON.stringify(models.groq);
-export type AssistantTransport = { status: number; tokenLimit?: number; remainingTokens?: number; retryAfterSeconds?: number; denial?: 'model-org' | 'model-project' | 'permission' | 'other'; responseFormat?: 'json' | 'html' | 'other' };
+export type AssistantTransport = { status: number; attempt?: number; errorCode?: 'json_validate_failed' | 'json_generation_failed' | 'context_length_exceeded' | 'other'; constraint?: 'maxItems' | 'minItems' | 'maxLength' | 'minLength' | 'enum' | 'required' | 'other'; tokenLimit?: number; remainingTokens?: number; retryAfterSeconds?: number; denial?: 'model-org' | 'model-project' | 'permission' | 'other'; responseFormat?: 'json' | 'html' | 'other' };
 export type AssistantUsage = { model: string; stage: 'answer' | 'review'; inputTokens?: number; outputTokens?: number; durationMs: number };
 export const OPENAI_ASSISTANT_MODEL = 'gpt-6-luna';
 const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], properties: { sourceId: { type: 'string', minLength: 1 }, quote: { type: 'string', minLength: 12, maxLength: 400 } } };
@@ -55,7 +58,7 @@ export function providerCacheKey(provider: string | undefined): string {
   return provider === 'workers-ai' ? WORKERS_ASSISTANT_PROFILE : providerModel(provider);
 }
 
-/** Preserve complete evidence with the approved fixed model; never retry silently. */
+/** Preserve complete evidence with the approved fixed model. */
 export function workersAssistantRequest(prompt: AssistantPrompt) {
   const review = prompt.outputKind === 'review';
   const schema = assistantOutputSchema(prompt);
@@ -107,7 +110,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
           if (first && first.finish_reason !== 'stop') fail('incomplete_output');
           const content = first?.message?.content ?? payload.response;
           const result = typeof content === 'string' ? content : content ? JSON.stringify(content) : '';
-          if (result && result.length <= 24_000) return result;
+          if (result && result.length <= 24_000) { prompt.validateOutput?.(result); return result; }
           if (result.length > 24_000) fail('oversized_output');
         }
         fail('empty_output');
@@ -118,6 +121,11 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       if (options.apiKey !== options.apiKey.trim() || /[^\x21-\x7e]/.test(options.apiKey)) return fail('invalid_key_format');
       const selected = review ? models.groq.review : models.groq.answer;
       const started = Date.now();
+      // Groq can return json_validate_failed even with strict:true. One bounded
+      // format-only repair is safe; do not retry configuration/auth/rate errors.
+      // Both attempts share the original 25s timeout and caller's total budget.
+      for (let attempt = 0; attempt < 2; attempt++) {
+      signal.throwIfAborted();
       reason = 'network_error';
       const response = await (options.fetcher ?? fetch)('https://api.groq.com/openai/v1/chat/completions', {
         // Workers does not implement redirect:error. Return redirects without
@@ -125,7 +133,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         method: 'POST', redirect: 'manual', signal,
         headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: selected,
-          messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
+          messages: [{ role: 'system', content: prompt.system + (attempt ? '\nFORMAT REPAIR: The previous attempt failed format or exact-citation validation. Return a concise object matching every required field. At most 6 claims, 3 disagreements, 4 unanswered items; each claim has 1–4 evidence entries, each disagreement 2–4. Every quote is one continuous verbatim body excerpt of 12–400 characters, never joined with ellipses. Copy only actual source IDs and exact text from the supplied source bodies. Each text is at most 700 characters. Review checks, if requested, include every supplied check ID exactly once. Do not add facts or change the requested task.' : '') }, { role: 'user', content: prompt.user }],
           response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } },
           reasoning_effort: review ? models.groq.reviewReasoningEffort : models.groq.reasoningEffort, include_reasoning: false,
           max_completion_tokens: review ? models.groq.reviewMaxTokens : models.groq.answerMaxTokens,
@@ -139,22 +147,32 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         return Number.isFinite(value) && value >= 0 && value <= 1_000_000_000 ? value : undefined;
       };
       let denial: AssistantTransport['denial'];
+      let errorCode: AssistantTransport['errorCode'];
+      let constraint: AssistantTransport['constraint'];
       const contentType = response.headers.get('content-type') ?? '';
       const responseFormat = contentType.includes('application/json') ? 'json' : contentType.includes('text/html') ? 'html' : 'other';
       if (!response.ok) {
-        // Inspect bounded errors only to classify documented permission codes.
-        // Never persist the body, message, identifiers, or arbitrary codes.
+        // Fixed categories only: never retain the body, failed generation,
+        // error message, identifiers, prompt text or arbitrary provider codes.
         denial = 'other';
+        errorCode = 'other';
         try {
-          const failure = await readBoundedJson(response, 8000) as { error?: { code?: unknown; type?: unknown } };
+          const failure = await readBoundedJson(response, 100_000) as { error?: { code?: unknown; type?: unknown; message?: unknown } };
           if (failure.error?.code === 'model_permission_blocked_org') denial = 'model-org';
           else if (failure.error?.code === 'model_permission_blocked_project') denial = 'model-project';
           else if (failure.error?.type === 'permissions_error') denial = 'permission';
+          const code = failure.error?.code;
+          if (code === 'json_validate_failed' || code === 'json_generation_failed' || code === 'context_length_exceeded') errorCode = code;
+          if (errorCode === 'json_validate_failed') {
+            const message = typeof failure.error?.message === 'string' ? failure.error.message : '';
+            constraint = /\bmaxItems\b/.test(message) ? 'maxItems' : /\bminItems\b/.test(message) ? 'minItems' : /\bmaxLength\b/.test(message) ? 'maxLength' : /\bminLength\b/.test(message) ? 'minLength' : /\benum\b/.test(message) ? 'enum' : /\brequired\b/.test(message) ? 'required' : 'other';
+          }
         } catch { /* unrecognized bodies remain private */ }
       }
       // Fixed labels and numeric telemetry only; no provider error text.
-      try { options.reportTransport?.({ status: response.status, tokenLimit: numberHeader('x-ratelimit-limit-tokens'), remainingTokens: numberHeader('x-ratelimit-remaining-tokens'), retryAfterSeconds: numberHeader('retry-after'), ...(denial ? { denial } : {}), responseFormat }); } catch { /* optional metrics */ }
+      try { options.reportTransport?.({ status: response.status, attempt: attempt + 1, ...(errorCode ? { errorCode } : {}), ...(constraint ? { constraint } : {}), tokenLimit: numberHeader('x-ratelimit-limit-tokens'), remainingTokens: numberHeader('x-ratelimit-remaining-tokens'), retryAfterSeconds: numberHeader('retry-after'), ...(denial ? { denial } : {}), responseFormat }); } catch { /* optional metrics */ }
       if (!response.ok) {
+        if (response.status === 400 && (errorCode === 'json_validate_failed' || errorCode === 'json_generation_failed') && attempt === 0 && !signal.aborted) continue;
         return fail(response.status === 429 ? 'rate_limited' : response.status === 401 ? 'authentication_failed' : response.status === 403 ? 'permission_denied' : response.status === 400 ? 'invalid_request' : 'provider_error');
       }
       const data = await readBoundedJson(response, 100_000) as { choices?: { finish_reason?: string; message?: { content?: unknown } }[]; usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
@@ -165,7 +183,22 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       const content = first.message?.content;
       if (typeof content !== 'string' || !content.trim()) return fail('empty_output');
       if (content.length > 24_000) return fail('oversized_output');
+      try { prompt.validateOutput?.(content); }
+      catch (error) {
+        // A 200 response may still contain a non-verbatim quote. Regenerate
+        // from the original evidence, never repair/drop evidence in-place.
+        // This shares the HTTP400 repair budget: at most two answer attempts.
+        const repairable = error instanceof AssistantError && error.code && [
+          'output_json', 'output_schema', 'claim_limit', 'claim_text', 'citation_schema',
+          'citation_missing', 'citation_length', 'citation_source', 'citation_quote',
+          'conflict_sources', 'unanswered_limit', 'answered_without_claims',
+        ].includes(error.code);
+        if (repairable && !review && attempt === 0 && !signal.aborted) continue;
+        throw error;
+      }
       return content;
+      }
+      return fail('provider_error');
     }
     const response = await (options.fetcher ?? fetch)('https://api.openai.com/v1/responses', {
       method: 'POST', redirect: 'manual', signal,
@@ -181,6 +214,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
     const output = data.output.filter(item => item.type === 'message').flatMap(item => item.content ?? []).filter(part => part.type === 'output_text').map(part => part.text ?? '').join('');
     if (!output) fail('empty_output');
     if (output.length > 24_000) fail('oversized_output');
+    prompt.validateOutput?.(output);
     return output;
   } catch (error) {
     // Allowlisted runtime categories only; never retain an exception message,
@@ -191,6 +225,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
     }
     if (options.signal?.aborted) reason = 'cancelled';
     else if (timeout.aborted) reason = 'timeout';
+    else if (error instanceof AssistantError && error.status === 502) throw error;
     try { options.reportFailure?.(reason); } catch { /* telemetry cannot change the response */ }
     throw unavailable();
   }

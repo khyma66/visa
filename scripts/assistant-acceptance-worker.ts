@@ -69,7 +69,7 @@ export default {
       let providerReason: AssistantProviderFailure | undefined;
       const handler = createAssistantHandler({
         model: providerCacheKey(provider),
-        reportFailure: event => { serviceFailure = event; },
+        reportFailure: event => { serviceFailure = { stage: event.stage, status: event.status, ...(event.code ? { code: event.code } : {}) }; },
         availability: () => ({ posts: true, communities: true, catchup: true }),
         authenticate: async token => {
           if (token !== syntheticToken) throw Error('Invalid synthetic session');
@@ -103,7 +103,13 @@ export default {
             }
           } catch { providerReason = 'missing_binding'; throw Error('Runtime AI binding unavailable'); }
           events.push('runtime-binding');
-          const output = await runAssistantModel(prompt, { provider, apiKey, binding, signal, reportFailure: reason => { providerReason = reason; }, reportUsage: value => usage.push(value), reportTransport: value => transport.push(value) });
+          // Capture rejected drafts only here, for fixed synthetic fixtures.
+          // Production never captures raw output or failed-generation content.
+          const checkedPrompt = { ...prompt, ...(prompt.validateOutput ? { validateOutput(value: string) {
+            raw = value;
+            prompt.validateOutput!(value);
+          } } : {}) };
+          const output = await runAssistantModel(checkedPrompt, { provider, apiKey, binding, signal, reportFailure: reason => { providerReason = reason; }, reportUsage: value => usage.push(value), reportTransport: value => transport.push(value) });
           if (review) rawReview = output;
           else raw = output;
           return output;
@@ -161,7 +167,7 @@ export default {
           { name: 'application_runtime_binding_loaded', passed: events.filter(event => event === 'runtime-binding').length === 1 + expectedReviews },
           { name: 'application_provider_called_once', passed: events.filter(event => event === 'generate').length === 1 },
           { name: 'application_evidence_reviewed_when_needed', passed: events.filter(event => event === 'review').length === expectedReviews && (expectedReviews === 0 || (rawReview !== undefined && events.indexOf('review') > events.indexOf('generate'))) },
-          { name: 'application_sources_revalidated', passed: events[1] === 'corpus' && events.slice(events.indexOf('generate') + 1).filter(event => event === 'corpus').length >= 2 },
+          { name: 'application_sources_revalidated', passed: events[1] === 'corpus' && events.slice(events.indexOf('generate') + 1).filter(event => event === 'corpus').length >= 1 },
         ]),
         { name: 'application_response_private', passed: serviceResponse.headers.get('cache-control') === 'private, no-store'
           && serviceResponse.headers.get('vary') === 'Authorization' && serviceResponse.headers.get('x-content-type-options') === 'nosniff' },

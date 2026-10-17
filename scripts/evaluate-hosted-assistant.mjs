@@ -29,6 +29,7 @@ async function api(path, options = {}) {
   assert(value.success === true, `Cloudflare ${options.method ?? 'GET'} ${path} was unsuccessful`);
   return value.result;
 }
+cases.push('large-discussion-summary');
 async function cleanup() {
   let state;
   try { state = JSON.parse(await readFile(statePath, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return true; throw error; }

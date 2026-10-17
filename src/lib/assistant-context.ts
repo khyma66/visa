@@ -1,4 +1,98 @@
-import type { AssistantPostReference, AssistantRequest, AssistantResult } from './assistant-contract';
+import type { AssistantPostReference, AssistantRequest, AssistantResult, AssistantSource } from './assistant-contract';
+
+// This bounded vocabulary normalizes common location aliases, not legal facts.
+// Unlisted place names still remain ordinary required terms in post lookups.
+const LOCATIONS = [
+  ['hyderabad', 'hyd'], ['chennai', 'madras'], ['mumbai', 'bombay'], ['delhi', 'new delhi'],
+  ['kolkata', 'calcutta'], ['bengaluru', 'bangalore'], ['pune'], ['ahmedabad'],
+  ['toronto'], ['ottawa'], ['vancouver'], ['montreal'], ['calgary'], ['quebec'],
+  ['london'], ['belfast'], ['dublin'], ['paris'], ['berlin'], ['frankfurt'],
+  ['dubai'], ['abu dhabi'], ['singapore'], ['hong kong'], ['bangkok'], ['tokyo'],
+  ['sydney'], ['melbourne'], ['auckland'], ['mexico city'], ['tijuana'],
+  ['dallas'], ['houston'], ['chicago'], ['new york', 'nyc'], ['san francisco'], ['los angeles'],
+] as const;
+const VISA = /\b(?:h[ -]?1[ -]?b|h[ -]?4|[flbj][ -]?[12]|o[ -]?1|e[ -]?3)\b/gi;
+const wordText = (text: string) => ` ${text.toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
+export function assistantCanonicalText(text: string): string {
+  let normalized = text.toLowerCase().normalize('NFKC').replace(VISA, value => value.replace(/[ -]/g, ''));
+  for (const [canonical, ...aliases] of LOCATIONS) for (const alias of aliases) {
+    normalized = normalized.replace(new RegExp(`\\b${alias}\\b`, 'g'), canonical);
+  }
+  return normalized;
+}
+function topicEntities(text: string) {
+  const normalized = wordText(assistantCanonicalText(text));
+  return {
+    locations: LOCATIONS.filter(([name]) => normalized.includes(` ${name} `)).map(([name]) => name),
+    visas: [...new Set((text.match(VISA) ?? []).map(value => value.toLowerCase().replace(/[ -]/g, '')))],
+  };
+}
+export type AssistantSearchIntent = {
+  task: 'lookup' | 'answer'; text: string; locations: string[]; locationTerms: string[]; visas: string[];
+  event: 'stamping' | 'biometrics' | 'passport-delivery' | null;
+  order: 'newest' | 'relevance'; since?: string; until?: string; unsupportedWindow: boolean;
+};
+const LOOKUP_NOUN = /\b(?:posts?|threads?|discussions?|experiences?|stor(?:y|ies))\b/i;
+function lookupRequest(question: string): boolean {
+  const noun = LOOKUP_NOUN.exec(question);
+  if (!noun || /\b(?:explain|explanation|answer|summari[sz]e|synopsis|overview|differences?|compare|comparison|advice|eligib\w*|rules?|polic(?:y|ies)|why|how|whether|should|guarantee\w*)\b/i.test(question)) return false;
+  if (/^(?:all\s+)?(?:posts|threads|discussions|experiences|stories)\s+(?:about|on|related to|regarding|in|at|for)\b/i.test(question)) return true;
+  if (/^(?:are there|do you have|any|recent|latest|newest)\b/i.test(question)) return true;
+  const selection = /^(?:(?:please|can you|could you|would you)\s+)*(?:give|show|find|list|get|share|search|look|i want|i need)\b/i.exec(question);
+  // Topic modifiers can occur before or after the noun ("find Chennai
+  // stamping threads"). Analysis/policy wording above still takes generation.
+  return !!selection && selection[0].length <= noun.index;
+}
+
+/** One deterministic interpretation, shared by all retrieval sources. */
+export function assistantSearchIntent(input: AssistantRequest, now = Date.now()): AssistantSearchIntent {
+  const current = (input.question ?? '').trim();
+  const previous = assistantRefersToEarlierTurn(current)
+    ? assistantBoundedHistory(input.previousQuestions ?? []).filter(value => !assistantStandaloneFollowUp(value) && !assistantMorePosts(value) && assistantPostOrdinal(value) === null).join(' ') : '';
+  const question = assistantMorePosts(current) || assistantStandaloneFollowUp(current) ? previous || current : current;
+  const own = topicEntities(question), prior = topicEntities(previous);
+  const locations = own.locations.length ? own.locations : prior.locations;
+  const visas = own.visas.length ? own.visas : prior.visas;
+  const combined = question === previous ? question : `${question} ${previous}`.trim();
+  const eventOf = (text: string): AssistantSearchIntent['event'] => /\bstamp(?:ing|ed|s)?\b|\bdrop[ -]?box\b|\bvisa interview\b/i.test(text) ? 'stamping'
+    : /\bbiometric\w*\b|\bfingerprints?\b/i.test(text) ? 'biometrics'
+      : /\bpassport (?:delivery|deliveries|arrival|arriv\w*|return\w*)\b/i.test(text) ? 'passport-delivery' : null;
+  const temporal = /\b(?:last|past|previous)\s+(?:(\d{1,4}|one|two|three|four)\s+)?(days?|weeks?|months?|years?)\b/i;
+  const explicit = temporal.exec(question);
+  const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4 };
+  const days = explicit ? (explicit[1] === undefined ? 1 : words[explicit[1].toLowerCase()] ?? Number(explicit[1])) * (/week/i.test(explicit[2]) ? 7 : /month/i.test(explicit[2]) ? 30 : /year/i.test(explicit[2]) ? 365 : 1)
+    : /\brecent(?:ly)?\b/i.test(question) ? 30 : null;
+  const unsupportedWindow = days !== null && (!Number.isFinite(days) || days < 1 || days > 366);
+  let since: string | undefined, until: string | undefined;
+  if (days !== null && !unsupportedWindow) { since = new Date(now - days * 86_400_000).toISOString(); until = new Date(now).toISOString(); }
+  if (/\b(?:today|yesterday)\b/i.test(question)) {
+    const midnight = new Date(now); midnight.setUTCHours(0, 0, 0, 0);
+    const yesterday = /\byesterday\b/i.test(question);
+    since = new Date(midnight.getTime() - (yesterday ? 86_400_000 : 0)).toISOString();
+    until = new Date(yesterday ? midnight.getTime() : now).toISOString();
+  }
+  return {
+    task: assistantMorePosts(current) && previous ? 'lookup' : lookupRequest(current) ? 'lookup' : 'answer',
+    text: combined.replace(new RegExp(temporal.source, 'gi'), ' ').replace(/\b(?:recent(?:ly)?|latest|newest|today|yesterday)\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500),
+    locations, locationTerms: LOCATIONS.filter(([name]) => locations.includes(name)).flatMap(group => [...group]), visas,
+    event: eventOf(question) ?? eventOf(previous), order: days !== null || /\b(?:latest|newest|today|yesterday)\b/i.test(question) ? 'newest' : 'relevance',
+    ...(since && until ? { since, until } : {}), unsupportedWindow,
+  };
+}
+
+/** Eligibility precedes ranking and caps; metadata dates never become event dates. */
+export function assistantSourceMatchesIntent(source: AssistantSource, intent: AssistantSearchIntent): boolean {
+  if (intent.unsupportedWindow) return false;
+  const text = assistantCanonicalText(`${source.title}\n${source.body}\n${source.parentContext ?? ''}`);
+  const normalized = wordText(text);
+  if (intent.locations.length && !intent.locations.some(value => normalized.includes(` ${value} `))) return false;
+  if (intent.visas.length && !intent.visas.some(value => normalized.includes(` ${value} `))) return false;
+  if (intent.event === 'stamping' && !/\bstamp(?:ing|ed|s)?\b|\bdrop[ -]?box\b|\b221[ ()-]*g\b|\badministrative processing\b|\bconsular processing\b|\bvisa (?:interview|issuance|issued|appointment)\b|\bpassport\b.{0,60}\b(?:visa|consulate|embassy|ceac)\b/i.test(text)) return false;
+  if (intent.event === 'biometrics' && !/\bbiometric\w*\b|\bfingerprints?\b/i.test(text)) return false;
+  if (intent.event === 'passport-delivery' && !/\bpassport\b/i.test(text)) return false;
+  const created = Date.parse(source.createdAt);
+  return Number.isFinite(created) && (!intent.since || created >= Date.parse(intent.since)) && (!intent.until || created < Date.parse(intent.until));
+}
 
 /** Shared, bounded conversation hints. None of these values confer access. */
 export function assistantStandaloneFollowUp(question: string): boolean {
@@ -6,12 +100,16 @@ export function assistantStandaloneFollowUp(question: string): boolean {
 }
 
 export function assistantMorePosts(question: string): boolean {
-  return /^(?:(?:please|can you|could you)\s+)*(?:(?:show|find|list|give|get)\s+(?:me\s+)?)?(?:more|other|additional)\s+(?:posts|threads|discussions|results)[?!.]*$/i.test(question.trim());
+  return /^(?:(?:please|can you|could you)\s+)*(?:(?:show|find|list|give|get)\s+(?:me\s+)?)?(?:more|other|additional)\s+(?:posts|threads|discussions|results|experiences|stories)[?!.]*$/i.test(question.trim());
 }
 
 function startsNewTopic(question: string): boolean {
   return /^(?:new topic|different topic|switch(?:ing)? (?:topics?|to)|instead[, :]|forget (?:that|the previous))/i.test(question.trim());
 }
+
+const explicitDiscussionReference = (text: string) => /\b(?:this|that|same|selected) (?:one|case|post|thread|discussion|appointment)\b/i.test(text);
+const personalFollowUp = (text: string) => /^(?:how long|why|when|what happened)\b/i.test(text)
+  && /\b(?:it|its|they|their|them)\b/i.test(text);
 
 export function assistantPostOrdinal(question: string): number | 'last' | null {
   if (startsNewTopic(question)) return null;
@@ -29,8 +127,13 @@ export function assistantPostOrdinal(question: string): number | 'last' | null {
 export function assistantRefersToEarlierTurn(question: string): boolean {
   const text = question.trim();
   if (startsNewTopic(text)) return false;
-  return assistantStandaloneFollowUp(text) || assistantMorePosts(text) || assistantPostOrdinal(text) !== null
-    || /\b(?:it|its|that|those|them|they|their|there|these|same)\b|\bthis (?:one|case|post|thread|question|appointment)\b|^(?:and|what about|how about)\b/i.test(text);
+  if (assistantStandaloneFollowUp(text) || assistantMorePosts(text) || assistantPostOrdinal(text) !== null) return true;
+  // A complete request naming its own place/category is not a reference just
+  // because it contains existential "there" or an incidental pronoun.
+  const entities = topicEntities(text);
+  if ((entities.locations.length || entities.visas.length) && !explicitDiscussionReference(text)) return personalFollowUp(text);
+  return /\b(?:it|its|that|those|them|they|their|these|same)\b|\bthis (?:one|case|post|thread|question|appointment)\b|^(?:and|what about|how about)\b/i.test(text)
+    || /\b(?:happened|happen|go|went|take|took|wait|waiting) there\b/i.test(text);
 }
 
 /** Keep the latest self-contained topic even after many tiny follow-ups. */
@@ -46,7 +149,17 @@ export function assistantPreviousPost(input: AssistantRequest): AssistantPostRef
   const question = input.question ?? '';
   if (!assistantRefersToEarlierTurn(question) || assistantMorePosts(question)) return null;
   const ordinal = assistantPostOrdinal(question);
-  if (ordinal === null) return input.focusedPost ?? null;
+  if (ordinal === null) {
+    if (!explicitDiscussionReference(question)) {
+      const current = topicEntities(question);
+      const prior = topicEntities(assistantBoundedHistory(input.previousQuestions ?? []).join(' '));
+      // A personal pronoun can retain focus only when named constraints agree
+      // with the preceding topic. Never attach a new city/class to an old post.
+      if (current.locations.length && !current.locations.some(value => prior.locations.includes(value))
+        || current.visas.length && !current.visas.some(value => prior.visas.includes(value))) return null;
+    }
+    return input.focusedPost ?? null;
+  }
   return (ordinal === 'last' ? input.previousPosts?.at(-1) : input.previousPosts?.[ordinal]) ?? null;
 }
 
