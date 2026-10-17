@@ -30,6 +30,7 @@ async function api(path, options = {}) {
   return value.result;
 }
 cases.push('large-discussion-summary');
+cases.push('numbered-interview-transcript');
 async function cleanup() {
   let state;
   try { state = JSON.parse(await readFile(statePath, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return true; throw error; }

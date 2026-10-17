@@ -20,6 +20,15 @@ const now = Date.parse('2026-10-13T18:00:00Z');
 const source = { id:`q:${id}`, questionId:id, communityId:null, kind:'question', title:'Appointment experience', body:'I attended my appointment on Monday. My passport arrived on Friday.', createdAt:'2026-10-10T00:00:00Z', updatedAt:'2026-10-10T00:00:00Z', url:`/questions/${id}`, provenance:'member' };
 const input = { mode:'ask',scope:{kind:'post',id},question:'What did the member report?' };
 const output = {status:'answered',claims:[{text:'The member reported a Monday appointment.',evidence:[{sourceId:source.id,quote:'I attended my appointment on Monday.'}]}],disagreements:[],unanswered:[]};
+const spanDraft = (raw, prompt) => {
+  const value=JSON.parse(raw);
+  for(const group of ['claims','disagreements']) for(const claim of value[group]) claim.evidence=claim.evidence.map(item=>{
+    const span=prompt.evidenceSpans.find(span=>span.sourceId===item.sourceId&&span.quote.includes(item.quote));
+    assert(span,'Synthetic supported evidence must match a server-defined span');
+    return {spanId:span.id};
+  });
+  return provider.resolveAssistantEvidence(JSON.stringify(value),prompt);
+};
 const request = (value=input, headers={}) => new Request('https://visathreads.com/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40),...headers},body:JSON.stringify(value)});
 test('Groq uses the fixed server endpoint, strict source IDs, bounded answer/review and numeric-only telemetry', async () => {
   const usage = [], transport = [], calls = [];
@@ -94,7 +103,7 @@ function harness(overrides={}) {
   const handler=service.createAssistantHandler({availability:()=>({posts:true,communities:true,catchup:true}),model:'test-model',
     authenticate:async()=>({actor:state.actor,corpus:async()=>{state.reads++;return {sources:structuredClone(state.sources),partial:false};},reserve:async()=>{state.reserved++;return true;}}),
     cache:{get:async key=>state.cache.get(key)??null,put:async(key,value)=>{state.cache.set(key,value);}},...overrides,
-    generate:async(prompt,signal)=>{if(prompt.outputKind==='review'){state.reviewed++;return JSON.stringify({fulfillsTask:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))});}return generate(prompt,signal);}});
+    generate:async(prompt,signal)=>{if(prompt.outputKind==='review'){state.reviewed++;return JSON.stringify({fulfillsTask:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))});}return spanDraft(await generate(prompt,signal),prompt);}});
   return {state,handler};
 }
 test('explicit post search answers from sources without waiting for or charging model generation', async () => {
@@ -222,6 +231,8 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
     assert.match(prompt.system,/omit an unstated venue or specialized role/);
     assert.match(prompt.system,/Preserve explicit material qualifications in the claim text, not only inside its evidence quote/);
     assert.match(prompt.system,/Attribution alone must not hide that stated limitation/);
+    assert.match(prompt.system,/select the essential outcome or unresolved status, corrected dates, and explicit limitations first/);
+    assert.match(prompt.system,/never cite every repeated report/);
     assert.match(prompt.system,/plural statement about several reports needs supporting citations to more than one report/);
     assert.match(prompt.system,/Different source IDs do not prove distinct people/);
     assert.match(prompt.system,/check every timing expression, sequence word, duration, venue, role and causal link against its quoted source body/);
@@ -231,7 +242,7 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v19-atomic-summary-faithfulness','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v20-fixed-evidence-spans','Semantic change invalidates old cached answers');
 });
 test('summary and catch-up are explicit evidence tasks without a missing question to answer',()=>{
   const summary=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},{sources:[source],partial:false});
@@ -241,9 +252,9 @@ test('summary and catch-up are explicit evidence tasks without a missing questio
   const data=JSON.parse(summary.user);assert.equal(data.task,'summary');assert.equal('question' in data,false);assert.equal(data.sources[0].body,source.body);
   const catchup=core.assistantPrompt({mode:'catchup',scope:{kind:'community',id},since:'2026-10-12T00:00:00Z',until:'2026-10-13T00:00:00Z'},{sources:[source],partial:false});
   assert.match(catchup.system,/No user question is required for catch-up/);assert.equal('question' in JSON.parse(catchup.user),false);
-  assert.match(summary.system,/Never infer current visa rules/);assert.match(summary.system,/exact supporting quotes/);
+  assert.match(summary.system,/Never infer current visa rules/);assert.match(summary.system,/MUST cite supporting span IDs/);
   assert.match(summary.system,/Explicitly stated individual events, outcomes, dates and timing ARE evidence/);
-  assert.match(summary.system,/put the comparison in disagreements with quotes from at least two conflicting sources/);
+  assert.match(summary.system,/put the comparison in disagreements with spans from at least two conflicting sources/);
 });
 test('output contract classifies conflicts before individual reports without changing source validation',()=>{
   const prompt=core.assistantPrompt(input,{sources:[source],partial:false});
@@ -382,7 +393,9 @@ test('long posts retain the passage that answers the question rather than losing
   const valid={...output,claims:[{text:'The member said their passport arrived Friday.',evidence:[{sourceId:source.id,quote:'my passport arrived on Friday after the Monday appointment.'}]}]};
   assert.equal(core.validateAssistantOutput(JSON.stringify(valid),prepared).status,'answered');
   const summary=core.prepareAssistantCorpus(original,{mode:'summary',scope:{kind:'post',id}});
-  assert.equal(summary.sources[0].body,body.slice(0,4000),'Summary retains the chronological start');
+  assert.equal(summary.sources[0].body,body,'Within the shared budget, summary retains the chronological start and full conclusion');
+  assert.equal(summary.partial,false);
+  assert.match(summary.sources[0].body,/passport arrived on Friday/);
 });
 
 test('an empty community catch-up explains the time range instead of asking for a new visa question',()=>{

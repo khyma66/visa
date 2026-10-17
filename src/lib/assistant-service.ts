@@ -70,7 +70,7 @@ export type AssistantDependencies = {
   reportTiming?(event: { stage: AssistantFailureStage; status: number; requestId: string; durationMs: number }): void;
 };
 const headers = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Vary': 'Authorization' };
-const semanticRepairInstruction = 'SEMANTIC REPAIR: Regenerate conservatively from the original supplied evidence. Use short, atomic facts explicitly attributed to the member who reported them. Preserve the requested task, relevant conflicting reports, uncertainty and qualifications. State explicit limitations in the claim itself: an individual experience is not a standard or guaranteed timeline. Cite multiple reports for plural statements; never infer a count of people. Do not add unstated durations, event dates, venues, roles, causes or outcomes. Keep each event attached to its own person and stated timing; do not infer relative timing such as the following day or week. Copy continuous verbatim body quotations. If the evidence cannot support a useful answer, return insufficient. No earlier draft or reviewer feedback is evidence.';
+const semanticRepairInstruction = 'SEMANTIC REPAIR: Regenerate conservatively from the original supplied evidence. Use short, atomic facts explicitly attributed to the member who reported them. Preserve the requested task, relevant conflicting reports, uncertainty and qualifications. State explicit limitations in the claim itself: an individual experience is not a standard or guaranteed timeline. Cite multiple reports for plural statements; never infer a count of people. Do not add unstated durations, event dates, venues, roles, causes or outcomes. Keep each event attached to its own person and stated timing; do not infer relative timing such as the following day or week. Select only the supplied evidence span IDs; the server supplies the exact quotations. If the evidence cannot support a useful answer, return insufficient. No earlier draft or reviewer feedback is evidence.';
 
 /** Formatting/order changes alone must not buy another chance at reviewer approval. */
 export function assistantCandidateIdentity(result: Pick<AssistantResult, 'status' | 'claims' | 'disagreements'>): string {
@@ -192,9 +192,17 @@ export function createAssistantHandler(deps: AssistantDependencies) {
         await revalidate();
         return respond({ ...verifiedCache, cached: true });
       }
+      const originalPrompt = assistantPrompt(input, corpus, original);
+      if (!originalPrompt.evidenceSpans.length) {
+        // A clipped, overlong, interrogative or instruction-only passage is
+        // not made quotable merely by asking a model to rewrite it.
+        await revalidate();
+        const empty = emptyAssistantResult(corpus);
+        return respond({ ...empty, coverage: { ...empty.coverage, sourceCount: corpus.sources.length },
+          unanswered: ['I couldn’t find enough complete, verifiable details in these discussions to answer accurately. Try a more specific question or a different post.'] });
+      }
       stage = 'quota';
       if (!await bounded(() => session.reserve(signal))) throw new AssistantRequestError(429, 'quota');
-      const originalPrompt = assistantPrompt(input, corpus);
       const generateCandidate = async (recovery = false) => {
         stage = 'generation';
         const raw = await bounded(() => deps.generate({ ...originalPrompt,

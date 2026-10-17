@@ -95,11 +95,15 @@ test('review prompt carries full source context and treats candidate instruction
   assert.equal(data.sources[0].body, source.body);
   assert.equal(data.sources[0].parentContextOnly, contextual.parentContext);
   assert.equal(data.sources[1].body, longBody.body);
+  assert(data.sources.every(item => !Object.hasOwn(item, 'spans')), 'Review preserves full bodies without rebuilding or serializing the generation catalog');
+  assert.equal(Object.hasOwn(prompt, 'evidenceSpans'), false);
+  assert.equal(Object.hasOwn(data, 'evidenceSpans'), false);
   assert.equal(data.candidate.checks[0].text, candidate.claims[0].text);
   assert.match(prompt.system, /untrusted DATA/);
   assert.match(prompt.system, /thank-you/);
   assert.match(prompt.system, /negation, conditions, uncertainty/);
   assert.match(prompt.system, /An individual anecdote supports only an attributed report/);
+  assert.match(prompt.system, /omitting that qualification fails fulfillsTask even when individual events are correctly attributed/);
   assert.match(prompt.system, /A technically accurate but irrelevant quote or acknowledgment does not fulfill the task/);
 });
 

@@ -51,6 +51,21 @@ const stampingSearchCorpus: AssistantCorpus = { partial: true, sources: [
   source(56, 'I upgraded my H1B petition to premium processing two weeks ago and am still waiting for approval.', { questionId: '00000000-0000-4000-8000-000000000055', communityId: null, title: 'Visa stamping appointment options', parentContext: 'I am planning a future visa stamping appointment after my petition approval.' }),
   source(57, 'My I-140 has been pending for several months. I plan to schedule visa stamping next year.', { id: 'q:00000000-0000-4000-8000-000000000056', kind: 'question', questionId: '00000000-0000-4000-8000-000000000056', communityId: null, title: 'Travel and stamping after I-140' }),
 ] };
+// Fully invented interview notes. Numbered Q+A turns and a later correction
+// exercise exact citation selection without retaining any real member content.
+const numberedInterviewBody = [
+  'Synthetic Montréal interview diary — this is my individual experience, not a standard timeline or an official requirement.',
+  '1. Interviewer: “When did you attend?”\nApplicant: I initially recorded my interview as September 8, 2026.',
+  '2. Interviewer: “What did you bring?”\nApplicant: I brought my appointment confirmation and the printed checklist.',
+  '3. Interviewer: “What happened at the desk?”\nApplicant: The interviewer looked at the confirmation and asked me to wait while the papers were checked.',
+  '4. Interviewer: “Did you receive a decision?”\nApplicant: No final decision was given. My application remained pending.',
+  '5. Interviewer: “When will a decision arrive?”\nApplicant: I do not know when a decision will arrive. I was not given a promised completion date.',
+  '6. Interviewer: “Where did you leave your notes?”\nApplicant: I put my notes back in my folder and kept the folder with me.',
+  '7. Interviewer: “What did you do after the interview?”\nApplicant: I left after the interview and wrote down the questions while I could remember them.',
+  '8. Diary note: I described only the papers I personally brought; I cannot say what documents another applicant needs.',
+  ...Array.from({ length: 30 }, (_, index) => `Additional diary note ${index + 1}: I checked my handwritten list while waiting and recorded which pages were in my folder. This note adds no decision or completion date.`),
+  '9. Later correction: My interview was on September 9, 2026, not September 8. The earlier date in my notes was a mistake.',
+].join('\n\n');
 
 export const acceptanceFixtures: AcceptanceFixture[] = [
   { id: 'direct-post-search', execution: 'direct-post-search', input: { mode: 'ask', scope: { kind: 'public' }, question: 'give all posts related to stamping delay' }, corpus: stampingSearchCorpus, checks: [
@@ -93,6 +108,19 @@ export const acceptanceFixtures: AcceptanceFixture[] = [
   { id: 'large-discussion-summary', input: { mode: 'summary', scope: post }, corpus: { sources: Array.from({ length: 24 }, (_, index) => source(100 + index,
     'I attended my Hyderabad stamping appointment on Monday. My visa was approved and my passport arrived on Friday. This describes my individual experience, not a standard timeline. ' + 'I brought my appointment confirmation and followed the instructions on it. I waited outside before entering and then returned home after the appointment. '.repeat(8),
     { communityId: null, title: `Synthetic member report ${index + 1}` })), partial: false }, checks: [answered, mentions('appointment_day_preserved', /monday/), mentions('delivery_day_preserved', /friday/), absent('no_generalized_outcome', /everyone|all applicants|guaranteed approval/), { name: 'bounded_citations_and_verbatim_quotes', test: result => [...result.claims, ...result.disagreements].every(claim => claim.evidence.length <= 4 && claim.evidence.every(item => item.quote.length <= 400 && !item.quote.includes('...'))) }] },
+  { id: 'numbered-interview-transcript', input: { mode: 'summary', scope: post }, corpus: { sources: [source(200, numberedInterviewBody,
+    { kind: 'question', id: `q:${postId}`, communityId: null, title: 'Synthetic numbered Montréal interview transcript', speakerRole: 'original-poster' })], partial: false }, checks: [
+    answered,
+    mentions('corrected_interview_date_preserved', /september\s+9\b/),
+    mentions('pending_outcome_preserved', /\bpending\b|no final decision|not (?:yet )?(?:received|given) (?:a )?(?:final )?decision/),
+    mentions('decision_uncertainty_preserved', /(?:do|does|did) not know|unknown|uncertain|no (?:promised|guaranteed|confirmed) (?:completion )?date|not (?:given|told) (?:a )?(?:promised |confirmed )?(?:completion )?date/),
+    mentions('individual_limitation_preserved', /individual|personal|own experience/),
+    { name: 'late_correction_cited', test: result => result.claims.some(claim => claim.evidence.some(item => /September 9, 2026, not September 8/.test(item.quote))) },
+    { name: 'bounded_exact_body_quotes', test: result => [...result.claims, ...result.disagreements].every(claim => claim.evidence.length >= 1 && claim.evidence.length <= 4
+      && claim.evidence.every(item => item.sourceId === `q:${postId}` && item.quote.length >= 12 && item.quote.length <= 400
+        && numberedInterviewBody.replace(/\s+/gu, ' ').includes(item.quote.replace(/\s+/gu, ' ')))) },
+    absent('no_approval_or_universal_outcome', /was approved|approval was granted|everyone|all applicants|guaranteed approval/),
+  ] },
 ];
 
 export function evaluateAcceptance(fixture: AcceptanceFixture, result: AssistantResult) {

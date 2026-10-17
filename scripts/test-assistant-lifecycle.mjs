@@ -66,6 +66,32 @@ test('identical concurrent callers do not share cancellation, reservations or pe
   assert.equal(h.state.writes, 1); assert.equal(h.state.reads, 3, 'Aborted owner must not revalidate after late generation');
 });
 
+test('uncitable reports return an honest empty result after fresh access checks without spending model quota', async () => {
+  for (const body of ['Did anyone receive a passport after the appointment?', 'x'.repeat(401)]) {
+    const h = harness();
+    h.session.corpus = async () => { h.state.reads++; return { sources: [{ ...source, body }], partial: false }; };
+    const response = await h.handler(request()), result = await response.json();
+    assert.equal(response.status, 200); assert.equal(result.status, 'insufficient');
+    assert.deepEqual(result.claims, []); assert.deepEqual(result.disagreements, []); assert.deepEqual(result.sources, []);
+    assert.equal(result.coverage.sourceCount, 1); assert(result.unanswered.length > 0);
+    assert.equal(h.state.reads, 2); assert.equal(h.state.reserved, 0); assert.equal(h.state.generated, 0);
+    assert.equal(h.state.reviewed, 0); assert.equal(h.state.writes, 0);
+  }
+});
+
+test('uncitable reports never bypass changed-source or revoked-access checks', async () => {
+  for (const status of [403, 409, 503]) {
+    const h = harness();
+    h.session.corpus = async () => {
+      if (++h.state.reads > 1) throw new service.AssistantError(status, 'private revalidation error');
+      return { sources: [{ ...source, body: 'Did anyone receive a passport after the appointment?' }], partial: false };
+    };
+    const response = await h.handler(request());
+    assert.equal(response.status, status); assert(!JSON.stringify(await response.json()).includes('private'));
+    assert.equal(h.state.reads, 2); assert.equal(h.state.reserved, 0); assert.equal(h.state.generated, 0); assert.equal(h.state.writes, 0);
+  }
+});
+
 test('late rejections and synchronous abort-then-throw remain handled without resuming work', async () => {
   const unhandled = [], listener = failure => unhandled.push(failure);
   process.on('unhandledRejection', listener);
@@ -245,10 +271,11 @@ test('malformed review, provider failure, missing review corpus and initial insu
     if (failure === 'missing-corpus') h.session.corpus = async () => { h.state.reads++; return { sources: [{ ...source, body: source.body + ' Additional background.'.repeat(1500) }], partial: false }; };
     const response = await h.handler(request()); const result = await response.json();
     assert.equal(prompts.some(prompt => prompt.maxAttempts === 1 || prompt.system.includes('SEMANTIC REPAIR:')), false, failure);
-    assert.equal(prompts.length, ['malformed-review', 'provider-review'].includes(failure) ? 2 : 1, failure);
+    assert.equal(prompts.length, failure === 'missing-corpus' ? 0 : ['malformed-review', 'provider-review'].includes(failure) ? 2 : 1, failure);
     if (['initial-insufficient', 'missing-corpus'].includes(failure)) { assert.equal(response.status, 200, failure); assert.equal(result.status, 'insufficient', failure); }
     else { assert(response.status >= 500, failure); assert.equal(h.state.writes, 0, failure); }
-    assert.equal(h.state.reserved, 1, failure);
+    assert.equal(h.state.reserved, failure === 'missing-corpus' ? 0 : 1, failure);
+    if (failure === 'missing-corpus') { assert.equal(h.state.reads, 2); assert.deepEqual(result.claims, []); assert.deepEqual(result.sources, []); assert.equal(h.state.writes, 0); }
   }
 });
 
@@ -322,7 +349,13 @@ test('combined real provider format repairs and semantic recovery have exactly s
       fetcher: async (_url, options) => {
         outgoing.push(options); local++;
         if (current <= 2 && local === 1) return Response.json({ error: { code: 'json_validate_failed' } }, { status: 400 });
-        const content = current === 1 ? JSON.stringify(rejectedOutput) : current === 2 ? negativeReview(prompt) : current === 3 ? JSON.stringify(correctedOutput) : review(prompt);
+        const selectedDraft = draft => JSON.stringify({ ...draft, claims: draft.claims.map(claim => ({ ...claim,
+          evidence: claim.evidence.map(item => {
+            const span = prompt.evidenceSpans.find(span => span.sourceId === item.sourceId && span.quote === item.quote);
+            assert(span, 'Synthetic provider evidence must match an exact server span');
+            return { spanId: span.id };
+          }) })) });
+        const content = current === 1 ? selectedDraft(rejectedOutput) : current === 2 ? negativeReview(prompt) : current === 3 ? selectedDraft(correctedOutput) : review(prompt);
         return Response.json({ choices: [{ finish_reason: 'stop', message: { content } }] });
       },
     });

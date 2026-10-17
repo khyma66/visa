@@ -1,4 +1,4 @@
-import { prepareAssistantCorpus, readBoundedJson, validateAssistantOutput, type AssistantValidationCode } from '../src/lib/assistant-core';
+import { assistantPrompt, prepareAssistantCorpus, readBoundedJson, validateAssistantOutput, type AssistantValidationCode } from '../src/lib/assistant-core';
 import type { AssistantCorpus, AssistantRequest, AssistantResult } from '../src/lib/assistant-contract';
 import { assistantCandidateIdentity, createAssistantHandler, type AssistantFailureStage } from '../src/lib/assistant-service';
 import { assistantReviewCorpus, validateAssistantReview } from '../src/lib/assistant-review';
@@ -18,6 +18,8 @@ export function checkAcceptanceInference(input: AssistantRequest, corpus: Assist
   const counts = { answers: rounds.filter(round => round.kind === 'answer').length,
     reviews: rounds.filter(round => round.kind === 'review').length,
     transportCalls: rounds.reduce((total, round) => total + round.transport.length, 0) };
+  const prepared = prepareAssistantCorpus(corpus, input);
+  const noSafeEvidence = !direct && assistantPrompt(input, prepared, corpus).evidenceSpans.length === 0;
   let sequence = false;
   try {
     const expected = ['authenticate', 'corpus'];
@@ -29,9 +31,10 @@ export function checkAcceptanceInference(input: AssistantRequest, corpus: Assist
       expected.push(kind === 'answer' ? 'generate' : 'review', 'runtime-binding');
       return round.output;
     };
-    if (!direct) {
+    if (noSafeEvidence) {
+      if (result.status !== 'insufficient' || result.claims.length || result.disagreements.length || result.sources.length) throw Error('Uncitable source cannot support a draft');
+    } else if (!direct) {
       expected.push('reserve');
-      const prepared = prepareAssistantCorpus(corpus, input);
       const validate = (raw: string) => validateAssistantOutput(raw, prepared, Date.now(), input);
       const hasClaims = (draft: AssistantResult) => draft.claims.length + draft.disagreements.length > 0;
       const insufficient = (draft: AssistantResult): AssistantResult => ({ ...draft, status: 'insufficient', claims: [], disagreements: [], sources: [] });
@@ -64,7 +67,7 @@ export function checkAcceptanceInference(input: AssistantRequest, corpus: Assist
       && round.transport.every((item, index) => item.attempt === index + 1)
       && round.transport.at(-1)?.status === 200;
   });
-  return { sequence, budget, counts };
+  return { sequence, budget, counts, noSafeEvidence };
 }
 
 async function authorized(request: Request, env: Env): Promise<boolean> {
@@ -224,10 +227,14 @@ export default {
       evaluation.checks.push(
         { name: 'application_request_parsed', passed: receivedInputs.length > 0 && receivedInputs.every(sameInput) },
         { name: 'application_authentication_used', passed: events.filter(event => event === 'authenticate').length === 1 },
-        ...(directPostSearch ? [
+        ...(directPostSearch || inference.noSafeEvidence ? [
           { name: 'application_model_quota_not_used', passed: events.filter(event => event === 'reserve').length === 0 },
           { name: 'application_runtime_binding_not_loaded', passed: events.filter(event => event === 'runtime-binding').length === 0 },
           { name: 'application_provider_not_called', passed: events.filter(event => event === 'generate' || event === 'review').length === 0 },
+          ...(!directPostSearch ? [
+            { name: 'application_provider_call_sequence', passed: inference.sequence },
+            { name: 'application_transport_budget', passed: inference.budget },
+          ] : []),
           { name: 'application_evidence_reviewed_when_needed', passed: events.filter(event => event === 'review').length === 0 },
           { name: 'application_sources_revalidated', passed: inference.sequence },
         ] : [
