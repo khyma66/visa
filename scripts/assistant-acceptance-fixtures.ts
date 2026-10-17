@@ -53,9 +53,6 @@ const stampingSearchCorpus: AssistantCorpus = { partial: true, sources: [
 ] };
 
 export const acceptanceFixtures: AcceptanceFixture[] = [
-  { id: 'large-discussion-summary', input: { mode: 'summary', scope: post }, corpus: { sources: Array.from({ length: 24 }, (_, index) => source(100 + index,
-    'I attended my Hyderabad stamping appointment on Monday. My visa was approved and my passport arrived on Friday. This describes my individual experience, not a standard timeline. ' + 'I brought my appointment confirmation and followed the instructions on it. I waited outside before entering and then returned home after the appointment. '.repeat(8),
-    { communityId: null, title: `Synthetic member report ${index + 1}` })), partial: false }, checks: [answered, mentions('appointment_day_preserved', /monday/), mentions('delivery_day_preserved', /friday/), absent('no_generalized_outcome', /everyone|all applicants|guaranteed approval/), { name: 'bounded_citations_and_verbatim_quotes', test: result => [...result.claims, ...result.disagreements].every(claim => claim.evidence.length <= 4 && claim.evidence.every(item => item.quote.length <= 400 && !item.quote.includes('...'))) }] },
   { id: 'direct-post-search', execution: 'direct-post-search', input: { mode: 'ask', scope: { kind: 'public' }, question: 'give all posts related to stamping delay' }, corpus: stampingSearchCorpus, checks: [
     { name: 'returns_post_search_results', test: result => result.kind === 'posts' && result.status === 'answered' },
     { name: 'matching_posts_deduplicated', test: result => result.posts?.length === 2 && stampingPostIds.every(id => result.posts?.some(post => post.questionId === id)) },
@@ -93,6 +90,9 @@ export const acceptanceFixtures: AcceptanceFixture[] = [
     source(72, 'My H-1B stamping in Chennai completed after twelve days. I can only report my own experience.', { questionId: '00000000-0000-4000-8000-000000000072', communityId: null, title: 'Second Chennai stamping experience' }),
     source(73, 'My Hyderabad appointment took fifteen minutes.', { questionId: '00000000-0000-4000-8000-000000000073', communityId: null, title: 'Different city and different event' }),
   ], partial: false }, checks: [answered, mentions('first_person_timeline', /(?:seven|7) days/), mentions('second_person_timeline', /(?:twelve|12) days/), { name: 'both_discussions_cited', test: result => ['a:fixture-71', 'a:fixture-72'].every(id => result.claims.some(claim => claim.evidence.some(item => item.sourceId === id))) }, absent('no_unrelated_city_or_generalized_timeline', /hyderabad|fifteen|15|typically|usually|average|everyone|guarantee/), { name: 'distinct_timelines_not_false_conflict', test: result => result.disagreements.length === 0 }] },
+  { id: 'large-discussion-summary', input: { mode: 'summary', scope: post }, corpus: { sources: Array.from({ length: 24 }, (_, index) => source(100 + index,
+    'I attended my Hyderabad stamping appointment on Monday. My visa was approved and my passport arrived on Friday. This describes my individual experience, not a standard timeline. ' + 'I brought my appointment confirmation and followed the instructions on it. I waited outside before entering and then returned home after the appointment. '.repeat(8),
+    { communityId: null, title: `Synthetic member report ${index + 1}` })), partial: false }, checks: [answered, mentions('appointment_day_preserved', /monday/), mentions('delivery_day_preserved', /friday/), absent('no_generalized_outcome', /everyone|all applicants|guaranteed approval/), { name: 'bounded_citations_and_verbatim_quotes', test: result => [...result.claims, ...result.disagreements].every(claim => claim.evidence.length <= 4 && claim.evidence.every(item => item.quote.length <= 400 && !item.quote.includes('...'))) }] },
 ];
 
 export function evaluateAcceptance(fixture: AcceptanceFixture, result: AssistantResult) {

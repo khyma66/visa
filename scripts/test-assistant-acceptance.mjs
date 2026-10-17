@@ -528,3 +528,16 @@ test('all intended usecases have semantic expectations and runner cannot silentl
   assert.match(runner, /const repetitions = 3/);
   assert.match(runner, /samples\.every\(sample => sample\.passed === true\)/);
 });
+
+test('both evaluator manifests exactly match authenticated worker readiness order', async () => {
+  const ready = await (await worker.fetch(request({ id: '__ready__' }), env())).json();
+  for (const path of ['./evaluate-hosted-assistant.mjs', './evaluate-groq-assistant.mjs']) {
+    const runner = await readFile(new URL(path, import.meta.url), 'utf8');
+    const declaration = runner.match(/const cases = (\[[^;]+\]);/);
+    assert(declaration, 'Expected explicit evaluator manifest');
+    const ids = JSON.parse(declaration[1].replaceAll("'", '"'));
+    for (const match of runner.matchAll(/cases\.push\('([a-z-]+)'\);/g)) ids.push(match[1]);
+    assert.equal(new Set(ids).size, ids.length, 'No duplicate cases');
+    assert.deepEqual(ids, ready.cases, path);
+  }
+});
