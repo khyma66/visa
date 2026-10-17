@@ -125,7 +125,10 @@ async function boundedJson(response: Response): Promise<unknown> {
 
 export async function authorizedAnalytics(request: Request, config: { url?: string; key?: string }, fetcher: typeof fetch = fetch): Promise<{ response: Response } | { metrics: OwnerAnalytics }> {
   const authorization = request.headers.get('authorization') ?? '';
-  if (!/^Bearer [A-Za-z0-9._-]{20,8192}$/.test(authorization)) return { response: analyticsJson({ error: 'Sign in with the designated owner account.' }, 401) };
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  // Syntax screening only: Supabase still verifies the signature and expiry,
+  // and the RPC separately checks the live session and owner authorization.
+  if (token.length < 20 || token.length > 8192 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) return { response: analyticsJson({ error: 'Sign in with the designated owner account.' }, 401) };
   const params = new URL(request.url).searchParams;
   const period = params.get('days') ?? '30';
   if (![...params.keys()].every(key => key === 'days') || params.getAll('days').length > 1 || !['7', '30', '90'].includes(period)) return { response: analyticsJson({ error: 'Choose 7, 30 or 90 days.' }, 400) };
@@ -136,10 +139,16 @@ export async function authorizedAnalytics(request: Request, config: { url?: stri
     origin = url.origin;
   } catch { return { response: analyticsJson({ error: 'Dashboard configuration is unavailable.' }, 503) }; }
   try {
-    const options = { headers: { apikey: config.key!, Authorization: authorization }, cache: 'no-store' as const, redirect: 'error' as const, signal: AbortSignal.timeout(12000) };
+    // Workers supports manual/follow, not redirect:'error'. Never follow an
+    // upstream redirect with the caller's Authorization or project API key.
+    const options = { headers: { apikey: config.key!, Authorization: authorization }, cache: 'no-store' as const, redirect: 'manual' as const, signal: AbortSignal.timeout(12000) };
     // Verify with Auth, then forward the caller JWT; never use service-role access.
     const identity = await fetcher(`${origin}/auth/v1/user`, options);
-    if (!identity.ok) { await identity.body?.cancel(); return { response: analyticsJson({ error: identity.status >= 500 ? 'Account verification is temporarily unavailable.' : 'Your session expired. Please sign in again.' }, identity.status >= 500 ? 503 : 401) }; }
+    if (!identity.ok) {
+      await identity.body?.cancel();
+      const unavailable = identity.status >= 500 || (identity.status >= 300 && identity.status < 400);
+      return { response: analyticsJson({ error: unavailable ? 'Account verification is temporarily unavailable.' : 'Your session expired. Please sign in again.' }, unavailable ? 503 : 401) };
+    }
     const user = await boundedJson(identity) as { id?: unknown; is_anonymous?: boolean };
     if (typeof user.id !== 'string' || user.is_anonymous) return { response: analyticsJson({ error: 'Owner access required.' }, 403) };
     const result = await fetcher(`${origin}/rest/v1/rpc/owner_analytics`, { ...options, method: 'POST', headers: { ...options.headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ period_days: Number(period) }) });
