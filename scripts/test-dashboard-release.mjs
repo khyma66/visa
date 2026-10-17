@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, chmod, symlink } from 'node:fs
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DASHBOARD_BASELINE, DASHBOARD_BRANCH, DASHBOARD_TOOLING, verifyDashboardSource, verifyDashboardBaseline, verifyDashboardRuntime, verifyRestrictedDashboardChange } from './dashboard-release.mjs';
+import { DASHBOARD_DENIAL_CASES, runAnalyticsDenialChecks, verifyAnalyticsDenial } from './smoke-dashboard-release.mjs';
 
 async function repository(t) {
   const root = await mkdtemp(join(tmpdir(), 'visa-dashboard-gate-'));
@@ -159,4 +160,38 @@ test('wrapper retains shared release compatibility and verifies the candidate af
   assert.match(helper, /async function verifyLiveRuntime\(expectedSource = DASHBOARD_BASELINE\)/);
   assert.match(helper, /response\.headers\.get\('x-visathreads-build'\), expectedSource/);
   assert(workflow.indexOf('vinext-cloudflare deploy') < workflow.indexOf('dashboard-release.mjs verify-runtime'));
+});
+
+test('dashboard smoke requires anonymous, exact malformed and well-shaped invalid-signature denial', async () => {
+  assert.deepEqual(DASHBOARD_DENIAL_CASES.map(row => row.id), ['anonymous', 'malformed-token', 'invalid-signature']);
+  assert.equal(DASHBOARD_DENIAL_CASES[0].token, null);
+  assert.equal(DASHBOARD_DENIAL_CASES[1].token, 'invalid-not-a-session');
+  assert.match(DASHBOARD_DENIAL_CASES[2].token, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+  const calls = [], diagnostics = [];
+  await runAnalyticsDenialChecks(async (_url, options) => {
+    calls.push(options.headers.Authorization ?? null);
+    return Response.json({ error: calls.length === 3 ? 'Your session expired. Please sign in again.' : 'Sign in with the designated owner account.' }, { status: 401, headers: { 'Cache-Control': 'private, no-store' } });
+  }, line => diagnostics.push(JSON.parse(line)));
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2], `Bearer ${DASHBOARD_DENIAL_CASES[2].token}`);
+  assert.deepEqual(diagnostics.map(row => row.category), ['sign-in-required', 'sign-in-required', 'invalid-session']);
+});
+
+test('invalid-signature smoke fails 403 or 503 immediately without retrying or bypassing Auth', async () => {
+  for (const status of [403, 503]) {
+    let calls = 0;
+    await assert.rejects(runAnalyticsDenialChecks(async () => {
+      calls++;
+      return Response.json({ error: calls === 3 ? 'Metrics are unavailable. Please retry; no zero values have been substituted.' : 'Sign in with the designated owner account.' }, { status: calls === 3 ? status : 401, headers: { 'Cache-Control': 'private, no-store' } });
+    }, () => {}), /invalid-signature: expected a confirmed 401/);
+    assert.equal(calls, 3, 'No retries may conceal failed account verification.');
+  }
+  await assert.rejects(verifyAnalyticsDenial(Response.json({ error: 'Sign in with the designated owner account.' }, { status: 401, headers: { 'Cache-Control': 'private, no-store' } }), DASHBOARD_DENIAL_CASES[2], () => {}), /required verification stage/);
+});
+
+test('denial diagnostics contain no raw response body, token or aggregate data', async () => {
+  const diagnostics = [];
+  await assert.rejects(verifyAnalyticsDenial(Response.json({ error: 'PRIVATE response text', token: 'PRIVATE token', metrics: { private: 'PRIVATE aggregate' } }, { status: 503 }), DASHBOARD_DENIAL_CASES[2], value => diagnostics.push(value)), /expected a confirmed 401/);
+  assert.deepEqual(JSON.parse(diagnostics[0]), { case: 'invalid-signature', status: 503, category: 'unrecognized-response' });
+  assert(!diagnostics.join('').includes('PRIVATE'));
 });

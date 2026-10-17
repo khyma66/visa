@@ -3,13 +3,16 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import ts from 'typescript';
 
 const source = await readFile(new URL('../src/lib/analytics-server.ts', import.meta.url), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const { authorizedAnalytics, summarizeImport, sanitizeOwnerAnalytics } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 const config = { url: 'https://database.example', key: 'public-test-key' };
-const bearer = `Bearer ${'a'.repeat(40)}`;
+// Deliberately unsigned fixture: only its three-segment syntax is valid. Auth
+// verification is mocked per test; no local parser is treated as authorization.
+const bearer = `Bearer ${Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')}.${Buffer.from(JSON.stringify({ sub: 'test-owner' })).toString('base64url')}.${'a'.repeat(43)}`;
 const request = (search = '', authorization = bearer) => new Request(`https://visathreads.com/api/admin/analytics${search}`, { headers: { Authorization: authorization } });
 const emptyActivity = () => ({ members_joined: 0, questions_created: 0, experiences_created: 0, answers_created: 0, imported_replies_created: 0, distinct_contributors: 0 });
 function validMetrics(days = 7) {
@@ -27,10 +30,26 @@ function validMetrics(days = 7) {
 }
 
 test('anonymous and malformed requests cannot contact database or read summaries', async () => {
-  for (const value of ['', 'Bearer null', `Bearer ${'x'.repeat(8200)}`]) {
+  for (const value of ['', 'Bearer null', 'Bearer invalid-not-a-session', `Bearer ${'x'.repeat(8200)}`,
+    `Bearer ${'a'.repeat(40)}`, 'Bearer header.payload', 'Bearer header.payload.signature.extra',
+    'Bearer .payload.signature', 'Bearer header..signature', 'Bearer header.payload.',
+    'Bearer header.payload.signature=', 'Bearer header.payload.signa+ture', `Bearer header.payload.${'a'.repeat(8192)}`,
+  ]) {
     const result = await authorizedAnalytics(request('', value), config, () => { throw new Error('Must not fetch'); });
     assert.equal(result.response.status, 401);
     assert.equal(result.response.headers.get('cache-control'), 'private, no-store');
+  }
+});
+test('exact deployed smoke token is rejected before configuration lookup or any upstream request', async () => {
+  for (const configuration of [config, {}]) {
+    let calls = 0;
+    const result = await authorizedAnalytics(request('?days=30', 'Bearer invalid-not-a-session'), configuration, async () => {
+      calls++; return Response.json({ error: 'Upstream unavailable' }, { status: 503 });
+    });
+    assert.equal(calls, 0); assert.equal(result.response.status, 401);
+    assert.deepEqual(await result.response.json(), { error: 'Sign in with the designated owner account.' });
+    assert.equal(result.response.headers.get('cache-control'), 'private, no-store');
+    assert(!('metrics' in result));
   }
 });
 test('report windows are strictly bounded and unknown query parameters rejected', async () => {
@@ -44,7 +63,7 @@ test('verified caller JWT reaches owner-gated RPC, not service credentials', asy
   const metrics = validMetrics();
   const result = await authorizedAnalytics(request('?days=7'), config, async (url, options) => {
     calls.push(url); assert.equal(options.headers.Authorization, bearer); assert.equal(options.headers.apikey, config.key);
-    assert.equal(options.redirect, 'error'); assert.equal(options.cache, 'no-store');
+    assert.equal(options.redirect, 'manual'); assert.equal(options.cache, 'no-store');
     if (url.endsWith('/user')) return Response.json({ id: 'test-owner', is_anonymous: false });
     assert.deepEqual(JSON.parse(options.body), { period_days: 7 });
     return Response.json(metrics);
@@ -113,6 +132,73 @@ test('expired identity and non-owner cannot read analytics; upstream error detai
   assert.equal(calls, 1); assert.equal(result.response.status, 401);
   result = await authorizedAnalytics(request(), config, async url => url.endsWith('/user') ? Response.json({ id: 'normal-user' }) : Response.json({ message: 'private internals' }, { status: 403 }));
   assert.equal(result.response.status, 403); assert(!JSON.stringify(await result.response.json()).includes('private internals'));
+});
+test('identity and RPC redirects are rejected without following them or disclosing their destination', async () => {
+  for (const stage of ['identity', 'rpc']) {
+    let calls = 0, cancelled = false;
+    const result = await authorizedAnalytics(request(), config, async (url, options) => {
+      calls++; assert.equal(options.redirect, 'manual');
+      if (stage === 'rpc' && url.endsWith('/user')) return Response.json({ id: 'owner' });
+      return new Response(new ReadableStream({ cancel() { cancelled = true; } }), { status: 302, headers: { Location: 'https://external.invalid/private-destination' } });
+    });
+    assert.equal(calls, stage === 'identity' ? 1 : 2); assert.equal(cancelled, true);
+    assert.equal(result.response.status, 503); assert(!('metrics' in result));
+    const body = await result.response.json();
+    assert(!JSON.stringify(body).includes('external.invalid'));
+    if (stage === 'identity') assert.equal(body.error, 'Account verification is temporarily unavailable.');
+  }
+});
+test('real Workers Request accepts analytics options and rejects upstream redirects without network or credential forwarding', { timeout: 20_000 }, async () => {
+  // The actual workerd Request constructor validates these options. Returning
+  // fixtures after that boundary performs no network calls or hosted writes.
+  const script = js.replace(/^export /gm, '') + `
+    export default { async fetch() {
+      const fixtureBearer = ${JSON.stringify(bearer)};
+      const fixtureConfig = ${JSON.stringify(config)};
+      const fixtureMetrics = ${JSON.stringify(validMetrics())};
+      const cases = [];
+      for (const mode of ['success', 'identityRedirect', 'rpcRedirect', 'invalidSession', 'malformed']) {
+        let calls = 0, cancelled = false;
+        const incoming = new Request('https://visathreads.com/api/admin/analytics?days=7', { headers: { Authorization: mode === 'malformed' ? 'Bearer invalid-not-a-session' : fixtureBearer } });
+        const result = await authorizedAnalytics(incoming, fixtureConfig, async (url, options) => {
+          calls++;
+          const outgoing = new Request(url, options);
+          if (outgoing.redirect !== 'manual' || outgoing.headers.has('Cookie')
+            || outgoing.headers.get('Authorization') !== fixtureBearer
+            || outgoing.headers.get('apikey') !== fixtureConfig.key
+            || new URL(outgoing.url).origin !== fixtureConfig.url) throw new Error('Unsafe fixture request');
+          const identity = new URL(outgoing.url).pathname === '/auth/v1/user';
+          if (identity && mode === 'invalidSession') return Response.json({message:'Invalid JWT'}, {status:403});
+          if ((identity && mode === 'identityRedirect') || (!identity && mode === 'rpcRedirect')) {
+            return new Response(new ReadableStream({ cancel() { cancelled = true; } }), {status:302,headers:{Location:'https://external.invalid/private-destination'}});
+          }
+          if (identity) return Response.json({id:'fixture-owner',is_anonymous:false});
+          if (outgoing.method !== 'POST' || (await outgoing.json()).period_days !== 7) throw new Error('Invalid RPC request');
+          return Response.json(fixtureMetrics);
+        });
+        cases.push({mode,calls,cancelled,status:'response' in result ? result.response.status : 200,
+          error:'response' in result ? (await result.response.json()).error : null,
+          hasMetrics:'metrics' in result});
+      }
+      return Response.json(cases);
+    }};
+  `;
+  const runtime = new Miniflare(convertV4MiniflareOptions({ modules: true, compatibilityDate: '2026-09-09', script }));
+  try {
+    const response = await runtime.dispatchFetch('http://localhost/');
+    assert.equal(response.status, 200);
+    const cases = await response.json();
+    assert.deepEqual(cases.map(({mode,calls,cancelled,status,hasMetrics}) => ({mode,calls,cancelled,status,hasMetrics})), [
+      {mode:'success',calls:2,cancelled:false,status:200,hasMetrics:true},
+      {mode:'identityRedirect',calls:1,cancelled:true,status:503,hasMetrics:false},
+      {mode:'rpcRedirect',calls:2,cancelled:true,status:503,hasMetrics:false},
+      {mode:'invalidSession',calls:1,cancelled:false,status:401,hasMetrics:false},
+      {mode:'malformed',calls:0,cancelled:false,status:401,hasMetrics:false},
+    ]);
+    assert.equal(cases.find(row => row.mode === 'identityRedirect').error, 'Account verification is temporarily unavailable.');
+    assert.equal(cases.find(row => row.mode === 'invalidSession').error, 'Your session expired. Please sign in again.');
+    assert(!JSON.stringify(cases).includes('external.invalid'));
+  } finally { await runtime.dispose(); }
 });
 test('backend errors never become false zero counts; large bodies fail closed', async () => {
   for (const mode of ['network', 'large', 'schema']) {
