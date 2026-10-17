@@ -64,3 +64,31 @@ test('semantic insufficiency and unknown validation errors are never automatical
     assert.equal(calls,1);
   }
 });
+
+test('server-only single-attempt cap disables both HTTP format and local citation repair', async () => {
+  for (const outputKind of [undefined, 'review']) {
+    let calls = 0;
+    await assert.rejects(runAssistantModel({ ...prompt, outputKind, ...(outputKind ? { reviewIds: ['claim:0'] } : {}), maxAttempts: 1 }, {
+      provider: 'groq', apiKey: 'synthetic-private-key', fetcher: async (_url, init) => {
+        calls++; assert(!JSON.stringify(JSON.parse(init.body)).includes('maxAttempts'));
+        return Response.json({ error: { code: 'json_validate_failed' } }, { status: 400 });
+      },
+    }));
+    assert.equal(calls, 1, outputKind ?? 'answer');
+  }
+  let calls = 0;
+  await assert.rejects(runAssistantModel({ ...prompt, maxAttempts: 1, validateOutput() { throw new AssistantError(502, 'private', undefined, 'citation_quote'); } }, {
+    provider: 'groq', apiKey: 'synthetic-private-key', fetcher: async () => { calls++; return success(); },
+  }), error => error.status === 502 && error.code === 'citation_quote');
+  assert.equal(calls, 1);
+});
+
+test('in-process attempt overrides clamp to one or two and can never extend the hard cap', async () => {
+  for (const [maxAttempts, expected] of [[0, 1], [-1, 1], [1, 1], [1.9, 1], [2, 2], [99, 2], [Infinity, 2], [NaN, 2], ['99', 2]]) {
+    let calls = 0;
+    await assert.rejects(runAssistantModel({ ...prompt, maxAttempts }, { provider: 'groq', apiKey: 'synthetic-private-key', fetcher: async () => {
+      calls++; return Response.json({ error: { code: 'json_generation_failed' } }, { status: 400 });
+    } }));
+    assert.equal(calls, expected, `maxAttempts=${maxAttempts}`);
+  }
+});

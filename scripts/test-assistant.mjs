@@ -203,6 +203,36 @@ test('prompts label untrusted evidence and exclude assistant history as knowledg
   const prompt=core.assistantPrompt({...input,previousQuestions:['Contact me at secret@example.com']},{sources:[source],partial:false});
   assert.match(prompt.system,/untrusted/);assert.match(prompt.system,/Never infer current visa rules/);assert.doesNotMatch(prompt.user,/secret@example/);
 });
+test('summary prompts require atomic explicit facts without inferred timing, chronology, venue or roles',()=>{
+  const adjacent={...source,body:'I attended my appointment on Tuesday. My application was approved. I waited outside. My document arrived on Saturday.'};
+  const corpus={sources:[adjacent],partial:false};
+  const selected={questionId:id,sourceId:source.id};
+  for(const value of [
+    {mode:'summary',scope:{kind:'post',id}},
+    {mode:'ask',scope:{kind:'public'},question:'Explain the first post.',previousPosts:[selected]},
+    {...input,question:'What did this member report?'},
+    {mode:'catchup',scope:{kind:'community',id},since:'2026-10-10T00:00:00Z',until:'2026-10-11T00:00:00Z'},
+  ]) {
+    const prompt=core.assistantPrompt(value,corpus);
+    assert.match(prompt.system,/Sentence adjacency and list order do not establish event timing, sequence or causation/);
+    assert.match(prompt.system,/"same day", "same week", "later", "before", "after" or "because" unless the source explicitly states that relationship/);
+    assert.match(prompt.system,/Named weekdays alone do not establish a shared calendar week or elapsed duration/);
+    assert.match(prompt.system,/do not attach an undated outcome to a nearby dated appointment or collection/);
+    assert.match(prompt.system,/waiting "outside" or "in a queue" does not identify an embassy, consulate, office/);
+    assert.match(prompt.system,/omit an unstated venue or specialized role/);
+    assert.match(prompt.system,/Preserve explicit material qualifications in the claim text, not only inside its evidence quote/);
+    assert.match(prompt.system,/Attribution alone must not hide that stated limitation/);
+    assert.match(prompt.system,/plural statement about several reports needs supporting citations to more than one report/);
+    assert.match(prompt.system,/Different source IDs do not prove distinct people/);
+    assert.match(prompt.system,/check every timing expression, sequence word, duration, venue, role and causal link against its quoted source body/);
+    assert.equal(JSON.parse(prompt.user).sources[0].body,adjacent.body,'Prompt hardening must not edit or supplement the evidence');
+    if(JSON.parse(prompt.user).task==='summary') {
+      assert.match(prompt.system,/1–3 short, atomic, attributed claims/);
+      assert.match(prompt.system,/An undated outcome remains undated/);
+    }
+  }
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v19-atomic-summary-faithfulness','Semantic change invalidates old cached answers');
+});
 test('summary and catch-up are explicit evidence tasks without a missing question to answer',()=>{
   const summary=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},{sources:[source],partial:false});
   assert.match(summary.system,/No user question is required for a summary/);

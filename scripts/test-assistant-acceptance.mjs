@@ -23,15 +23,16 @@ async function compile(path) {
 dependencies['./assistant-context'] = await compile('src/lib/assistant-context');
 dependencies['./assistant-core'] = dependencies['../src/lib/assistant-core'] = await compile('src/lib/assistant-core');
 dependencies['./assistant-search'] = await compile('src/lib/assistant-search');
-dependencies['./assistant-review'] = await compile('src/lib/assistant-review');
+dependencies['./assistant-review'] = dependencies['../src/lib/assistant-review'] = await compile('src/lib/assistant-review');
 dependencies['../src/lib/assistant-provider'] = await compile('src/lib/assistant-provider');
 dependencies['../src/lib/assistant-service'] = await compile('src/lib/assistant-service');
 dependencies['./assistant-acceptance-fixtures'] = await compile('scripts/assistant-acceptance-fixtures');
 const { acceptanceFixtures, evaluateAcceptance } = await import(dependencies['./assistant-acceptance-fixtures']);
-const { default: compiledWorker } = await import(await compile('scripts/assistant-acceptance-worker'));
+const { default: compiledWorker, checkAcceptanceInference } = await import(await compile('scripts/assistant-acceptance-worker'));
+const { prepareAssistantCorpus, validateAssistantOutput } = await import(dependencies['./assistant-core']);
 // Only the Node test loader supplies a cloudflare:workers stub. The deployed
 // evaluation Worker uses Cloudflare's actual dynamic runtime import.
-const worker = { fetch(request, settings) { runtimeEnvironment.ASSISTANT_AI = settings.ASSISTANT_AI; return compiledWorker.fetch(request, settings); } };
+const worker = { fetch(request, settings) { runtimeEnvironment.ASSISTANT_AI = settings.ASSISTANT_AI; runtimeEnvironment.GROQ_API_KEY = settings.GROQ_API_KEY; return compiledWorker.fetch(request, settings); } };
 const secret = 'synthetic-test-secret-'.repeat(3);
 const env = () => ({ ACCEPTANCE_SECRET: secret, ACCEPTANCE_EXPIRES: String(Date.now() + 60_000), ASSISTANT_AI: { run: async () => { throw Error('Inference must not run'); } } });
 const request = (body = { id: 'post-question' }, headers = {}, url = 'https://temporary.workers.dev/evaluate') => new Request(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
@@ -111,10 +112,11 @@ test('successful evaluation executes exact production model and returns no gener
   const value = await reply.json();
   assert.equal(value.passed, true);
   assert.equal(calls, 2);
-  for (const name of ['application_request_parsed', 'application_authentication_used', 'application_quota_reserved', 'application_runtime_binding_loaded', 'application_provider_called_once', 'application_evidence_reviewed_when_needed', 'application_sources_revalidated', 'application_response_private']) {
+  for (const name of ['application_request_parsed', 'application_authentication_used', 'application_quota_reserved', 'application_runtime_binding_loaded', 'application_provider_call_sequence', 'application_transport_budget', 'application_evidence_reviewed_when_needed', 'application_sources_revalidated', 'application_response_private']) {
     assert(value.checks.some(check => check.name === name && check.passed));
   }
-  assert.deepEqual(Object.keys(value).sort(), ['checks', 'durationMs', 'id', 'model', 'passed', 'usage']);
+  assert.deepEqual(Object.keys(value).sort(), ['checks', 'durationMs', 'id', 'inferenceCounts', 'model', 'passed', 'usage']);
+  assert.deepEqual(value.inferenceCounts, { answers: 1, reviews: 1, transportCalls: 0 });
   assert.doesNotMatch(JSON.stringify(value), /passport|Monday|Friday/);
 });
 
@@ -271,12 +273,14 @@ test('independent review rejects fabricated meaning without replacing it with a 
   const reply = await worker.fetch(request({ id: fixture.id }), settings);
   assert.equal(reply.status, 200);
   const evaluation = await reply.json();
-  assert.equal(calls, 2);
+  assert.equal(calls, 3, 'One identical recovery draft is not reviewed again');
   assert.equal(evaluation.passed, false, 'Rejected prose must not masquerade as a successful factual answer');
   assert.equal(evaluation.syntheticDiagnostic.output.status, 'insufficient');
   assert.deepEqual(evaluation.syntheticDiagnostic.output.claims, []);
   assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawModelOutput), draft, 'Diagnostics retain the draft, not the review response');
   assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawReviewOutput), { checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false });
+  assert.deepEqual(evaluation.syntheticDiagnostic.inferenceRounds.map(round => [round.kind, round.maxAttempts, round.semanticRepair]), [['answer', 2, false], ['review', 2, false], ['answer', 1, true]]);
+  assert.deepEqual(evaluation.syntheticDiagnostic.inferenceRounds.map(round => JSON.parse(round.rawOutputs[0])), [draft, { checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false }, draft]);
   assert(evaluation.checks.some(check => check.name === 'application_evidence_reviewed_when_needed' && check.passed));
 });
 
@@ -291,6 +295,86 @@ test('a malformed review preserves separate draft and review diagnostics on the 
   assert.equal(result.syntheticDiagnostic.serviceFailure.stage, 'review');
   assert.deepEqual(result.syntheticDiagnostic.output, draft);
   assert.equal(result.syntheticDiagnostic.rawReviewOutput, rawReviewOutput);
+  const retained = await readAcceptanceFailureDiagnostic(Response.json(result, { status: 502, headers: { 'X-Assistant-Acceptance': 'v1' } }), fixture.id, result.model);
+  assert.deepEqual(retained.inferenceRounds, result.syntheticDiagnostic.inferenceRounds);
+  assert.equal(retained.inferenceRounds.length, 2);
+});
+
+test('acceptance derives exact inference order from strict verdicts, not permissive call counts', () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
+  const makeDraft = text => ({ status: 'answered', claims: [{ text, evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] });
+  const first = makeDraft('The passport arrived on Tuesday.'), corrected = makeDraft('The member received their passport on Friday.');
+  const verdict = supported => ({ checks: [{ id: 'claim:0', supported }], fulfillsTask: supported });
+  const round = (kind, output, recovery = false) => ({ kind, output: JSON.stringify(output), rawOutputs: [JSON.stringify(output)], maxAttempts: recovery ? 1 : 2, semanticRepair: recovery && kind === 'answer', transport: [] });
+  const rounds = [round('answer', first), round('review', verdict(false)), round('answer', corrected, true), round('review', verdict(true), true)];
+  const events = rounds => ['authenticate', 'corpus', 'reserve', ...rounds.flatMap(item => [item.kind === 'answer' ? 'generate' : 'review', 'runtime-binding']), 'corpus'];
+  const prepared = prepareAssistantCorpus(fixture.corpus, fixture.input);
+  const result = validateAssistantOutput(JSON.stringify(corrected), prepared, Date.now(), fixture.input);
+  const check = (items, eventList = events(items), final = result) => checkAcceptanceInference(fixture.input, fixture.corpus, final, 'workers-ai', eventList, items);
+  assert.equal(check(rounds).sequence, true);
+  assert.deepEqual(check(rounds).counts, { answers: 2, reviews: 2, transportCalls: 0 });
+  for (const items of [
+    rounds.slice(0, 3), // A new draft is never accepted without review.
+    [rounds[0], round('review', verdict(true)), ...rounds.slice(2)], // Approval forbids a second draft.
+    [rounds[0], round('review', { checks: [], fulfillsTask: false }), ...rounds.slice(2)],
+    [rounds[0], round('review', { checks: [{ id: 'claim:0', supported: 'false' }], fulfillsTask: false }), ...rounds.slice(2)],
+    [...rounds.slice(0, 2), { ...rounds[2], maxAttempts: 2 }, rounds[3]],
+    [...rounds.slice(0, 2), { ...rounds[2], semanticRepair: false }, rounds[3]],
+    [...rounds, round('answer', corrected, true)],
+    [rounds[0], rounds[1], round('answer', first, true), rounds[3]], // No reviewer-luck retry.
+  ]) assert.equal(check(items).sequence, false);
+  for (const list of [events(rounds).slice(0, -1), [...events(rounds), 'corpus'], ['authenticate', ...events(rounds)], ['reserve', ...events(rounds)]]) assert.equal(check(rounds, list).sequence, false);
+  const stillRejected = [...rounds.slice(0, 3), round('review', verdict(false), true)];
+  assert.equal(check(stillRejected).sequence, false, 'Rejected output cannot be published');
+  assert.equal(check(stillRejected, events(stillRejected), { ...result, status: 'insufficient', claims: [], disagreements: [], sources: [] }).sequence, true);
+  const tooManyTransports = rounds.map(item => ({ ...item, transport: [{ status: 200, attempt: 1 }, { status: 200, attempt: 2 }] }));
+  assert.equal(checkAcceptanceInference(fixture.input, fixture.corpus, result, 'groq', events(rounds), tooManyTransports).budget, false);
+});
+
+test('actual evaluation permits exactly six Groq requests when both initial phases need format repair', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
+  const draft = text => JSON.stringify({ status: 'answered', claims: [{ text, evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] });
+  const initial = draft('The passport arrived on Tuesday.'), corrected = draft('The member received their passport on Friday.');
+  const oldFetch = globalThis.fetch, calls = [];
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body); calls.push(body);
+    const number = calls.length;
+    if (number === 1 || number === 3) return Response.json({ error: { code: 'json_validate_failed', message: 'maxItems synthetic format failure' } }, { status: 400 });
+    assert(number <= 6, 'Recovery must never reset format-repair allowances');
+    const isReview = body.response_format.json_schema.name === 'discussion_answer_review';
+    const content = isReview ? JSON.stringify({ checks: [{ id: 'claim:0', supported: number === 6 }], fulfillsTask: number === 6 }) : number === 2 ? initial : corrected;
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content } }] });
+  };
+  try {
+    const result = await (await worker.fetch(request(), { ...env(), ACCEPTANCE_PROVIDER: 'groq', GROQ_API_KEY: 'synthetic-local-secret' })).json();
+    assert.equal(result.passed, true, JSON.stringify(result)); assert.equal(calls.length, 6);
+    assert.deepEqual(result.inferenceCounts, { answers: 2, reviews: 2, transportCalls: 6 });
+    assert.deepEqual(result.transport.map(item => item.attempt), [1, 2, 1, 2, 1, 1]);
+    for (const name of ['application_provider_call_sequence', 'application_transport_budget', 'application_evidence_reviewed_when_needed', 'application_sources_revalidated']) assert(result.checks.some(check => check.name === name && check.passed));
+    assert.match(calls[4].messages[0].content, /SEMANTIC REPAIR:/);
+    assert.doesNotMatch(calls[4].messages[0].content, /FORMAT REPAIR:/);
+    assert.equal(result.syntheticDiagnostic, undefined); assert.doesNotMatch(JSON.stringify(result), /Tuesday|Friday|synthetic-local-secret/);
+  } finally { globalThis.fetch = oldFetch; }
+});
+
+test('failed distinct recovery preserves every draft and verdict only in protected synthetic diagnostics', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
+  let calls = 0, answers = 0;
+  const drafts = [];
+  const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+    calls++; const review = reviewResponse(input, false); if (review) return review;
+    const draft = { status: 'answered', claims: [{ text: ++answers === 1 ? 'The passport arrived on Tuesday.' : 'The passport arrived on Wednesday.', evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] };
+    drafts.push(draft); return { response: JSON.stringify(draft) };
+  } } };
+  const result = await (await worker.fetch(request(), settings)).json();
+  assert.equal(calls, 4); assert.equal(result.passed, false);
+  assert.deepEqual(result.inferenceCounts, { answers: 2, reviews: 2, transportCalls: 0 });
+  const rounds = result.syntheticDiagnostic.inferenceRounds;
+  assert.deepEqual(rounds.map(item => [item.kind, item.maxAttempts, item.semanticRepair]), [['answer', 2, false], ['review', 2, false], ['answer', 1, true], ['review', 1, false]]);
+  assert.deepEqual([JSON.parse(rounds[0].rawOutputs[0]), JSON.parse(rounds[2].rawOutputs[0])], drafts);
+  assert.deepEqual(JSON.parse(rounds[1].rawOutputs[0]), JSON.parse(rounds[3].rawOutputs[0]));
+  assert.deepEqual(result.syntheticDiagnostic.output.claims, []);
+  assert(result.checks.some(check => check.name === 'application_provider_call_sequence' && check.passed));
 });
 
 test('unsupported policy is rejected by the core without a needless second inference', async () => {
@@ -316,7 +400,7 @@ test('thank-you understanding is rejected as proof of work authorization with mi
     return { response: JSON.stringify({ status: 'answered', claims: [{ text: 'The author was authorized to keep working on H-1B while staying in the US.', evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: fixture.corpus.sources[0].body }] }], disagreements: [], unanswered: [] }) };
   } } };
   const evaluation = await (await worker.fetch(request({ id: fixture.id }), settings)).json();
-  assert.equal(calls, 2);
+  assert.equal(calls, 3, 'The unchanged rejected draft cannot receive a second review');
   assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
 });
 
@@ -501,6 +585,19 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
   assert.deepEqual(await readAcceptanceFailureDiagnostic(reply(validation), id, model), validation);
   const rawReviewOutput = JSON.stringify({ checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false });
   assert.deepEqual(await readAcceptanceFailureDiagnostic(reply({ ...validation, rawReviewOutput }), id, model), { ...validation, rawReviewOutput });
+  const inferenceRounds = [
+    { kind: 'answer', maxAttempts: 2, semanticRepair: false, rawOutputs: ['{"status":"answered"}'] },
+    { kind: 'review', maxAttempts: 2, semanticRepair: false, rawOutputs: [rawReviewOutput] },
+    { kind: 'answer', maxAttempts: 1, semanticRepair: true, rawOutputs: [] },
+  ];
+  assert.deepEqual((await readAcceptanceFailureDiagnostic(reply({ ...validation, inferenceRounds }), id, model)).inferenceRounds, inferenceRounds);
+  for (const invalid of [
+    [...inferenceRounds, ...inferenceRounds],
+    [{ ...inferenceRounds[0], kind: 'arbitrary' }], [{ ...inferenceRounds[0], maxAttempts: 3 }],
+    [{ ...inferenceRounds[0], semanticRepair: 'true' }], [{ ...inferenceRounds[0], rawOutputs: [1] }],
+    [{ ...inferenceRounds[0], rawOutputs: ['a', 'b', 'c'] }], [{ ...inferenceRounds[0], rawOutputs: ['a'.repeat(24_001)] }],
+    [{ ...inferenceRounds[1], rawOutputs: ['a'.repeat(12_001)] }],
+  ]) assert.equal(await readAcceptanceFailureDiagnostic(reply({ ...validation, inferenceRounds: invalid }), id, model), undefined);
   assert.equal((await readAcceptanceFailureDiagnostic(reply({ ...validation, rawReviewOutput: 'x'.repeat(12_000) }), id, model)).rawReviewOutput.length, 12_000);
   for (const invalid of ['x'.repeat(12_001), null, false, 7, {}, []]) {
     assert.equal(await readAcceptanceFailureDiagnostic(reply({ ...validation, rawReviewOutput: invalid }), id, model), undefined);

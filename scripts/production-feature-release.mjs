@@ -287,6 +287,9 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
       assert.equal(sample.passed, true, 'Every hosted sample must pass.');
       assert(Array.isArray(sample.checks) && sample.checks.length > 0 && sample.checks.every(check => typeof check.name === 'string' && check.name.length > 0 && check.passed === true), 'Every sample must retain passing semantic checks.');
       assert(sample.checks.some(check => check.name === 'application_evidence_reviewed_when_needed' && check.passed === true), 'Every sample must verify the independent evidence-review stage.');
+      const requiredLifecycle = row.id === 'direct-post-search'
+        ? ['application_provider_not_called'] : ['application_provider_call_sequence', 'application_transport_budget'];
+      for (const name of requiredLifecycle) assert(sample.checks.some(check => check.name === name && check.passed === true), 'Every sample must prove the bounded inference sequence and transport budget.');
     }
     const aggregate = row.samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed })));
     assert.deepEqual(row.checks, aggregate, 'Aggregate checks must exactly retain every sample result.');

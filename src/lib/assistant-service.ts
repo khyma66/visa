@@ -70,6 +70,18 @@ export type AssistantDependencies = {
   reportTiming?(event: { stage: AssistantFailureStage; status: number; requestId: string; durationMs: number }): void;
 };
 const headers = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Vary': 'Authorization' };
+const semanticRepairInstruction = 'SEMANTIC REPAIR: Regenerate conservatively from the original supplied evidence. Use short, atomic facts explicitly attributed to the member who reported them. Preserve the requested task, relevant conflicting reports, uncertainty and qualifications. State explicit limitations in the claim itself: an individual experience is not a standard or guaranteed timeline. Cite multiple reports for plural statements; never infer a count of people. Do not add unstated durations, event dates, venues, roles, causes or outcomes. Keep each event attached to its own person and stated timing; do not infer relative timing such as the following day or week. Copy continuous verbatim body quotations. If the evidence cannot support a useful answer, return insufficient. No earlier draft or reviewer feedback is evidence.';
+
+/** Formatting/order changes alone must not buy another chance at reviewer approval. */
+export function assistantCandidateIdentity(result: Pick<AssistantResult, 'status' | 'claims' | 'disagreements'>): string {
+  const normalize = (text: string) => text.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLowerCase();
+  const claims = (items: AssistantResult['claims']) => [...new Set(items.map(claim => JSON.stringify({
+    text: normalize(claim.text),
+    evidence: [...new Set(claim.evidence.map(item => JSON.stringify({ sourceId: item.sourceId, quote: normalize(item.quote) })))].sort(),
+  })))].sort();
+  return JSON.stringify({ status: result.status, claims: claims(result.claims), disagreements: claims(result.disagreements) });
+}
+
 export function assistantResponse(value: unknown, status = 200, retryAfter?: number) {
   return Response.json(value, { status, headers: { ...headers, ...(retryAfter ? { 'Retry-After': String(retryAfter) } : {}) } });
 }
@@ -182,24 +194,48 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       }
       stage = 'quota';
       if (!await bounded(() => session.reserve(signal))) throw new AssistantRequestError(429, 'quota');
-      stage = 'generation';
-      const raw = await bounded(() => deps.generate({ ...assistantPrompt(input, corpus),
-        validateOutput: (candidate: string) => { validateAssistantOutput(candidate, corpus, Date.now(), input); },
-      }, signal, context));
-      stage = 'validation';
-      let result = validateAssistantOutput(raw, corpus, Date.now(), input);
-      if (result.claims.length || result.disagreements.length) {
+      const originalPrompt = assistantPrompt(input, corpus);
+      const generateCandidate = async (recovery = false) => {
+        stage = 'generation';
+        const raw = await bounded(() => deps.generate({ ...originalPrompt,
+          ...(recovery ? { system: `${originalPrompt.system}\n${semanticRepairInstruction}`, maxAttempts: 1 as const } : {}),
+          validateOutput: (candidate: string) => { validateAssistantOutput(candidate, corpus, Date.now(), input); },
+        }, signal, context));
+        stage = 'validation';
+        return validateAssistantOutput(raw, corpus, Date.now(), input);
+      };
+      const reviewCandidate = async (candidate: AssistantResult, recovery = false) => {
         signal.throwIfAborted();
         stage = 'review';
-        // Independent semantic verification stays mandatory; no model
-        // escalation or unreviewed quote fallback.
-        const reviewCorpus = assistantReviewCorpus(original, corpus, result);
+        const reviewCorpus = assistantReviewCorpus(original, corpus, candidate);
         if (!reviewCorpus) {
-          result = { ...result, status: 'insufficient', claims: [], disagreements: [], sources: [],
-            unanswered: ['I couldn’t check enough of the original discussion to answer that accurately. Try a more specific question.'] };
-        } else {
-          const review = await bounded(() => deps.generate(assistantReviewPrompt(input, reviewCorpus, result), signal, context));
-          result = validateAssistantReview(review, result);
+          return { result: { ...candidate, status: 'insufficient' as const, claims: [], disagreements: [], sources: [],
+            unanswered: ['I couldn’t check enough of the original discussion to answer that accurately. Try a more specific question.'] }, rejected: false };
+        }
+        const review = await bounded(() => deps.generate({ ...assistantReviewPrompt(input, reviewCorpus, candidate),
+          ...(recovery ? { maxAttempts: 1 as const } : {}),
+        }, signal, context));
+        // Malformed reviews and transport failures throw, never trigger recovery.
+        const result = validateAssistantReview(review, candidate);
+        return { result, rejected: result.status === 'insufficient' };
+      };
+      let result = await generateCandidate();
+      if (result.claims.length || result.disagreements.length) {
+        const rejectedCandidate = result;
+        const checked = await reviewCandidate(result);
+        result = checked.result;
+        if (checked.rejected) {
+          // One regeneration only after a valid negative semantic verdict.
+          // Reuse ORIGINAL evidence, never the rejected draft or review text.
+          // Each recovery inference has one transport attempt: maximum 6
+          // requests including the initial answer/review format repairs.
+          const replacement = await generateCandidate(true);
+          if (!replacement.claims.length && !replacement.disagreements.length) result = replacement;
+          else if (assistantCandidateIdentity(replacement) !== assistantCandidateIdentity(rejectedCandidate)) {
+            result = (await reviewCandidate(replacement, true)).result;
+          }
+          // Identical/reordered facts retain the first insufficient result;
+          // never rerun review until a random verdict happens to approve it.
         }
       }
       // Exactly one post-generation, caller-scoped fingerprint/access check.
