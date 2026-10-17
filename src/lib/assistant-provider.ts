@@ -4,6 +4,8 @@ import models from './assistant-models.json';
 export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[];
   /** In-process validation only; never serialized or supplied by the caller. */
   validateOutput?(raw: string): void;
+  /** Server-only cap; recovery cannot multiply transport/schema retries. */
+  maxAttempts?: 1 | 2;
 };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
 export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'invalid_key_format' | 'network_error' | 'unsupported_redirect' | 'illegal_invocation' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'permission_denied' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
@@ -124,7 +126,10 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       // Groq can return json_validate_failed even with strict:true. One bounded
       // format-only repair is safe; do not retry configuration/auth/rate errors.
       // Both attempts share the original 25s timeout and caller's total budget.
-      for (let attempt = 0; attempt < 2; attempt++) {
+      // Even an invalid in-process override can never extend the hard cap.
+      const maximumAttempts = typeof prompt.maxAttempts === 'number' && Number.isFinite(prompt.maxAttempts)
+        ? Math.max(1, Math.min(2, Math.floor(prompt.maxAttempts))) : 2;
+      for (let attempt = 0; attempt < maximumAttempts; attempt++) {
       signal.throwIfAborted();
       reason = 'network_error';
       const response = await (options.fetcher ?? fetch)('https://api.groq.com/openai/v1/chat/completions', {
@@ -172,7 +177,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       // Fixed labels and numeric telemetry only; no provider error text.
       try { options.reportTransport?.({ status: response.status, attempt: attempt + 1, ...(errorCode ? { errorCode } : {}), ...(constraint ? { constraint } : {}), tokenLimit: numberHeader('x-ratelimit-limit-tokens'), remainingTokens: numberHeader('x-ratelimit-remaining-tokens'), retryAfterSeconds: numberHeader('retry-after'), ...(denial ? { denial } : {}), responseFormat }); } catch { /* optional metrics */ }
       if (!response.ok) {
-        if (response.status === 400 && (errorCode === 'json_validate_failed' || errorCode === 'json_generation_failed') && attempt === 0 && !signal.aborted) continue;
+        if (response.status === 400 && (errorCode === 'json_validate_failed' || errorCode === 'json_generation_failed') && attempt + 1 < maximumAttempts && !signal.aborted) continue;
         return fail(response.status === 429 ? 'rate_limited' : response.status === 401 ? 'authentication_failed' : response.status === 403 ? 'permission_denied' : response.status === 400 ? 'invalid_request' : 'provider_error');
       }
       const data = await readBoundedJson(response, 100_000) as { choices?: { finish_reason?: string; message?: { content?: unknown } }[]; usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
@@ -193,7 +198,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
           'citation_missing', 'citation_length', 'citation_source', 'citation_quote',
           'conflict_sources', 'unanswered_limit', 'answered_without_claims',
         ].includes(error.code);
-        if (repairable && !review && attempt === 0 && !signal.aborted) continue;
+        if (repairable && !review && attempt + 1 < maximumAttempts && !signal.aborted) continue;
         throw error;
       }
       return content;

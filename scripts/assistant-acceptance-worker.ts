@@ -1,11 +1,72 @@
 import { prepareAssistantCorpus, readBoundedJson, validateAssistantOutput, type AssistantValidationCode } from '../src/lib/assistant-core';
-import type { AssistantRequest, AssistantResult } from '../src/lib/assistant-contract';
-import { createAssistantHandler, type AssistantFailureStage } from '../src/lib/assistant-service';
+import type { AssistantCorpus, AssistantRequest, AssistantResult } from '../src/lib/assistant-contract';
+import { assistantCandidateIdentity, createAssistantHandler, type AssistantFailureStage } from '../src/lib/assistant-service';
+import { assistantReviewCorpus, validateAssistantReview } from '../src/lib/assistant-review';
 import { runAssistantModel, providerModel, providerCacheKey, GROQ_ASSISTANT_PROFILE, WORKERS_ASSISTANT_PROFILE, type WorkersAiBinding, type AssistantProviderFailure, type AssistantUsage, type AssistantTransport } from '../src/lib/assistant-provider';
 import { acceptanceFixtures, evaluateAcceptance } from './assistant-acceptance-fixtures';
 
 type Env = { ASSISTANT_AI?: WorkersAiBinding; GROQ_API_KEY?: string; ACCEPTANCE_PROVIDER?: string; ACCEPTANCE_SECRET?: string; ACCEPTANCE_EXPIRES?: string; ACCEPTANCE_SOURCE_SHA?: string };
 const response = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'X-Assistant-Acceptance': 'v1' } });
+type InferenceRound = {
+  kind: 'answer' | 'review'; maxAttempts: number; semanticRepair: boolean;
+  rawOutputs: string[]; output?: string; transport: AssistantTransport[];
+};
+
+/** Independently derive the exact allowed sequence from strictly checked drafts/verdicts. */
+export function checkAcceptanceInference(input: AssistantRequest, corpus: AssistantCorpus, result: AssistantResult,
+  provider: string, events: string[], rounds: InferenceRound[], direct = false) {
+  const counts = { answers: rounds.filter(round => round.kind === 'answer').length,
+    reviews: rounds.filter(round => round.kind === 'review').length,
+    transportCalls: rounds.reduce((total, round) => total + round.transport.length, 0) };
+  let sequence = false;
+  try {
+    const expected = ['authenticate', 'corpus'];
+    let cursor = 0;
+    const take = (kind: InferenceRound['kind'], recovery: boolean) => {
+      const round = rounds[cursor++];
+      if (!round || round.kind !== kind || round.maxAttempts !== (recovery ? 1 : 2)
+        || round.semanticRepair !== (recovery && kind === 'answer') || typeof round.output !== 'string') throw Error('Invalid inference sequence');
+      expected.push(kind === 'answer' ? 'generate' : 'review', 'runtime-binding');
+      return round.output;
+    };
+    if (!direct) {
+      expected.push('reserve');
+      const prepared = prepareAssistantCorpus(corpus, input);
+      const validate = (raw: string) => validateAssistantOutput(raw, prepared, Date.now(), input);
+      const hasClaims = (draft: AssistantResult) => draft.claims.length + draft.disagreements.length > 0;
+      const insufficient = (draft: AssistantResult): AssistantResult => ({ ...draft, status: 'insufficient', claims: [], disagreements: [], sources: [] });
+      const first = validate(take('answer', false));
+      let checked = first;
+      if (hasClaims(first)) {
+        if (!assistantReviewCorpus(corpus, prepared, first)) checked = insufficient(first);
+        else {
+          checked = validateAssistantReview(take('review', false), first);
+          // Only a complete, well-formed negative verdict permits a new draft.
+          if (checked !== first) {
+            const revised = validate(take('answer', true));
+            if (assistantCandidateIdentity(revised) !== assistantCandidateIdentity(first)) {
+              checked = revised;
+              if (hasClaims(revised)) checked = assistantReviewCorpus(corpus, prepared, revised)
+                ? validateAssistantReview(take('review', true), revised) : insufficient(revised);
+            }
+          }
+        }
+      }
+      if (assistantCandidateIdentity(checked) !== assistantCandidateIdentity(result)
+        || (result.status === 'insufficient' && (result.claims.length || result.disagreements.length || result.sources.length))) throw Error('Unverified final draft');
+    }
+    expected.push('corpus');
+    sequence = cursor === rounds.length && JSON.stringify(events) === JSON.stringify(expected);
+  } catch { /* A malformed or missing verdict cannot authorize another inference. */ }
+  const budget = rounds.length <= 4 && counts.transportCalls <= 6 && rounds.every(round => {
+    if (provider !== 'groq') return round.transport.length === 0;
+    return round.transport.length >= 1 && round.transport.length <= round.maxAttempts
+      && round.transport.every((item, index) => item.attempt === index + 1)
+      && round.transport.at(-1)?.status === 200;
+  });
+  return { sequence, budget, counts };
+}
+
 async function authorized(request: Request, env: Env): Promise<boolean> {
   const expires = Number(env.ACCEPTANCE_EXPIRES);
   if (!env.ACCEPTANCE_SECRET || env.ACCEPTANCE_SECRET.length < 40 || !Number.isFinite(expires) || Date.now() >= expires || expires - Date.now() > 15 * 60_000) return false;
@@ -63,6 +124,7 @@ export default {
       const usage: AssistantUsage[] = [];
       const transport: AssistantTransport[] = [];
       const receivedInputs: AssistantRequest[] = [];
+      const inferenceRounds: InferenceRound[] = [];
       let raw: string | undefined;
       let rawReview: string | undefined;
       let serviceFailure: { stage: AssistantFailureStage; status: number; code?: AssistantValidationCode } | undefined;
@@ -86,6 +148,9 @@ export default {
         },
         generate: async (prompt, signal) => {
           const review = prompt.outputKind === 'review';
+          const round: InferenceRound = { kind: review ? 'review' : 'answer', maxAttempts: prompt.maxAttempts ?? 2,
+            semanticRepair: prompt.system.includes('SEMANTIC REPAIR:'), rawOutputs: [], transport: [] };
+          inferenceRounds.push(round);
           events.push(review ? 'review' : 'generate');
           // Match the production route's runtime binding lookup. Directly
           // injecting the fetch environment would miss loader/binding errors.
@@ -107,9 +172,12 @@ export default {
           // Production never captures raw output or failed-generation content.
           const checkedPrompt = { ...prompt, ...(prompt.validateOutput ? { validateOutput(value: string) {
             raw = value;
+            if (value.length <= 24_000) round.rawOutputs.push(value);
             prompt.validateOutput!(value);
           } } : {}) };
-          const output = await runAssistantModel(checkedPrompt, { provider, apiKey, binding, signal, reportFailure: reason => { providerReason = reason; }, reportUsage: value => usage.push(value), reportTransport: value => transport.push(value) });
+          const output = await runAssistantModel(checkedPrompt, { provider, apiKey, binding, signal, reportFailure: reason => { providerReason = reason; }, reportUsage: value => usage.push(value), reportTransport: value => { transport.push(value); round.transport.push(value); } });
+          round.output = output;
+          if (output.length <= (review ? 12_000 : 24_000) && round.rawOutputs.at(-1) !== output) round.rawOutputs.push(output);
           if (review) rawReview = output;
           else raw = output;
           return output;
@@ -138,14 +206,14 @@ export default {
             ...(serviceFailure ? { serviceFailure } : {}), ...(providerReason ? { providerReason } : {}),
             ...(raw === undefined ? {} : output === undefined ? { rawOutput: raw } : { output }),
             ...(rawReview !== undefined && rawReview.length <= 12_000 ? { rawReviewOutput: rawReview } : {}),
+            ...(inferenceRounds.some(round => round.rawOutputs.length) ? { inferenceRounds: inferenceRounds.map(({ kind, maxAttempts, semanticRepair, rawOutputs }) => ({ kind, maxAttempts, semanticRepair, rawOutputs })) } : {}),
           },
         }, 502);
       }
       const result = serviceBody as AssistantResult;
       const evaluation = evaluateAcceptance(fixture, result);
       const directPostSearch = fixture.execution === 'direct-post-search';
-      const draft = raw === undefined ? undefined : validateAssistantOutput(raw, prepareAssistantCorpus(fixture.corpus, receivedInputs[0]), Date.now(), receivedInputs[0]);
-      const expectedReviews = draft && (draft.claims.length || draft.disagreements.length) ? 1 : 0;
+      const inference = checkAcceptanceInference(receivedInputs[0], fixture.corpus, result, provider, events, inferenceRounds, directPostSearch);
       const sameInput = (input: AssistantRequest) => input.mode === fixture.input.mode
         && JSON.stringify(input.scope) === JSON.stringify(fixture.input.scope)
         && input.question === fixture.input.question
@@ -161,13 +229,14 @@ export default {
           { name: 'application_runtime_binding_not_loaded', passed: events.filter(event => event === 'runtime-binding').length === 0 },
           { name: 'application_provider_not_called', passed: events.filter(event => event === 'generate' || event === 'review').length === 0 },
           { name: 'application_evidence_reviewed_when_needed', passed: events.filter(event => event === 'review').length === 0 },
-          { name: 'application_sources_revalidated', passed: events[1] === 'corpus' && events.filter(event => event === 'corpus').length >= 2 },
+          { name: 'application_sources_revalidated', passed: inference.sequence },
         ] : [
           { name: 'application_quota_reserved', passed: events.filter(event => event === 'reserve').length === 1 },
-          { name: 'application_runtime_binding_loaded', passed: events.filter(event => event === 'runtime-binding').length === 1 + expectedReviews },
-          { name: 'application_provider_called_once', passed: events.filter(event => event === 'generate').length === 1 },
-          { name: 'application_evidence_reviewed_when_needed', passed: events.filter(event => event === 'review').length === expectedReviews && (expectedReviews === 0 || (rawReview !== undefined && events.indexOf('review') > events.indexOf('generate'))) },
-          { name: 'application_sources_revalidated', passed: events[1] === 'corpus' && events.slice(events.indexOf('generate') + 1).filter(event => event === 'corpus').length >= 1 },
+          { name: 'application_runtime_binding_loaded', passed: inference.sequence },
+          { name: 'application_provider_call_sequence', passed: inference.sequence },
+          { name: 'application_transport_budget', passed: inference.budget },
+          { name: 'application_evidence_reviewed_when_needed', passed: inference.sequence },
+          { name: 'application_sources_revalidated', passed: inference.sequence },
         ]),
         { name: 'application_response_private', passed: serviceResponse.headers.get('cache-control') === 'private, no-store'
           && serviceResponse.headers.get('vary') === 'Authorization' && serviceResponse.headers.get('x-content-type-options') === 'nosniff' },
@@ -176,7 +245,7 @@ export default {
       // Only failed, fixed COMPILED SYNTHETIC fixtures may include diagnostic
       // output. This Worker has no database, production content or free-form
       // prompt input. Production API responses/logging are completely unchanged.
-      return response({ ...evaluation, model, durationMs: Date.now() - started, usage, ...(transport.length ? { transport } : {}),
+      return response({ ...evaluation, model, durationMs: Date.now() - started, usage, inferenceCounts: inference.counts, ...(transport.length ? { transport } : {}),
         ...(!evaluation.passed ? { syntheticDiagnostic: {
           source: 'compiled-synthetic-fixture-only', fixtureId: fixture.id,
           failedChecks: evaluation.checks.filter(check => !check.passed).map(check => check.name),
@@ -185,6 +254,7 @@ export default {
           // citation only for a failed, fixed synthetic case. Never production.
           ...(raw !== undefined && raw.length <= 24_000 ? { rawModelOutput: raw } : {}),
           ...(rawReview !== undefined && rawReview.length <= 12_000 ? { rawReviewOutput: rawReview } : {}),
+          inferenceRounds: inferenceRounds.map(({ kind, maxAttempts, semanticRepair, rawOutputs }) => ({ kind, maxAttempts, semanticRepair, rawOutputs })),
         } } : {}),
       });
     } catch { return response({ error: 'Hosted inference or source validation failed' }, 502); }

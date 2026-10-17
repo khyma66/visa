@@ -5,7 +5,7 @@ import { build, transform } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 
 const root = new URL('../', import.meta.url).pathname;
-const entry = `export * from ${JSON.stringify(root + 'src/lib/assistant-service.ts')}; export { AssistantError } from ${JSON.stringify(root + 'src/lib/assistant-core.ts')}; export { retrieveAssistantCorpus } from ${JSON.stringify(root + 'src/lib/assistant-data.ts')};`;
+const entry = `export * from ${JSON.stringify(root + 'src/lib/assistant-service.ts')}; export { AssistantError } from ${JSON.stringify(root + 'src/lib/assistant-core.ts')}; export { runAssistantModel } from ${JSON.stringify(root + 'src/lib/assistant-provider.ts')}; export { retrieveAssistantCorpus } from ${JSON.stringify(root + 'src/lib/assistant-data.ts')};`;
 const bundled = await build({ stdin: { contents: entry, resolveDir: root, loader: 'ts' }, bundle: true, write: false, platform: 'browser', format: 'esm', target: 'es2022', logLevel: 'silent',
   plugins: [{ name: 'synthetic-archive', setup(builder) {
     builder.onResolve({ filter: /^@visa\/archive$/ }, () => ({ path: 'archive', namespace: 'synthetic' }));
@@ -177,6 +177,161 @@ test('database transport preserves an existing abort signal as well as the reque
     assert.equal(outgoing.cache, 'no-store'); assert.equal(outgoing.redirect, 'manual'); assert.equal(outgoing.signal.aborted, false);
     (abortWhich === 'request' ? caller : upstream).abort(); assert.equal(outgoing.signal.aborted, true);
   }
+});
+
+const rejectedOutput = { ...output, claims: [{ ...output.claims[0], text: 'Rejected-draft sentinel: the passport arrived on Friday at an unstated venue.' }] };
+const correctedOutput = { ...output, claims: [{ ...output.claims[0], text: 'The member said their passport arrived on Friday.' }] };
+const negativeReview = prompt => JSON.stringify({ fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: false })) });
+
+test('one semantic recovery uses original evidence and a fixed prompt, then independently reviews and caches only the corrected answer', async () => {
+  for (const rejection of ['unsupported', 'task']) {
+    const prompts = [], signals = [];
+    const h = harness({ generate: async (prompt, signal) => {
+      prompts.push(prompt); signals.push(signal);
+      if (prompts.length === 1) return JSON.stringify(rejectedOutput);
+      if (prompts.length === 2) return rejection === 'unsupported' ? negativeReview(prompt) : JSON.stringify({ fulfillsTask: false, checks: prompt.reviewIds.map(id => ({ id, supported: true })) });
+      if (prompts.length === 3) return JSON.stringify(correctedOutput);
+      return review(prompt);
+    } });
+    const response = await h.handler(request()); const result = await response.json();
+    assert.equal(response.status, 200); assert.equal(result.status, 'answered'); assert.equal(result.claims[0].text, correctedOutput.claims[0].text);
+    assert.deepEqual(prompts.map(prompt => prompt.outputKind ?? 'answer'), ['answer', 'review', 'answer', 'review']);
+    assert.deepEqual(prompts.map(prompt => prompt.maxAttempts), [undefined, undefined, 1, 1]);
+    assert.match(prompts[2].system, /SEMANTIC REPAIR:/); assert.equal(prompts[2].user, prompts[0].user);
+    assert.doesNotMatch(JSON.stringify({ system: prompts[2].system, user: prompts[2].user }), /Rejected-draft sentinel/);
+    assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2); assert.equal(h.state.writes, 1);
+    assert(signals.every(signal => signal === signals[0]));
+    assert.doesNotMatch(JSON.stringify([...h.state.cache.values()]), /Rejected-draft sentinel/);
+    assert.equal((await h.handler(request())).status, 200); assert.equal(prompts.length, 4); assert.equal(h.state.reserved, 1);
+  }
+});
+
+test('a second negative semantic verdict remains insufficient with no more generation or rejected cache content', async () => {
+  const prompts = [];
+  const h = harness({ generate: async prompt => {
+    prompts.push(prompt);
+    return prompt.outputKind === 'review' ? negativeReview(prompt) : JSON.stringify(prompts.length === 1 ? rejectedOutput : correctedOutput);
+  } });
+  const response = await h.handler(request()); const result = await response.json();
+  assert.equal(response.status, 200); assert.equal(result.status, 'insufficient'); assert.deepEqual(result.claims, []); assert.deepEqual(result.sources, []);
+  assert.equal(prompts.length, 4); assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2); assert.equal(h.state.writes, 1);
+  assert.doesNotMatch(JSON.stringify([...h.state.cache.values()]), /Rejected-draft sentinel|The member said their passport/);
+  const cached = await h.handler(request()); assert.equal((await cached.json()).cached, true); assert.equal(prompts.length, 4);
+});
+
+test('unchanged rejected facts cannot obtain a second reviewer verdict through whitespace, case, order or duplicate changes', async () => {
+  const reordered = { ...rejectedOutput, claims: [{ ...rejectedOutput.claims[0], text: '  ' + rejectedOutput.claims[0].text.toUpperCase().replaceAll(' ', '   ') + ' ' }, rejectedOutput.claims[0]] };
+  assert.equal(service.assistantCandidateIdentity(rejectedOutput), service.assistantCandidateIdentity(reordered));
+  const prompts = [];
+  const h = harness({ generate: async prompt => {
+    prompts.push(prompt); return prompt.outputKind === 'review' ? negativeReview(prompt) : JSON.stringify(prompts.length === 1 ? rejectedOutput : reordered);
+  } });
+  const response = await h.handler(request()); const result = await response.json();
+  assert.equal(result.status, 'insufficient'); assert.deepEqual(result.claims, []); assert.equal(prompts.length, 3);
+  assert.equal(prompts.filter(prompt => prompt.outputKind === 'review').length, 1); assert.equal(h.state.reads, 2); assert.equal(h.state.reserved, 1);
+});
+
+test('malformed review, provider failure, missing review corpus and initial insufficiency never trigger semantic regeneration', async () => {
+  for (const failure of ['malformed-review', 'provider-review', 'provider-answer', 'missing-corpus', 'initial-insufficient', 'invalid-answer']) {
+    const prompts = [];
+    const h = harness({ generate: async prompt => {
+      prompts.push(prompt);
+      if (failure === 'provider-answer' || (failure === 'provider-review' && prompt.outputKind === 'review')) throw new service.AssistantError(503, 'private provider failure');
+      if (prompt.outputKind === 'review') return failure === 'malformed-review' ? '{"checks":[],"fulfillsTask":false}' : negativeReview(prompt);
+      if (failure === 'initial-insufficient') return JSON.stringify({ status: 'insufficient', claims: [], disagreements: [], unanswered: [] });
+      if (failure === 'invalid-answer') return JSON.stringify({ ...output, claims: [{ ...output.claims[0], evidence: [] }] });
+      return JSON.stringify(rejectedOutput);
+    } });
+    if (failure === 'missing-corpus') h.session.corpus = async () => { h.state.reads++; return { sources: [{ ...source, body: source.body + ' Additional background.'.repeat(1500) }], partial: false }; };
+    const response = await h.handler(request()); const result = await response.json();
+    assert.equal(prompts.some(prompt => prompt.maxAttempts === 1 || prompt.system.includes('SEMANTIC REPAIR:')), false, failure);
+    assert.equal(prompts.length, ['malformed-review', 'provider-review'].includes(failure) ? 2 : 1, failure);
+    if (['initial-insufficient', 'missing-corpus'].includes(failure)) { assert.equal(response.status, 200, failure); assert.equal(result.status, 'insufficient', failure); }
+    else { assert(response.status >= 500, failure); assert.equal(h.state.writes, 0, failure); }
+    assert.equal(h.state.reserved, 1, failure);
+  }
+});
+
+test('recovery transport and citation failures stop immediately without caching or further review', async () => {
+  for (const failure of ['answer-provider', 'answer-invalid', 'answer-insufficient', 'review-provider', 'review-malformed']) {
+    const prompts = [];
+    const h = harness({ generate: async prompt => {
+      prompts.push(prompt);
+      if (prompts.length === 1) return JSON.stringify(rejectedOutput);
+      if (prompts.length === 2) return negativeReview(prompt);
+      if ((failure === 'answer-provider' && prompts.length === 3) || (failure === 'review-provider' && prompts.length === 4)) throw new service.AssistantError(503, 'private provider failure');
+      if (prompts.length === 3) return JSON.stringify(failure === 'answer-invalid' ? { ...correctedOutput, claims: [] }
+        : failure === 'answer-insufficient' ? { status: 'insufficient', claims: [], disagreements: [], unanswered: [] } : correctedOutput);
+      return failure === 'review-malformed' ? '{"fulfillsTask":false}' : review(prompt);
+    } });
+    const response = await h.handler(request());
+    assert.equal(prompts.length, failure.startsWith('review-') ? 4 : 3, failure);
+    assert.equal(h.state.reserved, 1, failure);
+    if (failure === 'answer-insufficient') { assert.equal(response.status, 200); assert.equal((await response.json()).status, 'insufficient'); }
+    else { assert(response.status >= 500, failure); assert.equal(h.state.writes, 0, failure); }
+  }
+});
+
+test('cancellation and the original total deadline stop either recovery stage and ignore late completions', async () => {
+  for (const phase of ['answer', 'review']) for (const ending of ['cancel', 'deadline']) {
+    const waiting = deferred(), controller = new AbortController(), prompts = []; let entered = false, activeSignal;
+    const h = harness({ deadlineMs: 100, generate: async (prompt, signal) => {
+      prompts.push(prompt);
+      if (prompts.length === 1) return JSON.stringify(rejectedOutput);
+      if (prompts.length === 2) return negativeReview(prompt);
+      if (prompts.length === (phase === 'answer' ? 3 : 4)) { entered = true; activeSignal = signal; return waiting.promise; }
+      return JSON.stringify(correctedOutput);
+    } });
+    const start = Date.now(); const pending = h.handler(request(controller.signal));
+    while (!entered) await tick();
+    if (ending === 'cancel') controller.abort();
+    const response = await pending;
+    assert.equal(response.status, ending === 'cancel' ? 499 : 504, phase + ending); assert.equal(activeSignal.aborted, true);
+    assert(Date.now() - start < 1000); assert.equal(h.state.reads, 1); assert.equal(h.state.writes, 0); assert.equal(h.state.reserved, 1);
+    const calls = prompts.length;
+    waiting.resolve(phase === 'answer' ? JSON.stringify(correctedOutput) : review(prompts.at(-1))); await tick(); await tick();
+    assert.equal(prompts.length, calls); assert.equal(h.state.reads, 1); assert.equal(h.state.writes, 0);
+  }
+});
+
+test('source access and fingerprint changes after recovery prevent both response and cache publication', async () => {
+  for (const failure of ['changed', 401, 403, 429, 503]) {
+    const prompts = [];
+    const h = harness({ generate: async prompt => {
+      prompts.push(prompt); return prompts.length === 1 ? JSON.stringify(rejectedOutput) : prompts.length === 2 ? negativeReview(prompt)
+        : prompts.length === 3 ? JSON.stringify(correctedOutput) : review(prompt);
+    } });
+    h.session.corpus = async () => {
+      h.state.reads++;
+      if (h.state.reads === 1) return { sources: [source], partial: false };
+      if (failure === 'changed') return { sources: [], partial: false };
+      throw new service.AssistantError(failure, 'private access failure');
+    };
+    const response = await h.handler(request());
+    assert.equal(response.status, failure === 'changed' ? 409 : failure); assert.equal(prompts.length, 4);
+    assert.equal(h.state.reads, 2); assert.equal(h.state.reserved, 1); assert.equal(h.state.writes, 0);
+    assert.doesNotMatch(JSON.stringify(await response.json()), /Rejected-draft sentinel|private access failure|The member said their passport/);
+  }
+});
+
+test('combined real provider format repairs and semantic recovery have exactly six HTTP attempts at worst', async () => {
+  const prompts = [], outgoing = []; let generation = 0;
+  const h = harness({ generate: async (prompt, signal) => {
+    prompts.push(prompt); const current = ++generation; let local = 0;
+    return service.runAssistantModel(prompt, { provider: 'groq', apiKey: 'synthetic-private-key', signal,
+      fetcher: async (_url, options) => {
+        outgoing.push(options); local++;
+        if (current <= 2 && local === 1) return Response.json({ error: { code: 'json_validate_failed' } }, { status: 400 });
+        const content = current === 1 ? JSON.stringify(rejectedOutput) : current === 2 ? negativeReview(prompt) : current === 3 ? JSON.stringify(correctedOutput) : review(prompt);
+        return Response.json({ choices: [{ finish_reason: 'stop', message: { content } }] });
+      },
+    });
+  } });
+  const response = await h.handler(request()); const result = await response.json();
+  assert.equal(response.status, 200); assert.equal(result.claims[0].text, correctedOutput.claims[0].text);
+  assert.equal(outgoing.length, 6); assert.equal(prompts.length, 4); assert.deepEqual(prompts.map(prompt => prompt.maxAttempts), [undefined, undefined, 1, 1]);
+  assert.equal(outgoing[0].signal, outgoing[1].signal); assert.equal(outgoing[2].signal, outgoing[3].signal);
+  assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2); assert.equal(h.state.writes, 1);
 });
 
 const routeSource = await readFile(new URL('../src/app/api/assistant/route.ts', import.meta.url), 'utf8');

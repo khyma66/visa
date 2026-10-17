@@ -184,10 +184,12 @@ function acceptanceReceipt() {
   const ids = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context', 'thank-you-confirmation', 'public-multiple-thread-synthesis'];
   const model = modelProfile.answer;
   ids.push('large-discussion-summary');
+  const checksFor = id => ['supported', 'application_evidence_reviewed_when_needed', ...(id === 'direct-post-search'
+    ? ['application_provider_not_called'] : ['application_provider_call_sequence', 'application_transport_budget'])];
   return { schemaVersion: 1, sourceSha: 'a'.repeat(40), provider: 'workers-ai', model, modelProfile, createdAt: new Date().toISOString(), passed: true, repetitions: 3, features: { posts: true, communities: true, catchup: true }, workerDeleted: true, cases: ids.map(id => ({
     id, model, passed: true,
-    samples: Array.from({ length: 3 }, () => ({ id, model, passed: true, checks: [{ name: 'supported', passed: true }, { name: 'application_evidence_reviewed_when_needed', passed: true }] })),
-    checks: Array.from({ length: 3 }, (_, index) => ['supported', 'application_evidence_reviewed_when_needed'].map(name => ({ name: `sample_${index + 1}_${name}`, passed: true }))).flat(),
+    samples: Array.from({ length: 3 }, () => ({ id, model, passed: true, checks: checksFor(id).map(name => ({ name, passed: true })) })),
+    checks: Array.from({ length: 3 }, (_, index) => checksFor(id).map(name => ({ name: `sample_${index + 1}_${name}`, passed: true }))).flat(),
   })) };
 }
 
@@ -241,6 +243,16 @@ test('production acceptance cannot pass through aggregate-only, incomplete or fa
   for (const mutate of mutations) {
     const receipt = acceptanceReceipt(); mutate(receipt);
     assert.throws(() => verifyAssistantAcceptance(receipt, receipt.sourceSha, { communities: 'true', catchup: 'true' }));
+  }
+});
+
+test('production acceptance requires explicit bounded inference and transport proofs', () => {
+  for (const [caseIndex, name] of [[0, 'application_provider_not_called'], [1, 'application_provider_call_sequence'], [1, 'application_transport_budget']]) {
+    const receipt = acceptanceReceipt();
+    const row = receipt.cases[caseIndex];
+    row.samples[0].checks = row.samples[0].checks.filter(check => check.name !== name);
+    row.checks = row.samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed })));
+    assert.throws(() => verifyAssistantAcceptance(receipt, receipt.sourceSha), /bounded inference sequence and transport budget/);
   }
 });
 

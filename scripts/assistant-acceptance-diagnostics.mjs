@@ -17,7 +17,9 @@ export async function readAcceptanceFailureDiagnostic(reply, id, model) {
       const { value, done } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > 100_000) return undefined;
+      // At most four compiled-synthetic rounds may retain bounded drafts and
+      // reviews, including escaped multilingual text. Never an unbounded body.
+      if (bytes > 1_000_000) return undefined;
       body += decoder.decode(value, { stream: true });
     }
     const value = JSON.parse(body + decoder.decode());
@@ -45,6 +47,16 @@ export async function readAcceptanceFailureDiagnostic(reply, id, model) {
       if (diagnostic.rawReviewOutput !== undefined) {
         if (typeof diagnostic.rawReviewOutput !== 'string' || diagnostic.rawReviewOutput.length > 12_000) return undefined;
         result.rawReviewOutput = diagnostic.rawReviewOutput;
+      }
+      if (diagnostic.inferenceRounds !== undefined) {
+        if (!Array.isArray(diagnostic.inferenceRounds) || diagnostic.inferenceRounds.length > 4) return undefined;
+        result.inferenceRounds = [];
+        for (const round of diagnostic.inferenceRounds) {
+          if (!round || !['answer', 'review'].includes(round.kind) || ![1, 2].includes(round.maxAttempts)
+            || typeof round.semanticRepair !== 'boolean' || !Array.isArray(round.rawOutputs) || round.rawOutputs.length > 2
+            || round.rawOutputs.some(raw => typeof raw !== 'string' || raw.length > (round.kind === 'review' ? 12_000 : 24_000))) return undefined;
+          result.inferenceRounds.push({ kind: round.kind, maxAttempts: round.maxAttempts, semanticRepair: round.semanticRepair, rawOutputs: round.rawOutputs });
+        }
       }
     } else if (!result.serviceFailure && !result.providerReason) return undefined;
     return result;

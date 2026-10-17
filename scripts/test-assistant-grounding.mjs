@@ -237,7 +237,11 @@ test('an unconfirmed thank-you cannot be published as work permission when the s
   assert.equal(result.status, 'insufficient');
   assert.deepEqual(result.claims, []);
   assert.deepEqual(result.sources, []);
-  assert.equal(prompts.length, 2);
+  assert.equal(prompts.length, 3);
+  assert.deepEqual(prompts.map(prompt => prompt.outputKind ?? 'answer'), ['answer', 'review', 'answer']);
+  assert.equal(prompts[2].maxAttempts, 1);
+  assert.match(prompts[2].system, /SEMANTIC REPAIR:/);
+  assert.equal(prompts[2].user, prompts[0].user, 'Correction uses original evidence, never the rejected draft');
   assert.equal(prompts[1].outputKind, 'review');
   assert.equal(JSON.parse(prompts[1].user).sources[0].parentContextOnly, item.parentContext);
   assert.doesNotMatch(JSON.stringify(result), /You can keep working/);
