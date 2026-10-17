@@ -29,10 +29,45 @@ dependencies['../src/lib/assistant-service'] = await compile('src/lib/assistant-
 dependencies['./assistant-acceptance-fixtures'] = await compile('scripts/assistant-acceptance-fixtures');
 const { acceptanceFixtures, evaluateAcceptance } = await import(dependencies['./assistant-acceptance-fixtures']);
 const { default: compiledWorker, checkAcceptanceInference } = await import(await compile('scripts/assistant-acceptance-worker'));
-const { prepareAssistantCorpus, validateAssistantOutput } = await import(dependencies['./assistant-core']);
+const { assistantPrompt, prepareAssistantCorpus, validateAssistantOutput } = await import(dependencies['./assistant-core']);
+// Adapt fixed synthetic answer mocks to the actual internal provider contract.
+// No production adapter or verifier accepts quote text as a fallback. A bad
+// synthetic quote deliberately becomes an unknown ID and must fail closed.
+function spanModelOutput(input, raw) {
+  if (input.response_format.json_schema.name === 'discussion_answer_review') return raw;
+  assert(input.response_format.json_schema.schema.properties.claims.items.properties.evidence.items.properties.spanId,
+    'Generation must constrain server-owned citation IDs, not model-written quotations');
+  let value;
+  try { value = JSON.parse(raw); } catch { return raw; }
+  const prompt = JSON.parse(input.messages.find(message => message.role === 'user').content);
+  const catalog = prompt.sources.flatMap(source => (source.spans ?? []).map(span => ({ ...span, sourceId: source.id })));
+  const normalize = text => text.replace(/\s+/gu, ' ').trim();
+  for (const field of ['claims', 'disagreements']) {
+    if (!Array.isArray(value[field])) continue;
+    value[field] = value[field].map(claim => ({ ...claim, evidence: Array.isArray(claim.evidence) ? claim.evidence.map(item => {
+      if (item && typeof item.spanId === 'string') return item;
+      const quote = typeof item?.quote === 'string' ? normalize(item.quote) : '';
+      const match = quote.length >= 12 && item.quote.length <= 400
+        ? catalog.find(span => span.sourceId === item.sourceId && normalize(span.quote).includes(quote)) : undefined;
+      return { spanId: match?.id ?? 'unknown-synthetic-span' };
+    }) : claim.evidence }));
+  }
+  return JSON.stringify(value);
+}
+function resolvedFixtureDraft(fixture, draft) {
+  const checked = validateAssistantOutput(JSON.stringify(draft), prepareAssistantCorpus(fixture.corpus, fixture.input), Date.now(), fixture.input);
+  return { ...draft, claims: checked.claims, disagreements: checked.disagreements };
+}
 // Only the Node test loader supplies a cloudflare:workers stub. The deployed
 // evaluation Worker uses Cloudflare's actual dynamic runtime import.
-const worker = { fetch(request, settings) { runtimeEnvironment.ASSISTANT_AI = settings.ASSISTANT_AI; runtimeEnvironment.GROQ_API_KEY = settings.GROQ_API_KEY; return compiledWorker.fetch(request, settings); } };
+const worker = { fetch(request, settings) {
+  const binding = settings.ASSISTANT_AI && { async run(model, input) {
+    const value = await settings.ASSISTANT_AI.run(model, input);
+    return typeof value?.response === 'string' ? { ...value, response: spanModelOutput(input, value.response) } : value;
+  } };
+  runtimeEnvironment.ASSISTANT_AI = binding; runtimeEnvironment.GROQ_API_KEY = settings.GROQ_API_KEY;
+  return compiledWorker.fetch(request, { ...settings, ASSISTANT_AI: binding });
+} };
 const secret = 'synthetic-test-secret-'.repeat(3);
 const env = () => ({ ACCEPTANCE_SECRET: secret, ACCEPTANCE_EXPIRES: String(Date.now() + 60_000), ASSISTANT_AI: { run: async () => { throw Error('Inference must not run'); } } });
 const request = (body = { id: 'post-question' }, headers = {}, url = 'https://temporary.workers.dev/evaluate') => new Request(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
@@ -167,7 +202,9 @@ test('messy public evidence preserves UUIDs and validates the complete numerical
       assert.equal(reply.status, 502);
       assert.equal(value.passed, false);
       assert.equal(value.serviceStatus, 502);
-      assert.equal(value.syntheticDiagnostic.stage, 'source-validation');
+      assert.equal(value.syntheticDiagnostic.stage, 'application-service');
+      assert.deepEqual(value.syntheticDiagnostic.serviceFailure, { stage: 'generation', status: 502, code: 'citation_source' });
+      assert.equal(value.syntheticDiagnostic.output, undefined, 'Unresolved provider output must never reach the public-output callback');
     }
   }
 });
@@ -277,10 +314,10 @@ test('independent review rejects fabricated meaning without replacing it with a 
   assert.equal(evaluation.passed, false, 'Rejected prose must not masquerade as a successful factual answer');
   assert.equal(evaluation.syntheticDiagnostic.output.status, 'insufficient');
   assert.deepEqual(evaluation.syntheticDiagnostic.output.claims, []);
-  assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawModelOutput), draft, 'Diagnostics retain the draft, not the review response');
+  assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawModelOutput), resolvedFixtureDraft(fixture, draft), 'Diagnostics retain the resolved draft, not the review response');
   assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawReviewOutput), { checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false });
   assert.deepEqual(evaluation.syntheticDiagnostic.inferenceRounds.map(round => [round.kind, round.maxAttempts, round.semanticRepair]), [['answer', 2, false], ['review', 2, false], ['answer', 1, true]]);
-  assert.deepEqual(evaluation.syntheticDiagnostic.inferenceRounds.map(round => JSON.parse(round.rawOutputs[0])), [draft, { checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false }, draft]);
+  assert.deepEqual(evaluation.syntheticDiagnostic.inferenceRounds.map(round => JSON.parse(round.rawOutputs[0])), [resolvedFixtureDraft(fixture, draft), { checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false }, resolvedFixtureDraft(fixture, draft)]);
   assert(evaluation.checks.some(check => check.name === 'application_evidence_reviewed_when_needed' && check.passed));
 });
 
@@ -293,7 +330,7 @@ test('a malformed review preserves separate draft and review diagnostics on the 
   assert.equal(reply.status, 502);
   const result = await reply.json();
   assert.equal(result.syntheticDiagnostic.serviceFailure.stage, 'review');
-  assert.deepEqual(result.syntheticDiagnostic.output, draft);
+  assert.deepEqual(result.syntheticDiagnostic.output, resolvedFixtureDraft(fixture, draft));
   assert.equal(result.syntheticDiagnostic.rawReviewOutput, rawReviewOutput);
   const retained = await readAcceptanceFailureDiagnostic(Response.json(result, { status: 502, headers: { 'X-Assistant-Acceptance': 'v1' } }), fixture.id, result.model);
   assert.deepEqual(retained.inferenceRounds, result.syntheticDiagnostic.inferenceRounds);
@@ -343,7 +380,7 @@ test('actual evaluation permits exactly six Groq requests when both initial phas
     assert(number <= 6, 'Recovery must never reset format-repair allowances');
     const isReview = body.response_format.json_schema.name === 'discussion_answer_review';
     const content = isReview ? JSON.stringify({ checks: [{ id: 'claim:0', supported: number === 6 }], fulfillsTask: number === 6 }) : number === 2 ? initial : corrected;
-    return Response.json({ choices: [{ finish_reason: 'stop', message: { content } }] });
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: spanModelOutput(body, content) } }] });
   };
   try {
     const result = await (await worker.fetch(request(), { ...env(), ACCEPTANCE_PROVIDER: 'groq', GROQ_API_KEY: 'synthetic-local-secret' })).json();
@@ -355,6 +392,22 @@ test('actual evaluation permits exactly six Groq requests when both initial phas
     assert.doesNotMatch(calls[4].messages[0].content, /FORMAT REPAIR:/);
     assert.equal(result.syntheticDiagnostic, undefined); assert.doesNotMatch(JSON.stringify(result), /Tuesday|Friday|synthetic-local-secret/);
   } finally { globalThis.fetch = oldFetch; }
+});
+
+test('zero safe citation catalog allows only caller-scoped revalidation and empty insufficient output', () => {
+  const base = acceptanceFixtures.find(item => item.id === 'post-question');
+  const corpus = { ...base.corpus, sources: [{ ...base.corpus.sources[0], body: 'An indivisible report ' + 'with more unpunctuated words '.repeat(30) + '.' }] };
+  const prepared = prepareAssistantCorpus(corpus, base.input);
+  assert.deepEqual(assistantPrompt(base.input, prepared, corpus).evidenceSpans, []);
+  const result = validateAssistantOutput(JSON.stringify({ status: 'insufficient', claims: [], disagreements: [], unanswered: [] }), prepared, Date.now(), base.input);
+  const check = (events, rounds = [], candidate = result) => checkAcceptanceInference(base.input, corpus, candidate, 'workers-ai', events, rounds);
+  assert.deepEqual(check(['authenticate', 'corpus', 'corpus']), { sequence: true, budget: true,
+    counts: { answers: 0, reviews: 0, transportCalls: 0 }, noSafeEvidence: true });
+  for (const events of [['authenticate', 'corpus'], ['authenticate', 'corpus', 'reserve', 'corpus'], ['authenticate', 'corpus', 'generate', 'runtime-binding', 'corpus']]) {
+    assert.equal(check(events).sequence, false);
+  }
+  assert.equal(check(['authenticate', 'corpus', 'corpus'], [], { ...result, sources: corpus.sources }).sequence, false);
+  assert.equal(check(['authenticate', 'corpus', 'corpus'], [], { ...result, status: 'answered' }).sequence, false);
 });
 
 test('failed distinct recovery preserves every draft and verdict only in protected synthetic diagnostics', async () => {
@@ -371,7 +424,7 @@ test('failed distinct recovery preserves every draft and verdict only in protect
   assert.deepEqual(result.inferenceCounts, { answers: 2, reviews: 2, transportCalls: 0 });
   const rounds = result.syntheticDiagnostic.inferenceRounds;
   assert.deepEqual(rounds.map(item => [item.kind, item.maxAttempts, item.semanticRepair]), [['answer', 2, false], ['review', 2, false], ['answer', 1, true], ['review', 1, false]]);
-  assert.deepEqual([JSON.parse(rounds[0].rawOutputs[0]), JSON.parse(rounds[2].rawOutputs[0])], drafts);
+  assert.deepEqual([JSON.parse(rounds[0].rawOutputs[0]), JSON.parse(rounds[2].rawOutputs[0])], drafts.map(draft => resolvedFixtureDraft(fixture, draft)));
   assert.deepEqual(JSON.parse(rounds[1].rawOutputs[0]), JSON.parse(rounds[3].rawOutputs[0]));
   assert.deepEqual(result.syntheticDiagnostic.output.claims, []);
   assert(result.checks.some(check => check.name === 'application_provider_call_sequence' && check.passed));
@@ -488,6 +541,83 @@ test('multiple discussion synthesis preserves separate people, timelines and cit
   assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
 });
 
+test('numbered interview summary selects exact server spans and preserves correction, uncertainty and qualification', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'numbered-interview-transcript');
+  const source = fixture.corpus.sources[0];
+  assert(source.body.length > 4000 && source.body.includes('“') && source.body.includes('\nApplicant:'));
+  assert(source.body.indexOf('9. Later correction:') > 4000, 'The important correction must exercise the formerly truncated summary tail');
+  const draft = { status: 'answered', claims: [
+    { text: 'The member corrected their interview date to September 9, 2026; the earlier September 8 entry was a mistake.', evidence: [{ sourceId: source.id, quote: 'My interview was on September 9, 2026, not September 8.' }] },
+    { text: 'The member reported that no final decision was given and their application remained pending.', evidence: [
+      { sourceId: source.id, quote: 'No final decision was given.' }, { sourceId: source.id, quote: 'My application remained pending.' },
+    ] },
+    { text: 'The member did not know when a decision would arrive and was not given a promised completion date.', evidence: [
+      { sourceId: source.id, quote: 'I do not know when a decision will arrive.' }, { sourceId: source.id, quote: 'I was not given a promised completion date.' },
+    ] },
+    { text: 'The member brought an appointment confirmation and printed checklist, describing only their individual experience, not a standard timeline or an official requirement.', evidence: [
+      { sourceId: source.id, quote: 'I brought my appointment confirmation and the printed checklist.' },
+      { sourceId: source.id, quote: 'this is my individual experience, not a standard timeline or an official requirement.' },
+    ] },
+  ], disagreements: [], unanswered: [] };
+  let calls = 0;
+  const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+    calls++;
+    const review = reviewResponse(input); if (review) {
+      const task = JSON.parse(input.messages.find(message => message.role === 'user').content);
+      assert.equal(task.sources[0].body, source.body, 'Reviewer sees the whole original transcript including the late correction');
+      assert(task.candidate.checks.every(check => check.evidence.every(item => typeof item.quote === 'string' && !('spanId' in item))));
+      return review;
+    }
+    const schema = input.response_format.json_schema.schema.properties.claims.items.properties.evidence.items;
+    const task = JSON.parse(input.messages.find(message => message.role === 'user').content);
+    assert.equal(task.sources[0].body, source.body, 'Summary generation must retain the complete bounded transcript, not only its first 4000 characters');
+    assert.equal(task.partial, false, 'The single bounded transcript fits the unchanged total context budget');
+    assert.deepEqual(schema.required, ['spanId']);
+    assert.deepEqual(Object.keys(schema.properties), ['spanId']);
+    assert(schema.properties.spanId.enum.length > 1);
+    const raw = spanModelOutput(input, JSON.stringify(draft));
+    const candidate = JSON.parse(raw);
+    assert(candidate.claims.every(claim => claim.evidence.every(item => Object.keys(item).join() === 'spanId')));
+    assert.doesNotMatch(raw, /"quote"|"sourceId"/);
+    return { response: raw };
+  } } };
+  const evaluation = await (await worker.fetch(request({ id: fixture.id }), settings)).json();
+  assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
+  assert.equal(calls, 2);
+  assert.deepEqual(evaluation.inferenceCounts, { answers: 1, reviews: 1, transportCalls: 0 });
+  assert.equal(evaluation.syntheticDiagnostic, undefined);
+  for (const name of ['corrected_interview_date_preserved', 'pending_outcome_preserved', 'decision_uncertainty_preserved', 'individual_limitation_preserved', 'late_correction_cited', 'bounded_exact_body_quotes']) {
+    assert(evaluation.checks.some(check => check.name === name && check.passed), name);
+  }
+  const result = validateAssistantOutput(JSON.stringify(draft), prepareAssistantCorpus(fixture.corpus, fixture.input), Date.now(), fixture.input);
+  for (const [index, text, expectedCheck] of [
+    [0, 'The member attended the interview on September 8, 2026.', 'corrected_interview_date_preserved'],
+    [1, 'The application was approved immediately.', 'no_approval_or_universal_outcome'],
+    [2, 'The decision would arrive tomorrow.', 'decision_uncertainty_preserved'],
+    [3, 'All applicants must bring those documents.', 'individual_limitation_preserved'],
+  ]) {
+    const changed = structuredClone(result); changed.claims[index].text = text;
+    assert(evaluateAcceptance(fixture, changed).checks.some(check => check.name === expectedCheck && !check.passed), expectedCheck);
+  }
+});
+
+test('unknown model span IDs cannot reach evidence review or protected resolved-output diagnostics', async () => {
+  let calls = 0;
+  const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+    calls++;
+    assert.equal(input.response_format.json_schema.name, 'discussion_answer');
+    return { response: JSON.stringify({ status: 'answered', claims: [{ text: 'A fabricated report.', evidence: [{ spanId: 'not-a-catalog-span' }] }], disagreements: [], unanswered: [] }) };
+  } } };
+  const reply = await worker.fetch(request({ id: 'numbered-interview-transcript' }), settings);
+  assert.equal(reply.status, 502);
+  const result = await reply.json();
+  assert.equal(calls, 1);
+  assert.deepEqual(result.syntheticDiagnostic.serviceFailure, { stage: 'generation', status: 502, code: 'citation_source' });
+  assert.equal(result.syntheticDiagnostic.output, undefined);
+  assert.equal(result.syntheticDiagnostic.rawReviewOutput, undefined);
+  assert.equal(result.syntheticDiagnostic.inferenceRounds, undefined);
+});
+
 test('semantic gate rejects verbose answers, irrelevant details and answering a previous question', () => {
   const base = { status: 'answered', claims: [], disagreements: [], unanswered: [], sources: [], coverage: { sourceCount: 2, partial: false }, generatedAt: new Date().toISOString(), cached: false, notice: '' };
   const cases = [
@@ -544,10 +674,10 @@ test('invalid synthetic model output remains a failed HTTP response with protect
     assert.equal(value.passed, false);
     assert.equal(value.syntheticDiagnostic.source, 'compiled-synthetic-fixture-only');
     assert.equal(value.syntheticDiagnostic.fixtureId, 'post-question');
-    assert.equal(value.syntheticDiagnostic.stage, 'source-validation');
-    assert.deepEqual(value.syntheticDiagnostic.serviceFailure, { stage: 'generation', status: 502, code: raw === JSON.stringify(invalid) ? 'citation_quote' : 'output_json' });
-    if (raw === JSON.stringify(invalid)) assert.deepEqual(value.syntheticDiagnostic.output, invalid);
-    else assert.equal(value.syntheticDiagnostic.rawOutput, raw);
+    assert.equal(value.syntheticDiagnostic.stage, 'application-service');
+    assert.deepEqual(value.syntheticDiagnostic.serviceFailure, { stage: 'generation', status: 502, code: raw === JSON.stringify(invalid) ? 'citation_source' : 'output_json' });
+    assert.equal(value.syntheticDiagnostic.output, undefined, 'Unresolved citation IDs are not public source evidence');
+    assert.equal(value.syntheticDiagnostic.rawOutput, undefined, 'Provider output is not captured before strict resolution');
     assert.equal((await worker.fetch(request(undefined, { Authorization: '' }), settings)).status, 404);
     assert.equal((await worker.fetch(request({ id: 'post-question', prompt: 'caller text' }), settings)).status, 400);
   }
@@ -614,7 +744,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 27);
+  assert.equal(acceptanceFixtures.length, 28);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);

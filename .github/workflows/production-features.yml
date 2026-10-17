@@ -9,6 +9,7 @@ name: Release current VisaThreads AI features
 # one total deadline, bounded schema recovery and large-discussion acceptance.
 # Keep the evaluation manifest in exactly the authenticated readiness order.
 # Require atomic source facts and one bounded, independently verified correction.
+# Resolve model-selected evidence IDs to server-owned complete source excerpts.
 
 on:
   workflow_dispatch:

@@ -276,45 +276,66 @@ test('provider diagnostic failure is contained and successful inference emits no
   assert.deepEqual(events, []);
 });
 
-test('both providers receive bounded schemas citing only the server-selected sources', async () => {
+test('all providers receive bounded span schemas and restore only server-selected source evidence', async () => {
   const otherId = '00000000-0000-4000-8000-000000000002';
   const unrelatedId = 'q:00000000-0000-4000-8000-000000000099';
   const reply = { ...source, id: `a:${otherId}`, kind: 'reply', body: 'My passport arrived on Thursday.' };
   const corpus = core.prepareAssistantCorpus({ sources: [source, reply], partial: false }, input);
   // Untrusted browser fields cannot add IDs to the generated provider schema.
-  const parsed = core.parseAssistantRequest({ ...input, sourceIds: [unrelatedId], sources: [{ id: unrelatedId }] });
+  const parsed = core.parseAssistantRequest({ ...input, sourceIds: [unrelatedId], sources: [{ id: unrelatedId }], evidenceSpans: [{ id: 'attacker-span', sourceId: unrelatedId, quote: 'Untrusted browser quote.' }] });
+  assert.equal(parsed.evidenceSpans, undefined);
   const boundedPrompt = core.assistantPrompt(parsed, corpus);
-  const schemas = [];
+  const selected = boundedPrompt.evidenceSpans.find(span => span.sourceId === source.id && span.quote === source.body);
+  assert(selected, 'The server must supply the exact approved source span');
+  const modelOutput = JSON.stringify({ ...output, claims: [{ ...output.claims[0], evidence: [{ spanId: selected.id }] }] });
+  const schemas = [], validated = [];
+  boundedPrompt.validateOutput = raw => validated.push(raw);
   const workersResult = await provider.runAssistantModel(boundedPrompt, {
     provider: 'workers-ai', binding: { run: async (_model, payload) => {
       schemas.push(payload.response_format.json_schema.schema);
-      return { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(output) } }] };
+      return { choices: [{ finish_reason: 'stop', message: { content: modelOutput } }] };
     } },
   });
   const openaiResult = await provider.runAssistantModel(boundedPrompt, {
     provider: 'openai', apiKey: token, fetcher: async (_url, init) => {
       schemas.push(JSON.parse(init.body).text.format.schema);
-      return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(output) }] }] });
+      return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: modelOutput }] }] });
+    },
+  });
+  const groqResult = await provider.runAssistantModel(boundedPrompt, {
+    provider: 'groq', apiKey: token, fetcher: async (_url, init) => {
+      schemas.push(JSON.parse(init.body).response_format.json_schema.schema);
+      return Response.json({ choices: [{ finish_reason: 'stop', message: { content: modelOutput } }] });
     },
   });
   for (const schema of schemas) {
     for (const [key, minimum] of [['claims', 1], ['disagreements', 2]]) {
       const claim = schema.properties[key].items;
       const evidence = claim.properties.evidence;
-      assert.deepEqual(evidence.items.properties.sourceId.enum, [source.id, reply.id]);
-      assert(!evidence.items.properties.sourceId.enum.includes(unrelatedId));
+      assert.deepEqual(evidence.items.required, ['spanId']);
+      assert.deepEqual(evidence.items.properties.spanId.enum, boundedPrompt.evidenceSpans.map(span => span.id));
+      assert(!evidence.items.properties.spanId.enum.includes('attacker-span'));
+      assert.equal(evidence.items.additionalProperties, false);
+      assert.equal(evidence.items.properties.sourceId, undefined);
+      assert.equal(evidence.items.properties.quote, undefined);
       assert.equal(evidence.minItems, minimum);
       assert.equal(evidence.maxItems, 4);
-      assert.equal(evidence.items.properties.quote.minLength, 12);
-      assert.equal(evidence.items.properties.quote.maxLength, 400);
       assert.equal(claim.properties.text.maxLength, 700);
     }
     assert.equal(schema.properties.unanswered.items.maxLength, 400);
   }
-  for (const raw of [workersResult, openaiResult]) {
+  assert.equal(schemas.length, 3);
+  assert.deepEqual(validated, [workersResult, openaiResult, groqResult]);
+  for (const raw of [workersResult, openaiResult, groqResult]) {
     assert.equal(core.validateAssistantOutput(raw, corpus).status, 'answered');
+    assert.deepEqual(JSON.parse(raw).claims[0].evidence, output.claims[0].evidence);
+    assert.doesNotMatch(raw, /spanId|attacker-span/);
   }
-  const laterSchema = provider.assistantOutputSchema(core.assistantPrompt(input, { sources: [reply], partial: false }));
-  assert.deepEqual(laterSchema.properties.claims.items.properties.evidence.items.properties.sourceId.enum, [reply.id]);
+  const laterPrompt = core.assistantPrompt(input, { sources: [reply], partial: false });
+  const laterSchema = provider.assistantOutputSchema(laterPrompt);
+  assert.deepEqual(laterSchema.properties.claims.items.properties.evidence.items.properties.spanId.enum, laterPrompt.evidenceSpans.map(span => span.id));
+  assert.deepEqual(laterPrompt.evidenceSpans.map(span => span.sourceId), [reply.id]);
+  const laterResolved = JSON.parse(provider.resolveAssistantEvidence(JSON.stringify({ ...output, claims: [{ ...output.claims[0], evidence: [{ spanId: laterPrompt.evidenceSpans[0].id }] }] }), laterPrompt));
+  assert.deepEqual(laterResolved.claims[0].evidence, [{ sourceId: reply.id, quote: reply.body }]);
   assert.equal(provider.ASSISTANT_OUTPUT_SCHEMA.properties.claims.items.properties.evidence.items.properties.sourceId.enum, undefined);
 });

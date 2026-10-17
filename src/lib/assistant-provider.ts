@@ -1,7 +1,9 @@
-import { AssistantError, readBoundedJson } from './assistant-core';
+import { AssistantError, readBoundedJson, type AssistantEvidenceSpan, type AssistantValidationCode } from './assistant-core';
 import models from './assistant-models.json';
 
 export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[];
+  /** Server-selected exact excerpts. An absent catalog alone permits legacy prompts. */
+  evidenceSpans?: AssistantEvidenceSpan[];
   /** In-process validation only; never serialized or supplied by the caller. */
   validateOutput?(raw: string): void;
   /** Server-only cap; recovery cannot multiply transport/schema retries. */
@@ -25,6 +27,61 @@ export const ASSISTANT_OUTPUT_SCHEMA = { type: 'object', additionalProperties: f
   unanswered: { type: 'array', maxItems: 4, items: { type: 'string', maxLength: 400 } },
 } };
 
+const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+const evidenceFailure = (code: AssistantValidationCode): never => {
+  throw new AssistantError(502, 'The assistant could not verify its source references. Please try a more specific question.', undefined, code);
+};
+
+/** Presence is intentional: invalid or empty catalogs must never enable free-text fallback. */
+function evidenceCatalog(prompt: AssistantPrompt): Map<string, AssistantEvidenceSpan> | null {
+  if (prompt.outputKind === 'review' || !Object.hasOwn(prompt, 'evidenceSpans')) return null;
+  const spans: unknown = prompt.evidenceSpans;
+  if (!Array.isArray(spans) || !spans.length || spans.length > 256) return evidenceFailure('citation_schema');
+  const catalog = new Map<string, AssistantEvidenceSpan>();
+  for (const span of spans) {
+    if (!record(span) || Object.keys(span).length !== 3 || typeof span.id !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(span.id)
+      || typeof span.sourceId !== 'string' || !span.sourceId || span.sourceId.length > 256
+      || typeof span.quote !== 'string' || span.quote.trim().length < 12 || span.quote.length > 400
+      || catalog.has(span.id) || (prompt.sourceIds && !prompt.sourceIds.includes(span.sourceId))) return evidenceFailure('citation_schema');
+    catalog.set(span.id, { id: span.id, sourceId: span.sourceId, quote: span.quote });
+  }
+  return catalog;
+}
+
+/** Restore only exact server-selected excerpts; never salvage, fuzzy-match or echo model quotations. */
+export function resolveAssistantEvidence(raw: string, prompt: AssistantPrompt): string {
+  const catalog = evidenceCatalog(prompt);
+  if (!catalog) return raw;
+  if (raw.length > 24_000) return evidenceFailure('output_schema');
+  let value: unknown;
+  try { value = JSON.parse(raw); } catch { return evidenceFailure('output_json'); }
+  if (!record(value) || Object.keys(value).length !== 4 || typeof value.status !== 'string' || !['answered', 'insufficient'].includes(value.status)
+    || !Array.isArray(value.claims) || !Array.isArray(value.disagreements) || !Array.isArray(value.unanswered)) return evidenceFailure('output_schema');
+  const resolveClaims = (items: unknown[], maximum: number, minimumEvidence: number) => {
+    if (items.length > maximum) return evidenceFailure('claim_limit');
+    return items.map(item => {
+      if (!record(item) || Object.keys(item).length !== 2 || typeof item.text !== 'string' || !item.text.trim() || item.text.length > 700) return evidenceFailure('claim_text');
+      if (!Array.isArray(item.evidence)) return evidenceFailure('citation_schema');
+      if (item.evidence.length < minimumEvidence) return evidenceFailure('citation_missing');
+      if (item.evidence.length > 4) return evidenceFailure('claim_limit');
+      const selected = new Set<string>();
+      return { text: item.text, evidence: item.evidence.map(entry => {
+        if (!record(entry) || Object.keys(entry).length !== 1 || typeof entry.spanId !== 'string' || selected.has(entry.spanId)) return evidenceFailure('citation_schema');
+        const span = catalog.get(entry.spanId);
+        if (!span) return evidenceFailure('citation_source');
+        selected.add(entry.spanId);
+        return { sourceId: span.sourceId, quote: span.quote };
+      }) };
+    });
+  };
+  if (value.unanswered.length > 4 || value.unanswered.some(item => typeof item !== 'string' || item.length > 400)) return evidenceFailure('unanswered_limit');
+  const claims = resolveClaims(value.claims, 6, 1), disagreements = resolveClaims(value.disagreements, 3, 2);
+  if (value.status === 'answered' && !claims.length) return evidenceFailure('answered_without_claims');
+  const resolved = JSON.stringify({ status: value.status, disagreements, claims, unanswered: value.unanswered });
+  if (resolved.length > 24_000) return evidenceFailure('output_schema');
+  return resolved;
+}
+
 /** Constrain citations to the server-selected corpus before generation. */
 export function assistantOutputSchema(prompt: AssistantPrompt) {
   if (prompt.outputKind === 'review') {
@@ -36,6 +93,15 @@ export function assistantOutputSchema(prompt: AssistantPrompt) {
         properties: { id: { type: 'string', enum: ids }, supported: { type: 'boolean' } },
       } },
       fulfillsTask: { type: 'boolean', description: 'Whether the candidate satisfies the supplied task: answer, discussion summary, or interval catch-up. Summary and catch-up do not require a user question.' },
+    } };
+  }
+  const catalog = evidenceCatalog(prompt);
+  if (catalog) {
+    const selectedEvidence = { type: 'object', additionalProperties: false, required: ['spanId'], properties: { spanId: { type: 'string', enum: [...catalog.keys()] } } };
+    const selectedClaim = (minimum: number) => ({ ...claim, properties: { ...claim.properties, evidence: { ...claim.properties.evidence, minItems: minimum, items: selectedEvidence } } });
+    return { ...ASSISTANT_OUTPUT_SCHEMA, properties: { ...ASSISTANT_OUTPUT_SCHEMA.properties,
+      claims: { ...ASSISTANT_OUTPUT_SCHEMA.properties.claims, description: 'Individual attributed factual reports supported by listed evidence span IDs. Put comparisons of conflicting reports in disagreements, not only in claims.', items: selectedClaim(1) },
+      disagreements: { ...ASSISTANT_OUTPUT_SCHEMA.properties.disagreements, description: 'Populate this FIRST. Compare relevant contradictory reports using evidence span IDs belonging to at least two different sources. An empty array means no relevant conflicting reports were found.', items: selectedClaim(2) },
     } };
   }
   if (!prompt.sourceIds?.length) return ASSISTANT_OUTPUT_SCHEMA;
@@ -112,7 +178,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
           if (first && first.finish_reason !== 'stop') fail('incomplete_output');
           const content = first?.message?.content ?? payload.response;
           const result = typeof content === 'string' ? content : content ? JSON.stringify(content) : '';
-          if (result && result.length <= 24_000) { prompt.validateOutput?.(result); return result; }
+          if (result && result.length <= 24_000) { const resolved = resolveAssistantEvidence(result, prompt); prompt.validateOutput?.(resolved); return resolved; }
           if (result.length > 24_000) fail('oversized_output');
         }
         fail('empty_output');
@@ -129,6 +195,9 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       // Even an invalid in-process override can never extend the hard cap.
       const maximumAttempts = typeof prompt.maxAttempts === 'number' && Number.isFinite(prompt.maxAttempts)
         ? Math.max(1, Math.min(2, Math.floor(prompt.maxAttempts))) : 2;
+      const citationRepair = Object.hasOwn(prompt, 'evidenceSpans') && !review
+        ? 'Every evidence entry contains only a spanId selected from the supplied evidence catalog. Do not output quote or sourceId fields, invent IDs, or repeat a spanId within one evidence list.'
+        : 'Every quote is one continuous verbatim body excerpt of 12–400 characters, never joined with ellipses. Copy only actual source IDs and exact text from the supplied source bodies.';
       for (let attempt = 0; attempt < maximumAttempts; attempt++) {
       signal.throwIfAborted();
       reason = 'network_error';
@@ -138,7 +207,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         method: 'POST', redirect: 'manual', signal,
         headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: selected,
-          messages: [{ role: 'system', content: prompt.system + (attempt ? '\nFORMAT REPAIR: The previous attempt failed format or exact-citation validation. Return a concise object matching every required field. At most 6 claims, 3 disagreements, 4 unanswered items; each claim has 1–4 evidence entries, each disagreement 2–4. Every quote is one continuous verbatim body excerpt of 12–400 characters, never joined with ellipses. Copy only actual source IDs and exact text from the supplied source bodies. Each text is at most 700 characters. Review checks, if requested, include every supplied check ID exactly once. Do not add facts or change the requested task.' : '') }, { role: 'user', content: prompt.user }],
+          messages: [{ role: 'system', content: prompt.system + (attempt ? `\nFORMAT REPAIR: The previous attempt failed format or exact-citation validation. Return a concise object matching every required field. At most 6 claims, 3 disagreements, 4 unanswered items; each claim has 1–4 evidence entries, each disagreement 2–4. ${citationRepair} Each text is at most 700 characters. Review checks, if requested, include every supplied check ID exactly once. Do not add facts or change the requested task.` : '') }, { role: 'user', content: prompt.user }],
           response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } },
           reasoning_effort: review ? models.groq.reviewReasoningEffort : models.groq.reasoningEffort, include_reasoning: false,
           max_completion_tokens: review ? models.groq.reviewMaxTokens : models.groq.answerMaxTokens,
@@ -188,10 +257,11 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       const content = first.message?.content;
       if (typeof content !== 'string' || !content.trim()) return fail('empty_output');
       if (content.length > 24_000) return fail('oversized_output');
-      try { prompt.validateOutput?.(content); }
+      let resolved: string;
+      try { resolved = resolveAssistantEvidence(content, prompt); prompt.validateOutput?.(resolved); }
       catch (error) {
-        // A 200 response may still contain a non-verbatim quote. Regenerate
-        // from the original evidence, never repair/drop evidence in-place.
+        // A 200 response may still contain an invalid span ID or legacy quote.
+        // Regenerate from original evidence, never repair/drop proof in-place.
         // This shares the HTTP400 repair budget: at most two answer attempts.
         const repairable = error instanceof AssistantError && error.code && [
           'output_json', 'output_schema', 'claim_limit', 'claim_text', 'citation_schema',
@@ -201,7 +271,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         if (repairable && !review && attempt + 1 < maximumAttempts && !signal.aborted) continue;
         throw error;
       }
-      return content;
+      return resolved;
       }
       return fail('provider_error');
     }
@@ -219,8 +289,9 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
     const output = data.output.filter(item => item.type === 'message').flatMap(item => item.content ?? []).filter(part => part.type === 'output_text').map(part => part.text ?? '').join('');
     if (!output) fail('empty_output');
     if (output.length > 24_000) fail('oversized_output');
-    prompt.validateOutput?.(output);
-    return output;
+    const resolved = resolveAssistantEvidence(output, prompt);
+    prompt.validateOutput?.(resolved);
+    return resolved;
   } catch (error) {
     // Allowlisted runtime categories only; never retain an exception message,
     // URL, authorization header, or provider response body.

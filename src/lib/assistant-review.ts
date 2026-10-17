@@ -1,5 +1,5 @@
 import type { AssistantCorpus, AssistantRequest, AssistantResult } from './assistant-contract';
-import { AssistantError, assistantPrompt, redactAssistantText } from './assistant-core';
+import { AssistantError, assistantPromptContext, redactAssistantText } from './assistant-core';
 import type { AssistantPrompt } from './assistant-provider';
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -68,7 +68,7 @@ export function assistantReviewPrompt(input: AssistantRequest, corpus: Assistant
   // Use the same resolved question as generation, with the complete supplied
   // source text. Do not shrink sources to selected quotes: nearby corrections,
   // who did what, and the parent discussion can change a quote's meaning.
-  const task = JSON.parse(assistantPrompt(input, corpus).user) as Record<string, unknown>;
+  const task = assistantPromptContext(input, corpus);
   const taskRubric = input.mode === 'catchup'
     ? 'REVIEW TASK — CATCH-UP: The requested task is to summarize substantive new posts or replies within the supplied interval. No user question is required. fulfillsTask is true when the candidate describes the relevant new reported events, preserves their dates and meaning, and keeps older parent context separate from new events. A concise attributed report of the available event can fulfill this task; do not demand an answer to an absent question.'
     : input.mode === 'summary'
@@ -91,6 +91,7 @@ export function assistantReviewPrompt(input: AssistantRequest, corpus: Assistant
       'Distinguish an actual reported event from a question, an unconfirmed premise, a plan, a hypothetical, a hope, or a thank-you repeating someone’s understanding. For example, “Thank you, so I can keep working?” does NOT prove work authorization or that the member actually continued working. Describing that member as asking or understanding is supported only if the candidate clearly keeps that uncertainty.',
       'Keep people, immigration statuses and sequences distinct: one person’s OPT status, an approved consular petition, entry/stamping, a proposed change of status, and actual H-1B work are not interchangeable. Do not supply missing links from your own knowledge. Do not merge different people’s events into one timeline.',
       'An individual anecdote supports only an attributed report. Reject current legal rules, personal eligibility or permission, guaranteed outcomes, predictions, generalized timelines, and universal consensus inferred from community comments. A reply’s assertion may be described as that reply’s unverified advice; it must not become authoritative instruction to the user.',
+      'For a summary, preserve explicit personal-only limitations in the candidate text, not just quotations. If a source expressly says its experience is not a standard timeline or requirement, omitting that qualification fails fulfillsTask even when individual events are correctly attributed. Routine background details cannot substitute for a reported outcome, corrected date or unresolved status.',
       'A disagreement check needs at least two cited reports that actually contradict one another on the same relevant issue. Different dates, different people or circumstances, or one question plus one answer do not automatically establish a contradiction. Do not endorse a winner without evidence.',
       'Judge fulfillsTask for the candidate as a WHOLE using the task rubric above. It must contain useful supported substance relevant to the requested task and preserve material qualifications and relevant conflicting evidence. A technically accurate but irrelevant quote or acknowledgment does not fulfill the task. Do not require literal repetition of the question or every source detail, but reject omission of the requested point or any qualification that changes its meaning. supported checks factual entailment; fulfillsTask independently checks task completion. Both are required.',
       'Review the original source language when possible. A translation may paraphrase faithfully but may not introduce dates, certainty or meaning absent from the original. If you cannot establish fidelity, mark false.',
