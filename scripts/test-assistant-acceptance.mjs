@@ -552,6 +552,10 @@ test('multiple discussion synthesis preserves separate people, timelines and cit
   let calls = 0;
   const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
     calls++;
+    if (input.response_format.json_schema.name === 'discussion_answer_review') {
+      assert.match(input.messages[0].content, /Do not require a disagreement merely because individual experiences have different timelines/);
+      assert.deepEqual(JSON.parse(input.messages[1].content).candidate.checks.map(check => check.kind), ['claim']);
+    }
     return reviewResponse(input) ?? { response: JSON.stringify({ status: 'answered', claims: [{ text: 'One member’s Chennai H-1B stamping completed after seven days, while another member reported twelve days. These are two individual experiences.', evidence }], disagreements: [], unanswered: [] }) };
   } } };
   const evaluation = await (await worker.fetch(request({ id: fixture.id }), settings)).json();
