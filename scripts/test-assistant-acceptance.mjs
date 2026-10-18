@@ -35,24 +35,42 @@ const { assistantPrompt, prepareAssistantCorpus, validateAssistantOutput } = awa
 // synthetic quote deliberately becomes an unknown ID and must fail closed.
 function spanModelOutput(input, raw) {
   if (input.response_format.json_schema.name === 'discussion_answer_review') return raw;
-  assert(input.response_format.json_schema.schema.properties.claims.items.properties.evidence.items.properties.spanId,
-    'Generation must constrain server-owned citation IDs, not model-written quotations');
+  const schema = input.response_format.json_schema.schema;
+  assert.equal(schema.properties.claims.type, 'object', 'Generation must structurally bound output using fixed slots');
+  assert.deepEqual(schema.properties.claims.required, Array.from({ length: 6 }, (_, index) => `slot${index + 1}`));
   let value;
   try { value = JSON.parse(raw); } catch { return raw; }
+  // Already encoded fixtures are left untouched, including deliberately bad
+  // keys. Never conceal an overflowing/unknown model slot in this test adapter.
+  if (!Array.isArray(value.claims) && !Array.isArray(value.disagreements) && !Array.isArray(value.unanswered)) return raw;
   const prompt = JSON.parse(input.messages.find(message => message.role === 'user').content);
   const catalog = prompt.sources.flatMap(source => (source.spans ?? []).map(span => ({ ...span, sourceId: source.id })));
   const normalize = text => text.replace(/\s+/gu, ' ').trim();
   for (const field of ['claims', 'disagreements']) {
     if (!Array.isArray(value[field])) continue;
-    value[field] = value[field].map(claim => ({ ...claim, evidence: Array.isArray(claim.evidence) ? claim.evidence.map(item => {
+    value[field] = fixedSlots(value[field].map(claim => ({ ...claim, evidence: Array.isArray(claim.evidence) ? fixedSlots(claim.evidence.map(item => {
       if (item && typeof item.spanId === 'string') return item;
       const quote = typeof item?.quote === 'string' ? normalize(item.quote) : '';
       const match = quote.length >= 12 && item.quote.length <= 400
         ? catalog.find(span => span.sourceId === item.sourceId && normalize(span.quote).includes(quote)) : undefined;
       return { spanId: match?.id ?? 'unknown-synthetic-span' };
-    }) : claim.evidence }));
+    }), 4) : claim.evidence })), field === 'claims' ? 6 : 3);
   }
+  if (Array.isArray(value.unanswered)) value.unanswered = fixedSlots(value.unanswered, 4);
   return JSON.stringify(value);
+}
+function fixedSlots(items, capacity) {
+  // Include overflow explicitly so malformed fixtures test strict rejection,
+  // rather than truncating the evidence or answer to make it appear valid.
+  return Object.fromEntries(Array.from({ length: Math.max(capacity, items.length) }, (_, index) => [`slot${index + 1}`, items[index] ?? null]));
+}
+function schemaDefinition(root, value) {
+  const concrete = value.anyOf?.find(item => item.type !== 'null') ?? value;
+  if (!concrete.$ref) return concrete;
+  assert.match(concrete.$ref, /^#\/\$defs\/[^/]+$/);
+  const definition = root.$defs[concrete.$ref.slice('#/$defs/'.length)];
+  assert(definition, 'Every fixed-slot schema reference must resolve locally');
+  return definition;
 }
 function resolvedFixtureDraft(fixture, draft) {
   const checked = validateAssistantOutput(JSON.stringify(draft), prepareAssistantCorpus(fixture.corpus, fixture.input), Date.now(), fixture.input);
@@ -568,7 +586,10 @@ test('numbered interview summary selects exact server spans and preserves correc
       assert(task.candidate.checks.every(check => check.evidence.every(item => typeof item.quote === 'string' && !('spanId' in item))));
       return review;
     }
-    const schema = input.response_format.json_schema.schema.properties.claims.items.properties.evidence.items;
+    const rootSchema = input.response_format.json_schema.schema;
+    const claimSchema = schemaDefinition(rootSchema, rootSchema.properties.claims.properties.slot1);
+    const evidenceSchema = schemaDefinition(rootSchema, claimSchema.properties.evidence);
+    const schema = schemaDefinition(rootSchema, evidenceSchema.properties.slot1);
     const task = JSON.parse(input.messages.find(message => message.role === 'user').content);
     assert.equal(task.sources[0].body, source.body, 'Summary generation must retain the complete bounded transcript, not only its first 4000 characters');
     assert.equal(task.partial, false, 'The single bounded transcript fits the unchanged total context budget');
@@ -577,7 +598,7 @@ test('numbered interview summary selects exact server spans and preserves correc
     assert(schema.properties.spanId.enum.length > 1);
     const raw = spanModelOutput(input, JSON.stringify(draft));
     const candidate = JSON.parse(raw);
-    assert(candidate.claims.every(claim => claim.evidence.every(item => Object.keys(item).join() === 'spanId')));
+    assert(Object.values(candidate.claims).filter(Boolean).every(claim => Object.values(claim.evidence).filter(Boolean).every(item => Object.keys(item).join() === 'spanId')));
     assert.doesNotMatch(raw, /"quote"|"sourceId"/);
     return { response: raw };
   } } };
@@ -616,6 +637,93 @@ test('unknown model span IDs cannot reach evidence review or protected resolved-
   assert.equal(result.syntheticDiagnostic.output, undefined);
   assert.equal(result.syntheticDiagnostic.rawReviewOutput, undefined);
   assert.equal(result.syntheticDiagnostic.inferenceRounds, undefined);
+});
+
+test('compiled acceptance rejects extra and overflowing output slots without dropping malformed evidence', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
+  const draft = { status: 'answered', claims: [{ text: 'The member reported receiving their passport on Friday.', evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] };
+  const mutations = [
+    ['claim_limit', value => { value.claims.slot7 = structuredClone(value.claims.slot1); }],
+    ['claim_limit', value => { value.claims.extra = null; }],
+    ['claim_limit', value => { delete value.claims.slot6; }],
+    ['citation_schema', value => { value.claims.slot1.evidence.slot5 = structuredClone(value.claims.slot1.evidence.slot1); }],
+    ['citation_source', value => { value.claims.slot1.evidence.slot2 = { spanId: 'foreign-span' }; }],
+    ['unanswered_limit', value => { value.unanswered.slot5 = 'Unbounded extra question'; }],
+  ];
+  for (const [code, mutate] of mutations) {
+    let calls = 0;
+    const reply = await worker.fetch(request(), { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+      calls++;
+      assert.equal(input.response_format.json_schema.name, 'discussion_answer', 'Malformed draft must never reach independent review');
+      const encoded = JSON.parse(spanModelOutput(input, JSON.stringify(draft)));
+      mutate(encoded);
+      return { response: JSON.stringify(encoded) };
+    } } });
+    assert.equal(reply.status, 502);
+    const result = await reply.json();
+    assert.equal(calls, 1);
+    assert.equal(result.syntheticDiagnostic.serviceFailure.stage, 'generation');
+    assert.equal(result.syntheticDiagnostic.serviceFailure.status, 502);
+    assert.equal(result.syntheticDiagnostic.serviceFailure.code, code);
+    assert.equal(result.syntheticDiagnostic.output, undefined, 'Never expose a partially salvaged answer');
+    assert.equal(result.syntheticDiagnostic.rawReviewOutput, undefined);
+    assert.equal(result.syntheticDiagnostic.inferenceRounds, undefined);
+  }
+});
+
+test('heterogeneous report summary prioritizes dated actual status without promoting questions or advice', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'heterogeneous-report-summary');
+  const source = fixture.corpus.sources[0];
+  assert(source.body.includes('Practice dialogue') && source.body.includes('Reader FAQ') && source.body.includes('Personal suggestion'));
+  const draft = { status: 'answered', claims: [
+    { text: 'The member reported attending their Dublin interview on June 12, 2026.', evidence: [{ sourceId: source.id, quote: 'My interview in Dublin was on June 12, 2026.' }] },
+    { text: 'Their case status changed to “Issued” on June 18, 2026; this was a portal update, with no passport collection or delivery date reported.', evidence: [
+      { sourceId: source.id, quote: 'On June 18, 2026, my case status changed to “Issued”.' },
+      { sourceId: source.id, quote: 'I have no collection or delivery date to report.' },
+    ] },
+    { text: 'This describes only the member’s personal experience, not a standard timeline or an official requirement.', evidence: [{ sourceId: source.id, quote: 'This is my personal experience only, not a standard timeline or an official requirement.' }] },
+  ], disagreements: [], unanswered: [] };
+  let calls = 0;
+  const evaluation = await (await worker.fetch(request({ id: fixture.id }), { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+    calls++;
+    const task = JSON.parse(input.messages.find(message => message.role === 'user').content);
+    assert.equal(task.sources[0].body, source.body, 'Generation and independent review retain all mixed-content context');
+    const review = reviewResponse(input);
+    if (review) {
+      assert(task.candidate.checks.every(check => check.evidence.every(item => typeof item.quote === 'string' && !Object.hasOwn(item, 'spanId'))));
+      return review;
+    }
+    return { response: JSON.stringify(draft) };
+  } } })).json();
+  assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
+  assert.equal(calls, 2);
+  assert.deepEqual(evaluation.inferenceCounts, { answers: 1, reviews: 1, transportCalls: 0 });
+  assert.equal(evaluation.syntheticDiagnostic, undefined);
+  const result = validateAssistantOutput(JSON.stringify(draft), prepareAssistantCorpus(fixture.corpus, fixture.input), Date.now(), fixture.input);
+  for (const [text, expectedCheck] of [
+    ['The portal status changed to “Issued” on June 19, 2026.', 'actual_dated_status_preserved'],
+    ['The member received their passport on June 18, 2026.', 'no_document_delivery_inferred'],
+    ['Every applicant must bring the same copies.', 'no_questions_or_advice_promoted_to_policy'],
+    ['Another applicant will receive a decision on Tuesday.', 'no_questions_or_advice_promoted_to_policy'],
+    ['Other applicants were asked for additional documents.', 'no_tentative_observation_promoted_to_fact'],
+  ]) {
+    const changed = structuredClone(result); changed.claims[1].text = text;
+    assert(evaluateAcceptance(fixture, changed).checks.some(check => check.name === expectedCheck && !check.passed), expectedCheck);
+  }
+  const missingOutcome = structuredClone(result); missingOutcome.claims.splice(1, 1);
+  assert(evaluateAcceptance(fixture, missingOutcome).checks.some(check => check.name === 'actual_dated_status_preserved' && !check.passed));
+  // The lexical guard must not reject faithfully qualified wording. Full
+  // independent semantic review remains mandatory in the production path.
+  for (const [text, expectedCheck] of [
+    ['There is no evidence the passport was delivered.', 'no_document_delivery_inferred'],
+    ['The author thought other applicants were asked for a document, but could not confirm their conversations or decisions.', 'no_tentative_observation_promoted_to_fact'],
+    ['The unanswered question does not show that every applicant must bring those copies.', 'no_questions_or_advice_promoted_to_policy'],
+    ['The portal status changed to “Issued” on 18 June 2026.', 'actual_dated_status_preserved'],
+    ['The portal status changed to “Issued” on 2026-06-18.', 'actual_dated_status_preserved'],
+  ]) {
+    const changed = structuredClone(result); changed.claims[1].text = text;
+    assert(evaluateAcceptance(fixture, changed).checks.some(check => check.name === expectedCheck && check.passed), text);
+  }
 });
 
 test('semantic gate rejects verbose answers, irrelevant details and answering a previous question', () => {
@@ -744,7 +852,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 28);
+  assert.equal(acceptanceFixtures.length, 29);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);

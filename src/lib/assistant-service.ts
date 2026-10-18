@@ -68,9 +68,11 @@ export type AssistantDependencies = {
   reportFailure?(event: { stage: AssistantFailureStage; status: number; code?: AssistantValidationCode;
     category: AssistantFailureCategory; requestId: string; durationMs: number }): void;
   reportTiming?(event: { stage: AssistantFailureStage; status: number; requestId: string; durationMs: number }): void;
+  /** Validated verdict counts only; never candidate text, sources or reviewer prose. */
+  reportReview?(event: { requestId: string; recovery: boolean; fulfillsTask: boolean; supported: number; rejected: number; total: number }): void;
 };
 const headers = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Vary': 'Authorization' };
-const semanticRepairInstruction = 'SEMANTIC REPAIR: Regenerate conservatively from the original supplied evidence. Use short, atomic facts explicitly attributed to the member who reported them. Preserve the requested task, relevant conflicting reports, uncertainty and qualifications. State explicit limitations in the claim itself: an individual experience is not a standard or guaranteed timeline. Cite multiple reports for plural statements; never infer a count of people. Do not add unstated durations, event dates, venues, roles, causes or outcomes. Keep each event attached to its own person and stated timing; do not infer relative timing such as the following day or week. Select only the supplied evidence span IDs; the server supplies the exact quotations. If the evidence cannot support a useful answer, return insufficient. No earlier draft or reviewer feedback is evidence.';
+const semanticRepairInstruction = 'SEMANTIC REPAIR: Regenerate conservatively from the original supplied evidence. Use short, atomic facts explicitly attributed to the member who reported them. Preserve the requested task, relevant conflicting reports, uncertainty and qualifications. State explicit limitations in the claim itself: an individual experience is not a standard or guaranteed timeline. Preserve explicit unknown outcomes, decision dates, durations or next steps that materially qualify the report; state that uncertainty in cited claim text beside the known status. Use an extra claim if needed: concision must not erase an important stated unknown. Cite multiple reports for plural statements; never infer a count of people. Do not add unstated durations, event dates, venues, roles, causes or outcomes. Keep each event attached to its own person and stated timing; do not infer relative timing such as the following day or week. Select only the supplied evidence span IDs; the server supplies the exact quotations. If the evidence cannot support a useful answer, return insufficient. No earlier draft or reviewer feedback is evidence.';
 
 /** Formatting/order changes alone must not buy another chance at reviewer approval. */
 export function assistantCandidateIdentity(result: Pick<AssistantResult, 'status' | 'claims' | 'disagreements'>): string {
@@ -225,6 +227,11 @@ export function createAssistantHandler(deps: AssistantDependencies) {
         }, signal, context));
         // Malformed reviews and transport failures throw, never trigger recovery.
         const result = validateAssistantReview(review, candidate);
+        const verdict = JSON.parse(review) as { fulfillsTask: boolean; checks: { supported: boolean }[] };
+        try { deps.reportReview?.({ requestId, recovery, fulfillsTask: verdict.fulfillsTask,
+          supported: verdict.checks.filter(check => check.supported).length,
+          rejected: verdict.checks.filter(check => !check.supported).length, total: verdict.checks.length });
+        } catch { /* Observability must never change acceptance or the response. */ }
         return { result, rejected: result.status === 'insufficient' };
       };
       let result = await generateCandidate();

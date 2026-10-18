@@ -107,6 +107,33 @@ test('review prompt carries full source context and treats candidate instruction
   assert.match(prompt.system, /A technically accurate but irrelevant quote or acknowledgment does not fulfill the task/);
 });
 
+test('summary review requires important stated unknowns in cited claims even when the known status is supported', () => {
+  const uncertain = { ...source, body: 'I attended my appointment on April 6. My application remained pending. I did not know the final decision date. This is only my personal experience. A reader asked where I parked.' };
+  const knownStatus = { text: 'The member reported that their application remained pending.', evidence: [{ sourceId: uncertain.id, quote: uncertain.body }] };
+  const incomplete = { ...result, sources: [uncertain], claims: [knownStatus], unanswered: ['The final decision date was unknown.'] };
+  for (const request of [
+    { mode: 'summary', scope: { kind: 'post', id: uncertain.questionId } },
+    { mode: 'ask', scope: { kind: 'public' }, question: 'Explain the first post.', previousPosts: [{ questionId: uncertain.questionId, sourceId: uncertain.id }] },
+  ]) {
+    const prompt = assistantReviewPrompt(request, { sources: [uncertain], partial: false }, incomplete);
+    const data = JSON.parse(prompt.user);
+    assert.equal(data.task, 'summary');
+    assert.equal(data.sources[0].body, uncertain.body);
+    assert.match(prompt.system, /important explicit unknown outcomes, decision dates, durations or next steps that materially qualify the reported result must appear in cited candidate claim text beside the known status/);
+    assert.match(prompt.system, /A pending status alone does not preserve an explicitly unknown decision date/);
+    assert.match(prompt.system, /fulfillsTask is false even when all stated facts are supported/);
+    assert.match(prompt.system, /Brevity is not a reason to omit it/);
+    assert.match(prompt.system, /Do not require uncertainty invented from silence or incidental unanswered reader questions/);
+    assert.equal(Object.hasOwn(data.candidate, 'unanswered'), false, 'Only cited claims can satisfy the reviewed summary');
+    const rejected = validateAssistantReview(verdict([{ id: 'claim:0', supported: true }], false), incomplete);
+    assert.equal(rejected.status, 'insufficient');
+    assert.deepEqual(rejected.claims, []);
+    assert.deepEqual(rejected.sources, []);
+  }
+  const complete = { ...incomplete, unanswered: [], claims: [knownStatus, { text: 'The member did not know the final decision date.', evidence: [{ sourceId: uncertain.id, quote: uncertain.body }] }] };
+  assert.equal(validateAssistantReview(verdict([{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: true }], true), complete), complete);
+});
+
 test('full-context review restores a correction outside the generation window and keeps comparison sources', () => {
   const fullSource = { ...source, body: 'I first thought my application was approved. ' + 'I waited for a letter with more information. '.repeat(130) + 'Correction: the final letter said it was denied.' };
   const comparison = { ...source, id: 'a:apify-comparison', kind: 'reply', body: 'I only asked whether approval was possible.' };

@@ -67,6 +67,20 @@ const numberedInterviewBody = [
   '9. Later correction: My interview was on September 9, 2026, not September 8. The earlier date in my notes was a mistake.',
 ].join('\n\n');
 
+// Wholly invented heterogeneous diary: actual events share a post with
+// tentative observations, hypothetical dialogue, personal advice and questions.
+const heterogeneousReportBody = [
+  'Synthetic Dublin appointment diary. This is my personal experience only, not a standard timeline or an official requirement.',
+  'My interview in Dublin was on June 12, 2026. I brought my appointment confirmation and a folder of copies.',
+  'At the desk I was asked about my planned visit. I answered the questions and put my papers back in the folder.',
+  'Observation about other people: I thought a few people nearby might have been asked for another document. I could not hear their conversations and do not know their decisions.',
+  'Practice dialogue, not a real exchange: “Will every application be approved?” “What if a person forgets a paper?” These are imagined practice questions, not outcomes or official answers.',
+  'Personal suggestion: I would arrange my own copies in a labeled folder next time. That is a personal preference, not an official document requirement.',
+  ...Array.from({ length: 18 }, (_, index) => `Preparation note ${index + 1}: I made a separate list of the papers I had packed and checked the page labels. This was only my own way of organizing the folder.`),
+  'Reader FAQ, still unanswered: Does an Issued status mean a passport has already been delivered? Must every applicant bring the same copies? Will another applicant receive a decision on Tuesday?',
+  'Actual case update: On June 18, 2026, my case status changed to “Issued”. That is a portal status update, not a report of passport delivery. I have no collection or delivery date to report.',
+].join('\n\n');
+
 export const acceptanceFixtures: AcceptanceFixture[] = [
   { id: 'direct-post-search', execution: 'direct-post-search', input: { mode: 'ask', scope: { kind: 'public' }, question: 'give all posts related to stamping delay' }, corpus: stampingSearchCorpus, checks: [
     { name: 'returns_post_search_results', test: result => result.kind === 'posts' && result.status === 'answered' },
@@ -120,6 +134,22 @@ export const acceptanceFixtures: AcceptanceFixture[] = [
       && claim.evidence.every(item => item.sourceId === `q:${postId}` && item.quote.length >= 12 && item.quote.length <= 400
         && numberedInterviewBody.replace(/\s+/gu, ' ').includes(item.quote.replace(/\s+/gu, ' ')))) },
     absent('no_approval_or_universal_outcome', /was approved|approval was granted|everyone|all applicants|guaranteed approval/),
+  ] },
+  { id: 'heterogeneous-report-summary', input: { mode: 'summary', scope: post }, corpus: { sources: [source(201, heterogeneousReportBody,
+    { kind: 'question', id: `q:${postId}`, communityId: null, title: 'Synthetic Dublin diary, observations and unanswered questions', speakerRole: 'original-poster' })], partial: false }, checks: [
+    answered,
+    mentions('actual_interview_date_preserved', /(?:june\s+12(?:th)?|12(?:th)?\s+(?:of\s+)?june|2026-06-12)\b/),
+    { name: 'actual_dated_status_preserved', test: result => result.claims.some(claim => /(?:june\s+18(?:th)?|18(?:th)?\s+(?:of\s+)?june|2026-06-18)\b/i.test(claim.text) && /issued/i.test(claim.text)) },
+    mentions('individual_limitation_preserved', /individual|personal|own experience/),
+    { name: 'actual_status_update_cited', test: result => result.claims.some(claim => /issued/i.test(claim.text) && claim.evidence.some(item => /June 18, 2026, my case status changed to “Issued”/.test(item.quote))) },
+    // These reject direct assertions, not embedded phrases inside an explicit
+    // denial or uncertain observation. Independent review checks full meaning.
+    absent('no_document_delivery_inferred', /(?:^|[.!?;]\s*|\bbut\s+)(?:the |their )?(?:(?:passport|document) (?:was |had been |has been )?(?:delivered|received|collected|arrived)|(?:member|author|poster|they) (?:had |has |have )?(?:received|collected) (?:their|the|a) passport)/),
+    absent('no_questions_or_advice_promoted_to_policy', /(?:^|[.!?;]\s*|\bbut\s+)(?:every application (?:is|was|will be) approved|every applicant (?:must|needs? to)|you must|you should|another applicant will receive a decision (?:on|by) tuesday)/),
+    absent('no_tentative_observation_promoted_to_fact', /(?:^|[.!?;]\s*|\bbut\s+)(?:the author (?:said|reported|confirmed) (?:that )?)?(?:other people|other applicants|people nearby) (?:were|had been) (?:asked|required)/),
+    { name: 'bounded_exact_body_quotes', test: result => [...result.claims, ...result.disagreements].every(claim => claim.evidence.length >= 1 && claim.evidence.length <= 4
+      && claim.evidence.every(item => item.sourceId === `q:${postId}` && item.quote.length >= 12 && item.quote.length <= 400
+        && heterogeneousReportBody.replace(/\s+/gu, ' ').includes(item.quote.replace(/\s+/gu, ' ')))) },
   ] },
 ];
 

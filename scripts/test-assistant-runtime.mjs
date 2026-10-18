@@ -287,7 +287,15 @@ test('all providers receive bounded span schemas and restore only server-selecte
   const boundedPrompt = core.assistantPrompt(parsed, corpus);
   const selected = boundedPrompt.evidenceSpans.find(span => span.sourceId === source.id && span.quote === source.body);
   assert(selected, 'The server must supply the exact approved source span');
-  const modelOutput = JSON.stringify({ ...output, claims: [{ ...output.claims[0], evidence: [{ spanId: selected.id }] }] });
+  const slots = (items, count) => {
+    assert(items.length <= count);
+    return Object.fromEntries(Array.from({ length: count }, (_, index) => [`slot${index + 1}`, index < items.length ? items[index] : null]));
+  };
+  const modelAnswer = spanId => JSON.stringify({ ...output,
+    claims: slots([{ ...output.claims[0], evidence: slots([{ spanId }], 4) }], 6),
+    disagreements: slots([], 3), unanswered: slots(output.unanswered, 4),
+  });
+  const modelOutput = modelAnswer(selected.id);
   const schemas = [], validated = [];
   boundedPrompt.validateOutput = raw => validated.push(raw);
   const workersResult = await provider.runAssistantModel(boundedPrompt, {
@@ -309,20 +317,22 @@ test('all providers receive bounded span schemas and restore only server-selecte
     },
   });
   for (const schema of schemas) {
-    for (const [key, minimum] of [['claims', 1], ['disagreements', 2]]) {
-      const claim = schema.properties[key].items;
-      const evidence = claim.properties.evidence;
-      assert.deepEqual(evidence.items.required, ['spanId']);
-      assert.deepEqual(evidence.items.properties.spanId.enum, boundedPrompt.evidenceSpans.map(span => span.id));
-      assert(!evidence.items.properties.spanId.enum.includes('attacker-span'));
-      assert.equal(evidence.items.additionalProperties, false);
-      assert.equal(evidence.items.properties.sourceId, undefined);
-      assert.equal(evidence.items.properties.quote, undefined);
-      assert.equal(evidence.minItems, minimum);
-      assert.equal(evidence.maxItems, 4);
-      assert.equal(claim.properties.text.maxLength, 700);
+    for (const [key, maximum] of [['claims', 6], ['disagreements', 3]]) {
+      assert.equal(schema.properties[key].type, 'object');
+      assert.equal(schema.properties[key].additionalProperties, false);
+      assert.equal(schema.properties[key].required.length, maximum);
+      assert.deepEqual(schema.properties[key].properties.slot1.anyOf, [{ $ref: '#/$defs/claim' }, { type: 'null' }]);
     }
-    assert.equal(schema.properties.unanswered.items.maxLength, 400);
+    const evidence = schema.$defs.evidenceSpan;
+    assert.deepEqual(evidence.required, ['spanId']);
+    assert.deepEqual(evidence.properties.spanId.enum, boundedPrompt.evidenceSpans.map(span => span.id));
+    assert(!evidence.properties.spanId.enum.includes('attacker-span'));
+    assert.equal(evidence.additionalProperties, false);
+    assert.equal(evidence.properties.sourceId, undefined); assert.equal(evidence.properties.quote, undefined);
+    assert.equal(schema.$defs.evidenceSlots.required.length, 4);
+    assert.equal(schema.$defs.claim.properties.text.maxLength, 700);
+    assert.equal(schema.properties.unanswered.properties.slot1.anyOf[0].maxLength, 400);
+    assert.doesNotMatch(JSON.stringify(schema), /"type":"array"|maxItems|minItems/);
   }
   assert.equal(schemas.length, 3);
   assert.deepEqual(validated, [workersResult, openaiResult, groqResult]);
@@ -333,9 +343,9 @@ test('all providers receive bounded span schemas and restore only server-selecte
   }
   const laterPrompt = core.assistantPrompt(input, { sources: [reply], partial: false });
   const laterSchema = provider.assistantOutputSchema(laterPrompt);
-  assert.deepEqual(laterSchema.properties.claims.items.properties.evidence.items.properties.spanId.enum, laterPrompt.evidenceSpans.map(span => span.id));
+  assert.deepEqual(laterSchema.$defs.evidenceSpan.properties.spanId.enum, laterPrompt.evidenceSpans.map(span => span.id));
   assert.deepEqual(laterPrompt.evidenceSpans.map(span => span.sourceId), [reply.id]);
-  const laterResolved = JSON.parse(provider.resolveAssistantEvidence(JSON.stringify({ ...output, claims: [{ ...output.claims[0], evidence: [{ spanId: laterPrompt.evidenceSpans[0].id }] }] }), laterPrompt));
+  const laterResolved = JSON.parse(provider.resolveAssistantEvidence(modelAnswer(laterPrompt.evidenceSpans[0].id), laterPrompt));
   assert.deepEqual(laterResolved.claims[0].evidence, [{ sourceId: reply.id, quote: reply.body }]);
   assert.equal(provider.ASSISTANT_OUTPUT_SCHEMA.properties.claims.items.properties.evidence.items.properties.sourceId.enum, undefined);
 });
