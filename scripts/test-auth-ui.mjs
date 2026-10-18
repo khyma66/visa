@@ -151,13 +151,20 @@ function setup({ loading = false, user = null, search = '', signup = false } = {
   return h;
 }
 
-test('header Log In is a document link directly to the sign-in section', async () => {
+test('header shows both login and signup document links before authentication', async () => {
   const h = setup();
   try {
     h.render(SiteHeader);
-    const link = byText(h, 'a', 'Log In');
+    const link = byText(h, 'a', 'Log in');
     assert.equal(link.props.href, '/login#sign-in');
     assert.equal(link.props.onClick, undefined);
+    const signup = byText(h, 'a', 'Sign up');
+    assert.equal(signup.props.href, '/signup#sign-in');
+    assert.equal(signup.props.onClick, undefined);
+    const nav = nodes(h.tree).find(node => node.type === 'nav' && node.props['aria-label'] === 'Account access');
+    assert(nav);
+    assert(nodes(nav).includes(link));
+    assert(nodes(nav).includes(signup));
   } finally { h.close(); }
 });
 
@@ -301,6 +308,81 @@ test('email code flow shows VisaThreads and retains its return destination', asy
     assert(textOf(h.tree).includes('VisaThreads sign-in email'));
     assert(field(h, 'Sign-in code'));
     assert(byText(h, 'button', 'Resend in 60s').props.disabled);
+  } finally { h.close(); }
+});
+
+test('signup and login are visible before provider actions and keep only safe return destinations', async () => {
+  for (const signup of [false, true]) {
+    const h = setup({ signup, search: '?next=%2Fmessages&email=do-not-forward%40example.invalid' });
+    try {
+      await h.settle();
+      const all = nodes(h.tree);
+      const nav = all.find(n => n.type === 'nav' && n.props['aria-label'] === 'Account access');
+      assert(nav);
+      assert(all.indexOf(nav) < all.indexOf(byText(h, 'button', 'Continue with Google')));
+      const links = nodes(nav).filter(n => n.type === 'a');
+      assert.equal(links.length, 2);
+      assert.deepEqual(links.map(link => link.props.href), ['/login?next=%2Fmessages#sign-in', '/signup?next=%2Fmessages#sign-in']);
+      assert.equal(links[signup ? 1 : 0].props['aria-current'], 'page');
+      assert.equal(links[signup ? 0 : 1].props['aria-current'], undefined);
+      assert(links.every(link => !link.props.href.includes('email=')), 'Only the sanitized return destination is forwarded');
+    } finally { h.close(); }
+  }
+  const unsafe = setup({ search: '?next=%2F%2Fevil.invalid' });
+  try {
+    await unsafe.settle();
+    assert.equal(byText(unsafe, 'a', 'Create account').props.href, '/signup#sign-in');
+  } finally { unsafe.close(); }
+});
+
+test('a first-time sign-in request failure stays at email and offers account creation, not a code error', async () => {
+  const h = setup();
+  h.handlers.requestCode = async () => { throw { code: 'user_not_found', message: 'provider secret response' }; };
+  try {
+    await h.settle(); change(h, 'Email Address', 'new@example.invalid');
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    assert.equal(h.calls.find(c => c.name === 'requestCode').args[2], false);
+    assert(field(h, 'Email Address'));
+    assert.equal(nodes(h.tree).filter(n => n.type === 'input' && n.props.name === 'code').length, 0);
+    const alert = byText(h, 'p', 'We couldn’t send a sign-in code');
+    assert.equal(alert.props.role, 'alert');
+    assert.match(textOf(alert), /Choose Create account/);
+    assert.doesNotMatch(textOf(alert), /invalid|expired|not found|secret response/i);
+    assert.equal(h.calls.filter(c => c.name === 'verifyCode').length, 0);
+    assert.deepEqual(h.replacements, []);
+  } finally { h.close(); }
+});
+
+test('signup-disabled and delivery failures never advance to code verification', async () => {
+  for (const [code, expected] of [['signup_disabled', /New account registration is not available/], ['email_address_not_authorized', /Email delivery is not available/]]) {
+    const h = setup({ signup: true });
+    h.handlers.requestCode = async () => { throw { code }; };
+    try {
+      await h.settle(); change(h, 'First name', 'Ada'); change(h, 'Email Address', 'new@example.invalid');
+      nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+      assert.equal(h.calls.find(c => c.name === 'requestCode').args[2], true);
+      assert(field(h, 'First name'));
+      assert.match(textOf(h.tree), expected);
+      assert.equal(nodes(h.tree).filter(n => n.type === 'input' && n.props.name === 'code').length, 0);
+      assert.deepEqual(h.replacements, []);
+    } finally { h.close(); }
+  }
+});
+
+test('verification failures mention the code rather than a password and retain the code form', async () => {
+  const h = setup();
+  h.handlers.verifyCode = async () => { throw { code: 'invalid_credentials' }; };
+  try {
+    await h.settle(); change(h, 'Email Address', 'member@example.invalid');
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    assert.match(textOf(h.tree), /If this email has an account/);
+    change(h, 'Sign-in code', '123456');
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    const alert = nodes(h.tree).find(n => n.props?.role === 'alert');
+    assert.match(textOf(alert), /couldn’t verify that code/);
+    assert.doesNotMatch(textOf(alert), /password|not found/);
+    assert(field(h, 'Sign-in code'));
+    assert.deepEqual(h.replacements, []);
   } finally { h.close(); }
 });
 

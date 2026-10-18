@@ -21,12 +21,15 @@ async function component(path, dependencies = {}) {
 test('one compact footer reminder preserves essential safety facts without a warning banner',async()=>{
   const { SafetyNotice } = await component('../src/components/SafetyNotice.tsx');
   const html = renderToStaticMarkup(createElement(SafetyNotice));
-  for (const phrase of ['Never share passwords', 'verification codes', 'passport or case IDs', 'private documents', 'Questions and replies are public', 'do not guarantee anonymity', 'not end-to-end encrypted', 'moderators may review reported messages', 'administrators can access stored data', 'not a government service or legal adviser']) {
+  for (const phrase of ['Keep passwords', 'verification codes', 'passport or case IDs', 'personal documents', 'Questions and replies are public', 'do not guarantee anonymity', 'not end-to-end encrypted', 'moderators may review reported messages', 'administrators can access stored data', 'not a government service or legal adviser']) {
     assert(html.includes(phrase), phrase);
   }
   assert(html.includes('href="/community-safety"'));
   assert.doesNotMatch(html, /bg-amber|border-amber|role="alert"/);
-  assert.equal((html.match(/<p>/g) ?? []).length, 2);
+  assert.match(html, /<details class="group">/);
+  assert.match(html, /<summary[^>]*>Privacy and messaging safety<\/summary>/);
+  assert.doesNotMatch(html, /<details[^>]*open/);
+  assert.equal((html.slice(0, html.indexOf('<details')).match(/<p>/g) ?? []).length, 1, 'Only one short reminder is visible by default');
 });
 test('safety and early-preview disclosures appear once in the footer, not above each page', async () => {
   const safety = await component('../src/components/SafetyNotice.tsx');
@@ -62,6 +65,7 @@ test('safety and early-preview disclosures appear once in the footer, not above 
     const source = await readFile(new URL(`../src/components/${name}.tsx`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /SafetyNotice|Before you publish|Protect yourself in messages|Peer experiences, not legal advice/, `${name} relies on the single shared footer`);
     assert.doesNotMatch(source, /answer anonymously|anonymous profile|anonymous handle/i, `${name} must not imply guaranteed anonymity`);
+    assert.doesNotMatch(source, /Keep personal details private|Keep passport details|Do not paste documents|Remove names, case numbers/, `${name} avoids duplicate personal-data warnings`);
   }
 });
 test('policy pages clearly disclose missing operator processes rather than pretending compliance',async()=>{

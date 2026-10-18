@@ -104,6 +104,43 @@ test('friendly errors never echo raw backend messages', () => {
   assert(!flow.authErrorMessage(new Error('Supabase private raw details')).includes('Supabase'));
 });
 
+test('code request, verification and password failures describe the actual step without account enumeration', () => {
+  const request = { action: 'request-code', createAccount: false, channel: 'email' };
+  const signup = { ...request, createAccount: true };
+  const verify = { action: 'verify-code' };
+  const failure = flow.authErrorMessage({ code: 'user_not_found' }, request);
+  assert.match(failure, /couldn’t send a sign-in code/);
+  assert.match(failure, /Choose Create account/);
+  assert.doesNotMatch(failure, /invalid|expired|not found|does not exist|password/i);
+  for (const code of ['invalid_credentials', 'email_exists', 'phone_exists', 'user_already_exists', 'signup_disabled']) {
+    assert.equal(flow.authErrorMessage({ code }, request), failure, 'A request must not confirm whether contact details have an account');
+  }
+  assert.match(flow.authErrorMessage({ code: 'invalid_credentials' }, signup), /Already a member\? Choose Log in/);
+  assert.match(flow.authErrorMessage({ code: 'signup_disabled' }, signup), /New account registration is not available/);
+  assert.doesNotMatch(flow.authErrorMessage({ code: 'signup_disabled' }, signup), /code.*invalid|code.*expired/);
+  assert.match(flow.authErrorMessage({ code: 'otp_disabled' }, verify), /Code sign-in is not available/);
+  assert.doesNotMatch(flow.authErrorMessage({ code: 'otp_disabled' }, verify), /invalid|expired/);
+  assert.match(flow.authErrorMessage({ code: 'invalid_credentials' }, verify), /couldn’t verify that code/);
+  assert.match(flow.authErrorMessage({ code: 'otp_expired' }, verify), /latest code/);
+  assert.equal(flow.authErrorMessage({ code: 'otp_expired' }, request), failure);
+  assert.doesNotMatch(flow.authErrorMessage({ code: 'invalid_credentials' }, { action: 'password' }), /expired/);
+});
+
+test('delivery, service, provider and security failures remain actionable without raw server details', () => {
+  const request = { action: 'request-code', channel: 'email' };
+  assert.match(flow.authErrorMessage({ code: 'sms_send_failed' }, request), /text message could not be sent/);
+  assert.match(flow.authErrorMessage({ code: 'email_address_not_authorized' }, request), /Email delivery is not available/);
+  assert.match(flow.authErrorMessage({ code: 'email_provider_disabled' }, request), /Email sign-in is not available/);
+  assert.match(flow.authErrorMessage({ code: 'email_address_invalid' }, request), /valid email/);
+  for (const context of [request, { action: 'verify-code' }, { action: 'sign-out' }]) {
+    const message = flow.authErrorMessage(new Error('private backend detail user@example.invalid'), context);
+    assert.doesNotMatch(message, /private backend|user@example/);
+    assert.match(message, /connection/);
+    assert.match(flow.authErrorMessage({ status: 429 }, context), /Too many attempts/);
+    assert.match(flow.authErrorMessage({ code: 'captcha_failed' }, context), /security check/);
+  }
+});
+
 test('code template and screen keep branding and security boundaries', async () => {
   const form = await readFile(new URL('../src/components/AuthForm.tsx', import.meta.url), 'utf8');
   const template = await readFile(new URL('../supabase/templates/sign-in-code.html', import.meta.url), 'utf8');

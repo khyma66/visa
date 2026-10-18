@@ -47,6 +47,9 @@ export function buildProvenance(root = process.cwd(), env = process.env) {
       provider: env.ASSISTANT_PROVIDER,
       archiveSha256: JSON.parse(readFileSync(resolve(root, '.cache/visaflow/live-preview/receipt.json'), 'utf8')).archiveSha256,
     } } : {}),
+    ...(env.VISATHREADS_DEV_SYNC === 'true' ? { developmentSyncArchiveSha256:
+      JSON.parse(readFileSync(resolve(root, '.cache/visaflow/development-sync/receipt.json'), 'utf8')).archiveSha256,
+    } : {}),
   };
   return {
     schemaVersion: 1,
