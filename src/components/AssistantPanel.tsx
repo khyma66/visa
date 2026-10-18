@@ -46,11 +46,11 @@ function PostResults({ result }: { result: AssistantResult }) {
     <time dateTime={post.createdAt} className="mt-2 block text-xs text-slate-500">{dateLabel(post.createdAt)}</time>
   </li>)}</ol>;
   return <div aria-label="Assistant response">
-    <p className="text-base leading-relaxed text-slate-800">{posts.length ? `Found ${posts.length} matching post${posts.length === 1 ? '' : 's'}.` : result.unanswered[0] || 'No matching posts found. Try a visa type, location, or another keyword.'}</p>
+    <p className="text-base leading-relaxed text-slate-800">{posts.length ? 'Here are discussions that match your question.' : result.unanswered[0] || 'No matching posts found. Try a visa type, location, or another keyword.'}</p>
     {cards(posts.slice(0, 8))}
     {posts.length > 8 && <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-teal-700">{`Show ${posts.length - 8} more posts`}</summary>{cards(posts.slice(8), 8)}</details>}
     <p className="mt-3 text-xs leading-5 text-slate-500">{result.notice}</p>
-    {result.coverage.partial && <p className="mt-3 text-xs leading-5 text-amber-800">More posts may match. Narrow your search to see more specific results.</p>}
+    {posts.length > 0 && <details className="mt-3 text-xs leading-5 text-slate-500"><summary className="cursor-pointer font-medium">Search details</summary><p className="mt-2">Showing {posts.length} matching discussion{posts.length === 1 ? '' : 's'}.{result.coverage.partial && ' Results are selected for relevance, not an exhaustive list. Ask for more posts or add a visa type, location, or date.'}</p>{result.coverage.since && result.coverage.until && <p>Posts published {dateLabel(result.coverage.since)} to {dateLabel(result.coverage.until)}.</p>}</details>}
   </div>;
 }
 
@@ -64,16 +64,16 @@ function Result({ result, catchup }: { result: AssistantResult; catchup: boolean
   });
   const coverageReasons = result.coverage.reasons ?? [];
   const coverageNotes = {
-    'retrieval-limit': 'This answer uses a selection of relevant matching discussions.',
-    'context-limit': 'Only part of the available discussion text could be reviewed.',
-    'missing-replies': 'Some replies were not included in the imported discussion.',
-    'unindexed-replies': 'Some recent replies are not available to search yet.',
+    'retrieval-limit': 'Sources were selected for relevance to your question; this is not an exhaustive review of every discussion.',
+    'context-limit': 'The answer was checked against relevant excerpts. Follow the source links for the full discussions.',
+    'missing-replies': 'The original thread includes additional replies that are not available in this archive.',
+    'unindexed-replies': 'Additional replies could not be retrieved for this answer.',
   };
   const limitation = !result.coverage.partial ? null
-    : catchup ? 'I could only review part of this time range. Choose a shorter range; your last catch-up hasn’t advanced.'
-    : coverageReasons.includes('missing-replies') ? 'Some replies were not included in the imported discussion, so I may be missing part of the conversation.'
-    : coverageReasons.includes('unindexed-replies') ? 'Some recent replies are not available to search yet, so this answer may miss relevant updates.'
-    : !coverageReasons.length ? 'I could only review part of these discussions. Try a more specific question.' : null;
+    : catchup ? 'This catch-up does not cover every update in the selected period. Choose a shorter range; your saved catch-up position is unchanged.'
+    : coverageReasons.includes('missing-replies') ? 'Source note: Additional replies from the original thread are not available here.'
+    : coverageReasons.includes('unindexed-replies') ? 'Source note: Additional replies could not be retrieved for this answer.'
+    : !coverageReasons.length ? 'Source note: This answer does not cover the full discussion.' : null;
   return <div aria-label="Assistant response">
     {result.status === 'insufficient' && <p className="text-base leading-relaxed text-slate-800">{result.unanswered[0] || (catchup ? 'No updates found for this time range.' : 'I couldn’t find enough relevant discussions to answer. Try a more specific question.')}</p>}
     <Claims claims={result.claims} sources={result.sources} />

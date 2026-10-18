@@ -31,6 +31,23 @@ const record = (value: unknown): value is Record<string, unknown> => !!value && 
 const evidenceFailure = (code: AssistantValidationCode): never => {
   throw new AssistantError(502, 'The assistant could not verify its source references. Please try a more specific question.', undefined, code);
 };
+const slotNames = (count: number) => Array.from({ length: count }, (_, index) => `slot${index + 1}`);
+
+/** Fixed object cardinality avoids relying on provider-enforced array maxItems. */
+function slotSchema(count: number, item: Record<string, unknown>, description?: string) {
+  const names = slotNames(count);
+  return { type: 'object', additionalProperties: false, required: names,
+    ...(description ? { description } : {}),
+    properties: Object.fromEntries(names.map(name => [name, { anyOf: [item, { type: 'null' }] }])),
+  };
+}
+
+/** Only explicit null is absent. Missing, extra or malformed slots reject the whole candidate. */
+function readSlots(value: unknown, count: number, code: AssistantValidationCode): unknown[] {
+  const names = slotNames(count);
+  if (!record(value) || Object.keys(value).length !== count || names.some(name => !Object.hasOwn(value, name))) return evidenceFailure(code);
+  return names.map(name => value[name]).filter(item => item !== null);
+}
 
 /** Presence is intentional: invalid or empty catalogs must never enable free-text fallback. */
 function evidenceCatalog(prompt: AssistantPrompt): Map<string, AssistantEvidenceSpan> | null {
@@ -55,17 +72,15 @@ export function resolveAssistantEvidence(raw: string, prompt: AssistantPrompt): 
   if (raw.length > 24_000) return evidenceFailure('output_schema');
   let value: unknown;
   try { value = JSON.parse(raw); } catch { return evidenceFailure('output_json'); }
-  if (!record(value) || Object.keys(value).length !== 4 || typeof value.status !== 'string' || !['answered', 'insufficient'].includes(value.status)
-    || !Array.isArray(value.claims) || !Array.isArray(value.disagreements) || !Array.isArray(value.unanswered)) return evidenceFailure('output_schema');
-  const resolveClaims = (items: unknown[], maximum: number, minimumEvidence: number) => {
-    if (items.length > maximum) return evidenceFailure('claim_limit');
-    return items.map(item => {
+  if (!record(value) || Object.keys(value).length !== 4 || !['status', 'claims', 'disagreements', 'unanswered'].every(key => Object.hasOwn(value, key))
+    || typeof value.status !== 'string' || !['answered', 'insufficient'].includes(value.status)) return evidenceFailure('output_schema');
+  const resolveClaims = (slots: unknown, maximum: number, minimumEvidence: number) => {
+    return readSlots(slots, maximum, 'claim_limit').map(item => {
       if (!record(item) || Object.keys(item).length !== 2 || typeof item.text !== 'string' || !item.text.trim() || item.text.length > 700) return evidenceFailure('claim_text');
-      if (!Array.isArray(item.evidence)) return evidenceFailure('citation_schema');
-      if (item.evidence.length < minimumEvidence) return evidenceFailure('citation_missing');
-      if (item.evidence.length > 4) return evidenceFailure('claim_limit');
+      const entries = readSlots(item.evidence, 4, 'citation_schema');
+      if (entries.length < minimumEvidence) return evidenceFailure('citation_missing');
       const selected = new Set<string>();
-      return { text: item.text, evidence: item.evidence.map(entry => {
+      return { text: item.text, evidence: entries.map(entry => {
         if (!record(entry) || Object.keys(entry).length !== 1 || typeof entry.spanId !== 'string' || selected.has(entry.spanId)) return evidenceFailure('citation_schema');
         const span = catalog.get(entry.spanId);
         if (!span) return evidenceFailure('citation_source');
@@ -74,10 +89,12 @@ export function resolveAssistantEvidence(raw: string, prompt: AssistantPrompt): 
       }) };
     });
   };
-  if (value.unanswered.length > 4 || value.unanswered.some(item => typeof item !== 'string' || item.length > 400)) return evidenceFailure('unanswered_limit');
+  const unanswered = readSlots(value.unanswered, 4, 'unanswered_limit');
+  if (unanswered.some(item => typeof item !== 'string' || item.length > 400)) return evidenceFailure('unanswered_limit');
   const claims = resolveClaims(value.claims, 6, 1), disagreements = resolveClaims(value.disagreements, 3, 2);
   if (value.status === 'answered' && !claims.length) return evidenceFailure('answered_without_claims');
-  const resolved = JSON.stringify({ status: value.status, disagreements, claims, unanswered: value.unanswered });
+  if (value.status === 'insufficient' && (claims.length || disagreements.length)) return evidenceFailure('output_schema');
+  const resolved = JSON.stringify({ status: value.status, disagreements, claims, unanswered });
   if (resolved.length > 24_000) return evidenceFailure('output_schema');
   return resolved;
 }
@@ -98,11 +115,22 @@ export function assistantOutputSchema(prompt: AssistantPrompt) {
   const catalog = evidenceCatalog(prompt);
   if (catalog) {
     const selectedEvidence = { type: 'object', additionalProperties: false, required: ['spanId'], properties: { spanId: { type: 'string', enum: [...catalog.keys()] } } };
-    const selectedClaim = (minimum: number) => ({ ...claim, properties: { ...claim.properties, evidence: { ...claim.properties.evidence, minItems: minimum, items: selectedEvidence } } });
-    return { ...ASSISTANT_OUTPUT_SCHEMA, properties: { ...ASSISTANT_OUTPUT_SCHEMA.properties,
-      claims: { ...ASSISTANT_OUTPUT_SCHEMA.properties.claims, description: 'Individual attributed factual reports supported by listed evidence span IDs. Put comparisons of conflicting reports in disagreements, not only in claims.', items: selectedClaim(1) },
-      disagreements: { ...ASSISTANT_OUTPUT_SCHEMA.properties.disagreements, description: 'Populate this FIRST. Compare relevant contradictory reports using evidence span IDs belonging to at least two different sources. An empty array means no relevant conflicting reports were found.', items: selectedClaim(2) },
-    } };
+    // Refer to one catalog rather than repeating up to 256 IDs in every slot.
+    // Public arrays are constructed only after all nullable slots validate.
+    return { type: 'object', additionalProperties: false, required: ['status', 'disagreements', 'claims', 'unanswered'],
+      $defs: {
+        evidenceSpan: selectedEvidence,
+        evidenceSlots: slotSchema(4, { $ref: '#/$defs/evidenceSpan' }, 'Use 1–4 listed spans for a claim, 2–4 from at least two different sources for a disagreement. Every unused slot must be null. Never repeat a spanId in this object.'),
+        claim: { type: 'object', additionalProperties: false, required: ['text', 'evidence'], properties: {
+          text: { type: 'string', minLength: 1, maxLength: 700 }, evidence: { $ref: '#/$defs/evidenceSlots' },
+        } },
+      }, properties: {
+        status: { type: 'string', enum: ['answered', 'insufficient'], description: 'Answered requires at least one claim. Insufficient requires all claim and disagreement slots to be null.' },
+        disagreements: slotSchema(3, { $ref: '#/$defs/claim' }, 'Populate relevant contradictions FIRST, with evidence from at least two different sources. Every unused slot must be null.'),
+        claims: slotSchema(6, { $ref: '#/$defs/claim' }, 'Use as many of these six slots as needed for essential attributed facts AND material qualifications. Never omit an explicit personal-only limitation or important unknown outcome merely to shorten a summary. Put comparisons of conflicting reports in disagreements. Every unused slot must be null.'),
+        unanswered: slotSchema(4, { type: 'string', maxLength: 400 }, 'Questions not resolved by the evidence. Every unused slot must be null.'),
+      },
+    };
   }
   if (!prompt.sourceIds?.length) return ASSISTANT_OUTPUT_SCHEMA;
   const sourceId = { ...evidence.properties.sourceId, enum: [...new Set(prompt.sourceIds)] };
@@ -196,7 +224,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       const maximumAttempts = typeof prompt.maxAttempts === 'number' && Number.isFinite(prompt.maxAttempts)
         ? Math.max(1, Math.min(2, Math.floor(prompt.maxAttempts))) : 2;
       const citationRepair = Object.hasOwn(prompt, 'evidenceSpans') && !review
-        ? 'Every evidence entry contains only a spanId selected from the supplied evidence catalog. Do not output quote or sourceId fields, invent IDs, or repeat a spanId within one evidence list.'
+        ? 'Use fixed slot objects, never arrays: claims has exactly slot1–slot6, disagreements slot1–slot3, unanswered slot1–slot4, and each evidence object slot1–slot4. Include every required slot key; set every unused slot to null. Every non-null evidence slot contains only a spanId selected from the supplied evidence catalog. Do not output quote or sourceId fields, invent IDs, or repeat a spanId within one evidence object. Insufficient requires all claim and disagreement slots to be null.'
         : 'Every quote is one continuous verbatim body excerpt of 12–400 characters, never joined with ellipses. Copy only actual source IDs and exact text from the supplied source bodies.';
       for (let attempt = 0; attempt < maximumAttempts; attempt++) {
       signal.throwIfAborted();

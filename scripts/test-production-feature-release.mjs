@@ -185,6 +185,7 @@ function acceptanceReceipt() {
   const model = modelProfile.answer;
   ids.push('large-discussion-summary');
   ids.push('numbered-interview-transcript');
+  ids.push('heterogeneous-report-summary');
   const checksFor = id => ['supported', 'application_evidence_reviewed_when_needed', ...(id === 'direct-post-search'
     ? ['application_provider_not_called'] : ['application_provider_call_sequence', 'application_transport_budget'])];
   return { schemaVersion: 1, sourceSha: 'a'.repeat(40), provider: 'workers-ai', model, modelProfile, createdAt: new Date().toISOString(), passed: true, repetitions: 3, features: { posts: true, communities: true, catchup: true }, workerDeleted: true, cases: ids.map(id => ({
