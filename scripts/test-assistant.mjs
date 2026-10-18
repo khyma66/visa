@@ -220,6 +220,20 @@ test('every returned claim needs existing source and actual supporting quote; co
   assert.throws(()=>core.validateAssistantOutput(JSON.stringify({...output,disagreements:output.claims}),corpus));
   assert.throws(()=>core.validateAssistantOutput(JSON.stringify({...output,claims:[]}),corpus));
 });
+test('complete comparison-only answers survive full grounding but not missing or fabricated evidence',()=>{
+  const other={...source,id:`a:${id}`,kind:'reply',body:'My appointment was on Tuesday. My passport arrived on Saturday.'};
+  const corpus={sources:[source,other],partial:false};
+  const comparison={text:'One member reported a Monday appointment; the other reported Tuesday.',evidence:[{sourceId:source.id,quote:'I attended my appointment on Monday.'},{sourceId:other.id,quote:'My appointment was on Tuesday.'}]};
+  const draft={status:'answered',claims:[],disagreements:[comparison],unanswered:[]};
+  const checked=core.validateAssistantOutput(JSON.stringify(draft),corpus,now,input);
+  assert.equal(checked.status,'answered'); assert.deepEqual(checked.claims,[]);
+  assert.deepEqual(checked.disagreements,[{...comparison,evidence:[{sourceId:source.id,quote:source.body},{sourceId:other.id,quote:other.body}]}]); assert.equal(checked.sources.length,2);
+  for(const evidence of [[],comparison.evidence.slice(0,1),[comparison.evidence[0],comparison.evidence[0]],[comparison.evidence[0],{sourceId:other.id,quote:'A fabricated quotation from another visit.'}]]) {
+    assert.throws(()=>core.validateAssistantOutput(JSON.stringify({...draft,disagreements:[{...comparison,evidence}]}),corpus,now,input));
+  }
+  const policy=core.validateAssistantOutput(JSON.stringify(draft),corpus,now,{...input,question:'Am I eligible under the current visa rule?'});
+  assert.equal(policy.status,'insufficient'); assert.deepEqual(policy.disagreements,[]);
+});
 test('nearly exhausted corpus never turns a negative slice into unbounded context',()=>{
   const sources=Array.from({length:5},(_,i)=>({...source,id:`q:${i}`,title:'t'.repeat(240),body:'b'.repeat(4000)}));
   sources.push({...source,id:'q:six',title:'t'.repeat(240),body:'b'.repeat(2340)},{...source,id:'q:seven',title:'t'.repeat(240),body:'b'.repeat(10000)});
@@ -266,7 +280,7 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v22-temporal-provenance','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v23-evidence-comparisons','Semantic change invalidates old cached answers');
 });
 test('summary and catch-up are explicit evidence tasks without a missing question to answer',()=>{
   const summary=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},{sources:[source],partial:false});
@@ -278,7 +292,7 @@ test('summary and catch-up are explicit evidence tasks without a missing questio
   assert.match(catchup.system,/No user question is required for catch-up/);assert.equal('question' in JSON.parse(catchup.user),false);
   assert.match(summary.system,/Never infer current visa rules/);assert.match(summary.system,/MUST cite supporting span IDs/);
   assert.match(summary.system,/Explicitly stated individual events, outcomes, dates and timing ARE evidence/);
-  assert.match(summary.system,/put the comparison in disagreements with spans from at least two conflicting sources/);
+  assert.match(summary.system,/preserve both attributed positions in a concise comparison with spans from at least two different sources/);
 });
 test('generation requires nullable closed slots while summary priorities preserve evidence categories',()=>{
   const summary=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},{sources:[source],partial:false});
@@ -290,7 +304,7 @@ test('generation requires nullable closed slots while summary priorities preserv
   assert.match(summary.system,/Each evidence object requires slot1 through slot4/);
   assert.match(summary.system,/Do not fill slots merely because they exist/);
   assert.doesNotMatch(summary.system,/"claims":\[|"disagreements":\[|"evidence":\[|"unanswered":\[/);
-  const example=summary.system.match(/write "disagreements":(\{.*\}) and separately cite/);
+  const example=summary.system.match(/write "disagreements":(\{.*\}) with unused claim/);
   assert(example);
   const disagreements=JSON.parse(example[1]);
   assert.deepEqual(Object.keys(disagreements),['slot1','slot2','slot3']);
@@ -324,14 +338,16 @@ test('summary brevity cannot erase an explicit material unknown outcome or decis
     assert(prompt.evidenceSpans.some(span=>span.quote.includes('I did not know the final decision date.')));
   }
 });
-test('output contract classifies conflicts before individual reports without changing source validation',()=>{
+test('output contract prioritizes complete cited comparisons without redundant section requirements',()=>{
   const prompt=core.assistantPrompt(input,{sources:[source],partial:false});
-  assert.match(prompt.system,/Populate disagreements BEFORE claims/);
+  assert.match(prompt.system,/A complete, cited comparison can answer the question by itself/);
+  assert.match(prompt.system,/a fully supported comparison in claims is also valid/);
+  assert.match(prompt.system,/a vague "reports differ" without the actual relevant positions is not a complete answer/);
   assert.match(prompt.system,/FORMAT EXAMPLE ONLY, NOT EVIDENCE/);
   assert.match(prompt.system,/Never copy these example IDs or facts/);
   assert.deepEqual(Object.keys(provider.ASSISTANT_OUTPUT_SCHEMA.properties),['status','disagreements','claims','unanswered']);
   assert.match(provider.ASSISTANT_OUTPUT_SCHEMA.properties.disagreements.description,/at least two disagreeing sources/);
-  assert.match(provider.ASSISTANT_OUTPUT_SCHEMA.properties.claims.description,/put the comparison in disagreements/);
+  assert.match(provider.ASSISTANT_OUTPUT_SCHEMA.properties.claims.description,/comparison/i);
   assert.throws(()=>core.validateAssistantOutput(JSON.stringify({...output,disagreements:[{text:'The reports differ.',evidence:[{sourceId:'example-A',quote:'The library opens at eight.'},{sourceId:'example-B',quote:'The library opens at nine.'}]}]}),{sources:[source],partial:false}));
 });
 test('authentication, origin, content type, body budget and disabled rollout fail before inference',async()=>{
