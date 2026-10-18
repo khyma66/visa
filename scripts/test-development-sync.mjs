@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { archiveSource } from './archive-source.mjs';
 import { DEV_SITE, DEV_DATABASE, DEV_WORKER, DEV_SYNC_DIRECTORY, checkedDevelopmentArchive } from './development-sync-archive.mjs';
-import { developmentSyncEnvironment, uploadedDevelopmentVersion, verifyDevelopmentSyncWorker, verifyDevelopmentSyncSettings, verifySyncProductionSource } from './development-sync.mjs';
+import { developmentSyncEnvironment, uploadedDevelopmentVersion, verifyDevelopmentSyncWorker, verifyDevelopmentSyncSettings, verifyExistingDevelopmentHealth, verifySyncProductionSource } from './development-sync.mjs';
 import { verifyCurrentFeatureDeployment } from './production-feature-release.mjs';
 import { sha256, LIVE_SITE } from './live-preview-archive.mjs';
 import { buildProvenance } from './build-provenance.mjs';
@@ -70,7 +70,23 @@ test('unknown existing dev settings fail closed rather than being silently overw
   const settings = { bindings: Object.entries(config().vars).map(([name, text]) => ({ type: 'plain_text', name, text })) };
   assert.equal(verifyDevelopmentSyncSettings(settings).NEXT_PUBLIC_SITE_URL, DEV_SITE);
   verifyDevelopmentSyncSettings({ bindings: [...settings.bindings, { name: 'GROQ_API_KEY', type: 'secret_text' }, { name: 'ASSETS', type: 'assets' }, { name: 'CF_VERSION_METADATA', type: 'version_metadata' }] });
+  const legacy = verifyDevelopmentSyncSettings({ bindings: [...settings.bindings, { name: 'NEWS_REFRESH_ORIGIN', type: 'plain_text', text: DEV_SITE }] });
+  assert.equal(legacy.NEWS_REFRESH_ORIGIN, DEV_SITE);
+  assert.equal(developmentSyncEnvironment(legacy).NEWS_REFRESH_ORIGIN, undefined, 'Retired dev setting must not reach the replacement build');
   for (const binding of [{ name: 'EXTRA_SECURITY_FLAG', text: 'true', type: 'plain_text' }, { name: 'PUBLIC_LAUNCH_APPROVED', text: 'true', type: 'plain_text' }, { name: 'AI', type: 'ai' }, { name: 'PROD_DATABASE', type: 'hyperdrive' }]) assert.throws(() => verifyDevelopmentSyncSettings({ bindings: [...settings.bindings, binding] }));
+});
+
+test('an older dirty dev build can be captured only with the verified dev origin and valid provenance', () => {
+  const health = { environment: 'development', releaseStatus: 'configured', build: { siteOrigin: DEV_SITE, gitSha: sha, dirty: true } };
+  verifyExistingDevelopmentHealth(health);
+  verifyExistingDevelopmentHealth({ ...health, build: { ...health.build, dirty: false } });
+  for (const value of [
+    { ...health, environment: 'production' },
+    { ...health, releaseStatus: 'unavailable' },
+    { ...health, build: { ...health.build, siteOrigin: LIVE_SITE } },
+    { ...health, build: { ...health.build, gitSha: 'unknown' } },
+    { ...health, build: { ...health.build, dirty: 'true' } },
+  ]) assert.throws(() => verifyExistingDevelopmentHealth(value));
 });
 
 test('CI retains synthetic data unless a fresh exact dev receipt authorizes the already-serving archive', async t => {

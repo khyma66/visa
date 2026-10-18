@@ -41,6 +41,8 @@ Automated coverage includes private-role/session denial, dependency completion/r
 
 Release via the existing guarded production workflow: merge latest main, preserve newer concurrent features, capture live content/source baseline, run all regressions and model acceptance, deploy, then verify exact source and new pages. Sync development only after production verification, retaining its independent database and disabled assistant. Live deployment evidence, not this document, determines rollout success.
 
+The development sync recognizes the retired `NEWS_REFRESH_ORIGIN` setting in the existing Worker but does not copy it to the replacement build. It accepts a legacy dev build marked `dirty: true` only while preserving that exact active Worker's published archive and rollback version; the new candidate must still be a clean, committed source already verified in production.
+
 ## Owner next actions
 
 1. Open `/admin/launch` with the designated owner account and supply actual operator, support, recovery and review evidence. Do not paste credentials or member details.
