@@ -23,7 +23,8 @@ export const MODEL_USE_CRAWLERS = ['GPTBot', 'ClaudeBot', 'Google-Extended'] as 
 /** Fail closed when the release gate or canonical origin is not configured. */
 export function publicSearchOrigin(env: SearchEnvironment = process.env): string | null {
   if (env.APP_ENV !== 'production' || env.PUBLIC_LAUNCH_APPROVED !== 'true'
-    || env.NEXT_PUBLIC_DEPLOYMENT_TARGET === 'sandbox') return null;
+    || env.NEXT_PUBLIC_DEPLOYMENT_TARGET === 'sandbox'
+    || env.NEXT_PUBLIC_DEPLOYMENT_TARGET === 'development-sandbox') return null;
 
   const configured = env.NEXT_PUBLIC_SITE_URL;
   if (!configured || configured !== configured.trim() || /[\r\n\t]/.test(configured)) return null;

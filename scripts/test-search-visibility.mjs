@@ -28,6 +28,7 @@ test('previews and unapproved releases neither enumerate pages nor advertise a p
     { ...approved, PUBLIC_LAUNCH_APPROVED: 'false' },
     { ...approved, PUBLIC_LAUNCH_APPROVED: 'TRUE' },
     { ...approved, NEXT_PUBLIC_DEPLOYMENT_TARGET: 'sandbox' },
+    { ...approved, NEXT_PUBLIC_DEPLOYMENT_TARGET: 'development-sandbox' },
   ]) {
     assert.equal(publicSearchOrigin(env), null);
     assert.deepEqual(publicSitemap(env), []);
@@ -90,6 +91,10 @@ test('metadata routes use request-time environment gates, including after a prio
     delete process.env.NEXT_PUBLIC_DEPLOYMENT_TARGET;
     assert.deepEqual(await routes.sitemap.default(), publicSitemap(approved));
     assert.deepEqual(routes.robots.default(), publicRobots(approved));
+    process.env.NEXT_PUBLIC_DEPLOYMENT_TARGET = 'development-sandbox';
+    assert.deepEqual(await routes.sitemap.default(), []);
+    assert.deepEqual(routes.robots.default(), { rules: { userAgent: '*', disallow: '/' } });
+    delete process.env.NEXT_PUBLIC_DEPLOYMENT_TARGET;
     process.env.APP_ENV = 'development';
     assert.deepEqual(await routes.sitemap.default(), []);
     assert.deepEqual(routes.robots.default(), { rules: { userAgent: '*', disallow: '/' } });

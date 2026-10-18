@@ -8,6 +8,7 @@ const moduleUrl = source => `data:text/javascript;base64,${Buffer.from(source).t
 const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const read = name => readFile(new URL(`../src/lib/${name}.ts`, import.meta.url), 'utf8');
 const guides = moduleUrl(compile(await read('visa-guides')));
+const { VISA_GUIDES } = await import(guides);
 const visibility = moduleUrl(compile(await read('search-visibility')).replace("'./visa-guides'", JSON.stringify(guides)));
 const presentation = moduleUrl(compile(await read('post-presentation')));
 const metadataUrl = moduleUrl(compile(await read('search-metadata')).replace("'./search-visibility'", JSON.stringify(visibility)).replace("'./post-presentation'", JSON.stringify(presentation)));
@@ -34,9 +35,18 @@ test('canonical metadata drops filters and rejects indexing of every parameter v
 });
 
 test('preview remains noindex and nofollow regardless of public content eligibility', () => {
-  for (const env of [{}, { ...approved, APP_ENV: 'development' }, { ...approved, PUBLIC_LAUNCH_APPROVED: 'false' }, { ...approved, NEXT_PUBLIC_DEPLOYMENT_TARGET: 'sandbox' }]) {
+  for (const env of [{}, { ...approved, APP_ENV: 'development' }, { ...approved, PUBLIC_LAUNCH_APPROVED: 'false' }, { ...approved, NEXT_PUBLIC_DEPLOYMENT_TARGET: 'sandbox' }, { ...approved, NEXT_PUBLIC_DEPLOYMENT_TARGET: 'development-sandbox' }]) {
     assert.deepEqual(publicPageMetadata('/us', 'U.S.', 'Description', {}, true, env).robots, { index: false, follow: false });
     assert.equal(threadStructuredData(question, [answer], env), null);
+  }
+});
+
+test('sandbox marker blocks guide indexing even with falsely approved production variables', () => {
+  const env = { ...approved, NEXT_PUBLIC_DEPLOYMENT_TARGET: 'development-sandbox' };
+  for (const path of ['/guides', ...VISA_GUIDES.map(({ slug }) => `/guides/${slug}`)]) {
+    const metadata = publicPageMetadata(path, 'Guide', 'Description', {}, true, env);
+    assert.deepEqual(metadata.robots, { index: false, follow: false });
+    assert.equal(metadata.alternates.canonical, `https://visathreads.com${path}`);
   }
 });
 
