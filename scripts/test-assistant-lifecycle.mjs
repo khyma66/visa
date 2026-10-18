@@ -195,6 +195,20 @@ test('unexpected error text and caller headers never enter public diagnostics; o
   assert(!JSON.stringify({ body, failures: h.state.failures }).includes('caller-controlled'));
 });
 
+test('review diagnostics expose only validated bounded counts and cannot affect acceptance', async () => {
+  const events = [];
+  const h = harness({ reportReview: event => { events.push(event); throw Error('private observer failure'); } });
+  const response = await h.handler(request());
+  assert.equal(response.status, 200); assert.equal((await response.json()).status, 'answered');
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0], { requestId: response.headers.get('x-visathreads-request-id'), recovery: false,
+    fulfillsTask: true, supported: 1, rejected: 0, total: 1 });
+  assert.doesNotMatch(JSON.stringify(events), /passport|Friday|synthetic-token|sourceId|private observer/);
+  const invalid = harness({ reportReview: event => events.push(event), generate: async prompt =>
+    prompt.outputKind === 'review' ? '{"checks":[],"fulfillsTask":false,"private":"unvalidated"}' : JSON.stringify(output) });
+  assert.equal((await invalid.handler(request())).status, 502); assert.equal(events.length, 1);
+});
+
 test('database transport preserves an existing abort signal as well as the request budget', async () => {
   for (const abortWhich of ['request', 'upstream']) {
     const caller = new AbortController(), upstream = new AbortController(); let outgoing;
@@ -349,12 +363,15 @@ test('combined real provider format repairs and semantic recovery have exactly s
       fetcher: async (_url, options) => {
         outgoing.push(options); local++;
         if (current <= 2 && local === 1) return Response.json({ error: { code: 'json_validate_failed' } }, { status: 400 });
-        const selectedDraft = draft => JSON.stringify({ ...draft, claims: draft.claims.map(claim => ({ ...claim,
-          evidence: claim.evidence.map(item => {
+        const slots = (items, count) => Object.fromEntries(Array.from({ length: count }, (_, index) => [`slot${index + 1}`, items[index] ?? null]));
+        const selectedClaims = claims => claims.map(claim => ({ ...claim,
+          evidence: slots(claim.evidence.map(item => {
             const span = prompt.evidenceSpans.find(span => span.sourceId === item.sourceId && span.quote === item.quote);
             assert(span, 'Synthetic provider evidence must match an exact server span');
             return { spanId: span.id };
-          }) })) });
+          }), 4) }));
+        const selectedDraft = draft => JSON.stringify({ status: draft.status, claims: slots(selectedClaims(draft.claims), 6),
+          disagreements: slots(selectedClaims(draft.disagreements), 3), unanswered: slots(draft.unanswered, 4) });
         const content = current === 1 ? selectedDraft(rejectedOutput) : current === 2 ? negativeReview(prompt) : current === 3 ? selectedDraft(correctedOutput) : review(prompt);
         return Response.json({ choices: [{ finish_reason: 'stop', message: { content } }] });
       },

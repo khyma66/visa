@@ -207,7 +207,7 @@ test('evidence renders as escaped text with dates and only internal discussion l
     h.render(); await h.settle(); changeQuestion(h, 'What happened?'); await submit(h); await h.settle();
     const html = renderToStaticMarkup(h.tree);
     assert.match(html, /&lt;img/); assert.match(html, /&lt;script&gt;/); assert.doesNotMatch(html, /<script|javascript:/);
-    assert.match(html, /href="\/questions\/post-a#answer-reply-a"/); assert.match(visibleTextOf(h.tree), /I could only review part of these discussions/); assert.match(textOf(h.tree), /2026-10-01 10:00 UTC/);
+    assert.match(html, /href="\/questions\/post-a#answer-reply-a"/); assert.match(visibleTextOf(h.tree), /Source note: This answer does not cover the full discussion/); assert.match(textOf(h.tree), /2026-10-01 10:00 UTC/);
     assert.match(visibleTextOf(h.tree), /Sources · 1/); assert.doesNotMatch(textOf(h.tree), /Partial coverage/);
   } finally { h.close(); }
 });
@@ -239,8 +239,8 @@ test('incomplete catch-up explains the limitation visibly and keeps the saved po
     h.render({ scope: { kind: 'community', id: 'community-a' }, defaultOpen: true }); await h.settle();
     choose(h, 'Catch me up'); await submit(h); await h.settle();
     const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
-    assert.match(visibleTextOf(response), /I could only review part of this time range/);
-    assert.match(visibleTextOf(response), /your last catch-up hasn’t advanced/);
+    assert.match(visibleTextOf(response), /This catch-up does not cover every update in the selected period/);
+    assert.match(visibleTextOf(response), /your saved catch-up position is unchanged/);
     assert.doesNotMatch(visibleTextOf(response), /Checkpoint|Partial coverage/);
     assert.equal(h.storage.get(storageKey), '2026-10-01T00:00:00.000Z');
   } finally { h.close(); }
@@ -276,8 +276,9 @@ test('ranked source selection explains its scope in source details without a mis
     const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
     assert.doesNotMatch(visibleTextOf(response), /only review part|Partial coverage|selection of|discussion text/);
     const details = nodes(response).find(node => node.type === 'details');
-    assert.match(textOf(details), /selection of relevant matching discussions/);
-    assert.match(textOf(details), /Only part of the available discussion text could be reviewed/);
+    assert.match(textOf(details), /Sources were selected for relevance to your question/);
+    assert.match(textOf(details), /not an exhaustive review of every discussion/);
+    assert.match(textOf(details), /checked against relevant excerpts/);
   } finally { h.close(); }
 });
 
@@ -290,7 +291,8 @@ test('missing imported replies remain visible and original-poster replies are at
   try {
     h.render(); await h.settle(); changeQuestion(h, 'Can you explain this reply?'); await submit(h); await h.settle();
     const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
-    assert.match(visibleTextOf(response), /Some replies were not included in the imported discussion/);
+    assert.match(visibleTextOf(response), /Source note: Additional replies from the original thread are not available here/);
+    assert.doesNotMatch(visibleTextOf(response), /I may be missing|Some replies were not included|limited posts/);
     assert.doesNotMatch(visibleTextOf(response), /Original poster|Partial coverage/);
     assert.match(textOf(nodes(response).find(node => node.type === 'details')), /Imported community\s+reply\s+· Original poster/);
   } finally { h.close(); }
@@ -302,8 +304,10 @@ test('post search shows linked excerpts immediately with compact expandable resu
   h.post=async()=>reply(fixture({kind:'posts',posts:[...posts,{...posts[0],questionId:'unsafe',url:'javascript:alert(1)'}],claims:[],sources:[],coverage:{sourceCount:10,partial:true}}));
   try {
     h.render({scope:{kind:'public'},defaultOpen:true});await h.settle();changeQuestion(h,'give all posts related to stamping delay');await submit(h);await h.settle();
-    assert.match(textOf(h.tree),/Found 10 matching posts/);assert.match(textOf(h.tree),/Show 2 more posts/);
-    assert.match(textOf(h.tree),/More posts may match/);assert.doesNotMatch(textOf(h.tree),/Thinking|verify the sources/);
+    assert.match(visibleTextOf(h.tree),/Here are discussions that match your question/);assert.match(textOf(h.tree),/Show 2 more posts/);
+    assert.match(textOf(h.tree),/Showing\s+10\s+matching discussion\s*s/);
+    assert.match(textOf(h.tree),/not an exhaustive list/);assert.doesNotMatch(visibleTextOf(h.tree),/More posts may match|limited posts|not an exhaustive list/);
+    assert.doesNotMatch(textOf(h.tree),/Thinking|verify the sources/);
     const html=renderToStaticMarkup(h.tree);assert.match(html,/href="\/questions\/post-0"/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/javascript:|<script>/);
     assert.equal(nodes(h.tree).filter(node=>node.type==='li').length,10);
   } finally { h.close(); }

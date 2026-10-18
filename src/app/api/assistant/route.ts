@@ -40,6 +40,7 @@ const handle = createAssistantHandler({
   availability,
   reportFailure: event => console.warn('assistant_request_failed', event),
   reportTiming: event => console.info('assistant_request_completed', event),
+  reportReview: event => console.info('assistant_review_completed', event),
   // The provider is read again during inference; deployments set immutable environment values.
   get model() { try { return providerCacheKey(process.env.ASSISTANT_PROVIDER); } catch { return 'disabled'; } },
   cache: cloudflareAssistantCache(),

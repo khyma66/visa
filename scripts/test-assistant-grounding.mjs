@@ -31,11 +31,17 @@ const reviewed = (result, supported = true, fulfillsTask = true) => review.valid
 }), result);
 const spanDraft = (raw, prompt) => {
   const value = JSON.parse(raw);
+  const slots = (items, count) => Object.fromEntries(Array.from({ length: count }, (_, index) => [`slot${index + 1}`, items[index] ?? null]));
   for (const group of ['claims', 'disagreements']) for (const claim of value[group]) claim.evidence = claim.evidence.map(item => {
     const span = prompt.evidenceSpans.find(span => span.sourceId === item.sourceId && span.quote.includes(item.quote));
     assert(span, 'Synthetic supported evidence must match a server-defined span');
     return { spanId: span.id };
   });
+  for (const group of ['claims', 'disagreements']) {
+    for (const claim of value[group]) claim.evidence = slots(claim.evidence, 4);
+    value[group] = slots(value[group], group === 'claims' ? 6 : 3);
+  }
+  value.unanswered = slots(value.unanswered, 4);
   return provider.resolveAssistantEvidence(JSON.stringify(value), prompt);
 };
 

@@ -22,6 +22,36 @@ test('valid nested responses become independent allowlisted objects with safe ev
   assert.equal(result.sources[0].speakerRole, 'original-poster'); assert.equal(result.coverage.sourceCount, 2);
 });
 
+test('source bodies through the server 24k summary limit survive parsing without loosening other nested checks', async () => {
+  for (const length of [12_000, 12_001, 16_000, 23_999, 24_000]) {
+    const input = fixture();
+    input.sources[0].body += 'x'.repeat(length - input.sources[0].body.length);
+    const result = parseAssistantResult(await readAssistantJson(Response.json(input)));
+    assert(result, `A valid ${length}-character cited source must remain displayable`);
+    assert.equal(result.sources[0].body, input.sources[0].body);
+    assert.deepEqual(result.claims, input.claims); assert.equal(result.sources[0].url, input.sources[0].url);
+  }
+  for (const length of [24_001, 48_000]) {
+    const input = fixture(); input.sources[0].body = 'x'.repeat(length);
+    assert.equal(parseAssistantResult(input), null, `Source body ${length} exceeds the server cap`);
+  }
+  const long = fixture(); long.sources[0].body = 'x'.repeat(24_000);
+  for (const mutate of [value => { value.sources[0].createdAt = 'invalid'; }, value => { value.sources[0].parentContext = 'x'.repeat(2001); }, value => { value.claims[0].evidence[0].sourceId = 'a:unknown'; }]) {
+    const input = structuredClone(long); mutate(input); assert.equal(parseAssistantResult(input), null);
+  }
+  long.sources[0].url = 'https://untrusted.example/report';
+  assert.equal(parseAssistantResult(long)?.sources[0].url, '', 'Long sources never bypass navigation restrictions');
+});
+
+test('multiple individually allowed long sources still obey the unchanged 256KB response ceiling', async () => {
+  const input = fixture();
+  input.sources = Array.from({ length: 11 }, (_, index) => ({ ...input.sources[0], id: index ? `a:reply-${index}` : input.sources[0].id, body: 'x'.repeat(24_000) }));
+  input.coverage.sourceCount = input.sources.length;
+  assert.equal(parseAssistantResult(input)?.sources.length, 11, 'Per-source structural validation is separate from the byte reader');
+  const raw = JSON.stringify(input); assert(new TextEncoder().encode(raw).byteLength > 256_000);
+  await assert.rejects(readAssistantJson(new Response(raw)), /exceeds limit/);
+});
+
 test('malformed deeply nested success payloads are rejected before rendering', () => {
   const mutations = [
     v => { v.status = { toString: null }; }, v => { v.claims = null; }, v => { v.claims[0] = null; },
@@ -30,7 +60,7 @@ test('malformed deeply nested success payloads are rejected before rendering', (
     v => { v.claims[0].evidence[0].quote = 1; }, v => { v.claims[0].evidence[0].quote = 'short'; },
     v => { v.claims[0].evidence[0].sourceId = 'a:missing'; }, v => { v.claims = []; },
     v => { v.sources = [null]; }, v => { v.sources[0].kind = { toString: null }; }, v => { v.sources[0].provenance = {}; },
-    v => { v.sources[0].body = {}; }, v => { v.sources[0].body = 'x'.repeat(12001); }, v => { v.sources[0].title = []; },
+    v => { v.sources[0].body = {}; }, v => { v.sources[0].body = 'x'.repeat(24001); }, v => { v.sources[0].title = []; },
     v => { v.sources[0].id = 'javascript:alert(1)'; }, v => { v.sources[0].communityId = {}; }, v => { v.sources[0].url = null; },
     v => { v.sources[0].createdAt = 'yesterday'; }, v => { v.sources[0].updatedAt = null; },
     v => { v.sources[0].parentContext = []; }, v => { v.sources[0].parentUpdatedAt = 'bad'; }, v => { v.sources[0].speakerRole = 'official'; },
