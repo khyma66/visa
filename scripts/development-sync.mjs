@@ -18,6 +18,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const directory = resolve(root, DEV_SYNC_DIRECTORY);
 const configPath = resolve(root, 'dist/server/wrangler.json');
 const allowedPublic = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SITE_URL', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'GOOGLE_NEWS_RSS_ENABLED'];
+// The old dev Worker still carries this unused setting. It is read only to
+// recognize the existing deployment and is never copied into the new build.
+const retiredDevSettings = ['NEWS_REFRESH_ORIGIN'];
 const hash = value => sha256(canonicalJson(value));
 const save = (name, value) => writeFile(resolve(directory, name), `${JSON.stringify(value)}\n`, { mode: 0o600 });
 const read = async name => JSON.parse(await readFile(resolve(directory, name), 'utf8'));
@@ -87,7 +90,7 @@ export function verifyDevelopmentSyncSettings(settings) {
     ASSISTANT_CATCHUP_ENABLED: 'false', ASSISTANT_PROJECT_REF: '', ASSISTANT_PROVIDER: '', PUBLIC_LAUNCH_APPROVED: 'false', IMPORTED_CONTENT_APPROVED: 'false' };
   for (const binding of settings.bindings ?? []) {
     if (binding.type === 'plain_text') {
-      assert(allowedPublic.includes(binding.name) || Object.hasOwn(fixed, binding.name), 'Unrecognized dev variable requires review before sync.');
+      assert(allowedPublic.includes(binding.name) || retiredDevSettings.includes(binding.name) || Object.hasOwn(fixed, binding.name), 'Unrecognized dev variable requires review before sync.');
       if (Object.hasOwn(fixed, binding.name)) assert.equal(binding.text, fixed[binding.name], 'Existing dev setting differs from the reviewed isolated configuration.');
     } else assert(binding.type === 'secret_text' || (binding.type === 'assets' && binding.name === 'ASSETS') || (binding.type === 'version_metadata' && binding.name === 'CF_VERSION_METADATA'), 'Existing dev resource binding requires review before sync.');
   }
@@ -95,6 +98,15 @@ export function verifyDevelopmentSyncSettings(settings) {
   assert.equal(stored.NEXT_PUBLIC_SUPABASE_URL, DEV_DATABASE, 'Dev must already use its isolated database.');
   for (const name of ['APP_ENV', 'COMMUNITY_SOURCE_MODE', 'APIFY_LIVE_FETCH_ENABLED', 'ASSISTANT_ENABLED', 'ASSISTANT_COMMUNITIES_ENABLED', 'ASSISTANT_CATCHUP_ENABLED']) assert.equal(stored[name], fixed[name]);
   return stored;
+}
+export function verifyExistingDevelopmentHealth(health) {
+  assert.equal(health.environment, 'development');
+  assert.equal(health.releaseStatus, 'configured');
+  assert.equal(health.build?.siteOrigin, DEV_SITE);
+  // Old dev releases may record uncommitted source. We preserve only their
+  // published archive after checking the active Worker version and its digest.
+  assert.equal(typeof health.build?.dirty, 'boolean');
+  assert.match(health.build?.gitSha ?? '', /^[a-f0-9]{40}$/);
 }
 async function capture() {
   const production = await productionState();
@@ -106,9 +118,7 @@ async function capture() {
   values.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??= process.env.DEV_SUPABASE_PUBLISHABLE_KEY;
   developmentSyncEnvironment(values);
   const health = await requestJson(`${DEV_SITE}/api/health?dev-sync=${Date.now()}`);
-  assert.equal(health.environment, 'development'); assert.equal(health.releaseStatus, 'configured');
-  assert.equal(health.build?.siteOrigin, DEV_SITE); assert.equal(health.build?.dirty, false);
-  assert.match(health.build?.gitSha ?? '', /^[a-f0-9]{40}$/);
+  verifyExistingDevelopmentHealth(health);
   const feed = await requestJson(`${DEV_SITE}/api/community`);
   const archive = await recoverWorkerArchive(await fetch(cfUrl(`/workers/scripts/${DEV_WORKER}`), { headers: auth(), redirect: 'error', signal: AbortSignal.timeout(30_000) }));
   assert.equal(hash(publishedArchive(archive)), hash(feed), 'Recovered dev archive differs from currently served dev content.');

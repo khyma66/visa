@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRolloutProbe, probeRolloutHealth, publicClientAssets, verifyClientAssets, verifyRolloutHealth, verifyStableRollout, RolloutFailure } from './rollout-verification.mjs';
+import { PLAYBOOK_GUIDE_CHECKS, verifyPlaybookPages } from './smoke-playbook.mjs';
 
 const origin = 'https://visathreads.com';
 const expected = { schemaVersion: 1, gitSha: 'a'.repeat(40), gitTree: 'b'.repeat(40), sourceSha256: 'c'.repeat(64), configSha256: 'd'.repeat(64), appEnvironment: 'development', siteOrigin: origin, dirty: false };
@@ -160,4 +161,53 @@ test('feature integration retains original whole-site assertions and both post-a
   assert(source.includes('receipt.publishedArchiveSha256')); assert(source.includes('assert.deepEqual(await flagsResponse.json(), features)'));
   assert(source.includes("['anonymous-denial', {}, 401]")); assert(source.includes("Origin: 'https://untrusted.example' }, 403")); assert(source.includes("'invalid-session-denial'"));
   assert(source.includes('/private, no-store/')); assert(source.includes('rollout-verification.json'));
+  assert(source.includes('await verifyPlaybookPages(probe, feed)'));
+});
+
+const playbookPost = { id: 'apify-smoke-public-post', status: 'open', destination_country: 'United States', post_kind: 'question', title: 'Public question & source', body: 'Public community content is rendered on the server, without depending on client scripts.' };
+const escapeHtml = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+function playbookDocuments() {
+  const document = (path, title, body) => `<html><head><title>${escapeHtml(title)} · VisaThreads</title><link rel="canonical" href="${origin}${path}"><meta name="robots" content="noindex, nofollow"></head><body>${body}</body></html>`;
+  const pages = new Map([
+    ['/guides?sort=unanswered', document('/guides', 'U.S. Visa Guides and Official Resources', `<h1>U.S. Visa Guides</h1>${PLAYBOOK_GUIDE_CHECKS.map(guide => `<a href="/guides/${guide.slug}">${escapeHtml(guide.title)}</a>`).join('')}`)],
+    ['/about', document('/about', 'About VisaThreads', '<main>An independent community<a href="/guides">Guides</a><a href="/contact">Contact</a></main>')],
+    ['/admin/launch', document('/admin/launch', 'Owner workspace', '<main>Private to the designated owner<p>Checking your account…</p></main>')],
+    [`/questions/${playbookPost.id}`, document(`/questions/${playbookPost.id}`, playbookPost.title, `<h1>${escapeHtml(playbookPost.title)}</h1><div>${escapeHtml(playbookPost.body)}</div>`) ],
+  ]);
+  for (const guide of PLAYBOOK_GUIDE_CHECKS) pages.set(`/guides/${guide.slug}`, document(`/guides/${guide.slug}`, guide.title, `<main><h1>${escapeHtml(guide.title)}</h1><h2>Your preparation checklist</h2><h2>Official references</h2><a href="${guide.source}">Official agency</a><a href="/contact">Report a correction</a></main>`));
+  return pages;
+}
+function playbookProbe(pages) {
+  const paths = [];
+  const p = probe(async (url, init) => {
+    const parsed = new URL(url); const path = parsed.pathname + parsed.search; paths.push(path);
+    assert.equal(init.cache, 'no-store'); assert.equal(init.redirect, 'error'); assert(init.signal instanceof AbortSignal);
+    assert.equal(init.headers?.Authorization, undefined); assert.equal(init.headers?.Cookie, undefined);
+    return response(pages.has(path) ? 200 : 404, { body: pages.get(path) ?? '', type: 'text/html', extra: { 'x-robots-tag': 'noindex, nofollow' } });
+  });
+  return { ...p, paths };
+}
+test('playbook smoke uses exactly seven provenance-aware anonymous requests with real server content', async () => {
+  const p = playbookProbe(playbookDocuments());
+  await verifyPlaybookPages(p, { questions: [{ ...playbookPost, id: 'apify-experience', post_kind: 'experience' }, playbookPost] });
+  assert.equal(p.paths.length, 7); assert.equal(p.records.length, 7);
+  assert(p.records.every(row => row.build === expected.gitSha && row.check.startsWith('playbook:')));
+  assert(p.paths.includes('/guides?sort=unanswered'));
+  assert.equal(p.paths.at(-1), `/questions/${playbookPost.id}`);
+});
+test('playbook smoke rejects script-only content, wrong canonical/source and owner payloads without logging values', async () => {
+  const ownerSecret = 'private-owner-evidence-example';
+  const mutations = [
+    [`/questions/${playbookPost.id}`, html => html.replace(`<div>${playbookPost.body}</div>`, `<script>${JSON.stringify({ body: playbookPost.body })}</script>`), 'imported-server-content'],
+    ['/guides?sort=unanswered', html => html.replace(`${origin}/guides"`, `${origin}/guides?sort=unanswered"`), 'guides-canonical'],
+    [`/guides/${PLAYBOOK_GUIDE_CHECKS[0].slug}`, html => html.replace(PLAYBOOK_GUIDE_CHECKS[0].source, 'https://untrusted.example/'), 'guide-source-and-correction'],
+    ['/admin/launch', html => html.replace('</body>', `<script>{"tasks":[{"evidence":"${ownerSecret}"}]}</script></body>`), 'owner-no-record-payload'],
+    ['/admin/launch', html => html.replace('</body>', `<script>self.__next_f.push([1,"{\\"assigned_to\\":\\"${ownerSecret}\\"}"])</script></body>`), 'owner-no-record-payload'],
+  ];
+  for (const [path, mutate, check] of mutations) {
+    const pages = playbookDocuments(); pages.set(path, mutate(pages.get(path)));
+    const p = playbookProbe(pages);
+    await assert.rejects(verifyPlaybookPages(p, { questions: [playbookPost] }), error => error.message === `Playbook ${check} verification failed.`);
+    assert(!JSON.stringify(p.records).includes(ownerSecret)); assert(!JSON.stringify(p.records).includes(playbookPost.body));
+  }
 });

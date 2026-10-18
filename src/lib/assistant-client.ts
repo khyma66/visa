@@ -75,7 +75,7 @@ export function parseAssistantResult(value: unknown): AssistantResult | null {
       seen.add(post.questionId);
       posts.push({ questionId: post.questionId, sourceId: post.sourceId, title: post.title, excerpt: post.excerpt, url: post.url, createdAt: post.createdAt });
     }
-  } else if (value.posts !== undefined || (value.status === 'answered' && !parsedClaims.length)) return null;
+  } else if (value.posts !== undefined || (value.status === 'answered' && !parsedClaims.length && !disagreements.length)) return null;
   return {
     ...(value.kind === 'posts' ? { kind: 'posts' as const, posts } : {}), status: value.status as AssistantResult['status'],
     // A malformed insufficient result must never display unsupported claims.

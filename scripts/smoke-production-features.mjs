@@ -5,6 +5,7 @@ import { canonicalJson } from './recover-worker-archive.mjs';
 import { smokeSite } from './smoke-site.mjs';
 import { readFeatureBuildProvenance } from './production-feature-release.mjs';
 import { createRolloutProbe, probeRolloutHealth, publicClientAssets, verifyClientAssets, verifyStableRollout } from './rollout-verification.mjs';
+import { verifyPlaybookPages } from './smoke-playbook.mjs';
 
 const receipt = JSON.parse(await readFile('.cache/visaflow/live-preview/receipt.json', 'utf8'));
 const expected = await readFeatureBuildProvenance();
@@ -36,6 +37,7 @@ await verifyStableRollout({ expected, previous: receipt.health,
       await response.body?.cancel();
     }
     await smokeSite(LIVE_SITE, expected, { fetchImpl: probe.siteFetch, skipHealthWait: true });
+    await verifyPlaybookPages(probe, feed);
     await verifyClientAssets(probe, assets);
     await probeRolloutHealth(probe, 'end');
   },

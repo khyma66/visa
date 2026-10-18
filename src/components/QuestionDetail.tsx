@@ -13,7 +13,7 @@ import {
 } from '@/lib/community';
 import type { Answer, Question } from '@/lib/types';
 import { subscribeLive, type LiveStatus } from '@/lib/realtime';
-import { getMemberMessageHref } from '@/lib/messaging-state';
+import { getMemberMessageHref, isMemberId } from '@/lib/messaging-state';
 import { RelatedQuestions } from './RelatedQuestions';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
@@ -51,6 +51,12 @@ function ImportedScore({ score }: { score: number }) {
   );
 }
 
+export function initialAnswerCursor(answers: Answer[]): AnswerCursor | undefined {
+  // Archived source comments are shown with member replies, but only database
+  // UUIDs belong in the member pagination cursor. Preserve their ranked order.
+  return answers.filter(answer => !isImportedPost(answer) && isMemberId(answer.id)).at(-1);
+}
+
 export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: { initialQuestion?: Question | null; initialAnswers?: Answer[] }) {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -59,7 +65,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
   const [discussionContext, setDiscussionContext] = useState('');
   const [moreAnswers, setMoreAnswers] = useState((initialQuestion?.answer_count ?? 0) > initialAnswers.length);
-  const [answerCursor, setAnswerCursor] = useState<AnswerCursor | undefined>(initialAnswers.at(-1));
+  const [answerCursor, setAnswerCursor] = useState<AnswerCursor | undefined>(initialAnswerCursor(initialAnswers));
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [paginationNotice, setPaginationNotice] = useState('');

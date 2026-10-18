@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { publicPageMetadata } from '@/lib/search-metadata';
+
+export function generateMetadata() { return publicPageMetadata('/community-safety', 'Community Safety', 'Protect personal information, report abuse, and check official visa guidance when participating in VisaThreads.'); }
 
 export default function CommunitySafetyPage() {
   return <main className="mx-auto max-w-3xl space-y-7 px-4 py-12 leading-7">

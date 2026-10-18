@@ -222,7 +222,18 @@ for (const name of ['RelatedQuestions','Avatar','ReportButton','SafetyNotice','P
 for (const [name,replacement] of Object.entries(dependencies)) {
   detailSource = detailSource.replaceAll(`from '${name}'`,`from ${JSON.stringify(replacement)}`).replaceAll(`from "${name}"`,`from ${JSON.stringify(replacement)}`);
 }
-const {QuestionDetail} = await import(moduleUrl(detailSource));
+const {QuestionDetail,initialAnswerCursor} = await import(moduleUrl(detailSource));
+test('server-rendered mixed replies use the final native UUID as the initial cursor', () => {
+  const first = { id: alice, source: 'visaflow', vote_score: 9, is_accepted: false };
+  const last = { id: bob, vote_score: 2, is_accepted: false };
+  const imported = { id: 'apify-comment-fixture', source: 'apify', vote_score: 0, is_accepted: false };
+  const mixed = [first, last, imported];
+  assert.equal(initialAnswerCursor(mixed), last);
+  assert.deepEqual(mixed, [first, last, imported], 'Choosing a cursor must not change visible reply order');
+  assert.equal(initialAnswerCursor([imported, { ...first, source: 'apify' }]), undefined);
+  assert.equal(initialAnswerCursor([first, { id: 'malformed-id' }]), first);
+  assert.equal(initialAnswerCursor([]), undefined);
+});
 function renderQuestion(extra={}) {
   const q = {id:question,author_id:alice,author_username:'alice-test',author_avatar_seed:'alice',title:'UI answer pagination fixture',
     body:'A sufficiently long fixture body.',visa_type:'H-1B',destination_country:'United States',tags:['h1b'],status:'open',vote_score:0,

@@ -1,6 +1,7 @@
 import Link from 'next/link';
+import { publicPageMetadata } from '@/lib/search-metadata';
 
-export const metadata = { title: 'Reporting and Privacy Requests' };
+export function generateMetadata() { return publicPageMetadata('/contact', 'Reporting and Privacy Requests', 'Contact VisaThreads about account support, community reports, or privacy requests.'); }
 
 export default function ContactPage() {
   return <main className="mx-auto max-w-3xl space-y-6 px-4 py-12 leading-7">

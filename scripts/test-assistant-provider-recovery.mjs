@@ -111,6 +111,51 @@ const spanWire = value => ({ ...value,
 const spanRaw = value => JSON.stringify(spanWire(value));
 const spanSuccess = value => Response.json({ choices: [{ finish_reason: 'stop', message: { content: spanRaw(value) } }] });
 
+test('a comparison can answer alone in either section without copying, moving or rewriting evidence', async () => {
+  const comparison = { text: 'One report describes Friday delivery, while another reports no Friday delivery.', evidence: [{ spanId: 'span-1' }, { spanId: 'span-2' }] };
+  for (const section of ['disagreements', 'claims']) {
+    const answer = { status: 'answered', claims: [], disagreements: [], unanswered: [], [section]: [comparison] };
+    const before = structuredClone(answer);
+    const expected = { ...answer, [section]: [{ ...comparison, evidence: spans.map(({ sourceId, quote }) => ({ sourceId, quote })) }] };
+    assert.deepEqual(JSON.parse(resolveAssistantEvidence(spanRaw(answer), spanPrompt)), expected);
+    for (const provider of ['groq', 'workers-ai', 'openai']) {
+      let calls = 0, validated;
+      const raw = await runAssistantModel({ ...spanPrompt, validateOutput: value => { validated = JSON.parse(value); } }, {
+        provider, apiKey: 'synthetic-private-key',
+        binding: { run: async () => { calls++; return { response: spanRaw(answer) }; } },
+        fetcher: async () => {
+          calls++;
+          return provider === 'groq' ? spanSuccess(answer) : Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: spanRaw(answer) }] }] });
+        },
+      });
+      assert.equal(calls, 1); assert.deepEqual(JSON.parse(raw), expected); assert.deepEqual(validated, expected);
+    }
+    assert.deepEqual(answer, before);
+  }
+  for (const schema of [assistantOutputSchema(spanPrompt), assistantOutputSchema(prompt)]) {
+    assert.match(schema.properties.status.description, /across claims and disagreements/);
+    assert.match(schema.properties.disagreements.description, /without duplicating/);
+    assert.match(schema.properties.claims.description, /supported comparison may appear here/);
+  }
+});
+
+test('comparison-only answers still reject empty, insufficient-with-facts and invalid proof without salvage', () => {
+  const comparison = { text: 'One report describes Friday delivery, while another reports no Friday delivery.', evidence: [{ spanId: 'span-1' }, { spanId: 'span-2' }] };
+  const answer = { status: 'answered', claims: [], disagreements: [comparison], unanswered: [] };
+  for (const [value, code] of [
+    [{ ...answer, disagreements: [] }, 'answered_without_claims'],
+    [{ ...answer, status: 'insufficient' }, 'output_schema'],
+    [{ ...answer, disagreements: [{ ...comparison, evidence: [{ spanId: 'span-1' }] }] }, 'citation_missing'],
+    [{ ...answer, disagreements: [{ ...comparison, evidence: [{ spanId: 'span-1' }, { spanId: 'foreign' }] }] }, 'citation_source'],
+  ]) assert.throws(() => resolveAssistantEvidence(spanRaw(value), spanPrompt), error => error.code === code);
+  const missingQuote = { ...spanPrompt, evidenceSpans: [spans[0], { id: spans[1].id, sourceId: spans[1].sourceId }] };
+  assert.throws(() => resolveAssistantEvidence(spanRaw(answer), missingQuote), error => error.code === 'citation_schema');
+  const sameSource = { ...spanPrompt, evidenceSpans: [spans[0], { ...spans[1], sourceId: spans[0].sourceId }] };
+  const resolved = resolveAssistantEvidence(spanRaw(answer), sameSource);
+  const source = { id: spans[0].sourceId, title: 'Delivery', body: spans.map(span => span.quote).join('\n'), kind: 'question', url: '/questions/synthetic', createdAt: '2026-10-17T00:00:00Z' };
+  assert.throws(() => validateAssistantOutput(resolved, { sources: [source], partial: false }), error => error.code === 'conflict_sources');
+});
+
 test('every answer provider requests span IDs only and resolves exact Unicode evidence before validation and return', async () => {
   for (const provider of ['groq', 'workers-ai', 'openai']) {
     let calls = 0, wire, validated;

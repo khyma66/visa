@@ -269,6 +269,33 @@ test('related perspectives preserve the reviewed narrative, quotes and inline ci
   } finally { h.close(); }
 });
 
+test('a comparison-only answer renders both exact citations without duplicate claims or a false error', async () => {
+  const quotes = ['At my visit, staff allowed phones inside the venue.', 'At my visit, staff did not allow phones inside the venue.'];
+  const sources = ['one', 'two'].map((name, index) => ({ ...fixture().sources[0], id: `q:apify-comparison-${name}`, kind: 'question',
+    questionId: `apify-comparison-${name}`, communityId: null, body: quotes[index], url: `/questions/apify-comparison-${name}` }));
+  const comparison = 'One member said staff allowed phones inside the venue; another said staff did not. These were individual visits, not a confirmed current rule.';
+  const result = fixture({ claims: [], sources, coverage: { sourceCount: 2, partial: false },
+    disagreements: [{ text: comparison, evidence: sources.map((item, index) => ({ sourceId: item.id, quote: quotes[index] })) }],
+  });
+  const h = new Harness(); h.post = async () => reply(result);
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    changeQuestion(h, 'What conflicting reports did members give about phones?'); await submit(h); await h.settle();
+    const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
+    assert(response, 'A validated comparison-only answer must render as a response');
+    assert.match(visibleTextOf(response), /Related perspectives/);
+    assert.equal(visibleTextOf(response).split(comparison).length - 1, 1, 'The complete comparison appears once');
+    const inlineCitations = nodes(response).filter(node => node.type === 'a' && node.props['aria-label']?.startsWith('Source '));
+    assert.deepEqual(inlineCitations.map(node => ({ text: node.props.children.join(''), href: node.props.href })),
+      sources.map((item, index) => ({ text: `[${index + 1}]`, href: item.url })));
+    assert.deepEqual(nodes(response).filter(node => node.type === 'blockquote').map(node => node.props.children.join('')), quotes.map(quote => `“${quote}”`));
+    assert(!nodes(h.tree).some(node => node.props.role === 'alert'));
+    assert(!nodes(h.tree).some(node => node.type === 'button' && /Retry/.test(textOf(node))));
+    assert.doesNotMatch(visibleTextOf(response), /couldn’t find enough|could not|unavailable|Something went wrong|Try again/);
+    assert.equal(h.calls.filter(call => call.method === 'POST').length, 1);
+  } finally { h.close(); }
+});
+
 test('ranked source selection explains its scope in source details without a missing-data banner', async () => {
   const h = new Harness();
   h.post = async () => reply(fixture({ coverage: { sourceCount: 1, partial: true, reasons: ['retrieval-limit', 'context-limit'] } }));

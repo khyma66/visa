@@ -22,6 +22,45 @@ test('valid nested responses become independent allowlisted objects with safe ev
   assert.equal(result.sources[0].speakerRole, 'original-poster'); assert.equal(result.coverage.sourceCount, 2);
 });
 
+const comparisonFixture = () => {
+  const value = fixture();
+  value.sources.push({ ...value.sources[0], id: 'a:reply-two', questionId: 'apify-two', body: 'They did not ask for documents.', url: '/questions/apify-two#answer-reply-two' });
+  value.claims = [];
+  value.disagreements = [{ text: 'One report describes a document request, while another says no documents were requested.', evidence: value.sources.map(source => ({ sourceId: source.id, quote: source.body })) }];
+  return value;
+};
+
+test('a verified comparison alone remains an answer without copied claims or changed evidence', () => {
+  for (const section of ['disagreements', 'claims']) {
+    const input = comparisonFixture();
+    if (section === 'claims') { input.claims = input.disagreements; input.disagreements = []; }
+    const before = structuredClone(input);
+    const result = parseAssistantResult(input);
+    assert(result); assert.equal(result.status, 'answered');
+    assert.deepEqual(result.claims, input.claims); assert.deepEqual(result.disagreements, input.disagreements);
+    assert.notEqual(result[section][0], input[section][0]);
+    assert.notEqual(result[section][0].evidence[0], input[section][0].evidence[0]);
+    assert.deepEqual(input, before);
+  }
+});
+
+test('comparison-only responses cannot bypass nonempty answers, distinct sources or exact evidence shape', () => {
+  for (const mutate of [
+    value => { value.disagreements = []; },
+    value => { value.disagreements[0].evidence.pop(); },
+    value => { value.disagreements[0].evidence[1].sourceId = value.disagreements[0].evidence[0].sourceId; },
+    value => { delete value.disagreements[0].evidence[1].quote; },
+    value => { value.disagreements[0].evidence[1].quote = 'short'; },
+    value => { value.disagreements[0].evidence[1].sourceId = 'a:unknown'; },
+    value => { value.disagreements.push({ text: 'Invalid extra comparison.', evidence: [] }); },
+  ]) {
+    const input = comparisonFixture(); mutate(input); assert.equal(parseAssistantResult(input), null, String(mutate));
+  }
+  const insufficient = comparisonFixture(); insufficient.status = 'insufficient';
+  const result = parseAssistantResult(insufficient);
+  assert(result); assert.deepEqual(result.claims, []); assert.deepEqual(result.disagreements, []);
+});
+
 test('source bodies through the server 24k summary limit survive parsing without loosening other nested checks', async () => {
   for (const length of [12_000, 12_001, 16_000, 23_999, 24_000]) {
     const input = fixture();
