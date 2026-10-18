@@ -11,6 +11,7 @@ name: Release current VisaThreads AI features
 # Require atomic source facts and one bounded, independently verified correction.
 # Resolve model-selected evidence IDs to server-owned complete source excerpts.
 # Bound provider collections with nullable slots before exact evidence resolution.
+# Verify historical/current document relationships and canonical summary intent.
 # Preserve conflicting-report sections during independent review and correction.
 
 on:
