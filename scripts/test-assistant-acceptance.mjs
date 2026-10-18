@@ -317,6 +317,48 @@ test('reviewed public answers preserve outcomes, negation, translation and conve
   assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
 });
 
+test('comparison acceptance preserves both positions and expected citations in either presentation section', async () => {
+  for (const id of ['conflicting-reports', 'public-conflicting-reports']) {
+    const fixture = acceptanceFixtures.find(item => item.id === id);
+    const evidence = fixture.corpus.sources.map(source => ({ sourceId: source.id, quote: source.body }));
+    const wordings = [
+      // Exact valid combined wording retained from failed hosted run 39107516414.
+      'One member said staff allowed phones inside the venue, while another said staff did not allow phones inside the venue.',
+      'One member reported that phones were permitted inside the venue; another reported that phones were not permitted inside the venue.',
+      'Staff allowed one member to bring a phone inside the venue, while another reported that staff prohibited phones inside the venue.',
+      'One member said phones were not allowed inside the venue; another said phones were allowed inside the venue.',
+    ];
+    for (const section of ['claims', 'disagreements']) for (const text of wordings) {
+      const comparison = { text, evidence };
+      const draft = { status: 'answered', claims: [], disagreements: [], unanswered: [], [section]: [comparison] };
+      let calls = 0;
+      const evaluation = await (await worker.fetch(request({ id }), { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+        calls++;
+        if (input.response_format.json_schema.name === 'discussion_answer_review') {
+          assert.match(input.messages[0].content, /Judge completeness by meaning, not section placement or repetition/);
+          assert.match(input.messages[0].content, /citations to every report it compares, from at least two distinct sources/);
+        }
+        return reviewResponse(input) ?? { response: JSON.stringify(draft) };
+      } } })).json();
+      assert.equal(evaluation.passed, true, JSON.stringify(evaluation));
+      assert.equal(calls, 2, 'Comparison-only answers must still receive independent review');
+      const base = { ...draft, sources: fixture.corpus.sources, coverage: { sourceCount: 2, partial: false } };
+      for (const bad of [
+        { ...comparison, text: 'One member said staff allowed phones inside the venue.' },
+        { ...comparison, text: 'One member said staff did not allow phones inside the venue.' },
+        { ...comparison, text: 'The reports differ.' },
+        { ...comparison, text: 'One member said staff allowed phones outside the venue, while another said staff did not allow phones outside the venue.' },
+        { ...comparison, text: 'One member said phones were not permitted inside the venue; another said phones were not allowed inside the venue.' },
+        { ...comparison, text: 'One member said staff did not allow phones inside the venue; another said staff prohibited phones inside the venue.' },
+        { ...comparison, evidence: evidence.slice(0, 1) },
+        { ...comparison, evidence: [evidence[0], evidence[0]] },
+        { ...comparison, evidence: evidence.map(item => ({ ...item, sourceId: 'a:unrelated' })) },
+        { ...comparison, text: comparison.text + ' Phones are always allowed.' },
+      ]) assert.equal(evaluateAcceptance(fixture, { ...base, [section]: [bad] }).passed, false, `${id}: ${JSON.stringify(bad)}`);
+    }
+  }
+});
+
 test('independent review rejects fabricated meaning without replacing it with a raw quote', async () => {
   const fixture = acceptanceFixtures.find(item => item.id === 'public-denied-outcome');
   const draft = { status: 'answered', claims: [{ text: 'The member was approved immediately on Tuesday.', evidence: [{ sourceId: 'a:fixture-60', quote: 'My application was denied after the interview.' }] }], disagreements: [], unanswered: [] };

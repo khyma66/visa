@@ -13,7 +13,8 @@ name: Release current VisaThreads AI features
 # ROI playbook release: owner launch/experiment workspace and source-linked guides.
 # Bound provider collections with nullable slots before exact evidence resolution.
 # Verify historical/current document relationships and canonical summary intent.
-# Preserve conflicting-report sections during independent review and correction.
+# Preserve conflicting reports during independent review and correction.
+# Accept complete two-source comparisons without requiring duplicate statements.
 
 on:
   workflow_dispatch:

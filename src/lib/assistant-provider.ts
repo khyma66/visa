@@ -21,9 +21,9 @@ export const OPENAI_ASSISTANT_MODEL = 'gpt-6-luna';
 const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], properties: { sourceId: { type: 'string', minLength: 1 }, quote: { type: 'string', minLength: 12, maxLength: 400 } } };
 const claim = { type: 'object', additionalProperties: false, required: ['text', 'evidence'], properties: { text: { type: 'string', minLength: 1, maxLength: 700 }, evidence: { type: 'array', minItems: 1, maxItems: 4, items: evidence } } };
 export const ASSISTANT_OUTPUT_SCHEMA = { type: 'object', additionalProperties: false, required: ['status', 'disagreements', 'claims', 'unanswered'], properties: {
-  status: { type: 'string', enum: ['answered', 'insufficient'] },
-  disagreements: { type: 'array', maxItems: 3, description: 'Populate this FIRST. Every comparison of contradictory or conflicting reports belongs here, with exact quotes and source IDs from at least two disagreeing sources. An empty array means no relevant conflicting reports were found. Do not move such comparisons into claims instead.', items: { ...claim, properties: { ...claim.properties, evidence: { ...claim.properties.evidence, minItems: 2 } } } },
-  claims: { type: 'array', maxItems: 6, description: 'Individual attributed factual reports supported by source quotes. When reports conflict, state each side individually here and put the comparison in disagreements. Do not use a conflict-comparison claim as a substitute for filling disagreements.', items: claim },
+  status: { type: 'string', enum: ['answered', 'insufficient'], description: 'Answered requires at least one cited claim or comparison across claims and disagreements. Insufficient requires both arrays to be empty.' },
+  disagreements: { type: 'array', maxItems: 3, description: 'Prefer this section for relevant conflicting reports. Preserve both attributed positions with exact quotes and source IDs from at least two disagreeing sources. A supported comparison can answer without duplicating its reports in claims.', items: { ...claim, properties: { ...claim.properties, evidence: { ...claim.properties.evidence, minItems: 2 } } } },
+  claims: { type: 'array', maxItems: 6, description: 'Attributed factual reports supported by source quotes. Prefer disagreements for conflicting comparisons, but a supported comparison may appear here if it preserves both attributed positions and citations. Do not repeat reports already conveyed in a comparison.', items: claim },
   unanswered: { type: 'array', maxItems: 4, items: { type: 'string', maxLength: 400 } },
 } };
 
@@ -92,7 +92,7 @@ export function resolveAssistantEvidence(raw: string, prompt: AssistantPrompt): 
   const unanswered = readSlots(value.unanswered, 4, 'unanswered_limit');
   if (unanswered.some(item => typeof item !== 'string' || item.length > 400)) return evidenceFailure('unanswered_limit');
   const claims = resolveClaims(value.claims, 6, 1), disagreements = resolveClaims(value.disagreements, 3, 2);
-  if (value.status === 'answered' && !claims.length) return evidenceFailure('answered_without_claims');
+  if (value.status === 'answered' && !claims.length && !disagreements.length) return evidenceFailure('answered_without_claims');
   if (value.status === 'insufficient' && (claims.length || disagreements.length)) return evidenceFailure('output_schema');
   const resolved = JSON.stringify({ status: value.status, disagreements, claims, unanswered });
   if (resolved.length > 24_000) return evidenceFailure('output_schema');
@@ -125,9 +125,9 @@ export function assistantOutputSchema(prompt: AssistantPrompt) {
           text: { type: 'string', minLength: 1, maxLength: 700 }, evidence: { $ref: '#/$defs/evidenceSlots' },
         } },
       }, properties: {
-        status: { type: 'string', enum: ['answered', 'insufficient'], description: 'Answered requires at least one claim. Insufficient requires all claim and disagreement slots to be null.' },
-        disagreements: slotSchema(3, { $ref: '#/$defs/claim' }, 'Populate relevant contradictions FIRST, with evidence from at least two different sources. Every unused slot must be null.'),
-        claims: slotSchema(6, { $ref: '#/$defs/claim' }, 'Use as many of these six slots as needed for essential attributed facts AND material qualifications. Never omit an explicit personal-only limitation or important unknown outcome merely to shorten a summary. Put comparisons of conflicting reports in disagreements. Every unused slot must be null.'),
+        status: { type: 'string', enum: ['answered', 'insufficient'], description: 'Answered requires at least one cited claim or comparison across claims and disagreements. Insufficient requires all claim and disagreement slots to be null.' },
+        disagreements: slotSchema(3, { $ref: '#/$defs/claim' }, 'Prefer this section for relevant conflicting reports, preserving both attributed positions with evidence from at least two different sources. A supported comparison can answer without duplicating its reports in claims. Every unused slot must be null.'),
+        claims: slotSchema(6, { $ref: '#/$defs/claim' }, 'Use as many of these six slots as needed for essential attributed facts AND material qualifications. Never omit an explicit personal-only limitation or important unknown outcome merely to shorten a summary. Prefer disagreements for conflicting comparisons, but a supported comparison may appear here if it preserves both attributed positions and citations. Do not repeat reports already conveyed in a comparison. Every unused slot must be null.'),
         unanswered: slotSchema(4, { type: 'string', maxLength: 400 }, 'Questions not resolved by the evidence. Every unused slot must be null.'),
       },
     };

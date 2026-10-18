@@ -139,7 +139,7 @@ test('summary review requires important stated unknowns in cited claims even whe
   assert.equal(validateAssistantReview(verdict([{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: true }], true), complete), complete);
 });
 
-test('review treats conflict placement and both individual reports as task completeness, not factual support', () => {
+test('review accepts complete attributed comparisons in either section without requiring repetition', () => {
   const sources = ['At my visit, staff allowed phones inside the venue.', 'At my visit, staff did not allow phones inside the venue.']
     .map((body, index) => ({ ...source, id: `a:conflict-${index}`, body }));
   const evidence = sources.map(item => ({ sourceId: item.id, quote: item.body }));
@@ -148,30 +148,41 @@ test('review treats conflict placement and both individual reports as task compl
     { text: 'One member said staff allowed phones inside the venue.', evidence: [evidence[0]] },
     { text: 'Another member said staff did not allow phones inside the venue.', evidence: [evidence[1]] },
   ];
-  const wrongSection = { ...result, sources, claims: [comparison], disagreements: [] };
-  const complete = { ...wrongSection, claims: reports, disagreements: [comparison] };
+  const combined = { ...result, sources, claims: [comparison], disagreements: [] };
+  const comparisonOnly = { ...combined, claims: [], disagreements: [comparison] };
+  const complete = { ...combined, claims: reports, disagreements: [comparison] };
   for (const request of [
     { ...input, question: 'What conflicting reports did members provide about phones inside the venue?' },
     { mode: 'summary', scope: { kind: 'post', id: source.questionId } },
     { mode: 'catchup', scope: { kind: 'community', id: 'test-community' } },
   ]) {
-    const prompt = assistantReviewPrompt(request, { sources, partial: false }, wrongSection);
-    assert.match(prompt.system, /relevant conflicting reports must have a comparison with kind disagreement citing both conflicting sources/);
-    assert.match(prompt.system, /each side must also appear as a separate attributed kind claim/);
-    assert.match(prompt.system, /Set fulfillsTask false if the comparison appears only as a claim, the disagreement is missing, or either individual report is missing/);
-    assert.match(prompt.system, /supported true and fulfillsTask false/);
+    const prompt = assistantReviewPrompt(request, { sources, partial: false }, combined);
+    assert.match(prompt.system, /Judge completeness by meaning, not section placement or repetition/);
+    assert.match(prompt.system, /it explicitly preserves both relevant attributed positions and their material qualifications/);
+    assert.match(prompt.system, /it may appear as kind claim or kind disagreement, with the other section empty/);
+    assert.match(prompt.system, /Do not require separate repeated individual claims/);
+    assert.match(prompt.system, /Set fulfillsTask false if a relevant side or qualification is absent/);
+    assert.match(prompt.system, /A quotation from only one side cannot support a plural comparison/);
     const checks = JSON.parse(prompt.user).candidate.checks;
     assert.deepEqual(checks.map(check => [check.id, check.kind]), [['claim:0', 'claim']]);
-    assert.deepEqual(checks[0].evidence, evidence, 'Both exact citations can be valid while the section is wrong');
+    assert.deepEqual(checks[0].evidence, evidence, 'A comparison must preserve both exact citations');
   }
-  for (const candidate of [wrongSection, { ...complete, claims: reports.slice(0, 1) }]) {
+  for (const candidate of [combined, comparisonOnly, complete]) {
+    const checks = JSON.parse(assistantReviewPrompt(input, { sources, partial: false }, candidate).user).candidate.checks;
+    assert.equal(validateAssistantReview(verdict(checks.map(({ id }) => ({ id, supported: true }))), candidate), candidate);
+  }
+  for (const candidate of [{ ...combined, claims: reports.slice(0, 1) }, { ...comparisonOnly, disagreements: [{ ...comparison, text: 'The reports differ.' }] }]) {
     const checks = JSON.parse(assistantReviewPrompt(input, { sources, partial: false }, candidate).user).candidate.checks;
     const rejected = validateAssistantReview(verdict(checks.map(({ id }) => ({ id, supported: true })), false), candidate);
     assert.equal(rejected.status, 'insufficient');
     assert.deepEqual(rejected.claims, []); assert.deepEqual(rejected.disagreements, []); assert.deepEqual(rejected.sources, []);
   }
-  assert.equal(validateAssistantReview(verdict([{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: true }, { id: 'disagreement:0', supported: true }]), complete), complete);
-  assert.deepEqual(wrongSection.claims, [comparison], 'Review does not rewrite or relocate model text');
+  for (const candidate of [{ ...combined, claims: [{ ...comparison, evidence: [evidence[0]] }] }, comparisonOnly]) {
+    const checks = JSON.parse(assistantReviewPrompt(input, { sources, partial: false }, candidate).user).candidate.checks;
+    const rejected = validateAssistantReview(verdict(checks.map(({ id }) => ({ id, supported: false }))), candidate);
+    assert.equal(rejected.status, 'insufficient'); assert.deepEqual(rejected.disagreements, []);
+  }
+  assert.deepEqual(combined.claims, [comparison], 'Review does not rewrite or relocate model text');
 });
 
 test('review does not demand a conflict section for different individual timelines', () => {

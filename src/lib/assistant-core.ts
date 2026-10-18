@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantStandaloneFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v22-temporal-provenance';
+export const ASSISTANT_VERSION = 'grounded-chat-v23-evidence-comparisons';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -303,9 +303,9 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       'Every factual sentence belongs in claims or disagreements and MUST cite supporting span IDs from the supplied sources[].spans catalog. Each evidence entry must contain ONLY {"spanId":"the supplied span ID"}. Never write quote or sourceId fields, invent span IDs, or change a span. A source body provides context, but only its listed spans are citable. No unsupported introductory paragraph.',
       'Never quote parentContextOnly as evidence: it only explains what a reply refers to. To cite the parent’s facts, select a span belonging to the separate parent question source. A title is context only, never a citable span.',
       'If evidence is absent, irrelevant or conflicting, say so. Do not answer from memory. Preserve dates and uncertainty.',
-      'When sources contradict each other on the same issue, put the comparison in disagreements with spans from at least two conflicting sources. Also preserve each individual report as a separate cited claim. Do not put a conflicting comparison only in claims while leaving disagreements empty, and do not choose a winner without evidence.',
-      'Populate disagreements BEFORE claims: first identify incompatible reports on the same issue and cite both sides in disagreements; then write the individual attributed reports in claims. Set all disagreement slots to null only when the supplied sources contain no conflicting reports relevant to the task.',
-      'FORMAT EXAMPLE ONLY, NOT EVIDENCE: if hypothetical span example-A says "The library opens at eight." and span example-B from another source says "The library opens at nine.", write "disagreements":{"slot1":{"text":"The reports disagree about the library opening time.","evidence":{"slot1":{"spanId":"example-A"},"slot2":{"spanId":"example-B"},"slot3":null,"slot4":null}},"slot2":null,"slot3":null} and separately cite each individual report in claims. Never copy these example IDs or facts into your answer; use only the actual supplied spans.',
+      'When relevant reports differ on the same issue, preserve both attributed positions in a concise comparison with spans from at least two different sources. Prefer disagreements for this comparison; a fully supported comparison in claims is also valid. Do not duplicate the same reports across both sections merely to fill slots. Do not choose a winner, infer a current rule, or claim identical circumstances without evidence.',
+      'A complete, cited comparison can answer the question by itself: use status answered with unused claim slots null when the substantive answer is in disagreements. Conversely, a supported comparison in claims does not need repetition in disagreements. Section placement is presentation, not evidence. An answered result must contain at least one substantive statement across the two sections; a vague "reports differ" without the actual relevant positions is not a complete answer.',
+      'FORMAT EXAMPLE ONLY, NOT EVIDENCE: if hypothetical span example-A says "The library opens at eight." and span example-B from another source says "The library opens at nine.", write "disagreements":{"slot1":{"text":"One report says the library opens at eight; the other says nine.","evidence":{"slot1":{"spanId":"example-A"},"slot2":{"spanId":"example-B"},"slot3":null,"slot4":null}},"slot2":null,"slot3":null} with unused claim slots null. Never copy these example IDs or facts into your answer; use only the actual supplied spans.',
       'For catchup, describe only events in the supplied interval. Older parent questions provide context, not new events. Coverage may be partial.',
       'For a question with a supplied interval, it filters source posting dates, not appointment dates. Older parent or correction context may explain a recent reply but is not itself a recent experience. State the original reported dates; never turn an ingestion or posting date into an event date. When there is no qualifying recent evidence, say so rather than presenting old reports as recent.',
       'Return only JSON with exactly these root fields: status, disagreements, claims, unanswered. status is "answered" or "insufficient". The other fields are fixed-slot objects, NEVER arrays. claims requires slot1 through slot6; disagreements requires slot1 through slot3; unanswered requires slot1 through slot4. Every slot key is required: use null for each unused slot, never omit it or add a slot. A non-null claim or disagreement is exactly {"text":"individual report or comparison","evidence":{"slot1":{"spanId":"supplied ID"},"slot2":null,"slot3":null,"slot4":null}}. Each evidence object requires slot1 through slot4, each null or exactly {"spanId":"supplied ID"}. Each unanswered slot is null or a short string describing an open question or evidence limitation. No additional fields.',
@@ -465,12 +465,12 @@ export function validateAssistantOutput(raw: string, corpus: AssistantCorpus, no
   };
   let claims = parseClaims(value.claims, 6), disagreements = parseClaims(value.disagreements, 3, true);
   if (value.unanswered.length > 4 || value.unanswered.some(t => typeof t !== 'string' || t.length > 400)) return invalid('unanswered_limit');
-  if (value.status === 'answered' && !claims.length) return invalid('answered_without_claims');
+  if (value.status === 'answered' && !claims.length && !disagreements.length) return invalid('answered_without_claims');
   let status = value.status as AssistantResult['status'];
   const policyQuestion = input?.mode === 'ask' && needsAuthoritativePolicyAnswer(input);
   if (input) {
     ({ claims, disagreements } = groundAssistantAnswer(claims, disagreements, corpus));
-    if (status === 'insufficient' || policyQuestion || !claims.length) { status = 'insufficient'; claims = []; disagreements = []; }
+    if (status === 'insufficient' || policyQuestion || (!claims.length && !disagreements.length)) { status = 'insufficient'; claims = []; disagreements = []; }
   }
   const usedIds = new Set([...claims, ...disagreements].flatMap(c => c.evidence.map(e => e.sourceId)));
   return { status, claims, disagreements,
