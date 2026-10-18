@@ -18,6 +18,12 @@ async function component(path, dependencies = {}) {
   for (const [name, replacement] of Object.entries(dependencies)) code = code.replaceAll(`'${name}'`, JSON.stringify(replacement));
   return { ...await import(url(code)), moduleUrl: url(code) };
 }
+const guides = await component('../src/lib/visa-guides.ts');
+const visibility = await component('../src/lib/search-visibility.ts', { './visa-guides': guides.moduleUrl });
+const presentation = await component('../src/lib/post-presentation.ts');
+const searchMetadata = await component('../src/lib/search-metadata.ts', {
+  './search-visibility': visibility.moduleUrl, './post-presentation': presentation.moduleUrl,
+});
 test('one compact footer reminder preserves essential safety facts without a warning banner',async()=>{
   const { SafetyNotice } = await component('../src/components/SafetyNotice.tsx');
   const html = renderToStaticMarkup(createElement(SafetyNotice));
@@ -66,7 +72,7 @@ test('safety and early-preview disclosures appear once in the footer, not above 
 });
 test('policy pages clearly disclose missing operator processes rather than pretending compliance',async()=>{
   for(const [page,phrase] of Object.entries({privacy:'not a finalized production policy',terms:'not finalized production Terms',contact:'does not submit a request'})) {
-    const {default:Page}=await component(`../src/app/${page}/page.tsx`);
+    const {default:Page}=await component(`../src/app/${page}/page.tsx`, { '@/lib/search-metadata': searchMetadata.moduleUrl });
     const html=renderToStaticMarkup(createElement(Page));
     assert(html.includes(phrase),page);
     if (page === 'contact') assert(html.includes('href="mailto:varunchinna5966@gmail.com"'), 'Use only the approved temporary contact');

@@ -53,7 +53,7 @@
     "build:devsite": "node scripts/development-site.mjs",
     "deploy:devsite": "node scripts/development-site.mjs --deploy",
     "test:dependencies": "node --test scripts/test-braces-security.mjs vendor/braces/test/*.js",
-    "test:analytics": "node --test scripts/test-analytics.mjs scripts/test-search-visibility.mjs"
+    "test:analytics": "node --test scripts/test-analytics.mjs scripts/test-search-visibility.mjs scripts/test-search-metadata.mjs scripts/test-launch-workspace.mjs scripts/test-launch-ui.mjs scripts/test-visa-guides.mjs"
   },
   "keywords": [
     "visa",

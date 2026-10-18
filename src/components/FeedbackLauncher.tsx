@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { MessageSquarePlus, Inbox, X } from 'lucide-react';
+import { BarChart3, ClipboardList, MessageSquarePlus, Inbox, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { FeedbackForm } from './FeedbackForm';
 import { useAuth } from './AuthProvider';
@@ -42,5 +42,9 @@ export function OwnerFeedbackLink() {
     if (user && !demoMode) void isFeedbackOwner().then(value => { if (active) setAllowed(value === true); }).catch(() => {});
     return () => { active = false; };
   }, [user?.id, demoMode]);
-  return allowed ? <Link href="/owner/feedback" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Inbox size={16} aria-hidden="true"/>Feedback Inbox</Link> : null;
+  return allowed ? <>
+    <Link href="/admin/analytics" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><BarChart3 size={16} aria-hidden="true"/>Community Dashboard</Link>
+    <Link href="/admin/launch" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><ClipboardList size={16} aria-hidden="true"/>Launch & Experiments</Link>
+    <Link href="/owner/feedback" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Inbox size={16} aria-hidden="true"/>Feedback Inbox</Link>
+  </> : null;
 }

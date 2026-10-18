@@ -21,4 +21,5 @@ export type ImportHealth = {
 export type AnalyticsResponse = {
   metrics: OwnerAnalytics; imports: ImportHealth;
   release: { environment: string; publicLaunchApproved: boolean; checks: { key: string; status: string }[] };
+  readiness: { searchEligible: boolean; canonicalOrigin: string; assistantEnabled: boolean; visitorTracking: 'not-configured'; billing: 'not-configured' };
 };

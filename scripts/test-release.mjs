@@ -58,7 +58,14 @@ test('each human/security review is required and import approval needs attributa
 });
 
 test('public HTML reads never forward sessions and fail on backend errors', async () => {
-  const source = transpile(await readFile(new URL('../src/lib/public-server.ts',import.meta.url),'utf8')).replace("'react'",JSON.stringify(moduleUrl('export const cache = (fn) => fn;')));
+  const presentation = moduleUrl(transpile(await readFile(new URL('../src/lib/post-presentation.ts', import.meta.url), 'utf8')));
+  const source = transpile(await readFile(new URL('../src/lib/public-server.ts',import.meta.url),'utf8'))
+    .replace("'react'",JSON.stringify(moduleUrl('export const cache = (fn) => fn;')))
+    .replace("'@visa/archive'", JSON.stringify(moduleUrl('export default {questions:[],answersByQuestionId:{}};')))
+    .replace("'./archive-presentation'", JSON.stringify(moduleUrl('export const normalizeArchiveFeed = value => value;')))
+    .replace("'./post-presentation'", JSON.stringify(presentation))
+    .replace("'./search-metadata'", JSON.stringify(moduleUrl('export const NATIVE_THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;')))
+    .replace("'./search-visibility'", JSON.stringify(moduleUrl('export const publicSearchOrigin = () => null;')));
   const { publicQuestion } = await import(moduleUrl(source));
   const previousFetch = globalThis.fetch;
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

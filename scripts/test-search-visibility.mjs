@@ -7,15 +7,17 @@ const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source)
 const transpile = (source) => ts.transpileModule(source, { compilerOptions: {
   target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022,
 } }).outputText;
-const helperUrl = moduleUrl(transpile(await readFile(new URL('../src/lib/search-visibility.ts', import.meta.url), 'utf8')));
-const { publicSearchOrigin, publicSitemap, publicRobots, PUBLIC_SITEMAP_PATHS, PRIVATE_CRAWL_PATHS } = await import(helperUrl);
+const guideUrl = moduleUrl(transpile(await readFile(new URL('../src/lib/visa-guides.ts', import.meta.url), 'utf8')));
+const { VISA_GUIDES } = await import(guideUrl);
+const helperUrl = moduleUrl(transpile(await readFile(new URL('../src/lib/search-visibility.ts', import.meta.url), 'utf8')).replace("'./visa-guides'", JSON.stringify(guideUrl)));
+const { publicSearchOrigin, publicSitemap, publicRobots, PUBLIC_SITEMAP_PATHS, PRIVATE_CRAWL_PATHS, MODEL_USE_CRAWLERS } = await import(helperUrl);
 const approved = { APP_ENV: 'production', PUBLIC_LAUNCH_APPROVED: 'true', NEXT_PUBLIC_SITE_URL: 'https://visathreads.com' };
 
 test('only a reviewed production deployment publishes a sitemap', () => {
   assert.equal(publicSearchOrigin(approved), 'https://visathreads.com');
   assert.equal(publicSearchOrigin({ ...approved, NEXT_PUBLIC_SITE_URL: 'https://www.visathreads.com/' }), 'https://visathreads.com');
-  assert.deepEqual(publicSitemap(approved), PUBLIC_SITEMAP_PATHS.map((path) => ({ url: `https://visathreads.com${path}` })));
-  assert.equal(new Set(publicSitemap(approved).map(({ url }) => url)).size, PUBLIC_SITEMAP_PATHS.length);
+  assert.deepEqual(publicSitemap(approved), [...PUBLIC_SITEMAP_PATHS, ...VISA_GUIDES.map(guide => `/guides/${guide.slug}`)].map((path) => ({ url: `https://visathreads.com${path}` })));
+  assert.equal(new Set(publicSitemap(approved).map(({ url }) => url)).size, PUBLIC_SITEMAP_PATHS.length + VISA_GUIDES.length);
 });
 
 test('previews and unapproved releases neither enumerate pages nor advertise a production sitemap', () => {
@@ -41,6 +43,7 @@ test('invalid, sensitive, local and sandbox canonical origins fail closed', () =
     'https://visathreads.com/#fragment', 'https://localhost', 'https://test.localhost',
     'https://127.0.0.1', 'https://[::1]', 'https://visa-central.com',
     'https://www.visa-central.com', 'https://preview.workers.dev',
+    'https://unowned-example.com', 'https://visathreads.com.unowned-example.com',
   ]) {
     const env = { ...approved, NEXT_PUBLIC_SITE_URL: origin };
     assert.equal(publicSearchOrigin(env), null, String(origin));
@@ -52,10 +55,14 @@ test('invalid, sensitive, local and sandbox canonical origins fail closed', () =
 test('approved robots excludes all private areas and points at the canonical sitemap', () => {
   const robots = publicRobots(approved);
   assert.equal(robots.sitemap, 'https://visathreads.com/sitemap.xml');
-  assert.equal(robots.rules.allow, '/');
-  assert.deepEqual(robots.rules.disallow, [...PRIVATE_CRAWL_PATHS]);
+  assert.equal(robots.rules[0].allow, '/');
+  assert.deepEqual(robots.rules[0].disallow, [...PRIVATE_CRAWL_PATHS]);
+  assert.deepEqual(robots.rules[1], { userAgent: [...MODEL_USE_CRAWLERS], disallow: '/' });
+  for (const crawler of ['Googlebot', 'Bingbot', 'OAI-SearchBot', 'Claude-SearchBot', 'PerplexityBot']) {
+    assert(!MODEL_USE_CRAWLERS.includes(crawler));
+  }
   for (const path of ['/account', '/admin', '/owner', '/login', '/signup', '/messages', '/moderation', '/api/', '/ask', '/assistant', '/feedback', '/my-communities', '/communities/new', '/experiences/new']) {
-    assert(robots.rules.disallow.includes(path), path);
+    assert(robots.rules[0].disallow.includes(path), path);
     assert(!PUBLIC_SITEMAP_PATHS.includes(path), path);
   }
 });
@@ -71,7 +78,8 @@ test('metadata routes use request-time environment gates, including after a prio
   const routes = {};
   for (const name of ['robots', 'sitemap']) {
     const source = transpile(await readFile(new URL(`../src/app/${name}.ts`, import.meta.url), 'utf8'))
-      .replace("'@/lib/search-visibility'", JSON.stringify(helperUrl));
+      .replace("'@/lib/search-visibility'", JSON.stringify(helperUrl))
+      .replace("'@/lib/public-server'", JSON.stringify(moduleUrl('export async function publicThreadSitemap() { return []; }')));
     routes[name] = await import(moduleUrl(source));
     assert.equal(routes[name].dynamic, 'force-dynamic');
   }
@@ -80,10 +88,10 @@ test('metadata routes use request-time environment gates, including after a prio
   try {
     Object.assign(process.env, approved);
     delete process.env.NEXT_PUBLIC_DEPLOYMENT_TARGET;
-    assert.deepEqual(routes.sitemap.default(), publicSitemap(approved));
+    assert.deepEqual(await routes.sitemap.default(), publicSitemap(approved));
     assert.deepEqual(routes.robots.default(), publicRobots(approved));
     process.env.APP_ENV = 'development';
-    assert.deepEqual(routes.sitemap.default(), []);
+    assert.deepEqual(await routes.sitemap.default(), []);
     assert.deepEqual(routes.robots.default(), { rules: { userAgent: '*', disallow: '/' } });
   } finally {
     for (const [name, value] of Object.entries(previous)) {
