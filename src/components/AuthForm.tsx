@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useAuth } from './AuthProvider';
 import { TurnstileCheck } from './TurnstileCheck';
 import { getAuthMethods } from '@/lib/supabase/client';
-import { authCallbackUrl, authErrorMessage, authCaptchaOptions, safeAuthNext, type AuthMethods, type SocialProvider } from '@/lib/auth-flow';
+import { authCallbackUrl, authErrorMessage, authCaptchaOptions, safeAuthNext, type AuthErrorContext, type AuthMethods, type SocialProvider } from '@/lib/auth-flow';
 
 const inputClass = 'mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 font-normal outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100';
 const buttonClass = 'flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50';
@@ -35,6 +35,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
   const [sessionSlow, setSessionSlow] = useState(false);
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaReset, setCaptchaReset] = useState(0);
+  const [returnTo, setReturnTo] = useState('/');
   const captchaSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? '';
   const resetCaptcha = () => { setCaptchaToken(''); setCaptchaReset(value => value + 1); };
   useEffect(() => {
@@ -74,11 +75,16 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
     return () => window.clearTimeout(timer);
   }, [cooldown]);
 
-  async function run(action: () => Promise<void>) {
+  useEffect(() => {
+    setReturnTo(safeAuthNext(new URLSearchParams(window.location.search).get('next')));
+  }, []);
+  const accountHref = (createAccount: boolean) => `${createAccount ? '/signup' : '/login'}${returnTo === '/' ? '' : `?next=${encodeURIComponent(returnTo)}`}#sign-in`;
+
+  async function run(action: () => Promise<void>, context: AuthErrorContext = {}) {
     if (inFlight.current || loading) return;
     inFlight.current = true; setBusy(true); setError(''); setMessage('');
     try { await action(); }
-    catch (reason) { setError(authErrorMessage(reason)); }
+    catch (reason) { setError(authErrorMessage(reason, context)); }
     finally { inFlight.current = false; setBusy(false); }
   }
 
@@ -93,7 +99,9 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
       }
     } finally { resetCaptcha(); }
     setStep('code'); setCode(''); setCooldown(60);
-    setMessage(codeChannel === 'phone' ? 'Check your text messages for your VisaThreads sign-in code.' : 'Check your inbox and spam folder for your VisaThreads sign-in email.');
+    setMessage(codeChannel === 'phone'
+      ? (signup ? 'Check your text messages for your VisaThreads verification code.' : 'If this number has an account, a sign-in code is on its way. New here? Choose Create account.')
+      : (signup ? 'Check your inbox and spam folder for your VisaThreads verification code.' : 'If this email has an account, a VisaThreads sign-in email is on its way. New here? Choose Create account.'));
   }
 
   function submit(event: FormEvent) {
@@ -112,11 +120,11 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
         } finally { resetCaptcha(); }
       }
       if (step === 'code' || !useCode) router.replace(safeAuthNext(new URLSearchParams(window.location.search).get('next')));
-    });
+    }, { action: step === 'code' ? 'verify-code' : !useCode ? 'password' : 'request-code', createAccount: signup, channel: codeChannel });
   }
 
   function social(provider: SocialProvider) {
-    if (methods) void run(() => signInWithProvider(provider, methods, authCallbackUrl(window.location.origin, new URLSearchParams(window.location.search).get('next'))));
+    if (methods) void run(() => signInWithProvider(provider, methods, authCallbackUrl(window.location.origin, new URLSearchParams(window.location.search).get('next'))), { action: 'oauth', createAccount: signup });
   }
 
   return (
@@ -129,12 +137,16 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
           {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
           <button className={buttonClass} onClick={() => router.replace(safeAuthNext(new URLSearchParams(window.location.search).get('next')))}>Continue to VisaThreads <ArrowRight size={17} /></button>
           <Link href="/account" className="block text-center font-bold text-blue-700">View my profile</Link>
-          <button type="button" disabled={busy || loading} onClick={() => void run(signOut)} className="w-full rounded-xl border border-slate-300 p-3 font-bold disabled:opacity-50">{busy ? 'Signing out…' : 'Use a different account'}</button>
+          <button type="button" disabled={busy || loading} onClick={() => void run(signOut, { action: 'sign-out' })} className="w-full rounded-xl border border-slate-300 p-3 font-bold disabled:opacity-50">{busy ? 'Signing out…' : 'Use a different account'}</button>
         </div> : <>
           {loading && <p role="status" className="mb-4 text-sm text-slate-600">Checking your session… {sessionSlow && <>This is taking longer than expected. <button type="button" onClick={() => window.location.reload()} className="underline">Reload sign-in</button></>}</p>}
+          <nav aria-label="Account access" className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-center text-sm font-semibold">
+            <a href={accountHref(false)} aria-current={!signup ? 'page' : undefined} className={`rounded-lg px-3 py-2.5 ${!signup ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}>Log in</a>
+            <a href={accountHref(true)} aria-current={signup ? 'page' : undefined} className={`rounded-lg px-3 py-2.5 ${signup ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}>Create account</a>
+          </nav>
           <div className="mb-5 inline-flex rounded-xl bg-blue-50 p-3 text-blue-700"><Mail aria-hidden="true" size={24} /></div>
           <h1 className="text-2xl font-black text-slate-950">{step === 'code' ? `Check your ${codeChannel === 'phone' ? 'phone' : 'email'}` : signup ? 'Join VisaThreads' : 'Welcome Back'}</h1>
-          <p className="mt-2 text-base text-slate-600">{step === 'code' ? <>Enter the one-time code sent to <strong className="break-all">{codeChannel === 'phone' ? phone.trim() : email.trim()}</strong>.</> : signup ? 'Verify your contact details to join the community.' : 'Log In to join discussions and connect with the community.'}</p>
+          <p className="mt-2 text-base text-slate-600">{step === 'code' ? <>Enter the latest one-time code for <strong className="break-all">{codeChannel === 'phone' ? phone.trim() : email.trim()}</strong>.</> : signup ? 'Create your account with Google or verify your email below.' : 'Welcome back. New here? Choose Create account above.'}</p>
           {step === 'email' && <>
             <div className="mt-6 grid gap-3">
               {(['google'] as const).map(provider => <button key={provider} type="button" disabled={busy || loading || !methods?.[provider]} onClick={() => social(provider)} className="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
@@ -163,8 +175,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
           </form>
           {signup && step === 'email' && <p className="mt-4 text-xs leading-5 text-slate-500">After signing in, you’ll confirm the <Link href="/terms" target="_blank" rel="noopener" className="underline">Terms</Link> and <Link href="/privacy" target="_blank" rel="noopener" className="underline">Privacy notice</Link> once before participating. Links open in a new tab.</p>}
           {step === 'email' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm text-blue-700"><span className="flex flex-wrap gap-3">{methods?.phone && <button type="button" disabled={busy || loading} onClick={() => { setCodeChannel('phone'); setUseCode(true); setPassword(''); setError(''); }}>Use phone instead</button>}{codeChannel === 'phone' && <button type="button" disabled={busy || loading} onClick={() => { setCodeChannel('email'); setUseCode(true); setPassword(''); setError(''); }}>Use email instead</button>}{codeChannel === 'email' && !signup && <button type="button" disabled={busy || loading} onClick={() => { setUseCode(value => !value); setPassword(''); setError(''); }}>{useCode ? 'Use a password instead' : 'Use an email code instead'}</button>}</span>{!signup && <Link href="/account/recovery" className="underline">Forgot password?</Link>}</div>}
-          <p className="mt-4 text-sm text-slate-600">{signup ? 'Already a member? ' : 'New to VisaThreads? '}<Link href={signup ? '/login' : '/signup'} className="font-bold text-blue-700 underline">{signup ? 'Log In' : 'Create Account'}</Link></p>
-          {step === 'code' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm font-bold text-blue-700"><button type="button" disabled={busy || cooldown > 0 || Boolean(captchaSiteKey && !captchaToken)} onClick={() => void run(sendCode)} className="disabled:text-slate-400">{cooldown ? `Resend in ${cooldown}s` : 'Resend code'}</button><button type="button" disabled={busy || loading} onClick={() => { setStep('email'); setCode(''); setError(''); setMessage(''); }}>Use a different {codeChannel === 'phone' ? 'phone' : 'email'}</button></div>}
+          {step === 'code' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm font-bold text-blue-700"><button type="button" disabled={busy || cooldown > 0 || Boolean(captchaSiteKey && !captchaToken)} onClick={() => void run(sendCode, { action: 'request-code', createAccount: signup, channel: codeChannel })} className="disabled:text-slate-400">{cooldown ? `Resend in ${cooldown}s` : 'Resend code'}</button><button type="button" disabled={busy || loading} onClick={() => { setStep('email'); setCode(''); setError(''); setMessage(''); }}>Use a different {codeChannel === 'phone' ? 'phone' : 'email'}</button></div>}
           <p className="mt-5 text-xs leading-5 text-slate-500">Your email is not shown on your public profile. A community username is created for you.</p>
         </>}
       </section>

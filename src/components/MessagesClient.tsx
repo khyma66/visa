@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Lock, MessageCircle, Plus, Send } from 'lucide-react';
+import { ArrowLeft, Lock, MessageCircle, Plus, Send, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   getConversation, getConversationCounts, getConversationMessageCount, getMessageEntry, getMessageRecipient, listConversationFolder, listMessages, markConversationRead, refreshMessages, respondToConversation, sendMessage, startConversation,
@@ -43,6 +43,22 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   const [folderCounts, setFolderCounts] = useState<ConversationCounts | null>(null);
   const [messageTotal, setMessageTotal] = useState<number | null>(null);
   const [messageError, setMessageError] = useState('');
+  const [composeOpen, setComposeOpen] = useState(Boolean(recipientUsername));
+  const [mobileThread, setMobileThread] = useState(false);
+  const composeRef = useRef<HTMLDialogElement>(null);
+  const composeOpenRef = useRef(composeOpen);
+  composeOpenRef.current = composeOpen;
+  const presentedComposeOpen = useRef(composeOpen);
+  const mobileThreadRef = useRef(mobileThread);
+  mobileThreadRef.current = mobileThread;
+  const threadIsVisible = () => !composeOpenRef.current && !composeRef.current?.open
+    && (typeof window === 'undefined' || window.matchMedia('(min-width: 768px)').matches || mobileThreadRef.current);
+  const changeComposer = useCallback((open: boolean) => {
+    // Update before React commits so an already-running history fetch cannot
+    // mark the obscured thread read between opening the dialog and rerendering.
+    composeOpenRef.current = open;
+    setComposeOpen(open);
+  }, []);
   const folderRef = useRef(tab);
   folderRef.current = tab;
   const inboxRef = useRef(conversations);
@@ -72,13 +88,16 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
     setSelectedConversation(conversation);
     setActiveId(conversation.id);
     if (selectFolder) {
+      mobileThreadRef.current = true;
+      setMobileThread(true);
+      changeComposer(false);
       ++navigationGeneration.current;
       const next = conversationFolder(conversation, user?.id ?? '');
       if (folderRef.current !== next) { inboxRef.current = []; setConversations([]); setInboxHasOlder(false); }
       folderRef.current = next;
       setTab(next);
     }
-  }, [user?.id]);
+  }, [user?.id, changeComposer]);
 
   const loadInbox = useCallback(async (selectedId = activeRef.current) => {
     if (!user) return;
@@ -90,7 +109,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
       const [result, counts] = await Promise.all([listConversationFolder(folder, user.id), getConversationCounts(user.id)]);
       const selected = selectedId ? result.conversations.find((row) => row.id === selectedId) ?? await getConversation(selectedId) : null;
       if (generation !== inboxGeneration.current) return;
-      const rows = result.conversations;
+      const rows = sortConversations(result.conversations);
       inboxRef.current = rows;
       setConversations(rows);
       setFolderCounts(counts);
@@ -155,7 +174,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
           setHasOlder(result.hasOlder && result.messages.length < total);
           if (previous.length && result.hasOlder) setHistoryNotice('You have newer messages. Load earlier messages to continue through the full history.');
         }
-        if (document.visibilityState === 'visible' && result.messages.some((m) => m.sender_id !== user.id && !m.read_at)) {
+        if (document.visibilityState === 'visible' && threadIsVisible() && result.messages.some((m) => m.sender_id !== user.id && !m.read_at)) {
           // A receipt write is independent of the successfully fetched history
           // and count. Its failure must not turn that count into an unknown one.
           const receiptError = 'Messages loaded, but read receipts could not be updated. They will retry when the conversation refreshes.';
@@ -179,6 +198,18 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   }, [activeId, loadInbox, user]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [messages.at(-1)?.id]);
+
+  useEffect(() => {
+    const dialog = composeRef.current;
+    if (!dialog) return;
+    const wasComposing = presentedComposeOpen.current;
+    presentedComposeOpen.current = composeOpen;
+    if (composeOpen && !dialog.open) dialog.showModal();
+    if (!composeOpen && dialog.open) dialog.close();
+    // Escape closes a native dialog before this effect runs too. Refresh only
+    // after it is dismissed, with the normal visibility/auth checks still used.
+    if (!composeOpen && wasComposing) void retryMessages.current?.();
+  }, [composeOpen, loading, user?.id]);
 
   async function begin(event: FormEvent) {
     event.preventDefault();
@@ -270,7 +301,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
       messageRef.current = merged;
       setMessages(merged);
       setHasOlder(rows.length === 50 && (messageTotal === null || merged.length < messageTotal));
-      if (user && document.visibilityState === 'visible') {
+      if (user && document.visibilityState === 'visible' && threadIsVisible()) {
         await markConversationRead(conversation, user.id, rows);
         if (activeRef.current === conversation && generation === messageGeneration.current) await loadInbox();
       }
@@ -299,7 +330,9 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   const active = conversations.find((item) => item.id === activeId) ?? (selectedConversation?.id === activeId ? selectedConversation : null);
   const incoming = (c: Conversation) => conversationFolder(c, user.id) === 'requests';
   const closed = (c: Conversation) => conversationFolder(c, user.id) === 'closed';
-  const visible = conversations.filter((c) => tab === 'requests' ? incoming(c) : tab === 'closed' ? closed(c) : !incoming(c) && !closed(c));
+  // Realtime refreshes and overlapping pages must not create duplicate inbox rows.
+  // Distinct conversation IDs are never merged: their histories are separate.
+  const visible = sortConversations(conversations).filter((c) => tab === 'requests' ? incoming(c) : tab === 'closed' ? closed(c) : !incoming(c) && !closed(c));
   const canSend = canSendToConversation(active, user.id, messages, messagesLoading);
   const emptyFolder = {
     chats: { title: 'No chats yet', description: 'Start a request using a member’s public username.' },
@@ -307,20 +340,28 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
     closed: { title: 'No closed conversations', description: 'Declined or blocked conversations appear here.' },
   }[tab];
   return (
-    <main className="page-shell py-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-bold tracking-wider text-blue-700">Private Conversations</p><h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">Messages</h1></div><p className="flex items-center gap-1.5 text-xs text-slate-500"><Lock size={13} /> Participant-only inbox · Not end-to-end encrypted.</p></div>
+    <main className="page-shell py-6">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div><h1 className="text-2xl font-bold tracking-tight text-slate-950">Messages</h1><p className="mt-1 text-sm text-slate-500">Your conversations, in one place.</p></div>
+        <button type="button" aria-haspopup="dialog" aria-controls="new-message-dialog" aria-expanded={composeOpen} onClick={() => { setError(''); changeComposer(true); }} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"><Plus size={17} />New message</button>
+      </div>
       {demoMode && <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Development preview: sample conversations are saved in this browser. Real accounts across devices require the community database.</p>}
-      <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:h-[700px] md:grid-cols-[330px_minmax(0,1fr)]">
-        <aside className="border-b border-slate-200 md:border-b-0 md:border-r">
-          <form onSubmit={begin} className="border-b border-slate-200 p-4">
-            <label className="text-xs font-bold tracking-wider text-slate-500">New Chat Request</label>
-            <div className="mt-2 flex gap-2"><input aria-label="Recipient public username" value={recipient} onChange={(event) => { setRecipient(event.target.value); setLinkedRecipientId(''); setResolvedRecipient(null); setError(''); }} disabled={acting || resolvingRecipient} maxLength={34} required placeholder="public username" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-600 disabled:bg-slate-100" /><button disabled={acting || resolvingRecipient || !recipient.trim()} className="grid w-10 place-items-center rounded-lg bg-slate-900 text-white disabled:opacity-40" aria-label={acting ? 'Opening conversation' : 'Start conversation'}><Plus size={17} /></button></div>
-            <p role="status" className="mt-2 text-xs text-slate-500">{resolvingRecipient ? 'Finding this community member…' : resolvedRecipient ? `Member found: u/${resolvedRecipient.username}. Start a request or continue your existing conversation.` : 'Enter a member’s public username. They decide whether to accept your request.'}</p>
+      <dialog id="new-message-dialog" ref={composeRef} aria-labelledby="new-message-title" onCancel={() => changeComposer(false)} onClose={() => changeComposer(false)} className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl backdrop:bg-slate-950/40">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><h2 id="new-message-title" className="text-lg font-bold text-slate-900">New message</h2><button type="button" onClick={() => changeComposer(false)} aria-label="Close new message" className="rounded-full p-2 text-slate-500 hover:bg-slate-100"><X size={18} /></button></div>
+        <form onSubmit={begin} className="p-5">
+            <label htmlFor="message-recipient" className="text-sm font-semibold text-slate-800">Public username <span aria-hidden="true">*</span></label>
+            <input id="message-recipient" aria-label="Recipient public username" autoFocus autoComplete="off" value={recipient} onChange={(event) => { setRecipient(event.target.value); setLinkedRecipientId(''); setResolvedRecipient(null); setError(''); }} disabled={acting || resolvingRecipient} maxLength={34} required placeholder="e.g. calm-raven-12345" className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100" />
+            <p role="status" className="mt-2 text-xs leading-relaxed text-slate-500">{resolvingRecipient ? 'Finding this community member…' : resolvedRecipient ? `Member found: u/${resolvedRecipient.username}.` : 'Existing chats reopen here. New members receive a message request.'}</p>
+            {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
+            <button disabled={acting || resolvingRecipient || !recipient.trim()} className="mt-5 w-full rounded-full bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-40" aria-label={acting ? 'Opening conversation' : 'Start conversation'}>{acting ? 'Opening…' : 'Continue'}</button>
           </form>
+      </dialog>
+      <div className="grid h-[min(720px,calc(100dvh-12rem))] min-h-[440px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-[300px_minmax(0,1fr)]">
+        <aside aria-label="Conversation inbox" className={`${mobileThread ? 'hidden md:flex' : 'flex'} min-h-0 flex-col border-slate-200 md:border-r`}>
           <nav aria-label="Message folders" className="flex gap-1 border-b p-3">{(['chats', 'requests', 'closed'] as const).map((item) => <button key={item} onClick={() => { ++navigationGeneration.current; if (item === tab) return; ++inboxGeneration.current; folderRef.current = item; inboxRef.current = []; setConversations([]); setInboxHasOlder(false); setInboxLoading(true); setTab(item); }} aria-label={item} aria-pressed={tab === item} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold capitalize ${tab === item ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{item}<span aria-label={`${item} conversation count`} className="tabular-nums">{folderCounts ? folderCounts[item] : '—'}</span></button>)}</nav>
           {!inboxLoading && !inboxError && <p role="status" className="border-b border-slate-100 px-4 py-2 text-xs text-slate-500">{visible.length} of {folderCounts?.[tab] ?? '—'} {tab === 'requests' ? 'requests' : 'conversations'} shown</p>}
-          <div aria-busy={inboxLoading} className="max-h-[530px] overflow-y-auto">{inboxLoading && <p role="status" className="p-4 text-center text-sm text-slate-500">{conversations.length ? 'Updating inbox…' : 'Loading conversations…'}</p>}{inboxError && <div role="alert" className="p-4 text-sm text-rose-700"><p>{inboxError}</p><button onClick={() => void loadInbox()} disabled={inboxLoading} className="mt-2 font-bold underline disabled:opacity-50">Retry inbox</button></div>}{visible.map((conversation) => (
-            <button key={conversation.id} onClick={() => openConversation(conversation)} className={`flex w-full gap-3 border-b border-slate-100 p-4 text-left transition ${activeId === conversation.id ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
+          <div aria-busy={inboxLoading} className="min-h-0 flex-1 overflow-y-auto">{inboxLoading && <p role="status" className="p-4 text-center text-sm text-slate-500">{conversations.length ? 'Updating inbox…' : 'Loading conversations…'}</p>}{inboxError && <div role="alert" className="p-4 text-sm text-rose-700"><p>{inboxError}</p><button onClick={() => void loadInbox()} disabled={inboxLoading} className="mt-2 font-bold underline disabled:opacity-50">Retry inbox</button></div>}{visible.map((conversation) => (
+            <button key={conversation.id} aria-label={`Conversation with u/${conversation.other_username}`} aria-current={activeId === conversation.id ? 'true' : undefined} onClick={() => { const alreadySelected = activeRef.current === conversation.id; openConversation(conversation); if (alreadySelected) void retryMessages.current?.(); }} className={`flex w-full gap-3 border-b border-slate-100 p-4 text-left transition ${activeId === conversation.id ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
               <Avatar seed={conversation.other_avatar_seed} />
               <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><b className="truncate text-sm text-slate-900">u/{conversation.other_username}</b>{conversation.unread_count > 0 && <span aria-label={`${conversation.unread_count} unread messages`} title="Unread messages in this conversation, including earlier history" className="ml-auto shrink-0 rounded-full bg-blue-700 px-2 py-0.5 text-xs font-bold text-white">{conversation.unread_count} unread</span>}</span><span className="mt-1 block truncate text-xs text-slate-500">{conversation.last_message ?? 'Start the conversation'}</span></span>
             </button>
@@ -328,9 +369,9 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
           {inboxNotice && <p role="status" className="px-4 pt-3 text-xs text-slate-500">{inboxNotice}</p>}
           {inboxHasOlder && <button onClick={() => void olderConversations()} disabled={inboxLoading || inboxOlderLoading} className="w-full p-4 text-sm font-bold text-blue-700 disabled:opacity-50">{inboxOlderLoading ? 'Loading…' : 'Load earlier conversations'}</button>}</div>
         </aside>
-        <section className="flex h-[600px] min-h-0 flex-col md:h-auto">
+        <section aria-label="Selected conversation" className={`${mobileThread ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-col`}>
           {active ? <>
-            <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4"><Avatar seed={active.other_avatar_seed} /><div><b className="text-sm text-slate-900">u/{active.other_username}</b><p role="status" className="text-xs text-slate-500">{demoMode ? 'Browser preview' : live === 'live' ? 'Connected · live messages' : 'Reconnecting · checking for missed messages'}</p></div>{!closed(active) && <button disabled={acting} onClick={() => void respond('blocked')} className="ml-auto text-xs text-slate-500 hover:text-rose-700">Block</button>}</div>
+            <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-4"><button type="button" onClick={() => { mobileThreadRef.current = false; setMobileThread(false); }} aria-label="Back to inbox" className="rounded-full p-2 text-slate-600 hover:bg-slate-100 md:hidden"><ArrowLeft size={20} /></button><Avatar seed={active.other_avatar_seed} /><div className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-900">u/{active.other_username}</b><p role="status" className="text-xs text-slate-500">{demoMode ? 'Browser preview' : live === 'live' ? 'Connected' : 'Reconnecting…'}</p></div>{!closed(active) && <button disabled={acting} onClick={() => void respond('blocked')} className="rounded-full px-3 py-2 text-xs text-slate-500 hover:bg-rose-50 hover:text-rose-700">Block</button>}</div>
             {!messagesLoading && <p role="status" className="border-b border-slate-100 px-5 py-2 text-xs text-slate-500">{messages.length} of {messageTotal ?? '—'} messages shown{hasOlder ? ' · Earlier messages available' : ''}</p>}
             {messageError && <div role="alert" className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700"><p>{messageError}</p><button type="button" disabled={messagesLoading} onClick={() => void retryMessages.current?.()} className="mt-2 font-semibold underline disabled:opacity-50">Retry conversation</button></div>}
             <div aria-label="Conversation messages" className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50/60 p-5">
@@ -347,12 +388,13 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
             {incoming(active) && <div className="border-t bg-amber-50 p-4"><p className="text-sm text-amber-950">Accept this request to reply.</p><div className="mt-3 flex gap-3"><button disabled={acting} onClick={() => void respond('accepted')} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Accept request</button><button disabled={acting} onClick={() => void respond('declined')} className="rounded-lg border border-amber-300 px-4 py-2 text-sm">Decline</button></div></div>}
             {closed(active) ? <p className="border-t p-4 text-sm text-slate-500">{active.request_status === 'blocked' ? 'This conversation is blocked. No more messages can be sent.' : 'This request was declined.'}</p> : !incoming(active) && <>
               {active.request_status === 'pending' && <p className="border-t bg-amber-50 px-4 py-2 text-xs text-amber-900">{messages.length ? 'Waiting for acceptance before you can send more messages.' : 'Send one introduction. You can continue when they accept.'}</p>}
-              <form onSubmit={send} className="flex gap-3 border-t border-slate-200 p-4"><input aria-label="Private message" value={body} onChange={(event) => setBody(event.target.value)} disabled={!canSend || sending} maxLength={4000} required placeholder="Write a private message…" className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100" /><button disabled={!canSend || sending || !body.trim()} className="grid w-12 place-items-center rounded-xl bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-40" aria-label="Send message"><Send size={19} /></button></form>
+              <form onSubmit={send} className="flex items-end gap-2 border-t border-slate-200 bg-white p-3 sm:p-4"><textarea aria-label="Private message" rows={2} value={body} onChange={(event) => setBody(event.target.value)} disabled={!canSend || sending} maxLength={4000} required placeholder="Write a message…" className="max-h-40 min-w-0 flex-1 resize-y rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100" /><button type="submit" disabled={!canSend || sending || !body.trim()} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-40" aria-label={sending ? 'Sending message' : 'Send message'}><Send size={18} /></button></form>
             </>}
           </> : <div className="grid flex-1 place-items-center p-8 text-center"><div><MessageCircle className="mx-auto text-slate-300" size={42} /><h2 className="mt-3 text-xl font-black text-slate-800">Choose a conversation</h2><p className="mt-1 text-sm text-slate-500">Or start one with a public username.</p></div></div>}
         </section>
       </div>
-      {error && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
+      <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500"><Lock size={12} />Not end-to-end encrypted. <Link href="/privacy" className="underline hover:text-slate-700">Privacy details</Link></p>
+      {error && !composeOpen && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
     </main>
   );
 }

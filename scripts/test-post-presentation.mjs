@@ -179,3 +179,19 @@ test('cards expose exact reply totals without rounding', () => {
   assert(visibleText(html).includes('1234 replies'));
   assert.doesNotMatch(visibleText(html), /1\.2K replies/);
 });
+
+test('untracked views never appear as zero or as an inferred count on member or archive posts', () => {
+  for (const source of ['visaflow', 'apify', undefined]) {
+    for (const view_count of [null, 0, 45]) {
+      for (const answer_count of [0, 1, 1234]) {
+        const post = { ...question, source, view_count, answer_count };
+        const before = structuredClone(post);
+        const html = renderToStaticMarkup(createElement(QuestionCard, { question: post }));
+        assert.match(visibleText(html), new RegExp(`\\b${answer_count} replies\\b`));
+        assert.doesNotMatch(`${visibleText(html)} ${accessibleLabels(html)}`, /\bviews?\b/i);
+        assert.deepEqual(post, before, 'Replies must not fabricate or rewrite a view count');
+        assert.doesNotMatch(visibleText(renderDetail(post)), /\b\d+ views?\b/i);
+      }
+    }
+  }
+});

@@ -286,7 +286,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
             </button>}
           </div>
           {error && conversation.identity === identity && <p role="alert" className="mt-2 text-xs leading-5 text-amber-800">{error}{error.startsWith('Your session has expired') && <> <a href={`/login?next=${encodeURIComponent(pathname || '/assistant')}#sign-in`} className="font-semibold underline">Sign in</a></>}</p>}
-          <p className="mt-2 text-center text-xs leading-5 text-slate-600">Community experiences, not official visa advice. Don’t share personal identifiers.</p>
+          <p className="mt-2 text-center text-xs leading-5 text-slate-600">Answers from community discussions. Check the cited sources.</p>
         </form>
       </>}
     </div>}
