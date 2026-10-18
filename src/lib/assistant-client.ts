@@ -11,8 +11,9 @@ const coverageReasons = new Set<AssistantCoverageReason>(['retrieval-limit', 'co
 export const safeAssistantHref = (value: unknown): value is string => typeof value === 'string' && /^\/(?:questions|experiences)\/[a-zA-Z0-9_-]+(?:#answer-[a-zA-Z0-9_-]+)?$/.test(value);
 
 function source(value: unknown): AssistantSource | null {
+  // Match the server's 24k summary context budget; the response byte cap remains separate.
   if (!object(value) || !id(value.id) || (value.kind !== 'question' && value.kind !== 'reply') || !id(value.questionId)
-    || !(value.communityId === null || id(value.communityId)) || !text(value.title, 1000) || !text(value.body, 12000, 0)
+    || !(value.communityId === null || id(value.communityId)) || !text(value.title, 1000) || !text(value.body, 24_000, 0)
     || !date(value.createdAt) || !date(value.updatedAt) || !text(value.url, 500) || (value.provenance !== 'member' && value.provenance !== 'archive')
     || (value.parentContext !== undefined && !text(value.parentContext, 2000, 0))
     || (value.parentUpdatedAt !== undefined && !date(value.parentUpdatedAt))

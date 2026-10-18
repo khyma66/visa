@@ -22,11 +22,17 @@ const input = { mode:'ask',scope:{kind:'post',id},question:'What did the member 
 const output = {status:'answered',claims:[{text:'The member reported a Monday appointment.',evidence:[{sourceId:source.id,quote:'I attended my appointment on Monday.'}]}],disagreements:[],unanswered:[]};
 const spanDraft = (raw, prompt) => {
   const value=JSON.parse(raw);
+  const slots=(items,count)=>Object.fromEntries(Array.from({length:count},(_,index)=>[`slot${index+1}`,items[index]??null]));
   for(const group of ['claims','disagreements']) for(const claim of value[group]) claim.evidence=claim.evidence.map(item=>{
     const span=prompt.evidenceSpans.find(span=>span.sourceId===item.sourceId&&span.quote.includes(item.quote));
     assert(span,'Synthetic supported evidence must match a server-defined span');
     return {spanId:span.id};
   });
+  for(const group of ['claims','disagreements']) {
+    for(const claim of value[group]) claim.evidence=slots(claim.evidence,4);
+    value[group]=slots(value[group],group==='claims'?6:3);
+  }
+  value.unanswered=slots(value.unanswered,4);
   return provider.resolveAssistantEvidence(JSON.stringify(value),prompt);
 };
 const request = (value=input, headers={}) => new Request('https://visathreads.com/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40),...headers},body:JSON.stringify(value)});
@@ -238,11 +244,11 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
     assert.match(prompt.system,/check every timing expression, sequence word, duration, venue, role and causal link against its quoted source body/);
     assert.equal(JSON.parse(prompt.user).sources[0].body,adjacent.body,'Prompt hardening must not edit or supplement the evidence');
     if(JSON.parse(prompt.user).task==='summary') {
-      assert.match(prompt.system,/1–3 short, atomic, attributed claims/);
+      assert.match(prompt.system,/short, atomic, attributed claims and as many of the six available claim slots as needed/);
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v20-fixed-evidence-spans','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v21-fixed-evidence-slots','Semantic change invalidates old cached answers');
 });
 test('summary and catch-up are explicit evidence tasks without a missing question to answer',()=>{
   const summary=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},{sources:[source],partial:false});
@@ -255,6 +261,50 @@ test('summary and catch-up are explicit evidence tasks without a missing questio
   assert.match(summary.system,/Never infer current visa rules/);assert.match(summary.system,/MUST cite supporting span IDs/);
   assert.match(summary.system,/Explicitly stated individual events, outcomes, dates and timing ARE evidence/);
   assert.match(summary.system,/put the comparison in disagreements with spans from at least two conflicting sources/);
+});
+test('generation requires nullable closed slots while summary priorities preserve evidence categories',()=>{
+  const summary=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},{sources:[source],partial:false});
+  assert.match(summary.system,/fixed-slot objects, NEVER arrays/);
+  assert.match(summary.system,/claims requires slot1 through slot6; disagreements requires slot1 through slot3; unanswered requires slot1 through slot4/);
+  assert.match(summary.system,/Lead with the relevant answer in clear, professional language/);
+  assert.match(summary.system,/Never claim to have checked every post or to know missing replies/);
+  assert.match(summary.system,/Every slot key is required: use null for each unused slot/);
+  assert.match(summary.system,/Each evidence object requires slot1 through slot4/);
+  assert.match(summary.system,/Do not fill slots merely because they exist/);
+  assert.doesNotMatch(summary.system,/"claims":\[|"disagreements":\[|"evidence":\[|"unanswered":\[/);
+  const example=summary.system.match(/write "disagreements":(\{.*\}) and separately cite/);
+  assert(example);
+  const disagreements=JSON.parse(example[1]);
+  assert.deepEqual(Object.keys(disagreements),['slot1','slot2','slot3']);
+  assert.deepEqual(Object.keys(disagreements.slot1.evidence),['slot1','slot2','slot3','slot4']);
+  assert.equal(disagreements.slot2,null); assert.equal(disagreements.slot1.evidence.slot4,null);
+  assert.match(summary.system,/For a summary of a long or mixed discussion, prioritize the author's actual reported outcome/);
+  assert.match(summary.system,/need not enumerate every interview question or repeat routine advice/);
+  assert.match(summary.system,/observations about other applicants, hypothetical or example dialogue, recommendations and unanswered reader questions/);
+  assert.match(summary.system,/Preserve tentative wording for uncertain observations/);
+  assert.match(summary.system,/Keep different process statuses and document receipt or delivery separate/);
+  assert.equal(JSON.parse(summary.user).sources[0].body,source.body,'Prioritization instructions never rewrite supplied evidence');
+});
+test('summary brevity cannot erase an explicit material unknown outcome or decision date',()=>{
+  const item={...source,body:'I attended my appointment on April 6. My application remained pending. I did not know the final decision date. This is only my personal experience. A reader asked where I parked.'};
+  const corpus={sources:[item],partial:false};
+  for(const request of [
+    {mode:'summary',scope:{kind:'post',id}},
+    {mode:'ask',scope:{kind:'public'},question:'Explain the first post.',previousPosts:[{questionId:id,sourceId:item.id}]},
+  ]) {
+    const prompt=core.assistantPrompt(request,corpus);
+    assert.equal(JSON.parse(prompt.user).task,'summary');
+    assert.match(prompt.system,/preserve explicit unknown outcomes, decision dates, durations or next steps that materially qualify the reported result/);
+    assert.match(prompt.system,/State each important uncertainty in cited claim text alongside the known status/);
+    assert.match(prompt.system,/a pending status alone does not preserve an explicit unknown decision date/);
+    assert.match(prompt.system,/Do not hide that limitation only in the quotation or unanswered field/);
+    assert.match(prompt.system,/Use a fourth or additional claim within the six-slot limit when needed/);
+    assert.match(prompt.system,/SUMMARY COMPLETENESS CHECK/);
+    assert.match(prompt.system,/must EACH be represented in cited claim text/);
+    assert.match(prompt.system,/Do not invent uncertainty from mere silence or treat incidental unanswered reader questions as established facts/);
+    assert.equal(JSON.parse(prompt.user).sources[0].body,item.body);
+    assert(prompt.evidenceSpans.some(span=>span.quote.includes('I did not know the final decision date.')));
+  }
 });
 test('output contract classifies conflicts before individual reports without changing source validation',()=>{
   const prompt=core.assistantPrompt(input,{sources:[source],partial:false});

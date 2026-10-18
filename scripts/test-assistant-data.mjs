@@ -12,7 +12,8 @@ const search = moduleUrl(compile(await readFile(new URL('../src/lib/assistant-se
 const source = compile(await readFile(new URL('../src/lib/assistant-data.ts', import.meta.url), 'utf8'))
   .replace("import archive from '@visa/archive';", 'const archive = new Proxy({}, { get: (_, key) => globalThis.__assistantArchive[key] });')
   .replace("'./tagging'", JSON.stringify(tagging)).replace("'./assistant-core'", JSON.stringify(core)).replace("'./assistant-search'", JSON.stringify(search)).replace("'./assistant-context'", JSON.stringify(context));
-const { retrieveAssistantCorpus } = await import(moduleUrl(source));
+// Expose the private pure scorer only inside this test module; production API is unchanged.
+const { retrieveAssistantCorpus, sourceScorer } = await import(moduleUrl(source + '\nexport { sourceScorer };'));
 const { assistantPostSearchQuery, assistantPostSearchScore, buildAssistantPostSearchResult } = await import(search);
 const { assistantBoundedHistory } = await import(context);
 const saved = Object.fromEntries(['COMMUNITY_SOURCE_MODE', 'APP_ENV', 'IMPORTED_CONTENT_APPROVED'].map((name) => [name, process.env[name]]));
@@ -26,6 +27,31 @@ const q = (overrides = {}) => ({ id, title: 'My Chennai appointment experience',
 const a = (number = 1, overrides = {}) => ({ id: `22222222-2222-4222-8222-${String(number).padStart(12, '0')}`, question_id: id,
   body: 'My application completed in two days after the appointment.', created_at: '2026-10-11T12:00:00Z', updated_at: '2026-10-11T12:00:00Z',
   status: 'active', vote_score: 0, is_accepted: false, ...overrides });
+
+test('request-local scoring evaluates each source object once, including zero matches, without changing ranking', () => {
+  const now = Date.parse('2026-10-17T12:00:00Z');
+  for (const question of ['What did members report about H1B stamping delays in Chennai?', 'Find H1B stamping delay posts in Chennai']) {
+    const input = { mode: 'ask', scope: { kind: 'public' }, question };
+    let bodyReads = 0;
+    const sources = [
+      { id: 'q:apify-match', kind: 'question', title: 'Chennai H1B stamping delay', body: 'My H1B visa stamping in Chennai is delayed. My passport is still pending.', createdAt: '2026-10-01T00:00:00Z' },
+      { id: 'q:apify-miss', kind: 'question', title: 'Canada permit', body: 'My Canadian study permit arrived.', createdAt: '2026-10-01T00:00:00Z' },
+    ].map(value => new Proxy(Object.freeze(value), { get(target, key) { if (key === 'body') bodyReads++; return Reflect.get(target, key); } }));
+    const score = sourceScorer(input, now);
+    const expected = sources.map(score);
+    assert(expected[0] > 0); assert.equal(expected[1], 0);
+    const afterFirstPass = bodyReads; assert(afterFirstPass > 0);
+    for (let iteration = 0; iteration < 100; iteration++) assert.deepEqual(sources.map(score), expected);
+    assert.equal(bodyReads, afterFirstPass, 'Repeated sort comparisons must not retokenize already scored bodies');
+    assert.deepEqual([...sources].reverse().sort((left, right) => score(right) - score(left)), sources);
+    assert.equal(bodyReads, afterFirstPass);
+    const nextRequest = sourceScorer(input, now);
+    assert.deepEqual(sources.map(nextRequest), expected);
+    assert(bodyReads > afterFirstPass, 'A new request/scorer must not reuse earlier scores');
+    const changedVersion = { ...sources[0], title: 'Canada permit', body: 'My Canadian study permit arrived.' };
+    assert.equal(score(changedVersion), 0, 'The same ID with freshly read content has its own score');
+  }
+});
 
 function client(tables = {}, rpcResult = { data: [], error: null }) {
   const calls = [];

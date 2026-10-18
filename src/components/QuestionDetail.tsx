@@ -227,7 +227,6 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
         </div>
 
         <aside className="space-y-5 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-950"><b>Keep personal details private.</b><br />Never post passport, receipt, SEVIS, application, phone, or address information.</div>
           <RelatedQuestions drafting={Boolean(answerBody.trim())} context={{ ...question, draftText: answerBody, commentText: discussionContext }} />
         </aside>
       </div>

@@ -54,14 +54,25 @@ function archiveEnabled(): boolean {
     && (process.env.APP_ENV !== 'production' || process.env.IMPORTED_CONTENT_APPROVED === 'true');
 }
 function sourceScorer(input: AssistantRequest, now = Date.now()): (source: AssistantSource) => number {
+  // Sorting revisits the same immutable source objects many times. Keep only
+  // numeric scores in this scorer's lifetime, never across requests or reads.
+  // Object identity distinguishes freshly authorized/edited versions of an ID.
+  const scores = new WeakMap<AssistantSource, number>();
+  const memoize = (evaluate: (source: AssistantSource) => number) => (source: AssistantSource) => {
+    const cached = scores.get(source);
+    if (cached !== undefined) return cached;
+    const value = evaluate(source);
+    scores.set(source, value);
+    return value;
+  };
   const intent = assistantSearchIntent(input, now);
   const postSearch = assistantPostSearchQuery(input, now);
-  if (postSearch) return source => assistantPostSearchScore(source, postSearch);
+  if (postSearch) return memoize(source => assistantPostSearchScore(source, postSearch));
   const words = assistantSearchTerms(assistantCanonicalText(assistantSearchIntent({ ...input, previousQuestions: [] }, now).text)).slice(0, 24);
   const previous = assistantPreviousQuestions(input).join(' ');
   const historyWords = assistantSearchTerms(previous).filter(word => !words.includes(word)).slice(0, 24);
   const topics = detectTopics(input.question ?? ''), historyTopics = detectTopics(previous);
-  return (source) => {
+  return memoize((source) => {
     if (!assistantSourceMatchesIntent(source, intent)) return 0;
     const title = new Set(assistantSearchTerms(assistantCanonicalText(source.title))), body = new Set(assistantSearchTerms(assistantCanonicalText(source.body)));
     const parent = new Set(assistantSearchTerms(assistantCanonicalText(source.parentContext ?? '')));
@@ -72,7 +83,7 @@ function sourceScorer(input: AssistantRequest, now = Date.now()): (source: Assis
     // A new question dominates history; exact tokens prevent OPT/options and
     // H1B/H1B-like substring matches from filling the bounded evidence budget.
     return current * 8 + Math.min(history, 6);
-  };
+  });
 }
 
 function publicArchiveMatches(input: AssistantRequest, now = Date.now()): AssistantCorpus {

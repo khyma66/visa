@@ -146,6 +146,36 @@ function createHarness(search = '') {
 const publish = (h) => nodes(h.tree).find((n) => n.type === 'form').props.onSubmit(event());
 const popularTag = (h, label) => nodes(h.tree).find((node) => node.type === 'button' && node.props['aria-pressed'] !== undefined && textOf(node).trim() === label);
 
+test('question and experience forms clearly mark required editable fields and keep tags optional', async () => {
+  for (const experience of [false, true]) {
+    const h = createHarness();
+    try {
+      h.render(AskQuestionForm, { experience }); await h.settle();
+      assert.match(textOf(h.tree), /Required fields/);
+      for (const name of [experience ? 'Experience Title' : 'Question Title', 'Visa Type', 'Situation and Timeline', ...(experience ? ['Experience Category'] : [])]) {
+        const label = nodes(h.tree).find(node => node.type === 'label' && textOf(node).includes(name));
+        assert(nodes(label).some(node => node.type === 'span' && node.props['aria-hidden'] === 'true' && textOf(node) === '*'), name);
+        assert.equal(field(h, name).props.required, true, name);
+        assert.equal(field(h, name).props['aria-label'], name, 'Accessible names exclude decorative asterisks');
+      }
+      assert.equal(field(h, 'Destination Country').props.readOnly, true);
+      assert.equal(field(h, 'Community').props.required, undefined);
+      assert.equal(nodes(h.tree).find(node => node.props['aria-label'] === 'Add a tag').props.required, undefined);
+      assert.match(textOf(h.tree), /Tags\s+\(optional\)/);
+    } finally { h.close(); }
+  }
+});
+
+test('guest drafting offers sign in and signup with the same selected-community return destination', async () => {
+  const h = createHarness('?community=group-a'); h.auth.user = null;
+  try {
+    h.render(AskQuestionForm); await h.settle();
+    const links = nodes(h.tree).filter(node => node.props.href?.startsWith('/login?') || node.props.href?.startsWith('/signup?'));
+    assert.equal(links.length, 2);
+    for (const link of links) assert.equal(new URL(link.props.href, 'https://visathreads.com').searchParams.get('next'), '/ask?community=group-a');
+  } finally { h.close(); }
+});
+
 test('experience popular tags are available before typing and persist when publishing', async () => {
   const h = createHarness();
   try {

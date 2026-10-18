@@ -21,6 +21,7 @@ const cases = ['direct-post-search', 'post-question', 'post-summary', 'public-qu
 const smoke = process.argv.includes('--smoke');
 cases.push('large-discussion-summary');
 cases.push('numbered-interview-transcript');
+cases.push('heterogeneous-report-summary');
 const release = process.argv.includes('--release');
 assert(!(smoke && release), 'Smoke results cannot authorize a release');
 const selected = smoke ? ['post-question'] : cases;

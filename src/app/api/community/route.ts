@@ -210,7 +210,8 @@ function normalizePost(post: ApifyPost, now: string): { question: Question; answ
       vote_score: Math.max(count(post.likesCount), count(post.topReactionsCount)),
       answer_count: answers.length,
       source_comment_count: count(post.commentsCount),
-      view_count: count(post.sharesCount),
+      // The source supplies shares, not views. Do not invent a view total.
+      view_count: null,
       accepted_answer_id: null,
       created_at: createdAt,
       updated_at: createdAt,

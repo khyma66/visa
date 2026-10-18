@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowUp, CheckCircle2, Eye, GitFork, MessageCircle } from 'lucide-react';
+import { ArrowUp, CheckCircle2, GitFork, MessageCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 import type { Question } from '@/lib/types';
@@ -42,7 +42,7 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
               {question.answer_count} replies{question.accepted_answer_id && <span className="sr-only">, accepted answer</span>}
             </Link>
             {onRelated && <button onClick={() => onRelated(question)} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 hover:bg-slate-200"><GitFork size={14} aria-hidden="true" />Related</button>}
-            {!imported && <span className="ml-auto inline-flex items-center gap-1 font-normal"><Eye size={14} aria-hidden="true" />{compact(question.view_count)} views</span>}
+            {/* Views are not instrumented. A legacy zero or share count is not a measured view total. */}
           </div>
       </div>
     </article>
