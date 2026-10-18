@@ -134,6 +134,53 @@ test('summary review requires important stated unknowns in cited claims even whe
   assert.equal(validateAssistantReview(verdict([{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: true }], true), complete), complete);
 });
 
+test('review treats conflict placement and both individual reports as task completeness, not factual support', () => {
+  const sources = ['At my visit, staff allowed phones inside the venue.', 'At my visit, staff did not allow phones inside the venue.']
+    .map((body, index) => ({ ...source, id: `a:conflict-${index}`, body }));
+  const evidence = sources.map(item => ({ sourceId: item.id, quote: item.body }));
+  const comparison = { text: 'Members gave opposite reports: one said staff allowed phones inside the venue, while another said staff did not allow phones inside the venue.', evidence };
+  const reports = [
+    { text: 'One member said staff allowed phones inside the venue.', evidence: [evidence[0]] },
+    { text: 'Another member said staff did not allow phones inside the venue.', evidence: [evidence[1]] },
+  ];
+  const wrongSection = { ...result, sources, claims: [comparison], disagreements: [] };
+  const complete = { ...wrongSection, claims: reports, disagreements: [comparison] };
+  for (const request of [
+    { ...input, question: 'What conflicting reports did members provide about phones inside the venue?' },
+    { mode: 'summary', scope: { kind: 'post', id: source.questionId } },
+    { mode: 'catchup', scope: { kind: 'community', id: 'test-community' } },
+  ]) {
+    const prompt = assistantReviewPrompt(request, { sources, partial: false }, wrongSection);
+    assert.match(prompt.system, /relevant conflicting reports must have a comparison with kind disagreement citing both conflicting sources/);
+    assert.match(prompt.system, /each side must also appear as a separate attributed kind claim/);
+    assert.match(prompt.system, /Set fulfillsTask false if the comparison appears only as a claim, the disagreement is missing, or either individual report is missing/);
+    assert.match(prompt.system, /supported true and fulfillsTask false/);
+    const checks = JSON.parse(prompt.user).candidate.checks;
+    assert.deepEqual(checks.map(check => [check.id, check.kind]), [['claim:0', 'claim']]);
+    assert.deepEqual(checks[0].evidence, evidence, 'Both exact citations can be valid while the section is wrong');
+  }
+  for (const candidate of [wrongSection, { ...complete, claims: reports.slice(0, 1) }]) {
+    const checks = JSON.parse(assistantReviewPrompt(input, { sources, partial: false }, candidate).user).candidate.checks;
+    const rejected = validateAssistantReview(verdict(checks.map(({ id }) => ({ id, supported: true })), false), candidate);
+    assert.equal(rejected.status, 'insufficient');
+    assert.deepEqual(rejected.claims, []); assert.deepEqual(rejected.disagreements, []); assert.deepEqual(rejected.sources, []);
+  }
+  assert.equal(validateAssistantReview(verdict([{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: true }, { id: 'disagreement:0', supported: true }]), complete), complete);
+  assert.deepEqual(wrongSection.claims, [comparison], 'Review does not rewrite or relocate model text');
+});
+
+test('review does not demand a conflict section for different individual timelines', () => {
+  const sources = ['My H-1B stamping in Chennai completed after seven days.', 'My H-1B stamping in Chennai completed after twelve days.']
+    .map((body, index) => ({ ...source, id: `a:timeline-${index}`, body }));
+  const candidate = { ...result, sources, claims: [{ text: 'One member reported seven days for Chennai H-1B stamping, while another reported twelve days; these were individual experiences.', evidence: sources.map(item => ({ sourceId: item.id, quote: item.body })) }], disagreements: [] };
+  const prompt = assistantReviewPrompt({ ...input, question: 'What timelines did members report?' }, { sources, partial: false }, candidate);
+  assert.match(prompt.system, /Different dates, different people or circumstances.*do not automatically establish a contradiction/);
+  assert.match(prompt.system, /Do not require a disagreement merely because individual experiences have different timelines/);
+  assert.match(prompt.system, /may be synthesized in claims/);
+  assert.equal(validateAssistantReview(verdict(), candidate), candidate);
+  assert.deepEqual(candidate.disagreements, []);
+});
+
 test('full-context review restores a correction outside the generation window and keeps comparison sources', () => {
   const fullSource = { ...source, body: 'I first thought my application was approved. ' + 'I waited for a letter with more information. '.repeat(130) + 'Correction: the final letter said it was denied.' };
   const comparison = { ...source, id: 'a:apify-comparison', kind: 'reply', body: 'I only asked whether approval was possible.' };

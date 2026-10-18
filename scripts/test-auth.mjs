@@ -112,7 +112,7 @@ test('code request, verification and password failures describe the actual step 
   assert.match(failure, /couldn’t send a sign-in code/);
   assert.match(failure, /Choose Create account/);
   assert.doesNotMatch(failure, /invalid|expired|not found|does not exist|password/i);
-  for (const code of ['invalid_credentials', 'email_exists', 'phone_exists', 'user_already_exists', 'signup_disabled']) {
+  for (const code of ['invalid_credentials', 'email_exists', 'phone_exists', 'user_already_exists', 'signup_disabled', 'otp_disabled']) {
     assert.equal(flow.authErrorMessage({ code }, request), failure, 'A request must not confirm whether contact details have an account');
   }
   assert.match(flow.authErrorMessage({ code: 'invalid_credentials' }, signup), /Already a member\? Choose Log in/);

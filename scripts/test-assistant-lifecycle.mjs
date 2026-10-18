@@ -223,6 +223,92 @@ const rejectedOutput = { ...output, claims: [{ ...output.claims[0], text: 'Rejec
 const correctedOutput = { ...output, claims: [{ ...output.claims[0], text: 'The member said their passport arrived on Friday.' }] };
 const negativeReview = prompt => JSON.stringify({ fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: false })) });
 
+const conflictSources = ['At my visit, staff allowed phones inside the venue.', 'At my visit, staff did not allow phones inside the venue.']
+  .map((body, index) => {
+    const questionId = `00000000-0000-4000-8000-00000000006${index + 4}`;
+    return { ...source, id: `q:${questionId}`, questionId, title: 'Individual venue experience', body, url: `/questions/${questionId}` };
+  });
+const conflictInput = { mode: 'ask', scope: { kind: 'public' }, question: 'What conflicting reports did members provide about phones inside this venue?' };
+const conflictEvidence = conflictSources.map(item => ({ sourceId: item.id, quote: item.body }));
+const conflictComparison = { text: 'Members gave opposite reports: one said staff allowed phones inside the venue, while another said staff did not allow phones inside the venue.', evidence: conflictEvidence };
+const conflictReports = [
+  { text: 'One member reported that staff allowed phones inside the venue.', evidence: [conflictEvidence[0]] },
+  { text: 'Another member reported that staff did not allow phones inside the venue.', evidence: [conflictEvidence[1]] },
+];
+const misplacedConflict = { status: 'answered', claims: [conflictComparison], disagreements: [], unanswered: [] };
+const correctConflict = { ...misplacedConflict, claims: conflictReports, disagreements: [conflictComparison] };
+const taskIncompleteReview = prompt => JSON.stringify({ fulfillsTask: false, checks: prompt.reviewIds.map(id => ({ id, supported: true })) });
+function withConflictSources(h) {
+  h.session.corpus = async () => { h.state.reads++; return { sources: conflictSources, partial: false }; };
+  return h;
+}
+
+test('a factually supported comparison in the wrong section gets one independently reviewed conflict-preserving repair', async () => {
+  const prompts = [];
+  const h = withConflictSources(harness({ generate: async prompt => {
+    prompts.push(prompt);
+    if (prompts.length === 1) return JSON.stringify(misplacedConflict);
+    if (prompts.length === 2) {
+      assert.match(prompt.system, /Set fulfillsTask false if the comparison appears only as a claim/);
+      assert.deepEqual(JSON.parse(prompt.user).candidate.checks.map(check => check.kind), ['claim']);
+      return taskIncompleteReview(prompt);
+    }
+    if (prompts.length === 3) {
+      const repair = prompt.system.slice(prompt.system.indexOf('SEMANTIC REPAIR:'));
+      assert.match(repair, /populate disagreements first with a comparison citing spans from both conflicting sources/);
+      assert.match(repair, /preserve each side as a separate attributed claim/);
+      assert.match(repair, /Never move the comparison only into claims or omit the disagreement during repair/);
+      assert.match(repair, /Different individual timelines or outcomes alone do not require a disagreement/);
+      return JSON.stringify(correctConflict);
+    }
+    assert.equal(prompts.length, 4);
+    assert.deepEqual(JSON.parse(prompt.user).candidate.checks.map(check => check.kind), ['claim', 'claim', 'disagreement']);
+    return review(prompt);
+  } }));
+  const response = await h.handler(request(undefined, conflictInput)), result = await response.json();
+  assert.equal(response.status, 200); assert.equal(result.status, 'answered');
+  assert.deepEqual(result.claims, conflictReports); assert.deepEqual(result.disagreements, [conflictComparison]);
+  assert.deepEqual(prompts.map(prompt => prompt.outputKind ?? 'answer'), ['answer', 'review', 'answer', 'review']);
+  assert.deepEqual(prompts.map(prompt => prompt.maxAttempts), [undefined, undefined, 1, 1]);
+  assert.equal(prompts[2].user, prompts[0].user, 'Recovery uses only the original evidence');
+  assert.doesNotMatch(prompts[2].user, /Members gave opposite reports/);
+  assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2); assert.equal(h.state.writes, 1);
+  assert.deepEqual([...h.state.cache.values()][0].result.disagreements, [conflictComparison]);
+});
+
+test('captured repair regression cannot publish a correct comparison after dropping its conflict section', async () => {
+  const initial = { ...correctConflict, claims: [{ text: 'Members gave conflicting reports about phones inside the venue.', evidence: [conflictEvidence[0]] }] };
+  const prompts = [];
+  const h = withConflictSources(harness({ generate: async prompt => {
+    prompts.push(prompt);
+    if (prompts.length === 1) return JSON.stringify(initial);
+    if (prompts.length === 2) return JSON.stringify({ fulfillsTask: false, checks: [{ id: 'claim:0', supported: false }, { id: 'disagreement:0', supported: true }] });
+    if (prompts.length === 3) return JSON.stringify(misplacedConflict);
+    assert.equal(prompts.length, 4);
+    assert.match(prompt.system, /supported true and fulfillsTask false/);
+    return taskIncompleteReview(prompt);
+  } }));
+  const response = await h.handler(request(undefined, conflictInput)), result = await response.json();
+  assert.equal(response.status, 200); assert.equal(result.status, 'insufficient');
+  assert.deepEqual(result.claims, []); assert.deepEqual(result.disagreements, []); assert.deepEqual(result.sources, []);
+  assert.equal(prompts.length, 4); assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2);
+  assert.doesNotMatch(JSON.stringify([...h.state.cache.values()]), /Members gave|allowed phones/);
+});
+
+test('an unchanged misclassified comparison cannot buy a second reviewer verdict', async () => {
+  const same = { ...misplacedConflict, claims: [{ ...conflictComparison, text: `  ${conflictComparison.text.toUpperCase()}  `, evidence: [...conflictEvidence].reverse() }] };
+  assert.equal(service.assistantCandidateIdentity(same), service.assistantCandidateIdentity(misplacedConflict));
+  const prompts = [];
+  const h = withConflictSources(harness({ generate: async prompt => {
+    prompts.push(prompt);
+    return prompt.outputKind === 'review' ? taskIncompleteReview(prompt) : JSON.stringify(prompts.length === 1 ? misplacedConflict : same);
+  } }));
+  const result = await (await h.handler(request(undefined, conflictInput))).json();
+  assert.equal(result.status, 'insufficient'); assert.deepEqual(result.claims, []); assert.deepEqual(result.disagreements, []);
+  assert.equal(prompts.length, 3); assert.equal(prompts.filter(prompt => prompt.outputKind === 'review').length, 1);
+  assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2);
+});
+
 test('one semantic recovery uses original evidence and a fixed prompt, then independently reviews and caches only the corrected answer', async () => {
   for (const rejection of ['unsupported', 'task']) {
     const prompts = [], signals = [];
