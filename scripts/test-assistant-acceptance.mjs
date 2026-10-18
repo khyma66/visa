@@ -297,7 +297,7 @@ test('reviewed public answers preserve outcomes, negation, translation and conve
       if (example.id === 'public-multi-hop-context') assert.deepEqual(prompt.previousQuestions, ['What did members report about H-1B stamping in Chennai?']);
       if (example.id === 'public-ordinal-context') {
         assert.match(request.messages.find(message => message.role === 'system').content, /server has already resolved the selected post/);
-        assert.equal(prompt.question, 'Explain the selected discussion.');
+        assert.equal(prompt.question, 'Summarize the selected discussion.');
         assert.deepEqual(prompt.previousQuestions, []);
         assert.deepEqual(prompt.resolvedDiscussion, { questionId: example.sourceId.slice(2), sourceIds: [example.sourceId] });
       }
@@ -726,6 +726,125 @@ test('heterogeneous report summary prioritizes dated actual status without promo
   }
 });
 
+test('historical and current documents retain their own events, dates and personal-only qualification', async () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'historical-current-document-separation');
+  const source = fixture.corpus.sources[0];
+  assert.equal(fixture.input.question, 'Explain the third post.');
+  assert.equal(fixture.input.previousPosts[2].questionId, source.questionId);
+  const evidence = quote => ({ sourceId: source.id, quote });
+  const draft = { status: 'answered', claims: [
+    { text: 'The member visited Lisbon in November 2019 using an old entry sticker that expired in 2021.', evidence: [
+      evidence('Earlier travel history: I visited Lisbon for a holiday in November 2019 using the old entry sticker in my previous passport.'),
+      evidence('That old entry sticker expired on February 6, 2021.'),
+    ] },
+    { text: 'Their renewed residence card is valid through August 14, 2031.', evidence: [evidence('Current paperwork: My renewed residence card is valid through August 14, 2031.')] },
+    { text: 'Their Oslo interview took place on May 17, 2025.', evidence: [evidence('Current appointment: My interview in Oslo took place on May 17, 2025.')] },
+    { text: 'At that interview they were asked for a new photograph; the post does not say whether a decision was made.', evidence: [
+      evidence('At the May 17, 2025 interview, the interviewer asked me to upload a new photograph.'), evidence('I have not shared whether a decision was made on this application.'),
+    ] },
+    { text: 'They did not report how they traveled to this interview or which document they used.', evidence: [evidence('I did not describe how I traveled to this interview or which document I used on that trip.')] },
+    { text: 'This is their individual experience only, not a standard timeline or an official requirement.', evidence: [evidence('This is my individual experience only, not a standard timeline or an official requirement.')] },
+  ], disagreements: [], unanswered: [] };
+  let calls = 0;
+  const runDraft = async candidate => {
+    calls = 0;
+    return (await worker.fetch(request({ id: fixture.id }), { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+      calls++;
+      const task = JSON.parse(input.messages.find(message => message.role === 'user').content);
+      assert.equal(task.sources[0].body, source.body, 'Full surrounding history must reach generation and independent review');
+      // Deliberately accepting every literal-supported candidate simulates the
+      // observed false-positive reviewer: fixture semantics must still fail.
+      return reviewResponse(input) ?? { response: JSON.stringify(candidate) };
+    } } })).json();
+  };
+  const valid = await runDraft(draft);
+  assert.equal(valid.passed, true, JSON.stringify(valid));
+  assert.equal(calls, 2);
+  assert.deepEqual(valid.inferenceCounts, { answers: 1, reviews: 1, transportCalls: 0 });
+  assert.equal(valid.syntheticDiagnostic, undefined);
+  const result = validateAssistantOutput(JSON.stringify(draft), prepareAssistantCorpus(fixture.corpus, fixture.input), Date.now(), fixture.input);
+  const currentOnly = { ...draft, claims: draft.claims.slice(2) };
+  const concise = await runDraft(currentOnly);
+  assert.equal(concise.passed, true, 'A useful current-outcome summary need not include nonessential historical background: ' + JSON.stringify(concise));
+  const catalog = assistantPrompt(fixture.input, prepareAssistantCorpus(fixture.corpus, fixture.input), fixture.corpus).evidenceSpans;
+  const factQuotes = [draft.claims[0].evidence[0].quote, draft.claims[0].evidence[1].quote, draft.claims[1].evidence[0].quote, draft.claims[2].evidence[0].quote];
+  // Exact span selection may put two short facts in one complete span. Select
+  // each span once; this is fixture construction, never model-output repair.
+  const factSpans = [...new Map(factQuotes.map(quote => {
+    const span = catalog.find(item => item.quote.includes(quote)); assert(span, quote); return [span.id, span];
+  })).values()].map(span => ({ sourceId: span.sourceId, quote: span.quote }));
+  for (const [text, expectedCheck] of [
+    ['The member traveled to the May 17, 2025 interview using the old entry sticker that expired in 2021.', 'no_historical_document_current_travel_join'],
+    ['The member traveled to the May 17, 2025 interview using the renewed residence card valid through 2031.', 'no_historical_document_current_travel_join'],
+    ['Their renewed residence card expired on February 6, 2021.', 'no_renewal_old_expiry_join'],
+    ['Their old entry sticker was valid through August 14, 2031.', 'no_old_sticker_renewal_validity_join'],
+    ['They used their renewed residence card for the Lisbon holiday in November 2019.', 'no_renewal_historical_trip_join'],
+    ['Their renewed residence card was used for the Lisbon holiday in November 2019.', 'no_renewal_historical_trip_join'],
+    ['For their November 2019 holiday, they traveled using the renewed residence card.', 'no_renewal_historical_trip_join'],
+  ]) {
+    const changed = structuredClone(draft);
+    changed.claims[4] = { text, evidence: factSpans };
+    const evaluation = await runDraft(changed);
+    assert.equal(evaluation.passed, false, text);
+    assert.equal(calls, 2, 'A false positive review must not hide the fixture failure: ' + JSON.stringify(evaluation));
+    assert(evaluation.checks.some(check => check.name === expectedCheck && !check.passed), text);
+    assert(evaluation.syntheticDiagnostic.failedChecks.includes(expectedCheck));
+    assert.equal(evaluation.syntheticDiagnostic.source, 'compiled-synthetic-fixture-only');
+    assert.equal(evaluation.syntheticDiagnostic.output.claims[4].text, text);
+  }
+  const missingQualification = structuredClone(result); missingQualification.claims.pop();
+  assert(evaluateAcceptance(fixture, missingQualification).checks.some(check => check.name === 'personal_only_qualification_preserved' && !check.passed));
+  for (const text of [
+    'The author reported that no decision had been made on the application.',
+    'The author reported that no decision had been given at the interview.',
+    'The poster indicated that no decision was made.',
+    'The application remained pending.',
+  ]) {
+    const changed = structuredClone(currentOnly);
+    changed.claims[1].text = `At the interview they were asked for a new photograph; ${text}`;
+    const evaluation = await runDraft(changed);
+    assert.equal(evaluation.passed, false, text);
+    assert.equal(calls, 2, 'A literal-supported but semantically stronger statement cannot pass an accepting reviewer');
+    assert(evaluation.checks.some(check => check.name === 'decision_not_invented' && !check.passed), text);
+    assert(evaluation.syntheticDiagnostic.failedChecks.includes('decision_not_invented'));
+  }
+  for (const text of [
+    'The post does not say whether a decision was made.',
+    'The author has not shared whether a decision was made.',
+    'The poster has not indicated whether a decision on the application was made.',
+    'Whether a decision was made is not stated.',
+    'It is unclear whether a decision was made.',
+    'The author reported no decision on the application.',
+    'No decision on the application was reported.',
+    'The author did not report a decision.',
+    'The decision remains unreported.',
+    'No decision was reported; a pending status is not established.',
+    'No decision was reported; there is no evidence that no decision was made.',
+  ]) {
+    const changed = structuredClone(result);
+    changed.claims[3].text = `At the interview they were asked for a new photograph; ${text}`;
+    assert(evaluateAcceptance(fixture, changed).checks.some(check => check.name === 'decision_not_invented' && check.passed), text);
+  }
+  for (const text of [
+    'There is no evidence they used the old entry sticker for travel to this interview.',
+    'It is not stated that the renewed residence card expired in 2021.',
+    'They visited Lisbon in 2019 using the old entry sticker, while the interview was in 2025.',
+    'The old entry sticker expired in 2021; the renewed residence card is valid through 2031.',
+    'During the interview, the member described their November 2019 Lisbon holiday using the old entry sticker.',
+    'The renewed residence card is distinct from the old entry sticker used for the 2019 holiday.',
+    'Their interview took place on 17 May 2025.',
+    'Their interview took place on 2025-05-17.',
+  ]) {
+    const changed = structuredClone(result); changed.claims[4].text = text;
+    const checks = evaluateAcceptance(fixture, changed).checks;
+    assert(checks.filter(check => check.name.startsWith('no_')).every(check => check.passed), text);
+  }
+  for (const date of ['17 May 2025', '2025-05-17']) {
+    const changed = structuredClone(result); changed.claims[2].text = `Their interview took place on ${date}.`;
+    assert.equal(evaluateAcceptance(fixture, changed).passed, true, date);
+  }
+});
+
 test('semantic gate rejects verbose answers, irrelevant details and answering a previous question', () => {
   const base = { status: 'answered', claims: [], disagreements: [], unanswered: [], sources: [], coverage: { sourceCount: 2, partial: false }, generatedAt: new Date().toISOString(), cached: false, notice: '' };
   const cases = [
@@ -852,7 +971,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 29);
+  assert.equal(acceptanceFixtures.length, 30);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);

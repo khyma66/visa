@@ -138,6 +138,41 @@ test('archive summaries disclose when only top comments were exported', async ()
   globalThis.__assistantArchive = { questions: [q({ id: 'apify-test', answer_count: 50 })], answersByQuestionId: { 'apify-test': [a(1)] } };
   const result = await retrieveAssistantCorpus(client(), { mode: 'summary', scope: { kind: 'post', id: 'apify-test' } });
   assert.equal(result.sources.length, 2); assert.equal(result.partial, true);
+  assert.deepEqual(result.coverageReasons, ['missing-replies']);
+});
+
+test('normalized source counters disclose capture gaps without changing saved counts or counting native replies as captured', async () => {
+  process.env.APP_ENV = 'production'; process.env.COMMUNITY_SOURCE_MODE = 'snapshot'; process.env.IMPORTED_CONTENT_APPROVED = 'true';
+  const archiveId = 'apify-normalized-gap';
+  const question = q({ id: archiveId, answer_count: 1, source_comment_count: 7 });
+  const captured = a(99, { id: 'apify-comment-captured', question_id: archiveId });
+  globalThis.__assistantArchive = { questions: [question], answersByQuestionId: { [archiveId]: [captured] } };
+  const before = structuredClone(globalThis.__assistantArchive);
+  const members = Array.from({ length: 6 }, (_, index) => a(index + 1, { question_id: archiveId }));
+  const result = await retrieveAssistantCorpus(client({ imported_answer_feed: { data: members, error: null } }), { mode: 'summary', scope: { kind: 'post', id: archiveId } });
+  assert.equal(result.partial, true); assert.deepEqual(result.coverageReasons, ['missing-replies']);
+  assert.equal(result.sources.length, 8);
+  assert.equal(result.sources.filter(source => source.kind === 'reply' && source.provenance === 'archive').length, 1);
+  assert.equal(result.sources.filter(source => source.provenance === 'member').length, 6);
+  assert.deepEqual(globalThis.__assistantArchive, before, 'Coverage detection must never modify counts, bodies, or saved replies');
+});
+
+test('normalized complete and explicit-zero counters remain complete with legacy snapshot parity', async () => {
+  process.env.APP_ENV = 'production'; process.env.COMMUNITY_SOURCE_MODE = 'snapshot'; process.env.IMPORTED_CONTENT_APPROVED = 'true';
+  const archiveId = 'apify-counter-parity';
+  for (const [metadata, replies, partial] of [
+    [{ answer_count: 1, source_comment_count: 1 }, 1, false],
+    [{ answer_count: 1, source_comment_count: 0 }, 1, false],
+    [{ answer_count: 0, source_comment_count: 0 }, 0, false],
+    [{ answer_count: 1 }, 1, false],
+    [{ answer_count: 7 }, 1, true],
+  ]) {
+    globalThis.__assistantArchive = { questions: [q({ id: archiveId, ...metadata })], answersByQuestionId: { [archiveId]: Array.from({ length: replies }, (_, index) => a(index + 1, { question_id: archiveId })) } };
+    const result = await retrieveAssistantCorpus(client(), { mode: 'summary', scope: { kind: 'post', id: archiveId } });
+    assert.equal(result.partial, partial, JSON.stringify(metadata));
+    assert.deepEqual(result.coverageReasons ?? [], partial ? ['missing-replies'] : []);
+    assert.equal(result.sources.length, replies + 1);
+  }
 });
 
 test('public asks search approved archive and carry prior user questions into follow-up retrieval', async () => {

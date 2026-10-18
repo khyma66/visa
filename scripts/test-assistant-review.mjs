@@ -124,6 +124,11 @@ test('summary review requires important stated unknowns in cited claims even whe
     assert.match(prompt.system, /fulfillsTask is false even when all stated facts are supported/);
     assert.match(prompt.system, /Brevity is not a reason to omit it/);
     assert.match(prompt.system, /Do not require uncertainty invented from silence or incidental unanswered reader questions/);
+    assert.match(prompt.system, /Summary completeness is not exhaustive coverage/);
+    assert.match(prompt.system, /Explicit personal-only limitations and material unknown outcomes or completion dates still must appear/);
+    assert.match(prompt.system, /"The author has not said whether a decision was made" supports that reporting limitation, not that no decision was made or given/);
+    assert.match(prompt.system, /an explicit report that no decision was made supports that attributed event/);
+    assert.match(prompt.system, /already preserves that unknown outcome; do not require an invented unknown decision date/);
     assert.equal(Object.hasOwn(data.candidate, 'unanswered'), false, 'Only cited claims can satisfy the reviewed summary');
     const rejected = validateAssistantReview(verdict([{ id: 'claim:0', supported: true }], false), incomplete);
     assert.equal(rejected.status, 'insufficient');
@@ -228,10 +233,18 @@ test('full-context review refuses oversized cited bodies or total context instea
 test('review asks the same resolved selected-post question as generation', () => {
   const selected = { questionId: source.questionId, sourceId: source.id };
   const prompt = assistantReviewPrompt({ ...input, question: 'Explain the second post.', previousPosts: [{ questionId: 'apify-other', sourceId: 'q:apify-other' }, selected] }, corpus, result);
-  assert.equal(JSON.parse(prompt.user).question, 'Explain the selected discussion.');
-  assert.match(prompt.system, /^REVIEW TASK — SELECTED DISCUSSION/);
-  assert.match(prompt.system, /server has already selected the discussion/);
-  assert.match(prompt.system, /Do not reconstruct an ordinal or earlier result list/);
+  assert.equal(JSON.parse(prompt.user).question, 'Summarize the selected discussion.');
+  assert.match(prompt.system, /^REVIEW TASK — DISCUSSION SUMMARY/);
+  assert.match(prompt.system, /server has already resolved this SUMMARY/);
+  assert.match(prompt.system, /Apply the stated summary scope, including material qualifications/);
+  assert.match(prompt.system, /BRIEF summary of one selected discussion/);
+  assert.equal(JSON.parse(prompt.user).summaryStyle, 'brief');
+  const equivalent = assistantReviewPrompt({ ...input, question: 'Summarize the second post.', previousPosts: [{ questionId: 'apify-other', sourceId: 'q:apify-other' }, selected] }, corpus, result);
+  assert.deepEqual(prompt, equivalent);
+  const qualified = assistantReviewPrompt({ ...input, question: 'Why did the second post report a delay?', previousPosts: [{ questionId: 'apify-other', sourceId: 'q:apify-other' }, selected] }, corpus, result);
+  assert.match(qualified.system, /^REVIEW TASK — SELECTED DISCUSSION/);
+  assert.equal(JSON.parse(qualified.user).task, 'ask');
+  assert.equal(JSON.parse(qualified.user).question, 'Why did the selected discussion report a delay?');
   const unselected = assistantReviewPrompt(input, corpus, result);
   assert.match(unselected.system, /^REVIEW TASK — QUESTION/);
   assert.doesNotMatch(unselected.system, /server has already selected the discussion/);
@@ -263,17 +276,29 @@ test('captured ordinal draft receives the already resolved discussion task befor
   const captured = { ...result, sources: [item], claims: [{ text: 'The poster reports that their visa stamping interview in Chennai was rescheduled to October 28 because the consular officer was unavailable.', evidence: [{ sourceId: item.id, quote: item.body }] }] };
   const prompt = assistantReviewPrompt({ ...input, question: 'Explain the second post.', previousQuestions: ['Find posts about Chennai stamping'], previousPosts: [{ questionId: 'apify-first', sourceId: 'q:apify-first' }, { questionId: postId, sourceId: item.id }] }, { sources: [item], partial: false }, captured);
   const data = JSON.parse(prompt.user);
-  assert.match(prompt.system, /^REVIEW TASK — SELECTED DISCUSSION:/);
-  assert.match(prompt.system.split('\n')[0], /actual reported events and stated reasons/);
-  assert.match(prompt.system.split('\n')[0], /otherwise it must answer the specific question asked/);
-  assert.equal(data.question, 'Explain the selected discussion.');
+  assert.match(prompt.system, /^REVIEW TASK — DISCUSSION SUMMARY:/);
+  assert.match(prompt.system.split('\n')[0], /main reported outcome or unresolved status/);
+  assert.match(prompt.system.split('\n')[0], /Explicit personal-only limitations, material outcome uncertainty, corrected dates and relevant conflicting reports still must be preserved/);
+  assert.equal(data.question, 'Summarize the selected discussion.');
   assert.equal(data.task, 'summary');
-  assert.match(prompt.system, /explicitly a SUMMARY task/);
-  assert.match(prompt.system, /Unsupported additions and material omissions still fail/);
+  assert.match(prompt.system, /Apply the stated summary scope, including material qualifications/);
+  assert.match(prompt.system, /do not demand a full history/);
+  assert.match(prompt.system, /long mixed report must still preserve its substantive outcome and explicit limitations/);
   assert.equal(data.resolvedDiscussion.questionId, postId);
   assert.deepEqual(data.previousQuestions, []);
   assert.equal(data.candidate.checks[0].text, captured.claims[0].text);
   assert.match(prompt.system, /EVERY factual assertion/);
+});
+
+test('semantic review requires linked document versions, events and dates rather than matching facts alone', () => {
+  const prompt = assistantReviewPrompt(input, corpus, result);
+  assert.match(prompt.system, /Audit relationships, not just matching nouns and dates/);
+  assert.match(prompt.system, /Historical and current documents, renewals, trips and appointments are distinct instances/);
+  assert.match(prompt.system, /source must explicitly connect the document instance, validity period, trip and purpose/);
+  assert.match(prompt.system, /Any unsupported link makes the entire check false/);
+  assert.match(prompt.system, /qualification is missing from the candidate text, set fulfillsTask false/);
+  assert.equal(validateAssistantReview(verdict([{ id: 'claim:0', supported: false }]), result).status, 'insufficient');
+  assert.equal(validateAssistantReview(verdict([{ id: 'claim:0', supported: true }], false), result).status, 'insufficient');
 });
 
 test('a supported but unrelated candidate still fails task completion without a quote fallback', () => {

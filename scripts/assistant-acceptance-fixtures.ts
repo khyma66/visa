@@ -81,6 +81,43 @@ const heterogeneousReportBody = [
   'Actual case update: On June 18, 2026, my case status changed to “Issued”. That is a portal status update, not a report of passport delivery. I have no collection or delivery date to report.',
 ].join('\n\n');
 
+// Entirely invented history/current-document contrast. The old trip, old entry
+// sticker, renewed residence card and current interview are distinct entities.
+const historicalCurrentDocumentBody = [
+  'Synthetic Oslo interview diary. This is my individual experience only, not a standard timeline or an official requirement.',
+  'Earlier travel history: I visited Lisbon for a holiday in November 2019 using the old entry sticker in my previous passport.',
+  'That old entry sticker expired on February 6, 2021.',
+  'Current paperwork: My renewed residence card is valid through August 14, 2031. The renewed residence card is a different document from the old entry sticker.',
+  'Current appointment: My interview in Oslo took place on May 17, 2025.',
+  'Interviewer: “Have you traveled before?” I described the Lisbon holiday from November 2019. That answer concerned my earlier travel history.',
+  'At the May 17, 2025 interview, the interviewer asked me to upload a new photograph. I have not shared whether a decision was made on this application.',
+  'I did not describe how I traveled to this interview or which document I used on that trip.',
+].join('\n\n');
+const historicalClauses = (result: AssistantResult) => [...result.claims, ...result.disagreements]
+  .flatMap(claim => claim.text.toLowerCase().split(/[.!?;]+|\b(?:and|while|whereas)\b/));
+const explicitlyUnestablished = (text: string) => /no (?:evidence|information|report)|(?:did|does|do) not (?:say|state|report|establish)|not (?:stated|reported|established|known)|unknown|unstated|unreported/.test(text);
+// These deterministic checks supplement independent semantic review. Match a
+// claimed trip relation, not an interview that merely discusses an old trip.
+const claimsInterviewTrip = (text: string) => /\b(?:travel|traveled|travelled|traveling|travelling|flew|arrived)\b.{0,35}\b(?:to|for|at)\b.{0,35}\binterview\b|\b(?:used|using)\b.{0,85}\b(?:to|for)\b.{0,35}\binterview\b/.test(text);
+const noHistoricalTravelJoin = (result: AssistantResult) => historicalClauses(result).every(text => explicitlyUnestablished(text)
+  || !(/\b(?:old|previous)\b.{0,35}\b(?:sticker|visa)\b|\b(?:renewed|renewal|residence)\b.{0,30}\b(?:card|permit)\b/.test(text) && claimsInterviewTrip(text)));
+const noRenewalExpiryJoin = (result: AssistantResult) => historicalClauses(result).every(text => explicitlyUnestablished(text)
+  || !/\b(?:renewed|renewal|current)\b.{0,30}\b(?:card|permit)\b.{0,20}\b(?:expired|expires|valid)\b.{0,30}\b2021\b/.test(text));
+const noOldStickerRenewalValidity = (result: AssistantResult) => historicalClauses(result).every(text => explicitlyUnestablished(text)
+  || !/\b(?:old|previous|entry)\b.{0,30}\b(?:sticker|visa)\b.{0,20}\b(?:expired|expires|valid)\b.{0,30}\b2031\b/.test(text));
+const noRenewalHistoricalTrip = (result: AssistantResult) => historicalClauses(result).every(text => explicitlyUnestablished(text)
+  || !(/\b2019\b/.test(text) && (
+    /\b(?:used|using|with)\b.{0,25}\b(?:renewed|renewal|residence)\b.{0,30}\b(?:card|permit)\b/.test(text)
+    // A different document between the residence card and the travel verb
+    // owns that verb: "card is distinct from the old sticker used in 2019".
+    || /\b(?:renewed|renewal|residence)\b.{0,30}\b(?:card|permit)\b(?:(?!\b(?:old|previous|entry|sticker|visa)\b).){0,45}\b(?:used|using|for|on)\b.{0,50}\b(?:travel|traveled|travelled|holiday|visited|visit)\b/.test(text)
+  )));
+const unsharedDecision = (text: string) => /\bnot\s+(?:yet\s+)?(?:said|say|state[ds]?|specified|specify|shared|share|reported|report|disclosed|disclose|mentioned|mention|indicated|indicate)\b.{0,35}\bwhether\b.{0,35}\bdecision\b|\b(?:unclear|unknown|unstated|unreported|unspecified)\b.{0,35}\bwhether\b.{0,35}\bdecision\b|\bwhether\b.{0,35}\bdecision\b.{0,35}\b(?:unknown|unstated|unreported|unspecified|not (?:stated|reported|shared|disclosed))\b/i.test(text);
+const decisionReportingScope = (result: AssistantResult) => result.claims.some(claim => unsharedDecision(claim.text)
+    || /\breported\s+no\s+(?:final\s+)?decision\b|\bno\s+(?:final\s+)?decision\b.{0,35}\breported\b|\b(?:did|does|has|had)\s+not\s+(?:report|reported|mention|mentioned)\b.{0,30}\bdecision\b|\bdecision\b.{0,20}\bunreported\b|\bunreported\s+decision\b/i.test(claim.text))
+  && historicalClauses(result).every(text => explicitlyUnestablished(text) || unsharedDecision(text)
+    || !/\bpending\b|\bno\s+(?:final\s+)?decision\b.{0,45}\b(?:made|given|issued|reached|received)\b|\bdecision\b.{0,20}\b(?:not|never)\b.{0,20}\b(?:made|given|issued|reached|received)\b/.test(text));
+
 export const acceptanceFixtures: AcceptanceFixture[] = [
   { id: 'direct-post-search', execution: 'direct-post-search', input: { mode: 'ask', scope: { kind: 'public' }, question: 'give all posts related to stamping delay' }, corpus: stampingSearchCorpus, checks: [
     { name: 'returns_post_search_results', test: result => result.kind === 'posts' && result.status === 'answered' },
@@ -150,6 +187,33 @@ export const acceptanceFixtures: AcceptanceFixture[] = [
     { name: 'bounded_exact_body_quotes', test: result => [...result.claims, ...result.disagreements].every(claim => claim.evidence.length >= 1 && claim.evidence.length <= 4
       && claim.evidence.every(item => item.sourceId === `q:${postId}` && item.quote.length >= 12 && item.quote.length <= 400
         && heterogeneousReportBody.replace(/\s+/gu, ' ').includes(item.quote.replace(/\s+/gu, ' ')))) },
+  ] },
+  { id: 'historical-current-document-separation', input: { mode: 'ask', scope: { kind: 'public' }, question: 'Explain the third post.',
+    previousQuestions: ['Find posts about visa interview experiences in Oslo'], previousPosts: [
+      { questionId: stampingPostIds[0], sourceId: `q:${stampingPostIds[0]}` },
+      { questionId: stampingPostIds[1], sourceId: `q:${stampingPostIds[1]}` },
+      { questionId: postId, sourceId: `q:${postId}` },
+    ] }, corpus: { sources: [source(202, historicalCurrentDocumentBody,
+      { kind: 'question', id: `q:${postId}`, communityId: null, title: 'Synthetic Oslo interview with earlier travel and distinct documents', speakerRole: 'original-poster' })], partial: false }, checks: [
+    answered,
+    // An unqualified summary may omit nonessential history. If it includes a
+    // historical event or validity, that fact must keep its original instance.
+    { name: 'historical_trip_keeps_its_year_when_mentioned', test: result => result.claims.every(claim => !/\blisbon\b|\bholiday\b/i.test(claim.text) || /\b2019\b/.test(claim.text)) },
+    { name: 'old_sticker_keeps_its_expiry_when_mentioned', test: result => result.claims.every(claim => !(/\b(?:old|previous|entry)\b.{0,35}\b(?:sticker|visa)\b/i.test(claim.text) && /expir/i.test(claim.text)) || /\b2021\b/.test(claim.text)) },
+    { name: 'renewed_card_keeps_its_validity_when_mentioned', test: result => result.claims.every(claim => !(/renewed|renewal|residence/i.test(claim.text) && /valid|through|until|expir/i.test(claim.text)) || /\b2031\b/.test(claim.text)) },
+    { name: 'current_interview_keeps_its_date', test: result => result.claims.some(claim => /\binterview\b/i.test(claim.text)
+      && /(?:may\s+17(?:th)?,?\s+2025|17(?:th)?\s+(?:of\s+)?may,?\s+2025|2025-05-17)\b/i.test(claim.text)) },
+    mentions('current_request_and_unknown_decision_preserved', /photograph|\bphoto\b/),
+    { name: 'decision_not_invented', test: decisionReportingScope },
+    { name: 'personal_only_qualification_preserved', test: result => /individual|personal|own experience/.test(words(result)) && /only|not a standard|not an official|not a rule/.test(words(result)) },
+    { name: 'no_historical_document_current_travel_join', test: noHistoricalTravelJoin },
+    { name: 'no_renewal_old_expiry_join', test: noRenewalExpiryJoin },
+    { name: 'no_old_sticker_renewal_validity_join', test: noOldStickerRenewalValidity },
+    { name: 'no_renewal_historical_trip_join', test: noRenewalHistoricalTrip },
+    { name: 'only_resolved_discussion_cited', test: result => result.sources.length === 1 && result.sources[0].questionId === postId },
+    { name: 'bounded_exact_body_quotes', test: result => [...result.claims, ...result.disagreements].every(claim => claim.evidence.length >= 1 && claim.evidence.length <= 4
+      && claim.evidence.every(item => item.sourceId === `q:${postId}` && item.quote.length >= 12 && item.quote.length <= 400
+        && historicalCurrentDocumentBody.replace(/\s+/gu, ' ').includes(item.quote.replace(/\s+/gu, ' ')))) },
   ] },
 ];
 
