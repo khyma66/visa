@@ -20,7 +20,8 @@ export type Question = {
   status: 'open' | 'closed' | 'archived';
   vote_score: number;
   answer_count: number;
-  view_count: number;
+  /** Legacy, untracked value; do not display as measured views or infer from replies. New imports use null. */
+  view_count: number | null;
   accepted_answer_id: string | null;
   created_at: string;
   updated_at: string;

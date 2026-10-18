@@ -66,7 +66,7 @@ function button(tree, label) {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const messageForm = tree => nodes(tree, item => item.type === 'form')
-  .find(form => nodes(form, item => item.type === 'input' && item.props['aria-label'] === 'Private message').length);
+  .find(form => nodes(form, item => item.type === 'textarea' && item.props['aria-label'] === 'Private message').length);
 
 test('messages waits for auth and signed-out accounts cannot see cached conversation text', () => {
   const cached = { conversations: [conversation('accepted')], activeId: 'accepted', messages: [message('private-secret')] };
@@ -86,6 +86,155 @@ test('initial inbox waits for results rather than showing a false empty folder',
   assert.match(html, /Loading conversations/);
   assert.match(html, /aria-busy="true"/);
   assert.doesNotMatch(html, /No chats yet/);
+});
+
+test('overlapping inbox results render one row per conversation without combining different histories', () => {
+  const first = conversation('first');
+  const distinct = conversation('second');
+  const { tree, html } = render(fixture({ conversations: [first, distinct, { ...first, last_message: 'Latest preview' }], inboxLoading: false, folderCounts: { chats: 2, requests: 0, closed: 0 } }));
+  const rows = nodes(tree, node => node.type === 'button' && node.props['aria-label']?.startsWith('Conversation with'));
+  assert.equal(rows.length, 2);
+  assert.equal(rows.filter(row => row.props['aria-label'] === 'Conversation with u/first-member').length, 1);
+  assert.match(html, /Latest preview/);
+  assert.match(html, /2 of 2 conversations shown/);
+});
+
+test('mobile shows either the inbox or selected conversation and Back preserves the current draft', () => {
+  const row = conversation('accepted');
+  const f = fixture({ conversations: [row], activeId: row.id, body: 'Unsent draft', inboxLoading: false });
+  let output = render(f);
+  const pane = (tree, label) => nodes(tree, node => node.props['aria-label'] === label)[0];
+  assert.match(pane(output.tree, 'Conversation inbox').props.className, /^flex /);
+  assert.match(pane(output.tree, 'Selected conversation').props.className, /^hidden md:flex /);
+  button(output.tree, 'Conversation with u/accepted-member').props.onClick();
+  output = render(f);
+  assert.match(pane(output.tree, 'Conversation inbox').props.className, /^hidden md:flex /);
+  assert.match(pane(output.tree, 'Selected conversation').props.className, /^flex /);
+  assert.equal(button(output.tree, 'Conversation with u/accepted-member').props['aria-current'], 'true');
+  button(output.tree, 'Back to inbox').props.onClick();
+  output = render(f);
+  assert.match(pane(output.tree, 'Conversation inbox').props.className, /^flex /);
+  assert.equal(f.state[stateNames.indexOf('body')], 'Unsent draft');
+  assert.deepEqual(f.calls, []);
+});
+
+test('New message uses a labeled native modal with explicit close and Escape, without creating a request', () => {
+  const f = fixture({ inboxLoading: false });
+  let output = render(f);
+  const trigger = nodes(output.tree, node => node.type === 'button' && React.Children.toArray(node.props.children).includes('New message'))[0];
+  trigger.props.onClick();
+  output = render(f);
+  let dialog = nodes(output.tree, node => node.type === 'dialog')[0];
+  const opened = [];
+  dialog.props.ref.current = { open: false, showModal() { this.open = true; opened.push('show'); }, close() { this.open = false; opened.push('close'); } };
+  f.effects[4]();
+  assert.equal(dialog.props['aria-labelledby'], 'new-message-title');
+  assert.deepEqual(opened, ['show']);
+  const field = nodes(output.tree, node => node.type === 'input' && node.props.id === 'message-recipient')[0];
+  assert.equal(field.props.required, true);
+  assert.equal(field.props.autoFocus, true);
+  button(output.tree, 'Close new message').props.onClick();
+  render(f); f.effects[4]();
+  assert.deepEqual(opened, ['show', 'close']);
+  trigger.props.onClick(); output = render(f); f.effects[4]();
+  dialog = nodes(output.tree, node => node.type === 'dialog')[0];
+  dialog.props.onCancel();
+  assert.equal(f.state[stateNames.indexOf('composeOpen')], false);
+  assert.deepEqual(f.calls, []);
+});
+
+test('a hidden mobile thread does not mark unread messages as seen; opening it confirms receipts', async () => {
+  const previousDocument = globalThis.document;
+  const previousWindow = globalThis.window;
+  globalThis.document = { visibilityState: 'visible' };
+  globalThis.window = { matchMedia: () => ({ matches: false }) };
+  const row = conversation('accepted');
+  const f = fixture({ conversations: [row], activeId: row.id, inboxLoading: false });
+  f.api.refreshMessages = async () => ({ messages: [message('unread', bob)], reset: true, hasOlder: false });
+  f.api.getConversationMessageCount = async () => 1;
+  f.api.markConversationRead = async () => {};
+  f.api.listConversationFolder = async () => ({ conversations: [row], hasOlder: false });
+  let cleanup;
+  try {
+    render(f); cleanup = f.effects[2](); await flush();
+    assert.equal(f.calls.filter(([name]) => name === 'markConversationRead').length, 0);
+    button(render(f).tree, 'Conversation with u/accepted-member').props.onClick(); await flush();
+    assert.equal(f.calls.filter(([name]) => name === 'markConversationRead').length, 1);
+    button(render(f).tree, 'Back to inbox').props.onClick();
+    f.subscriptions.find(subscription => subscription.topics.includes('conversation:accepted')).callback(); await flush();
+    assert.equal(f.calls.filter(([name]) => name === 'markConversationRead').length, 1);
+  } finally { cleanup?.(); globalThis.document = previousDocument; globalThis.window = previousWindow; }
+});
+
+test('a New message popup suppresses background read receipts on desktop and mobile until dismissal', async () => {
+  const previousDocument = globalThis.document;
+  const previousWindow = globalThis.window;
+  globalThis.document = { visibilityState: 'visible' };
+  try {
+    for (const desktop of [true, false]) {
+      globalThis.window = { matchMedia: () => ({ matches: desktop }) };
+      const row = conversation('accepted');
+      const f = fixture({ conversations: [row], activeId: row.id, inboxLoading: false, composeOpen: true, mobileThread: true });
+      f.api.refreshMessages = async () => ({ messages: [message('unread', bob)], reset: true, hasOlder: false });
+      f.api.getConversationMessageCount = async () => 1;
+      f.api.markConversationRead = async () => {};
+      f.api.listConversationFolder = async () => ({ conversations: [row], hasOlder: false });
+      const output = render(f);
+      const dialog = nodes(output.tree, node => node.type === 'dialog')[0];
+      dialog.props.ref.current = { open: true, showModal() { this.open = true; }, close() { this.open = false; } };
+      const cleanup = f.effects[2]();
+      f.effects[4](); await flush();
+      assert.equal(f.calls.filter(([name]) => name === 'markConversationRead').length, 0, `popup open, desktop=${desktop}`);
+      if (desktop) button(render(f).tree, 'Close new message').props.onClick();
+      else {
+        dialog.props.ref.current.open = false; // Native Escape closes first.
+        dialog.props.onCancel();
+      }
+      render(f); f.effects[4](); await flush();
+      assert.equal(f.calls.filter(([name]) => name === 'markConversationRead').length, 1, `popup closed, desktop=${desktop}`);
+      cleanup?.();
+    }
+  } finally { globalThis.document = previousDocument; globalThis.window = previousWindow; }
+});
+
+test('opening the popup prevents an in-flight history refresh from marking the obscured thread read', async () => {
+  const previousDocument = globalThis.document;
+  const previousWindow = globalThis.window;
+  globalThis.document = { visibilityState: 'visible' };
+  globalThis.window = { matchMedia: () => ({ matches: true }) };
+  const row = conversation('accepted');
+  const f = fixture({ conversations: [row], activeId: row.id, inboxLoading: false });
+  let complete, cleanup;
+  f.api.refreshMessages = () => new Promise(resolve => { complete = resolve; });
+  f.api.getConversationMessageCount = async () => 1;
+  f.api.markConversationRead = async () => {};
+  try {
+    const output = render(f); cleanup = f.effects[2]();
+    nodes(output.tree, node => node.type === 'button' && node.props['aria-controls'] === 'new-message-dialog')[0].props.onClick();
+    // Do not rerender: the receipt guard must already see the modal opening.
+    complete({ messages: [message('arrived-late', bob)], reset: true, hasOlder: false }); await flush();
+    assert.equal(f.calls.filter(([name]) => name === 'markConversationRead').length, 0);
+    assert.match(render(f).html, /arrived-late text/);
+  } finally { cleanup?.(); globalThis.document = previousDocument; globalThis.window = previousWindow; }
+});
+
+test('the multiline composer preserves line breaks and messages render as text, not executable HTML', async () => {
+  const row = conversation('accepted');
+  const text = 'First line\nSecond line';
+  const unsafe = '<img src=x onerror=alert(1)> <script>bad()</script>';
+  const f = fixture({ conversations: [row], activeId: row.id, inboxLoading: false, body: text, messages: [message('markup', bob, { body: unsafe })] });
+  const output = render(f);
+  const field = nodes(output.tree, node => node.type === 'textarea' && node.props['aria-label'] === 'Private message')[0];
+  assert.equal(field.props.value, text);
+  assert.equal(field.props.maxLength, 4000);
+  assert.match(output.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(output.html, /<script>|<img src=x/);
+  f.api.sendMessage = async () => {};
+  f.api.refreshMessages = async () => ({ messages: [], reset: true, hasOlder: false });
+  f.api.getConversationMessageCount = async () => 1;
+  f.api.listConversationFolder = async () => ({ conversations: [row], hasOlder: false });
+  await messageForm(output.tree).props.onSubmit({ preventDefault() {} });
+  assert.equal(f.calls.find(([name]) => name === 'sendMessage')[1][2], text);
 });
 
 test('failed inbox has a usable retry and only confirmed empty results show the empty state', async () => {
@@ -405,7 +554,7 @@ test('a confirmed send superseding a manual history retry settles loading and ig
     output = render(f);
     assert.equal(f.state[stateNames.indexOf('messagesLoading')], false);
     assert.doesNotMatch(output.html, /obsolete text|Loading conversation/);
-    assert.equal(nodes(output.tree, item => item.type === 'input' && item.props['aria-label'] === 'Private message')[0].props.disabled, false);
+    assert.equal(nodes(output.tree, item => item.type === 'textarea' && item.props['aria-label'] === 'Private message')[0].props.disabled, false);
   } finally { cleanup?.(); globalThis.document = previousDocument; }
 });
 

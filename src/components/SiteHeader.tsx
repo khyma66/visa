@@ -101,7 +101,10 @@ export function SiteHeader() {
             </div>}
           </div>
         ) : (
-          <a href="/login#sign-in" className="header-login">Log In</a>
+          <nav aria-label="Account access" className="header-auth-actions">
+            <a href="/login#sign-in" className="header-signin">Log in</a>
+            <a href="/signup#sign-in" className="header-login">Sign up</a>
+          </nav>
         )}
       </div>
     </header>

@@ -12,6 +12,7 @@ name: Release current VisaThreads AI features
 # Resolve model-selected evidence IDs to server-owned complete source excerpts.
 # Bound provider collections with nullable slots before exact evidence resolution.
 # Verify historical/current document relationships and canonical summary intent.
+# Preserve conflicting-report sections during independent review and correction.
 
 on:
   workflow_dispatch:
@@ -113,6 +114,94 @@ jobs:
       - name: Remove recovered content
         if: always()
         run: rm -f src/data/api-archive.json .cache/visaflow/live-preview/public-build-values.json
+
+  sync-development:
+    needs: release
+    if: github.ref == 'refs/heads/main' && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: visa-central-development
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node --test scripts/test-development-sync.mjs
+      - name: Capture only existing dev content after verifying this source is live in production
+        id: capture
+        run: node scripts/development-sync.mjs capture
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEV_SUPABASE_PUBLISHABLE_KEY: sb_publishable_iTiFgVvvFA6h9cYqMivsFA_3qnCzmX7
+      - name: Build the same source for the isolated development database
+        run: node scripts/development-sync.mjs build
+      - name: Recheck production source and unchanged dev archive before deployment
+        run: node scripts/development-sync.mjs deploy-check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy only the checked dev Worker
+        id: deploy
+        run: npx --no-install vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ github.workspace }}/.cache/visaflow/development-sync/wrangler-deploy.ndjson
+      - name: Record the exact uploaded dev version even if deployment exits with an error
+        if: always() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')
+        run: node scripts/development-sync.mjs record-deployment
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify exact dev source, preserved content, assets and disabled assistant
+        run: node scripts/development-sync.mjs verify
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Restore captured dev version only if this exact uploaded version is still active
+        id: rollback
+        if: failure() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')
+        run: |
+          ROLLBACK_VERSION=$(node scripts/development-sync.mjs rollback-version)
+          npx --no-install wrangler rollback "$ROLLBACK_VERSION" --name visathreads-sandbox --config dist/server/wrangler.json --message "Restore captured dev version after failed sync verification" --yes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify restored dev version and unchanged content
+        if: always() && steps.rollback.outcome == 'success'
+        run: node scripts/development-sync.mjs verify-rollback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify production deployment was not modified by dev synchronization
+        if: always() && steps.capture.outcome == 'success'
+        run: node scripts/development-sync.mjs production-unchanged
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Preserve metadata-only development sync evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: development-sync-evidence-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: |
+            .cache/visaflow/development-sync/build-provenance.json
+            .cache/visaflow/development-sync/rollout-verification.json
+          include-hidden-files: true
+          if-no-files-found: warn
+      - name: Remove recovered dev content and configuration
+        if: always()
+        run: rm -f src/data/api-archive.json .cache/visaflow/development-sync/public-build-values.json .cache/visaflow/development-sync/receipt.json
 
 # This updates the already-serving early preview on visathreads.com. It neither
 # opens PUBLIC_LAUNCH_APPROVED nor replaces the Reviewed public release workflow.

@@ -3,6 +3,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export type SocialProvider = 'google';
 export type AuthMethods = { google: boolean; phone: boolean };
 export type SignupNames = { firstName: string; lastName?: string };
+export type AuthErrorContext = {
+  action?: 'request-code' | 'verify-code' | 'password' | 'oauth' | 'sign-out';
+  createAccount?: boolean;
+  channel?: 'email' | 'phone';
+};
 
 export function safeAuthNext(value: string | null): string {
   if (!value || value.length > 2048 || !value.startsWith('/') || value.startsWith('//') || /[\\\s%\u0000-\u001f\u007f]/.test(value)) return '/';
@@ -18,22 +23,45 @@ export function authCallbackUrl(origin: string, next: string | null): string {
   return url.toString();
 }
 
-export function authErrorMessage(reason: unknown): string {
+export function authErrorMessage(reason: unknown, context: AuthErrorContext = {}): string {
   const error = reason as { code?: string; status?: number } | null;
+  const requestFailure = context.createAccount
+    ? 'We couldn’t send your verification code. Check your details and try again. Already a member? Choose Log in.'
+    : 'We couldn’t send a sign-in code. Check your details. New to VisaThreads? Choose Create account first.';
   if (error?.code === 'policy_required') return 'Please review the policies and confirm your eligibility first.';
   if (error?.status === 429 || ['over_email_send_rate_limit', 'over_sms_send_rate_limit', 'over_request_rate_limit'].includes(error?.code ?? '')) return 'Too many attempts. Please wait a few minutes before trying again.';
-  if (['otp_expired', 'otp_disabled'].includes(error?.code ?? '')) return 'That code is invalid or has expired. Use your latest sign-in code, or request a new one.';
+  // Supabase also returns otp_disabled when create_user:false cannot find an
+  // account. At the request step it does not prove OTP is globally unavailable.
+  if (error?.code === 'otp_disabled') return context.action === 'request-code' ? requestFailure : 'Code sign-in is not available right now. Try another sign-in option.';
+  if (error?.code === 'otp_expired') return context.action === 'request-code' ? requestFailure : 'That code has expired or could not be verified. Use the latest code, or request a new one.';
   if (error?.code === 'invalid_code') return 'Enter the 6–10 digit sign-in code.';
   if (error?.code === 'invalid_phone') return 'Enter a valid phone number with country code, like +15551234567.';
   if (error?.code === 'phone_provider_disabled') return 'Phone code sign-in is not available yet. Please use email.';
   if (error?.code === 'provider_disabled') return 'This sign-in option is not available yet. Please use email.';
-  if (error?.code === 'invalid_email') return 'Enter a valid email address.';
+  if (['invalid_email', 'email_address_invalid'].includes(error?.code ?? '')) return 'Enter a valid email address.';
   if (error?.code === 'invalid_first_name') return 'Enter your first name, starting with a letter and using up to 80 characters. Email addresses are not accepted here.';
   if (error?.code === 'invalid_last_name') return 'Use up to 80 characters for your last name, or leave it blank.';
-  if (error?.code === 'invalid_credentials') return 'The email or password is incorrect. Try again or use an email code.';
+  // Auth can intentionally hide whether an account exists. Do not turn a failed
+  // request into an account lookup or claim that an unsent code was incorrect.
+  if (['invalid_credentials', 'user_not_found', 'user_already_exists', 'email_exists', 'phone_exists'].includes(error?.code ?? '')) {
+    if (context.action === 'request-code') return requestFailure;
+    if (context.action === 'verify-code') return 'We couldn’t verify that code. Check the contact details and enter the latest code, or request a new one.';
+    return 'We couldn’t sign you in with those details. Try again or use an email code. New here? Choose Create account.';
+  }
+  if (error?.code === 'signup_disabled') return context.action === 'request-code' && !context.createAccount
+    ? requestFailure
+    : 'New account registration is not available right now. Existing members can log in.';
+  if (error?.code === 'email_provider_disabled') return 'Email sign-in is not available right now. Try another sign-in option.';
+  if (error?.code === 'sms_send_failed') return 'Your text message could not be sent. Check the phone number or use email instead.';
+  if (error?.code === 'email_address_not_authorized') return 'Email delivery is not available for this address right now. Try another sign-in option.';
   if (error?.code === 'email_not_confirmed') return 'Verify your email before signing in.';
   if (['weak_password', 'invalid_password'].includes(error?.code ?? '')) return 'Use a unique password between 12 and 128 characters.';
   if (['captcha_failed', 'captcha_required'].includes(error?.code ?? '')) return 'Complete the security check and try again.';
+  if (context.action === 'request-code') return context.channel === 'phone'
+    ? 'Your text message could not be sent. Check your connection and try again.'
+    : 'Your verification email could not be sent. Check your connection and try again.';
+  if (context.action === 'verify-code') return 'We couldn’t finish verifying your code. Check your connection and try again.';
+  if (context.action === 'sign-out') return 'We couldn’t sign you out. Check your connection and try again.';
   return 'We couldn’t complete sign-in. Check your connection and try again.';
 }
 

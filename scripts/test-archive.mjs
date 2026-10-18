@@ -14,6 +14,27 @@ const {createDiscoveryIndex}=await import(moduleUrl(discovery));
 const presentation=moduleUrl(transpile(await readFile(new URL('../src/lib/post-presentation.ts',import.meta.url),'utf8')));
 const normalization=transpile(await readFile(new URL('../src/lib/archive-presentation.ts',import.meta.url),'utf8')).replace("'./post-presentation'",JSON.stringify(presentation));
 const {normalizeArchiveFeed}=await import(moduleUrl(normalization));
+const route=transpile((await readFile(new URL('../src/app/api/community/route.ts',import.meta.url),'utf8'))+'\nexport { normalizePost };')
+  .replace("'next/server'",JSON.stringify(moduleUrl('export class NextResponse extends Response {}')))
+  .replace("'@/lib/tagging'",JSON.stringify(tags))
+  .replace("'@/lib/archive-presentation'",JSON.stringify(moduleUrl(normalization)))
+  .replace("'@visa/archive'",JSON.stringify(moduleUrl('export default {questions:[],answersByQuestionId:{},source:{}};')));
+const {normalizePost}=await import(moduleUrl(route));
+
+test('new imports have unknown views; source shares and replies are never substituted for views',()=>{
+  for(const sharesCount of [undefined,0,97,'1500']) {
+    for(const commentsCount of [0,4,1300]) {
+      const input={id:'views-fixture',text:'What documents should I bring to my H1B interview?',sharesCount,commentsCount,
+        topComments:[{id:'one',text:'Check the consulate instructions.'}]};
+      const before=structuredClone(input);
+      const normalized=normalizePost(input,'2026-10-18T00:00:00Z');
+      assert.equal(normalized.question.view_count,null);
+      assert.equal(normalized.question.answer_count,1);
+      assert.equal(normalized.question.source_comment_count,commentsCount);
+      assert.deepEqual(input,before,'Source records must remain unchanged');
+    }
+  }
+});
 
 test('public archive reply counts equal captured unique active replies, retaining upstream totals separately',()=>{
   const before=structuredClone(archive);

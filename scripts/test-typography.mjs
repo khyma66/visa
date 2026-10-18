@@ -97,7 +97,7 @@ test('post and assistant reading text use the shared body size with readable lin
   assert.match(assistant, /text-base leading-relaxed text-slate-800/);
   assert.match(assistant, /text-base leading-relaxed text-slate-700">\{post\.excerpt\}/);
   assert.match(assistant, /text-base leading-relaxed text-white" aria-label="Your message"/);
-  assert.match(assistant, /text-xs leading-5 text-slate-600">Community experiences/);
+  assert.match(assistant, /text-xs leading-5 text-slate-600">Answers from community discussions/);
 });
 
 test('component text never reintroduces unreadable arbitrary sizes below the 12px metadata floor', async () => {

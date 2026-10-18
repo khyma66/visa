@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Check, CheckCircle2, Plus, Search, X } from 'lucide-react';
+import { Check, CheckCircle2, Plus, X } from 'lucide-react';
 import { getCommunityById, getMembershipForCommunity, listMyCommunitiesPage, type Community } from '@/lib/groups';
 import { createQuestion } from '@/lib/community';
 import { topicLabel } from '@/lib/post-presentation';
@@ -131,10 +131,10 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
       <section>
         <p className="text-sm font-bold tracking-wider text-blue-700">{experience ? 'Share a Visa Experience' : 'Ask the Community'}</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">{experience ? 'Help others learn from your visa journey' : 'Share the details that make your case different'}</h1>
-        <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your-random-handle'}</b>.</p>
-        {!user && <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mr-2 inline" size={17} /> <Link href={loginReturn} className="font-bold underline">Log In</Link> before publishing. Your email remains private.</div>}
+        {user ? <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your public username'}</b>.</p> : <p className="mt-3 text-sm text-slate-600"><Link href={loginReturn} className="font-semibold text-blue-700 underline">Log in</Link> or <Link href={loginReturn.replace('/login?', '/signup?')} className="font-semibold text-blue-700 underline">create an account</Link> to publish. You can draft your question below.</p>}
         <form onSubmit={submit} className="mt-7 space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-          <label className="block"><span className="font-bold text-slate-900">Community</span>
+          <p className="text-sm text-slate-500"><span aria-hidden="true" className="font-semibold text-rose-700">*</span> Required fields</p>
+          <label className="block"><span className="font-bold text-slate-900">Community <span className="text-sm font-normal text-slate-500">(optional)</span></span>
             <select aria-label="Community" value={communityId} onChange={(event) => setCommunityId(event.target.value)} disabled={submitting} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">
               <option value="">General Questions</option>
               {communityId && !communities.some((community) => community.id === communityId) && <option value={communityId}>{selectedCommunity?.display_name ?? (selectionLoading ? 'Checking community…' : 'Join this community before posting')}</option>}
@@ -151,24 +151,24 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
           {selectionError && <div role="alert" className="text-sm text-rose-700">{selectionError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline">Retry selection</button></div>}
           {communityError && <div role="alert" className="text-sm text-rose-700">{communityError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline">Retry</button></div>}
           <label className="block">
-            <span className="font-bold text-slate-900">{experience ? 'Experience Title' : 'Question Title'}</span>
-            <span className="mt-1 block text-sm text-slate-500">Write the exact question another person might search.</span>
-            <input required minLength={15} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Can I… / How should I…"
+            <span className="font-bold text-slate-900">{experience ? 'Experience Title' : 'Question Title'} <span aria-hidden="true" className="text-rose-700">*</span></span>
+            <span id="post-title-help" className="mt-1 block text-sm text-slate-500">Be specific. Use 15–180 characters.</span>
+            <input aria-label={experience ? 'Experience Title' : 'Question Title'} aria-describedby="post-title-help" required minLength={15} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Can I… / How should I…"
               className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
           </label>
           <div className="grid gap-5 sm:grid-cols-2">
             <label><span className="font-bold text-slate-900">Destination Country</span><input readOnly value={country} className="mt-2 w-full rounded-lg border border-slate-200 bg-blue-50 px-4 py-3 text-blue-900" /><span className="mt-1 block text-xs text-slate-500">U.S. visa topics only for now.</span></label>
-            <label><span className="font-bold text-slate-900">Visa Type</span><select value={visaType} onChange={(event) => setVisaType(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600">{VISA_TYPES.map((type) => <option key={type} value={type}>{type === 'Family / spouse' ? 'Family / Spouse' : type}</option>)}</select></label>
+            <label><span className="font-bold text-slate-900">Visa Type <span aria-hidden="true" className="text-rose-700">*</span></span><select aria-label="Visa Type" required value={visaType} onChange={(event) => setVisaType(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600">{VISA_TYPES.map((type) => <option key={type} value={type}>{type === 'Family / spouse' ? 'Family / Spouse' : type}</option>)}</select></label>
           </div>
           {visaType === 'Other' && <p className="text-sm text-slate-600">Please mention your visa type in the title or details below.</p>}
-          {experience && <label className="block"><span className="font-bold text-slate-900">Experience Category</span><select required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
+          {experience && <label className="block"><span className="font-bold text-slate-900">Experience Category <span aria-hidden="true" className="text-rose-700">*</span></span><select aria-label="Experience Category" required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
           <label className="block">
-            <span className="font-bold text-slate-900">Situation and Timeline</span>
-            <span className="mt-1 block text-sm text-slate-500">Describe relevant dates, visa type and steps already taken. Do not paste documents or identifying numbers.</span>
-            <textarea required minLength={30} maxLength={10000} rows={9} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
+            <span className="font-bold text-slate-900">Situation and Timeline <span aria-hidden="true" className="text-rose-700">*</span></span>
+            <span id="post-body-help" className="mt-1 block text-sm text-slate-500">Describe relevant dates and steps already taken. Use at least 30 characters.</span>
+            <textarea aria-label="Situation and Timeline" aria-describedby="post-body-help" required minLength={30} maxLength={10000} rows={9} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
           </label>
           <div className="block">
-            <span className="font-bold text-slate-900">Tags</span>
+            <span className="font-bold text-slate-900">Tags <span className="text-sm font-normal text-slate-500">(optional)</span></span>
             <span id="post-tags-help" className="mt-1 block text-sm text-slate-500">Pick popular tags below or type your own. Add up to five.</span>
             <div className="mt-3 flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 focus-within:border-blue-600 focus-within:ring-4 focus-within:ring-blue-100">
               {selectedTags.map((tag) => <span key={topicLabel(tag)} className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1.5 text-sm font-bold text-blue-700">{topicLabel(tag)}<button type="button" aria-label={`Remove ${topicLabel(tag)}`} onClick={() => setSelectedTags((current) => current.filter((item) => item !== tag))} className="rounded p-0.5 hover:bg-blue-100"><X size={13} /></button></span>)}
@@ -187,13 +187,13 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
             {suggestedTags.length > 0 && <div className="mt-3 rounded-lg bg-slate-50 p-3"><div className="flex items-center gap-2 text-xs font-bold tracking-wide text-slate-500"><Check size={14} /> Suggested from Your Post</div><div className="mt-2 flex flex-wrap gap-2">{suggestedTags.map((tag) => selectedTags.includes(tag) ? <span key={topicLabel(tag)} className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700"><Check size={12} /> {topicLabel(tag)}</span> : <button key={topicLabel(tag)} type="button" onClick={() => addTag(tag)} disabled={selectedTags.length >= 5} className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-blue-700 shadow-sm ring-1 ring-slate-200 hover:bg-blue-50 disabled:opacity-40"><Plus size={12} /> {topicLabel(tag)}</button>)}</div></div>}
             <p className="mt-2 text-xs text-slate-500">Your selected tags are saved. Suggested tags are added automatically when you publish.</p>
           </div>
-          {error && <p className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
+          {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
           <button disabled={submitting} className="rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-60">{submitting ? 'Publishing…' : experience ? 'Publish Experience' : 'Publish Question'}</button>
         </form>
       </section>
       <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
         <RelatedQuestions drafting context={{ title, body, tags: normalizeTags([...selectedTags, tagInput, ...suggestedTags]), visa_type: visaType, destination_country: country }} />
-        {['Search first and review close matches.', 'Use a specific title with the visa type.', 'Remove names, case numbers, emails, and addresses.', 'Return to accept the answer that solved your question.'].map((tip) => <div key={tip} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600"><CheckCircle2 className="mt-0.5 shrink-0 text-blue-600" size={18} />{tip}</div>)}
+        {['Search first and review close matches.', 'Use a specific title with the visa type.', 'Return to accept the answer that solved your question.'].map((tip) => <div key={tip} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600"><CheckCircle2 className="mt-0.5 shrink-0 text-blue-600" size={18} />{tip}</div>)}
       </aside>
     </main>
   );
