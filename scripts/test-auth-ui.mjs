@@ -353,6 +353,24 @@ test('a first-time sign-in request failure stays at email and offers account cre
   } finally { h.close(); }
 });
 
+test('Supabase otp_disabled for a first-time login offers signup without claiming OTP is unavailable', async () => {
+  const h = setup();
+  h.handlers.requestCode = async () => { throw { code: 'otp_disabled', message: 'Signups not allowed for otp' }; };
+  try {
+    await h.settle(); change(h, 'Email Address', 'new@example.invalid');
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    assert.equal(h.calls.find(c => c.name === 'requestCode').args[2], false);
+    assert(field(h, 'Email Address'));
+    assert.equal(nodes(h.tree).filter(n => n.type === 'input' && n.props.name === 'code').length, 0);
+    const alert = nodes(h.tree).find(n => n.props?.role === 'alert');
+    assert.match(textOf(alert), /couldn’t send a sign-in code/);
+    assert.match(textOf(alert), /Choose Create account/);
+    assert.doesNotMatch(textOf(alert), /invalid|expired|not available|disabled|not found|does not exist|Signups not allowed/i);
+    assert.equal(h.calls.filter(c => c.name === 'verifyCode').length, 0);
+    assert.deepEqual(h.replacements, []);
+  } finally { h.close(); }
+});
+
 test('signup-disabled and delivery failures never advance to code verification', async () => {
   for (const [code, expected] of [['signup_disabled', /New account registration is not available/], ['email_address_not_authorized', /Email delivery is not available/]]) {
     const h = setup({ signup: true });

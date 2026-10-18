@@ -30,7 +30,9 @@ export function authErrorMessage(reason: unknown, context: AuthErrorContext = {}
     : 'We couldn’t send a sign-in code. Check your details. New to VisaThreads? Choose Create account first.';
   if (error?.code === 'policy_required') return 'Please review the policies and confirm your eligibility first.';
   if (error?.status === 429 || ['over_email_send_rate_limit', 'over_sms_send_rate_limit', 'over_request_rate_limit'].includes(error?.code ?? '')) return 'Too many attempts. Please wait a few minutes before trying again.';
-  if (error?.code === 'otp_disabled') return 'Code sign-in is not available right now. Try another sign-in option.';
+  // Supabase also returns otp_disabled when create_user:false cannot find an
+  // account. At the request step it does not prove OTP is globally unavailable.
+  if (error?.code === 'otp_disabled') return context.action === 'request-code' ? requestFailure : 'Code sign-in is not available right now. Try another sign-in option.';
   if (error?.code === 'otp_expired') return context.action === 'request-code' ? requestFailure : 'That code has expired or could not be verified. Use the latest code, or request a new one.';
   if (error?.code === 'invalid_code') return 'Enter the 6–10 digit sign-in code.';
   if (error?.code === 'invalid_phone') return 'Enter a valid phone number with country code, like +15551234567.';
