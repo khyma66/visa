@@ -247,7 +247,11 @@ async function postCorpus(client: SupabaseClient, input: AssistantRequest & { sc
       archivedReplies = (snapshot.answersByQuestionId[id] ?? []).filter((row) => row.status === 'active');
       // Some upstream exports include only top comments. A low source count
       // must never be presented as a complete summary of the original thread.
-      archiveIncomplete = (importedQuestion?.answer_count ?? 0) > archivedReplies.length;
+      // Normalized imports keep the upstream counter separately from the
+      // retrievable reply total; older reviewed snapshots used answer_count.
+      // This signals possible incomplete capture, not an exact recoverable gap.
+      const sourceCommentCount = importedQuestion?.source_comment_count ?? importedQuestion?.answer_count ?? 0;
+      archiveIncomplete = sourceCommentCount > archivedReplies.length;
     }
   } else {
     if (!UUID.test(id)) return { sources: [], partial: false };

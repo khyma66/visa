@@ -12,6 +12,7 @@ name: Release current VisaThreads AI features
 # Resolve model-selected evidence IDs to server-owned complete source excerpts.
 # ROI playbook release: owner launch/experiment workspace and source-linked guides.
 # Bound provider collections with nullable slots before exact evidence resolution.
+# Verify historical/current document relationships and canonical summary intent.
 # Preserve conflicting-report sections during independent review and correction.
 
 on:

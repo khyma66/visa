@@ -226,6 +226,7 @@ test('complete answers keep evidence metadata in collapsed sources without a cov
     assert.match(textOf(details), /Imported community\s+reply/);
     assert.match(textOf(details), /1\s+source\s+checked/);
     assert.match(textOf(details), /They asked for documents/);
+    assert.doesNotMatch(textOf(details), /Load more/);
     assert.match(renderToStaticMarkup(details), /href="\/questions\/post-a#answer-reply-a"/);
   } finally { h.close(); }
 });
@@ -291,11 +292,29 @@ test('missing imported replies remain visible and original-poster replies are at
   try {
     h.render(); await h.settle(); changeQuestion(h, 'Can you explain this reply?'); await submit(h); await h.settle();
     const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
-    assert.match(visibleTextOf(response), /Source note: Additional replies from the original thread are not available here/);
+    assert.match(visibleTextOf(response), /Source note: This answer uses the post and replies saved here\./);
     assert.doesNotMatch(visibleTextOf(response), /I may be missing|Some replies were not included|limited posts/);
     assert.doesNotMatch(visibleTextOf(response), /Original poster|Partial coverage/);
-    assert.match(textOf(nodes(response).find(node => node.type === 'details')), /Imported community\s+reply\s+· Original poster/);
+    const details = nodes(response).find(node => node.type === 'details');
+    assert.match(textOf(details), /Imported community\s+reply\s+· Original poster/);
+    assert.match(textOf(details), /The original discussion may contain additional replies that were not captured\./);
+    assert.doesNotMatch(textOf(response), /Load more|includes additional replies that are not available/);
+    assert.doesNotMatch(visibleTextOf(response), /were not captured/);
   } finally { h.close(); }
+});
+
+test('pagination guidance is conditional for member replies and is never offered for archive replies or posts', async () => {
+  for (const [kind, provenance, expected] of [['reply', 'member', true], ['reply', 'archive', false], ['question', 'member', false], ['question', 'archive', false]]) {
+    const h = new Harness();
+    h.post = async () => reply(fixture({ sources: [{ ...fixture().sources[0], kind, provenance }] }));
+    try {
+      h.render(); await h.settle(); changeQuestion(h, 'What documents were requested?'); await submit(h); await h.settle();
+      const response = nodes(h.tree).find(node => node.props['aria-label'] === 'Assistant response');
+      assert.equal(textOf(response).includes('Open the discussion and use “Load more” if available to see additional replies.'), expected, `${kind}/${provenance}`);
+      assert.doesNotMatch(visibleTextOf(response), /Load more/);
+      assert.doesNotMatch(textOf(response), /for older replies/);
+    } finally { h.close(); }
+  }
 });
 
 test('post search shows linked excerpts immediately with compact expandable results', async () => {

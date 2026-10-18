@@ -146,18 +146,34 @@ test('resolved ordinal prompts describe the selected discussion without asking t
   const ask={mode:'ask',scope:{kind:'public'},question:'Explain the second post.',previousQuestions:['Find posts about Chennai stamping'],previousPosts:[{questionId:'apify-other',sourceId:'q:apify-other'},selected]};
   const build=(value, sources=[source])=>core.assistantPrompt(value,{sources,partial:false});
   const prompt=build(ask), content=JSON.parse(prompt.user);
-  assert.equal(content.question,'Explain the selected discussion.');
+  assert.equal(content.question,'Summarize the selected discussion.');
   assert.equal(content.task,'summary');
-  assert.match(prompt.system,/TASK: Summarize the supplied discussion/);
+  assert.equal(content.summaryStyle,'brief');
+  assert.match(prompt.system,/TASK: Give a brief summary of the selected discussion, not an exhaustive retelling/);
+  assert.match(prompt.system,/about 60–80 words/);
+  assert.match(prompt.system,/FINAL LENGTH CHECK.*within 100 words/);
+  assert.match(prompt.system,/Do not repeat an unresolved point in unanswered when a cited claim already explains it/);
+  assert.match(prompt.system,/"the author has not said whether a decision was made" does not establish "no decision was made or given"/);
+  assert.match(prompt.system,/an explicit report that no decision was made supports that attributed event/);
+  assert.match(prompt.system,/do not invent the underlying state or when it applied/);
+  assert.match(prompt.system,/unqualified selected-discussion summary.*within 100 words/);
+  assert.match(prompt.system,/word budget is not a reason to erase qualifications or connect separate events/);
   assert.deepEqual(content.previousQuestions,[]);
   assert.deepEqual(content.resolvedDiscussion,{questionId:id,sourceIds:[source.id]});
   assert.match(prompt.system,/complete supporting BODY sentences/);
   assert.equal(ask.question,'Explain the second post.','Original request and cache identity are not rewritten');
+  for (const question of ['Summarize the second post.', 'Please explain the second post!', 'Summarise the second post']) {
+    assert.deepEqual(build({...ask,question}),prompt,'Equivalent unqualified selected summaries must serialize identically');
+  }
+  const focusedSummary=JSON.parse(build({...ask,question:'Explain this post.',previousQuestions:['An irrelevant older question'],focusedPost:selected}).user);
+  assert.equal(focusedSummary.question,content.question);
+  assert.deepEqual(focusedSummary.previousQuestions,[],'A fully resolved generic summary needs no older question hints');
   const qualified=JSON.parse(build({...ask,question:'Why did the second post report a delay in Chennai?'}).user);
   assert.equal(qualified.question,'Why did the selected discussion report a delay in Chennai?');
   assert.equal(qualified.task,'ask');
   for(const question of ['Explain the second post and whether I qualify.', 'Explain the second post in detail and predict my outcome.']) {
     assert.equal(JSON.parse(build({...ask,question}).user).task,'ask','Qualified requests must not be silently converted to summaries');
+    assert.doesNotMatch(build({...ask,question}).system,/unqualified selected-discussion summary/);
   }
   const previousQuestion='What did this member report about their passport delivery?';
   const focused=JSON.parse(build({...ask,question:'How long?',previousQuestions:[previousQuestion],focusedPost:selected}).user);
@@ -244,11 +260,13 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
     assert.match(prompt.system,/check every timing expression, sequence word, duration, venue, role and causal link against its quoted source body/);
     assert.equal(JSON.parse(prompt.user).sources[0].body,adjacent.body,'Prompt hardening must not edit or supplement the evidence');
     if(JSON.parse(prompt.user).task==='summary') {
-      assert.match(prompt.system,/short, atomic, attributed claims and as many of the six available claim slots as needed/);
+      assert.match(prompt.system,/short, atomic, attributed claims/);
+      if(value.mode==='summary') assert.match(prompt.system,/as many of the six available claim slots as needed/);
+      else assert.match(prompt.system,/use an additional claim only for an essential correction, conflict or qualification/);
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v21-fixed-evidence-slots','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v22-temporal-provenance','Semantic change invalidates old cached answers');
 });
 test('summary and catch-up are explicit evidence tasks without a missing question to answer',()=>{
   const summary=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},{sources:[source],partial:false});

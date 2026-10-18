@@ -66,12 +66,12 @@ function Result({ result, catchup }: { result: AssistantResult; catchup: boolean
   const coverageNotes = {
     'retrieval-limit': 'Sources were selected for relevance to your question; this is not an exhaustive review of every discussion.',
     'context-limit': 'The answer was checked against relevant excerpts. Follow the source links for the full discussions.',
-    'missing-replies': 'The original thread includes additional replies that are not available in this archive.',
+    'missing-replies': 'The original discussion may contain additional replies that were not captured.',
     'unindexed-replies': 'Additional replies could not be retrieved for this answer.',
   };
   const limitation = !result.coverage.partial ? null
     : catchup ? 'This catch-up does not cover every update in the selected period. Choose a shorter range; your saved catch-up position is unchanged.'
-    : coverageReasons.includes('missing-replies') ? 'Source note: Additional replies from the original thread are not available here.'
+    : coverageReasons.includes('missing-replies') ? 'Source note: This answer uses the post and replies saved here.'
     : coverageReasons.includes('unindexed-replies') ? 'Source note: Additional replies could not be retrieved for this answer.'
     : !coverageReasons.length ? 'Source note: This answer does not cover the full discussion.' : null;
   return <div aria-label="Assistant response">
@@ -87,7 +87,7 @@ function Result({ result, catchup }: { result: AssistantResult; catchup: boolean
           <p className="mt-1">{source.provenance === 'archive' ? 'Imported community' : 'Community'} {source.kind === 'reply' ? 'reply' : 'post'}{source.kind === 'reply' && source.speakerRole === 'original-poster' && ' · Original poster'}</p>
           {quotes.map((quote, quoteIndex) => <blockquote key={quoteIndex} className="mt-1 whitespace-pre-wrap text-base leading-relaxed text-slate-700">“{quote}”</blockquote>)}
           <p className="mt-1"><time dateTime={source.createdAt}>{dateLabel(source.createdAt)}</time>{source.updatedAt !== source.createdAt && <> · Updated {dateLabel(source.updatedAt)}</>}</p>
-          {source.kind === 'reply' && <p>Use “Load more” in the discussion for older replies.</p>}
+          {source.kind === 'reply' && source.provenance === 'member' && <p>Open the discussion and use “Load more” if available to see additional replies.</p>}
         </div>)}
         {result.coverage.partial && !!coverageReasons.length && <ul className="list-disc space-y-1 pl-4">{[...new Set(coverageReasons)].map((reason) => coverageNotes[reason] ? <li key={reason}>{coverageNotes[reason]}</li> : null)}</ul>}
         <p>{result.notice}</p>

@@ -22,6 +22,7 @@ const smoke = process.argv.includes('--smoke');
 cases.push('large-discussion-summary');
 cases.push('numbered-interview-transcript');
 cases.push('heterogeneous-report-summary');
+cases.push('historical-current-document-separation');
 const release = process.argv.includes('--release');
 assert(!(smoke && release), 'Smoke results cannot authorize a release');
 const selected = smoke ? ['post-question'] : cases;
