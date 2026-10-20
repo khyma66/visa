@@ -88,15 +88,26 @@ export function verifyDevelopmentSyncSettings(settings) {
   const fixed = { APP_ENV: 'development', NEXT_PUBLIC_APP_ENV: 'development', NEXT_PUBLIC_DEPLOYMENT_TARGET: 'development-sandbox',
     COMMUNITY_SOURCE_MODE: 'snapshot', APIFY_LIVE_FETCH_ENABLED: 'false', ASSISTANT_ENABLED: 'false', ASSISTANT_COMMUNITIES_ENABLED: 'false',
     ASSISTANT_CATCHUP_ENABLED: 'false', ASSISTANT_PROJECT_REF: '', ASSISTANT_PROVIDER: '', PUBLIC_LAUNCH_APPROVED: 'false', IMPORTED_CONTENT_APPROVED: 'false' };
+  // The original isolated dev Worker predates the explicit assistant gates.
+  // Recognize only that exact older shape for capture; the replacement build
+  // still receives the strict development-sandbox values above.
+  const legacy = stored.NEXT_PUBLIC_DEPLOYMENT_TARGET === 'sandbox';
+  if (legacy) {
+    for (const name of ['NEXT_PUBLIC_APP_ENV', 'ASSISTANT_ENABLED', 'ASSISTANT_COMMUNITIES_ENABLED', 'ASSISTANT_CATCHUP_ENABLED', 'ASSISTANT_PROJECT_REF', 'ASSISTANT_PROVIDER']) {
+      assert.equal(stored[name], undefined, 'Legacy dev baseline unexpectedly contains an assistant or newer environment setting.');
+    }
+    assert.equal(stored.NEWS_REFRESH_ORIGIN, DEV_SITE, 'Legacy news origin must be the isolated dev site.');
+  }
   for (const binding of settings.bindings ?? []) {
     if (binding.type === 'plain_text') {
       assert(allowedPublic.includes(binding.name) || retiredDevSettings.includes(binding.name) || Object.hasOwn(fixed, binding.name), 'Unrecognized dev variable requires review before sync.');
-      if (Object.hasOwn(fixed, binding.name)) assert.equal(binding.text, fixed[binding.name], 'Existing dev setting differs from the reviewed isolated configuration.');
+      if (Object.hasOwn(fixed, binding.name) && !(legacy && binding.name === 'NEXT_PUBLIC_DEPLOYMENT_TARGET')) assert.equal(binding.text, fixed[binding.name], 'Existing dev setting differs from the reviewed isolated configuration.');
     } else assert(binding.type === 'secret_text' || (binding.type === 'assets' && binding.name === 'ASSETS') || (binding.type === 'version_metadata' && binding.name === 'CF_VERSION_METADATA'), 'Existing dev resource binding requires review before sync.');
   }
   assert.equal(stored.NEXT_PUBLIC_SITE_URL, DEV_SITE);
   assert.equal(stored.NEXT_PUBLIC_SUPABASE_URL, DEV_DATABASE, 'Dev must already use its isolated database.');
-  for (const name of ['APP_ENV', 'COMMUNITY_SOURCE_MODE', 'APIFY_LIVE_FETCH_ENABLED', 'ASSISTANT_ENABLED', 'ASSISTANT_COMMUNITIES_ENABLED', 'ASSISTANT_CATCHUP_ENABLED']) assert.equal(stored[name], fixed[name]);
+  for (const name of ['APP_ENV', 'COMMUNITY_SOURCE_MODE', 'APIFY_LIVE_FETCH_ENABLED']) assert.equal(stored[name], fixed[name]);
+  if (!legacy) for (const name of ['ASSISTANT_ENABLED', 'ASSISTANT_COMMUNITIES_ENABLED', 'ASSISTANT_CATCHUP_ENABLED']) assert.equal(stored[name], fixed[name]);
   return stored;
 }
 export function verifyExistingDevelopmentHealth(health) {
