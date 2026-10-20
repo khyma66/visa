@@ -68,9 +68,9 @@ export function SiteHeader() {
         )}
         <FeedbackLauncher />
         {process.env.NEXT_PUBLIC_SITE_URL === 'https://visathreads.com' && <Link href="/assistant" aria-label="Ask VisaThreads assistant" title="Ask VisaThreads assistant" className="header-secondary-action icon-control text-teal-800"><Sparkles size={20} aria-hidden="true" /></Link>}
-        <Link href="/ask" aria-label="Ask a Question" title="Ask a Question" className="header-secondary-action header-ask">
+        {!loading && user && <Link href="/ask" aria-label="Ask a Question" title="Ask a Question" className="header-secondary-action header-ask">
           <Plus size={16} /> <span className="hidden sm:inline">Ask</span>
-        </Link>
+        </Link>}
         {loading ? <span role="status" aria-label="Checking account" className="header-account h-10 w-10 animate-pulse rounded-full bg-slate-100" /> : user ? (
           <div ref={accountRef} className="header-account relative">
             <button ref={accountButton} onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="account-panel" className="flex min-h-10 items-center gap-2 rounded-full p-1 hover:bg-slate-100" aria-label={`Account: ${profile?.username ?? 'Signed in'}`}>

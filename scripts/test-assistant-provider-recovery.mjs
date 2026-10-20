@@ -111,6 +111,65 @@ const spanWire = value => ({ ...value,
 const spanRaw = value => JSON.stringify(spanWire(value));
 const spanSuccess = value => Response.json({ choices: [{ finish_reason: 'stop', message: { content: spanRaw(value) } }] });
 
+test('answer schema guidance covers each fact before prose and uses singular attribution for repeated content', () => {
+  for (const schema of [assistantOutputSchema(spanPrompt), assistantOutputSchema(prompt), assistantOutputSchema({ system: '', user: '' })]) {
+    const fixed = !!schema.$defs;
+    const claimSchema = fixed ? schema.$defs.claim : schema.properties.claims.items;
+    const evidenceSchema = fixed ? schema.$defs.evidenceSlots : claimSchema.properties.evidence;
+    const passageSchema = fixed ? schema.$defs.evidenceSpan : evidenceSchema.items;
+    assert.match(claimSchema.description, /Choose supporting (?:spans|passages) before composing/);
+    assert.match(claimSchema.description, /opening event does not cover later outcomes/);
+    assert.match(evidenceSchema.description, /every stated (?:fact|event)/);
+    assert.match(evidenceSchema.description, /qualification/);
+    assert.match(evidenceSchema.description, /each report being compared/);
+    assert.match(evidenceSchema.description, /more than four (?:spans|passages), split it into atomic claims or narrow its attribution to one supported report/);
+    assert.match(evidenceSchema.description, /never drop necessary citations or material qualifications/);
+    assert.match(evidenceSchema.description, /one supported report when repeated content permits/);
+    assert.match(evidenceSchema.description, /Preserve every relevant side of a required comparison/);
+    assert.match(passageSchema.description, /specific event, outcome or qualification/);
+    assert.match(schema.properties.claims.description, /material content repeats, summarize one cited report with singular wording/);
+    assert.match(schema.properties.claims.description, /not several members or a frequency claim/);
+    assert.match(schema.properties.claims.description, /Preserve distinct material facts, corrections, qualifications and conflicts/);
+    assert.match(schema.properties.claims.description, /supported comparison may appear here/);
+    assert.match(schema.properties.claims.description, /at least two different sources/);
+    assert.match(schema.properties.disagreements.description, /without duplicating/);
+  }
+});
+
+test('fact-level schema guidance leaves legacy, fixed-slot and reviewer structures and limits unchanged', () => {
+  const withoutDescriptions = value => Array.isArray(value) ? value.map(withoutDescriptions)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'description').map(([key, item]) => [key, withoutDescriptions(item)])) : value;
+  const object = (required, properties) => ({ type: 'object', additionalProperties: false, required, properties });
+  const text = { type: 'string', minLength: 1, maxLength: 700 };
+  const unanswered = { type: 'string', maxLength: 400 };
+  const status = { type: 'string', enum: ['answered', 'insufficient'] };
+  for (const [input, ids] of [[{ system: '', user: '' }, null], [prompt, ['q:synthetic']]]) {
+    const evidence = object(['sourceId', 'quote'], { sourceId: { type: 'string', minLength: 1, ...(ids ? { enum: ids } : {}) }, quote: { type: 'string', minLength: 12, maxLength: 400 } });
+    const claim = minimum => object(['text', 'evidence'], { text, evidence: { type: 'array', minItems: minimum, maxItems: 4, items: evidence } });
+    assert.deepEqual(withoutDescriptions(assistantOutputSchema(input)), object(['status', 'disagreements', 'claims', 'unanswered'], {
+      status, disagreements: { type: 'array', maxItems: 3, items: claim(2) }, claims: { type: 'array', maxItems: 6, items: claim(1) }, unanswered: { type: 'array', maxItems: 4, items: unanswered },
+    }));
+  }
+  const fixedSlots = (count, item) => {
+    const names = Array.from({ length: count }, (_, index) => `slot${index + 1}`);
+    return object(names, Object.fromEntries(names.map(name => [name, { anyOf: [item, { type: 'null' }] }])));
+  };
+  assert.deepEqual(withoutDescriptions(assistantOutputSchema(spanPrompt)), {
+    ...object(['status', 'disagreements', 'claims', 'unanswered'], {
+      status, disagreements: fixedSlots(3, { $ref: '#/$defs/claim' }), claims: fixedSlots(6, { $ref: '#/$defs/claim' }), unanswered: fixedSlots(4, unanswered),
+    }),
+    $defs: {
+      evidenceSpan: object(['spanId'], { spanId: { type: 'string', enum: spans.map(span => span.id) } }),
+      evidenceSlots: fixedSlots(4, { $ref: '#/$defs/evidenceSpan' }),
+      claim: object(['text', 'evidence'], { text, evidence: { $ref: '#/$defs/evidenceSlots' } }),
+    },
+  });
+  assert.deepEqual(assistantOutputSchema({ ...prompt, outputKind: 'review', reviewIds: ['claim:0'] }), object(['checks', 'fulfillsTask'], {
+    checks: { type: 'array', minItems: 1, maxItems: 1, items: object(['id', 'supported'], { id: { type: 'string', enum: ['claim:0'] }, supported: { type: 'boolean' } }) },
+    fulfillsTask: { type: 'boolean', description: 'Whether the candidate satisfies the supplied task: answer, discussion summary, or interval catch-up. Summary and catch-up do not require a user question.' },
+  }));
+});
+
 test('a comparison can answer alone in either section without copying, moving or rewriting evidence', async () => {
   const comparison = { text: 'One report describes Friday delivery, while another reports no Friday delivery.', evidence: [{ spanId: 'span-1' }, { spanId: 'span-2' }] };
   for (const section of ['disagreements', 'claims']) {

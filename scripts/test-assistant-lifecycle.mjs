@@ -5,7 +5,7 @@ import { build, transform } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 
 const root = new URL('../', import.meta.url).pathname;
-const entry = `export * from ${JSON.stringify(root + 'src/lib/assistant-service.ts')}; export { AssistantError } from ${JSON.stringify(root + 'src/lib/assistant-core.ts')}; export { runAssistantModel } from ${JSON.stringify(root + 'src/lib/assistant-provider.ts')}; export { retrieveAssistantCorpus } from ${JSON.stringify(root + 'src/lib/assistant-data.ts')};`;
+const entry = `export * from ${JSON.stringify(root + 'src/lib/assistant-service.ts')}; export { AssistantError } from ${JSON.stringify(root + 'src/lib/assistant-core.ts')}; export { runAssistantModel } from ${JSON.stringify(root + 'src/lib/assistant-provider.ts')}; export { retrieveAssistantCorpus } from ${JSON.stringify(root + 'src/lib/assistant-data.ts')}; export { acceptanceFixtures } from ${JSON.stringify(root + 'scripts/assistant-acceptance-fixtures.ts')};`;
 const bundled = await build({ stdin: { contents: entry, resolveDir: root, loader: 'ts' }, bundle: true, write: false, platform: 'browser', format: 'esm', target: 'es2022', logLevel: 'silent',
   plugins: [{ name: 'synthetic-archive', setup(builder) {
     builder.onResolve({ filter: /^@visa\/archive$/ }, () => ({ path: 'archive', namespace: 'synthetic' }));
@@ -222,6 +222,126 @@ test('database transport preserves an existing abort signal as well as the reque
 const rejectedOutput = { ...output, claims: [{ ...output.claims[0], text: 'Rejected-draft sentinel: the passport arrived on Friday at an unstated venue.' }] };
 const correctedOutput = { ...output, claims: [{ ...output.claims[0], text: 'The member said their passport arrived on Friday.' }] };
 const negativeReview = prompt => JSON.stringify({ fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: false })) });
+
+const repeatedSummary = service.acceptanceFixtures.find(fixture => fixture.id === 'large-discussion-summary');
+const repeatedSource = repeatedSummary.corpus.sources[0];
+const repeatedQuotes = [
+  'I attended my Hyderabad stamping appointment on Monday.',
+  'My visa was approved and my passport arrived on Friday.',
+  'This describes my individual experience, not a standard timeline.',
+];
+const repeatedEvidence = repeatedQuotes.map(quote => ({ sourceId: repeatedSource.id, quote }));
+const representativeSummary = { status: 'answered', claims: [
+  { text: 'One report describes attending a Hyderabad stamping appointment on Monday.', evidence: [repeatedEvidence[0]] },
+  { text: 'The same report says the visa was approved.', evidence: [repeatedEvidence[1]] },
+  { text: 'The same report says the passport arrived on Friday.', evidence: [repeatedEvidence[1]] },
+  { text: 'This is the member’s individual experience, not a standard timeline.', evidence: [repeatedEvidence[2]] },
+], disagreements: [], unanswered: [] };
+const invalidRepeatedSummaries = [
+  { text: 'Several members reported attending on Monday and receiving their passports on Friday.', evidence: repeatedEvidence },
+  { text: 'One report says the passport arrived on the following Friday after the Monday appointment.', evidence: repeatedEvidence.slice(0, 2) },
+  { text: 'One report says the visa was approved on Friday.', evidence: [repeatedEvidence[1]] },
+  { text: 'Several reports describe visa approval, Friday passport delivery, and an individual-only timeline.',
+    evidence: repeatedSummary.corpus.sources.slice(0, 3).map(item => ({ sourceId: item.id, quote: repeatedQuotes[0] })) },
+].map(claim => ({ status: 'answered', claims: [claim], disagreements: [], unanswered: [] }));
+function withRepeatedSummary(h, corpus = repeatedSummary.corpus) {
+  h.session.corpus = async (_input, signal) => { h.state.reads++; h.state.signals.push(signal); return structuredClone(corpus); };
+  return h;
+}
+
+test('a singular representative summary keeps exact atomic event, outcome and qualification evidence and awaits review', async () => {
+  assert.equal(repeatedSummary.corpus.sources.length, 24);
+  const prompts = [], reviewing = deferred(), verdict = deferred();
+  const h = withRepeatedSummary(harness({ generate: async prompt => {
+    prompts.push(prompt);
+    if (prompt.outputKind !== 'review') {
+      assert.match(prompt.system, /summarize a representative report in the singular/);
+      return JSON.stringify(representativeSummary);
+    }
+    assert.deepEqual(JSON.parse(prompt.user).candidate.checks.map(({ text, evidence }) => ({ text, evidence })), representativeSummary.claims);
+    reviewing.resolve(); await verdict.promise; return review(prompt);
+  } }));
+  let finished = false;
+  const pending = h.handler(request(undefined, repeatedSummary.input)).then(response => { finished = true; return response; });
+  await reviewing.promise; await tick();
+  assert.equal(finished, false); assert.equal(h.state.writes, 0); assert.equal(h.state.reads, 1);
+  verdict.resolve(); const response = await pending, result = await response.json();
+  assert.equal(response.status, 200); assert.equal(result.status, 'answered');
+  assert.deepEqual(result.claims, representativeSummary.claims);
+  assert.deepEqual(result.sources.map(item => item.id), [repeatedSource.id]);
+  assert.deepEqual(prompts.map(prompt => prompt.outputKind ?? 'answer'), ['answer', 'review']);
+  assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2); assert.equal(h.state.writes, 1);
+  assert.deepEqual([...h.state.cache.values()][0].result.claims, representativeSummary.claims);
+});
+
+test('unsupported plural attribution and inferred timing never publish or enter the answer cache after review rejection', async () => {
+  for (const [index, initial] of invalidRepeatedSummaries.entries()) {
+    const prompts = [];
+    const h = withRepeatedSummary(harness({ generate: async prompt => {
+      prompts.push(prompt);
+      if (prompt.outputKind === 'review') return negativeReview(prompt);
+      return JSON.stringify(prompts.length === 1 ? initial : invalidRepeatedSummaries[(index + 1) % invalidRepeatedSummaries.length]);
+    } }));
+    const response = await h.handler(request(undefined, repeatedSummary.input)), result = await response.json();
+    assert.equal(response.status, 200); assert.equal(result.status, 'insufficient');
+    assert.deepEqual(result.claims, []); assert.deepEqual(result.disagreements, []); assert.deepEqual(result.sources, []);
+    assert.deepEqual(prompts.map(prompt => prompt.outputKind ?? 'answer'), ['answer', 'review', 'answer', 'review']);
+    assert.deepEqual(prompts.map(prompt => prompt.maxAttempts), [undefined, undefined, 1, 1]);
+    assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2);
+    for (const rejected of invalidRepeatedSummaries) {
+      assert(!JSON.stringify(result).includes(rejected.claims[0].text));
+      assert(!JSON.stringify([...h.state.cache.values()]).includes(rejected.claims[0].text));
+    }
+  }
+});
+
+test('representative-summary recovery reuses the complete original corpus and independently reviews only the correction', async () => {
+  for (const initial of invalidRepeatedSummaries) {
+    const prompts = [], signals = [];
+    const h = withRepeatedSummary(harness({ generate: async (prompt, signal) => {
+      prompts.push(prompt); signals.push(signal);
+      if (prompts.length === 1) return JSON.stringify(initial);
+      if (prompts.length === 2) return negativeReview(prompt);
+      if (prompts.length === 3) return JSON.stringify(representativeSummary);
+      assert.equal(prompts.length, 4); assert.equal(prompt.outputKind, 'review');
+      assert.deepEqual(JSON.parse(prompt.user).candidate.checks.map(({ text, evidence }) => ({ text, evidence })), representativeSummary.claims);
+      return review(prompt);
+    } }));
+    const result = await (await h.handler(request(undefined, repeatedSummary.input))).json();
+    assert.equal(result.status, 'answered'); assert.deepEqual(result.claims, representativeSummary.claims);
+    assert.equal(prompts[2].user, prompts[0].user);
+    assert(!prompts[2].user.includes(initial.claims[0].text));
+    assert.deepEqual(JSON.parse(prompts[0].user).sources.map(item => item.id), repeatedSummary.corpus.sources.map(item => item.id));
+    assert.deepEqual(prompts.map(prompt => prompt.maxAttempts), [undefined, undefined, 1, 1]);
+    assert(signals.every(signal => signal === signals[0]));
+    assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2); assert.equal(h.state.writes, 1);
+    assert.deepEqual([...h.state.cache.values()][0].result.claims, representativeSummary.claims);
+  }
+});
+
+test('near-duplicate report outcomes, qualifications and conflicting details remain in generation and review context', async () => {
+  const base = repeatedQuotes.join(' ');
+  const bodies = [base, base, base.replace('was approved', 'was denied'),
+    base.replace('not a standard timeline.', 'not a standard timeline or an official requirement.'),
+    `${base} Staff allowed phones inside at my visit.`, `${base} Staff did not allow phones inside at my visit.`];
+  const corpus = { partial: false, sources: bodies.map((body, index) => ({ ...repeatedSource,
+    id: `a:near-repeat-${index}`, title: `Synthetic near-repeat ${index}`, body })) };
+  const candidate = { ...representativeSummary, claims: representativeSummary.claims.map(claim => ({ ...claim,
+    evidence: claim.evidence.map(item => ({ ...item, sourceId: corpus.sources[0].id })) })) };
+  const seen = [];
+  const h = withRepeatedSummary(harness({ generate: async prompt => {
+    const context = JSON.parse(prompt.user);
+    assert.deepEqual(context.sources.map(({ id, body }) => ({ id, body })), corpus.sources.map(({ id, body }) => ({ id, body })));
+    seen.push(prompt.outputKind ?? 'answer');
+    if (prompt.outputKind === 'review') return taskIncompleteReview(prompt);
+    return JSON.stringify(seen.length === 1 ? candidate : { status: 'insufficient', claims: [], disagreements: [], unanswered: [] });
+  } }), corpus);
+  const result = await (await h.handler(request(undefined, repeatedSummary.input))).json();
+  assert.equal(result.status, 'insufficient'); assert.deepEqual(result.claims, []);
+  assert.deepEqual(seen, ['answer', 'review', 'answer']);
+  assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2);
+  assert.deepEqual(corpus.sources.map(item => item.body), bodies, 'Preparation must not mutate or deduplicate source reports');
+});
 
 const conflictSources = ['At my visit, staff allowed phones inside the venue.', 'At my visit, staff did not allow phones inside the venue.']
   .map((body, index) => {

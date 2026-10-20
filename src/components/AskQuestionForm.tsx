@@ -41,6 +41,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
   const [selectionError, setSelectionError] = useState('');
   const submitLock = useRef<symbol | null>(null);
   const alive = useRef(true);
+  const [draftLoaded, setDraftLoaded] = useState(false);
   const currentActor = useRef(user?.id);
   currentActor.current = user?.id;
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -48,6 +49,28 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
   useEffect(() => {
     setCommunityId(new URLSearchParams(window.location.search).get('community') ?? '');
   }, []);
+  const draftKey = `visathreads:${experience ? 'experience' : 'question'}-draft:v1`;
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(draftKey);
+      if (saved) {
+        const draft = JSON.parse(saved) as { title?: unknown; body?: unknown; visaType?: unknown; tags?: unknown; tagInput?: unknown; category?: unknown; communityId?: unknown };
+        if (typeof draft.title === 'string') setTitle(draft.title.slice(0, 180));
+        if (typeof draft.body === 'string') setBody(draft.body.slice(0, 10000));
+        if (typeof draft.visaType === 'string' && VISA_TYPES.includes(draft.visaType)) setVisaType(draft.visaType);
+        if (Array.isArray(draft.tags)) setSelectedTags(normalizeTags(draft.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 5)));
+        if (typeof draft.tagInput === 'string') setTagInput(draft.tagInput.slice(0, 40));
+        if (experience && typeof draft.category === 'string' && EXPERIENCE_CATEGORIES.includes(draft.category)) setCategory(draft.category);
+        if (typeof draft.communityId === 'string') setCommunityId(draft.communityId.slice(0, 100));
+      }
+    } catch { /* Draft recovery is best-effort when browser storage is unavailable. */ }
+    setDraftLoaded(true);
+  }, [draftKey, experience]);
+  useEffect(() => {
+    if (!draftLoaded) return;
+    try { sessionStorage.setItem(draftKey, JSON.stringify({ title, body, visaType, tags: selectedTags, tagInput, category, communityId })); }
+    catch { /* Keep editing available when browser storage is unavailable or full. */ }
+  }, [draftKey, draftLoaded, title, body, visaType, selectedTags, tagInput, category, communityId]);
   useEffect(() => {
     const controller = new AbortController();
     setCommunities([]); setCommunityNext(null); setCommunityError('');
@@ -115,6 +138,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
         ...(experience ? { post_kind: 'experience' as const, experience_category: category } : {}),
         ...(communityId ? { community_id: communityId } : {}),
       });
+      try { sessionStorage.removeItem(draftKey); } catch { /* Draft cleanup is best-effort. */ }
       if (alive.current && currentActor.current === actor && submitLock.current === operation) router.push(`/${experience ? 'experiences' : 'questions'}/${id}`);
     } catch (reason) {
       if (alive.current && currentActor.current === actor && submitLock.current === operation) {
@@ -131,7 +155,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
       <section>
         <p className="text-sm font-bold tracking-wider text-blue-700">{experience ? 'Share a Visa Experience' : 'Ask the Community'}</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">{experience ? 'Help others learn from your visa journey' : 'Share the details that make your case different'}</h1>
-        {user ? <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your public username'}</b>.</p> : <p className="mt-3 text-sm text-slate-600"><Link href={loginReturn} className="font-semibold text-blue-700 underline">Log in</Link> or <Link href={loginReturn.replace('/login?', '/signup?')} className="font-semibold text-blue-700 underline">create an account</Link> to publish. You can draft your question below.</p>}
+        {user ? <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your public username'}</b>.</p> : <p className="mt-3 text-sm text-slate-600"><Link href={loginReturn} className="font-semibold text-blue-700 underline">Log in</Link> or <Link href={loginReturn.replace('/login?', '/signup?')} className="font-semibold text-blue-700 underline">create an account</Link> to publish. Your draft is kept in this browser tab while you sign in.</p>}
         <form onSubmit={submit} className="mt-7 space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <p className="text-sm text-slate-500"><span aria-hidden="true" className="font-semibold text-rose-700">*</span> Required fields</p>
           <label className="block"><span className="font-bold text-slate-900">Community <span className="text-sm font-normal text-slate-500">(optional)</span></span>
@@ -163,9 +187,9 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
           {visaType === 'Other' && <p className="text-sm text-slate-600">Please mention your visa type in the title or details below.</p>}
           {experience && <label className="block"><span className="font-bold text-slate-900">Experience Category <span aria-hidden="true" className="text-rose-700">*</span></span><select aria-label="Experience Category" required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
           <label className="block">
-            <span className="font-bold text-slate-900">Situation and Timeline <span aria-hidden="true" className="text-rose-700">*</span></span>
-            <span id="post-body-help" className="mt-1 block text-sm text-slate-500">Describe relevant dates and steps already taken. Use at least 30 characters.</span>
-            <textarea aria-label="Situation and Timeline" aria-describedby="post-body-help" required minLength={30} maxLength={10000} rows={9} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
+            <span className="font-bold text-slate-900">Details <span aria-hidden="true" className="text-rose-700">*</span></span>
+            <span id="post-body-help" className="mt-1 block text-sm text-slate-500">Share the relevant context in at least 30 characters. Dates and timelines are optional.</span>
+            <textarea aria-label="Details" aria-describedby="post-body-help" required minLength={30} maxLength={10000} rows={9} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
           </label>
           <div className="block">
             <span className="font-bold text-slate-900">Tags <span className="text-sm font-normal text-slate-500">(optional)</span></span>

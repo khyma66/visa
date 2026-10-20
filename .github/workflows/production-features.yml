@@ -15,6 +15,7 @@ name: Release current VisaThreads AI features
 # Verify historical/current document relationships and canonical summary intent.
 # Preserve conflicting reports during independent review and correction.
 # Accept complete two-source comparisons without requiring duplicate statements.
+# Keep repeated-report summaries singular and cited at the material-fact level.
 
 on:
   workflow_dispatch:
