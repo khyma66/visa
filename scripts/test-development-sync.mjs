@@ -76,6 +76,29 @@ test('unknown existing dev settings fail closed rather than being silently overw
   for (const binding of [{ name: 'EXTRA_SECURITY_FLAG', text: 'true', type: 'plain_text' }, { name: 'PUBLIC_LAUNCH_APPROVED', text: 'true', type: 'plain_text' }, { name: 'AI', type: 'ai' }, { name: 'PROD_DATABASE', type: 'hyperdrive' }]) assert.throws(() => verifyDevelopmentSyncSettings({ bindings: [...settings.bindings, binding] }));
 });
 
+test('capture recognizes only the verified pre-assistant dev baseline and replaces its settings', () => {
+  const old = { APP_ENV: 'development', COMMUNITY_SOURCE_MODE: 'snapshot', APIFY_LIVE_FETCH_ENABLED: 'false',
+    NEXT_PUBLIC_DEPLOYMENT_TARGET: 'sandbox', NEXT_PUBLIC_SITE_URL: DEV_SITE,
+    NEXT_PUBLIC_SUPABASE_URL: DEV_DATABASE, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: values.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    NEWS_REFRESH_ORIGIN: DEV_SITE };
+  const bindings = Object.entries(old).map(([name, text]) => ({ type: 'plain_text', name, text }));
+  const stored = verifyDevelopmentSyncSettings({ bindings });
+  assert.equal(stored.NEXT_PUBLIC_DEPLOYMENT_TARGET, 'sandbox');
+  const replacement = developmentSyncEnvironment(stored);
+  assert.equal(replacement.NEXT_PUBLIC_DEPLOYMENT_TARGET, 'development-sandbox');
+  for (const name of ['ASSISTANT_ENABLED', 'ASSISTANT_COMMUNITIES_ENABLED', 'ASSISTANT_CATCHUP_ENABLED']) assert.equal(replacement[name], 'false');
+  assert.equal(replacement.NEWS_REFRESH_ORIGIN, undefined);
+  for (const change of [
+    { NEXT_PUBLIC_SITE_URL: LIVE_SITE }, { NEXT_PUBLIC_SUPABASE_URL: 'https://cycnichledvqbxevrwnt.supabase.co' },
+    { NEWS_REFRESH_ORIGIN: LIVE_SITE }, { APIFY_LIVE_FETCH_ENABLED: 'true' },
+    { ASSISTANT_ENABLED: 'false' }, { ASSISTANT_PROVIDER: 'groq' }, { NEXT_PUBLIC_APP_ENV: 'development' },
+  ]) {
+    const altered = { ...old, ...change };
+    assert.throws(() => verifyDevelopmentSyncSettings({ bindings: Object.entries(altered).map(([name, text]) => ({ type: 'plain_text', name, text })) }));
+  }
+  assert.throws(() => verifyDevelopmentSyncSettings({ bindings: [...bindings, { name: 'AI', type: 'ai' }] }));
+});
+
 test('an older dirty dev build can be captured only with the verified dev origin and valid provenance', () => {
   const health = { environment: 'development', releaseStatus: 'configured', build: { siteOrigin: DEV_SITE, gitSha: sha, dirty: true } };
   verifyExistingDevelopmentHealth(health);
