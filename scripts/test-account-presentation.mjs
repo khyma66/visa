@@ -59,6 +59,13 @@ test('brand uses the local mascot with stable dimensions and a named home link f
   }
 });
 
+test('Ask a Question header action appears only after sign-in is confirmed', () => {
+  const ask = auth => links(render(SiteHeader, { auth })).filter(link => link.href === '/ask');
+  assert.equal(ask({ user: null, profile: null, loading: false }).length, 0);
+  assert.equal(ask({ user: null, profile: null, loading: true }).length, 0);
+  assert.equal(ask({ user: { id: 'member-one' }, profile, loading: false }).length, 1);
+});
+
 test('signed-out account tabs require login and preserve only a recognized return destination', () => {
   for (const tab of ['profile', 'activity', 'settings', '//evil.invalid']) {
     const html = render(AccountClient, { query: `tab=${tab}`, auth: { user: null, profile: null } });

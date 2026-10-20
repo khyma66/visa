@@ -97,6 +97,18 @@ test('initial feed and sort clicks start fetching without the search debounce', 
   } finally { h.close(); }
 });
 
+test('home page shows Ask a Question only for signed-in users', async () => {
+  const h = new Harness(); h.getPage = async () => ({ questions: [], more: false });
+  try {
+    h.render(); await h.settle();
+    assert(!nodes(h.tree).some(node => node.props.href === '/ask'));
+    assert.match(textOf(h.tree), /sign in to contribute/i);
+    h.auth = { user: { id: 'member-a' }, demoMode: false };
+    h.render();
+    assert(nodes(h.tree).some(node => node.props.href === '/ask' && textOf(node).includes('Ask a Question')));
+  } finally { h.close(); }
+});
+
 test('sort selection responds immediately and keeps loaded cards visible while fresh results arrive', async () => {
   const h = new Harness(), top = deferred();
   h.getPage = ({ sort }) => sort === 'score' ? top.promise : Promise.resolve({ questions: [question('newest'), question('popular', { vote_score: 10, created_at: '2026-10-01T01:00:00Z' })], more: false });

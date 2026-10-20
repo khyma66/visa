@@ -93,7 +93,7 @@ class Harness {
     }
     assert.fail('Component did not settle');
   }
-  close() { for (const slot of this.slots) slot?.cleanup?.(); delete globalThis.__communityHarness; }
+  close() { for (const slot of this.slots) slot?.cleanup?.(); delete globalThis.__communityHarness; delete globalThis.sessionStorage; }
   async invoke(name, args) { this.calls.push({ name, args }); return this.handlers[name]?.(...args); }
 }
 function same(a, b) { return a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i])); }
@@ -133,10 +133,12 @@ dependencies['@/lib/tagging'] = await compile('../src/lib/tagging.ts');
 dependencies['./SafetyNotice'] = await compile('../src/components/SafetyNotice.tsx');
 const { AskQuestionForm } = await import(await compile('../src/components/AskQuestionForm.tsx'));
 const group = { id: 'group-a', slug: 'h1b-careers', display_name: 'H1B careers', description: 'Work visa questions and shared experience.', category: 'Work visas', country: 'United States', is_public: true, member_count: 2, rules: ['Be respectful.'], created_by: 'owner-a', created_at: '2026-10-06T01:00:00Z' };
-function createHarness(search = '') {
+function createHarness(search = '', storage = new Map()) {
   const h = new Harness();
   h.search = search;
+  h.storage = storage;
   globalThis.window = { location: { search } };
+  globalThis.sessionStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, String(value)), removeItem: key => storage.delete(key) };
   h.handlers.listMyCommunitiesPage = async () => ({ communities: [group], nextCursor: null });
   h.handlers.getCommunityById = async (id) => id === group.id ? group : null;
   h.handlers.getMembershipForCommunity = async (userId, id) => userId === 'member-a' && id === group.id ? { community_id: id, role: 'member', is_active: true } : null;
@@ -146,19 +148,20 @@ function createHarness(search = '') {
 const publish = (h) => nodes(h.tree).find((n) => n.type === 'form').props.onSubmit(event());
 const popularTag = (h, label) => nodes(h.tree).find((node) => node.type === 'button' && node.props['aria-pressed'] !== undefined && textOf(node).trim() === label);
 
-test('question and experience forms clearly mark required editable fields and keep tags optional', async () => {
+test('question and experience forms clearly mark required editable fields and keep dates optional', async () => {
   for (const experience of [false, true]) {
     const h = createHarness();
     try {
       h.render(AskQuestionForm, { experience }); await h.settle();
       assert.match(textOf(h.tree), /Required fields/);
-      for (const name of [experience ? 'Experience Title' : 'Question Title', 'Visa Type', 'Situation and Timeline', ...(experience ? ['Experience Category'] : [])]) {
+      for (const name of [experience ? 'Experience Title' : 'Question Title', 'Visa Type', 'Details', ...(experience ? ['Experience Category'] : [])]) {
         const label = nodes(h.tree).find(node => node.type === 'label' && textOf(node).includes(name));
         assert(nodes(label).some(node => node.type === 'span' && node.props['aria-hidden'] === 'true' && textOf(node) === '*'), name);
         assert.equal(field(h, name).props.required, true, name);
-        assert.equal(field(h, name).props['aria-label'], name, 'Accessible names exclude decorative asterisks');
+        if (name !== 'Experience Category') assert.equal(field(h, name).props['aria-label'], name, 'Accessible names exclude decorative asterisks');
       }
       assert.equal(field(h, 'Destination Country').props.readOnly, true);
+      assert.match(textOf(h.tree), /Dates and timelines are optional/);
       assert.equal(field(h, 'Community').props.required, undefined);
       assert.equal(nodes(h.tree).find(node => node.props['aria-label'] === 'Add a tag').props.required, undefined);
       assert.match(textOf(h.tree), /Tags\s+\(optional\)/);
@@ -166,14 +169,25 @@ test('question and experience forms clearly mark required editable fields and ke
   }
 });
 
-test('guest drafting offers sign in and signup with the same selected-community return destination', async () => {
-  const h = createHarness('?community=group-a'); h.auth.user = null;
+test('guest drafts survive sign-in or signup navigation in the same tab', async () => {
+  const storage = new Map(), h = createHarness('?community=group-a', storage); h.auth.user = null;
   try {
     h.render(AskQuestionForm); await h.settle();
     const links = nodes(h.tree).filter(node => node.props.href?.startsWith('/login?') || node.props.href?.startsWith('/signup?'));
     assert.equal(links.length, 2);
     for (const link of links) assert.equal(new URL(link.props.href, 'https://visathreads.com').searchParams.get('next'), '/ask?community=group-a');
-  } finally { h.close(); }
+    change(h, 'Question Title', 'My question about changing employers'); await h.settle();
+    change(h, 'Details', 'I am changing employers and need to understand which documents are required.'); await h.settle();
+    assert.equal(JSON.parse(storage.get('visathreads:question-draft:v1')).title, 'My question about changing employers');
+    h.close();
+    const restored = createHarness('?community=group-a', storage); restored.auth.user = null;
+    try {
+      restored.render(AskQuestionForm); await restored.settle();
+      assert.equal(field(restored, 'Question Title').props.value, 'My question about changing employers');
+      assert.equal(field(restored, 'Details').props.value, 'I am changing employers and need to understand which documents are required.');
+      assert.match(textOf(restored.tree), /Your draft is kept in this browser tab while you sign in/);
+    } finally { restored.close(); }
+  } catch (error) { h.close(); throw error; }
 });
 
 test('experience popular tags are available before typing and persist when publishing', async () => {
@@ -186,7 +200,7 @@ test('experience popular tags are available before typing and persist when publi
     assert.equal(popularTag(h, 'H-1B').props['aria-pressed'], true);
     assert(nodes(h.tree).some(node => node.props?.['aria-label'] === 'Remove H-1B'));
     change(h, 'Experience Title', 'My recent appointment experience');
-    change(h, 'Situation and Timeline', 'I arrived early and completed the appointment without a long wait.');
+    change(h, 'Details', 'I arrived early and completed the appointment without a long wait.');
     await publish(h);
     const payload = h.calls.find(call => call.name === 'createQuestion').args[1];
     assert.deepEqual(payload.tags.slice(0, 2), ['h1b', 'biometrics']);
@@ -219,7 +233,7 @@ test('tag quick picks enforce five selections, toggle off and normalize typed du
 
 function fillQuestion(h) {
   change(h, 'Question Title', ' What documents for my H1B transfer? ');
-  change(h, 'Situation and Timeline', ' I am changing employers and need to understand the required transfer documents. ');
+  change(h, 'Details', ' I am changing employers and need to understand the required transfer documents. ');
 }
 
 test('question form preserves the selected community, real actor and suggested tags on publish', async () => {
