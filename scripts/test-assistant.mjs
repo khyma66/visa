@@ -269,8 +269,11 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
     assert.match(prompt.system,/Attribution alone must not hide that stated limitation/);
     assert.match(prompt.system,/select the essential outcome or unresolved status, corrected dates, and explicit limitations first/);
     assert.match(prompt.system,/never cite every repeated report/);
-    assert.match(prompt.system,/plural statement about several reports needs supporting citations to more than one report/);
-    assert.match(prompt.system,/Different source IDs do not prove distinct people/);
+    assert.match(prompt.system,/select the spans covering its event, stated timing and material qualification/);
+    assert.match(prompt.system,/summarize a representative report in the singular/);
+    assert.match(prompt.system,/split it into atomic claims or narrow its attribution/);
+    assert.match(prompt.system,/Never solve the citation limit by citing only one report for plural wording/);
+    assert.match(prompt.system,/Do not describe several people, consensus, prevalence or corroboration merely because repeated text or different source IDs exist/);
     assert.match(prompt.system,/check every timing expression, sequence word, duration, venue, role and causal link against its quoted source body/);
     assert.equal(JSON.parse(prompt.user).sources[0].body,adjacent.body,'Prompt hardening must not edit or supplement the evidence');
     if(JSON.parse(prompt.user).task==='summary') {
@@ -280,7 +283,24 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v23-evidence-comparisons','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v24-summary-attribution','Semantic change invalidates old cached answers');
+});
+test('representative summary instructions preserve duplicate provenance and every material difference',()=>{
+  const repeated='I attended my appointment on Wednesday. My application was approved. My document arrived on Saturday. This is only my own experience, not a standard timeline.';
+  const reports=[repeated,repeated,'I attended my appointment on Wednesday. My application is still pending. I do not know the decision date. This is only my personal experience.']
+    .map((body,index)=>({...source,id:`a:summary-${index}`,kind:'reply',body}));
+  const corpus={sources:reports,partial:false};
+  const prompt=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},corpus);
+  const data=JSON.parse(prompt.user);
+  assert.deepEqual(data.sources.map(item=>[item.id,item.body]),reports.map(item=>[item.id,item.body]),'Representative wording must not deduplicate or edit the evidence');
+  for(const report of reports) assert(prompt.evidenceSpans.some(span=>span.sourceId===report.id));
+  assert(prompt.evidenceSpans.some(span=>span.quote.includes('still pending')));
+  assert(prompt.evidenceSpans.some(span=>span.quote.includes('do not know the decision date')));
+  assert.match(prompt.system,/Add other reports when they contribute distinct material facts, corrections, uncertainty or relevant differences/);
+  assert.match(prompt.system,/A requested comparison must still preserve both sides and their citations/);
+  assert.match(prompt.system,/SUMMARY FORMAT EXAMPLE ONLY, NOT EVIDENCE/);
+  assert.match(prompt.system,/write separate singular statements for the dispatch, delivery and personal-only qualification/);
+  assert.doesNotMatch(prompt.user,/parcel|shipment|dispatch/,'The generic format example must never become source evidence');
 });
 test('summary and catch-up are explicit evidence tasks without a missing question to answer',()=>{
   const summary=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},{sources:[source],partial:false});
