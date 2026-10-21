@@ -55,7 +55,11 @@ test('identical concurrent callers do not share cancellation, reservations or pe
   const waits = [], signals = [];
   const h = harness({ generate: async (prompt, signal) => { if (prompt.outputKind === 'review') return review(prompt); const item = deferred(); waits.push(item); signals.push(signal); return item.promise; } });
   const ownerController = new AbortController();
-  const owner = h.handler(request(ownerController.signal)), waiter = h.handler(request());
+  const owner = h.handler(request(ownerController.signal));
+  // Keep both requests in flight, but establish which deferred generation
+  // belongs to the owner before scheduling the independent waiter.
+  while (waits.length < 1) await tick();
+  const waiter = h.handler(request());
   while (waits.length < 2) await tick();
   assert.equal(h.state.reserved, 2); assert.notEqual(signals[0], signals[1]);
   ownerController.abort(); const stopped = await owner;
