@@ -20,6 +20,7 @@ name: Release current VisaThreads AI features
 # Keep repeated-report summaries singular and cited at the material-fact level.
 # Require a separate H-4 stamping experience synthesis before releasing the updated assistant.
 # Treat documented H-4 visa interviews as useful partial answers without inventing EAD involvement.
+# Resolve the common H-4/EAD stamping shorthand consistently for generation and independent review.
 
 on:
   workflow_dispatch:
