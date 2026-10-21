@@ -82,6 +82,21 @@ test('only unmarked404/503 may retry; current503, malformed/foreign/previous mar
     await assert.rejects(p.request('cross-origin-denial', '/api/assistant', {}, { status: 403, denial: true, marked: true }), error => !error.retryable);
   }
 });
+test('only a marked private transient auth failure retries the invalid-session probe; 401 is still required', async () => {
+  const temporary = probe(async () => response(503));
+  await assert.rejects(temporary.request('invalid-session-denial', '/api/assistant', {}, { status: 401, denial: true, marked: true }),
+    error => error.code === 'auth-upstream-unavailable' && error.retryable);
+  for (const options of [{ marker: previous.build.gitSha }, { marker: null }, { cache: 'public' }, { cache: 'private' }]) {
+    const p = probe(async () => response(503, options));
+    await assert.rejects(p.request('invalid-session-denial', '/api/assistant', {}, { status: 401, denial: true, marked: true }),
+      error => options.marker === null ? error.code === 'unmarked-unavailability' && error.retryable : !error.retryable);
+  }
+  const denied = probe(async () => response(401));
+  assert.equal((await denied.request('invalid-session-denial', '/api/assistant', {}, { status: 401, denial: true, marked: true })).status, 401);
+  const persistent = await sequence(Array.from({ length: 6 }, () => new RolloutFailure('auth-upstream-unavailable', 'invalid-session-denial', true)));
+  assert.equal(persistent.error.code, 'stable-rounds-exhausted');
+  assert.equal(persistent.count, 6);
+});
 test('unauthorized2xx is immediately fatal for every version marker', async () => {
   for (const marker of [null, expected.gitSha, previous.build.gitSha, '9'.repeat(40)]) {
     const p = probe(async () => response(200, { marker }));

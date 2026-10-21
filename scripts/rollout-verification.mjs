@@ -60,6 +60,14 @@ export function createRolloutProbe({ origin, expected, previous, signal, record,
     if (metadata.build && metadata.build !== expected.gitSha) await reject('foreign-build');
     if (response.status !== status) {
       if (!metadata.build && [404, 503].includes(response.status)) await reject('unmarked-unavailability', true);
+      // A malformed-session probe still must eventually receive 401. During
+      // rollout, an isolated Supabase Auth timeout can produce a marked 503;
+      // retry the entire bounded round rather than accept it or roll back on
+      // the first transient network failure. Other denial failures stay fatal.
+      if (check === 'invalid-session-denial' && denial && status === 401 && response.status === 503
+        && metadata.build === expected.gitSha && metadata.cacheControl.includes('private') && metadata.cacheControl.includes('no-store')) {
+        await reject('auth-upstream-unavailable', true);
+      }
       await reject('unexpected-status');
     }
     if (marked && metadata.build !== expected.gitSha) await reject('missing-build-marker');

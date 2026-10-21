@@ -16,6 +16,7 @@ name: Release current VisaThreads AI features
 # Preserve conflicting reports during independent review and correction.
 # Accept complete two-source comparisons without requiring duplicate statements.
 # Collapse only exact same-discussion, same-time summary repeats before the guarded quality gate.
+# Retry only marked transient Supabase Auth timeouts during post-deploy invalid-session smoke.
 # Keep repeated-report summaries singular and cited at the material-fact level.
 
 on:
