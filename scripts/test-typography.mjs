@@ -128,6 +128,6 @@ test('phone header keeps account controls on the first row and the complete logo
   assert.equal(property(phone('.header-account, .header-login'), 'flex-shrink'), '0');
   const navigation = await readFile(new URL('src/components/CommunityNavigation.tsx', root), 'utf8');
   assert.match(navigation, /mobile \? \[\{ name: 'Create & Ask'/);
-  assert.match(navigation, /href: '\/ask', label: 'Ask a Question'/);
+  assert.match(navigation, /href: askHref, label: 'Ask a Question'/);
   assert.match(navigation, /NEXT_PUBLIC_SITE_URL === 'https:\/\/visathreads\.com'[\s\S]*?href: '\/assistant'/);
 });

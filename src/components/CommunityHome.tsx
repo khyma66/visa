@@ -2,10 +2,10 @@
 
 import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowUpRight, Compass, MessageSquare, Plus, Search, SlidersHorizontal, Tags, X } from 'lucide-react';
+import { ArrowUpRight, Compass, GripVertical, MessageSquare, Plus, Search, SlidersHorizontal, Tags, X } from 'lucide-react';
 import { getCommunitySource, getQuestionPage } from '@/lib/community';
 import type { Question } from '@/lib/types';
 import { subscribeLive } from '@/lib/realtime';
@@ -16,6 +16,9 @@ import { RelatedQuestions } from './RelatedQuestions';
 import { EXPERIENCE_CATEGORIES, VISA_TYPES } from '@/lib/post-categories';
 
 const PAGE_SIZE = 20;
+const PANEL_WIDTH_KEY = 'visathreads:discovery-panel-width:v1';
+const MIN_PANEL_WIDTH = 240;
+const MAX_PANEL_WIDTH = 640;
 const SORTS = [['newest', 'New'], ['activity', 'Active'], ['score', 'Top'], ['unanswered', 'Unanswered']] as const;
 type SortMode = typeof SORTS[number][0];
 type PostKind = '' | 'question' | 'discussion' | 'promotion';
@@ -43,7 +46,70 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const [origin, setOrigin] = useState<'' | 'member' | 'archive'>('');
   const [loadedFilterKey, setLoadedFilterKey] = useState<string | null>(null);
   const olderLock = useRef<symbol | null>(null);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ pointerId: number; x: number; width: number; current: number } | null>(null);
   const alive = useRef(true);
+  const [panelWidth, setPanelWidth] = useState(300);
+  const [layoutWidth, setLayoutWidth] = useState(1000);
+  const maxPanelWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, layoutWidth - 440));
+  const visiblePanelWidth = Math.min(panelWidth, maxPanelWidth);
+  const askHref = user ? '/ask' : '/login?next=%2Fask#sign-in';
+
+  useEffect(() => {
+    try {
+      const saved = Number(window.localStorage.getItem(PANEL_WIDTH_KEY));
+      if (Number.isFinite(saved) && saved >= MIN_PANEL_WIDTH && saved <= MAX_PANEL_WIDTH) setPanelWidth(saved);
+    } catch { /* The layout remains usable when storage is unavailable. */ }
+    const layout = layoutRef.current;
+    if (!layout) return;
+    const measure = () => setLayoutWidth(layout.clientWidth);
+    measure();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(measure);
+      observer.observe(layout);
+      return () => observer.disconnect();
+    }
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  function savePanelWidth(width: number) {
+    const bounded = Math.max(MIN_PANEL_WIDTH, Math.min(maxPanelWidth, width));
+    setPanelWidth(bounded);
+    try { window.localStorage.setItem(PANEL_WIDTH_KEY, String(bounded)); } catch { /* Browser storage is optional. */ }
+  }
+
+  function startResize(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    dragRef.current = { pointerId: event.pointerId, x: event.clientX, width: visiblePanelWidth, current: visiblePanelWidth };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function moveResize(event: PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    drag.current = Math.max(MIN_PANEL_WIDTH, Math.min(maxPanelWidth, drag.width + drag.x - event.clientX));
+    setPanelWidth(drag.current);
+  }
+
+  function stopResize(event: PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (drag?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    savePanelWidth(drag.current);
+  }
+
+  function resizeWithKeyboard(event: KeyboardEvent<HTMLDivElement>) {
+    const next = event.key === 'ArrowLeft' ? visiblePanelWidth + 24
+      : event.key === 'ArrowRight' ? visiblePanelWidth - 24
+      : event.key === 'Home' ? MIN_PANEL_WIDTH
+      : event.key === 'End' ? maxPanelWidth : null;
+    if (next === null) return;
+    event.preventDefault();
+    savePanelWidth(next);
+  }
   // Sort immediately over the already loaded rows while the fresh server page
   // arrives, but never present rows from a different search/filter as results.
   const contentFilterKey = JSON.stringify([search, tag, visaType, experience, category, origin]);
@@ -172,11 +238,11 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
 
   return (
     <main className="page-shell">
-      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0">
+      <div ref={layoutRef} className="home-feed-layout" style={{ '--discovery-width': `${visiblePanelWidth}px` } as CSSProperties}>
+        <div id="home-feed-main" className="min-w-0">
           <header className="feed-heading flex flex-wrap items-center justify-between gap-4">
             <div><p className="mb-2 text-sm font-semibold text-teal-800">Your visa journey, together</p><h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl">{experience ? 'U.S. Visa Experiences' : initialKind === 'discussion' ? 'U.S. Visa Discussions' : 'U.S. Visa Community'}</h1><p className="mt-2 max-w-2xl text-base leading-6 text-slate-600">{experience ? 'First-hand stories selected from existing discussions, alongside experiences shared here. Original dates and replies are preserved. Personal accounts are not verified outcomes or legal advice.' : 'Questions, shared experiences, and practical discussions about U.S. visas.'}</p></div>
-            {(experience || user) && <Link href={experience ? "/experiences/new" : "/ask"} className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-800"><Plus size={17} aria-hidden="true" />{experience ? "Share Your Experience" : "Ask a Question"}</Link>}
+            <Link href={experience ? '/experiences/new' : askHref} className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-800"><Plus size={17} aria-hidden="true" />{experience ? 'Share Your Experience' : 'Ask a Question'}</Link>
           </header>
 
           <label className="relative my-4 block">
@@ -203,7 +269,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
             {!loading && feedUnavailable && <p className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">Some discussions are temporarily unavailable. Please try again later.</p>}
             {error && <div role="alert" className="my-3 rounded-lg bg-rose-50 p-4 text-sm text-rose-800">{error} <button onClick={() => setRevision((value) => value + 1)} className="font-semibold underline">Retry</button></div>}
             {loading && !refreshing ? <div role="status" aria-label="Loading questions" className="divide-y divide-slate-100">{[1, 2, 3, 4].map((item) => <div key={item} className="space-y-3 py-5"><div className="h-5 w-2/5 animate-pulse rounded bg-slate-100" /><div className="h-6 w-4/5 animate-pulse rounded bg-slate-100" /><div className="h-10 animate-pulse rounded bg-slate-100" /></div>)}</div> : <>
-              {!loading && !error && visibleQuestions.length === 0 && <div className="px-6 py-12 text-center"><Search className="mx-auto text-slate-400" size={28} aria-hidden="true" /><h2 className="mt-3 font-semibold text-slate-900">{experience ? 'No matching experiences' : 'No matching questions'}</h2><p className="mt-1 text-sm text-slate-500">{more ? 'Load more posts or adjust your filters.' : experience ? 'Try another filter or share your own first-hand story.' : 'Try another search or sign in to contribute.'}</p>{(experience || user) && <Link href={experience ? '/experiences/new' : '/ask'} className="mt-4 inline-block text-sm font-semibold text-blue-700 hover:underline">{experience ? 'Share Your Experience' : 'Ask a Question'}</Link>}</div>}
+              {!loading && !error && visibleQuestions.length === 0 && <div className="px-6 py-12 text-center"><Search className="mx-auto text-slate-400" size={28} aria-hidden="true" /><h2 className="mt-3 font-semibold text-slate-900">{experience ? 'No matching experiences' : 'No matching questions'}</h2><p className="mt-1 text-sm text-slate-500">{more ? 'Load more posts or adjust your filters.' : experience ? 'Try another filter or share your own first-hand story.' : 'Try another search or sign in to contribute.'}</p><Link href={experience ? '/experiences/new' : askHref} className="mt-4 inline-block text-sm font-semibold text-blue-700 hover:underline">{experience ? 'Share Your Experience' : 'Ask a Question'}</Link></div>}
               {pageQuestions.map((question) => <QuestionCard key={question.id} question={question} onTagSelect={selectTag} onRelated={(value) => { setRelated(value); document.getElementById('feed-related')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }} />)}
               {pageCount > 1 && <nav aria-label="Post pagination" className="flex flex-wrap items-center justify-center gap-2 py-5"><button disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} className="rounded-full px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40">Previous</button>{pageNumbers.map((value, index) => <span key={value} className="inline-flex items-center gap-2">{index > 0 && value > pageNumbers[index - 1] + 1 && <span aria-hidden="true">...</span>}<button aria-label={`Page ${value}`} aria-current={currentPage === value ? 'page' : undefined} onClick={() => goToPage(value)} className={`min-w-9 rounded-full px-3 py-2 text-sm ${currentPage === value ? 'bg-blue-700 text-white' : 'hover:bg-slate-100'}`}>{value}</button></span>)}<button disabled={currentPage === pageCount} onClick={() => goToPage(currentPage + 1)} className="rounded-full px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40">Next</button></nav>}
               {more && <div className="py-4 text-center"><button onClick={() => void loadOlder()} disabled={loadingOlder} className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">{loadingOlder ? 'Loading...' : 'Load more questions'}</button></div>}
@@ -211,7 +277,8 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
           </section>
         </div>
 
-        <aside aria-label="Community discovery" className="feed-discovery min-w-0 space-y-5">
+        <div role="separator" tabIndex={0} aria-label="Resize posts and discovery panels" aria-orientation="vertical" aria-controls="home-feed-main home-feed-aside" aria-valuemin={MIN_PANEL_WIDTH} aria-valuemax={maxPanelWidth} aria-valuenow={visiblePanelWidth} title="Drag to resize panels. Use arrow keys when focused; double-click to reset." className="home-feed-resizer" onPointerDown={startResize} onPointerMove={moveResize} onPointerUp={stopResize} onPointerCancel={stopResize} onKeyDown={resizeWithKeyboard} onDoubleClick={() => savePanelWidth(300)}><GripVertical size={16} aria-hidden="true" /></div>
+        <aside id="home-feed-aside" aria-label="Community discovery" className="feed-discovery min-w-0 space-y-5">
           <section className="rounded-xl bg-teal-50 p-4">
             <h2 className="text-thread-title font-semibold text-slate-900">Find Your Community</h2><p className="mt-2 text-base leading-6 text-slate-600">Connect around a U.S. visa or stage of your journey.</p>
             <Link href="/explore" className="mt-3 flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"><span className="inline-flex items-center gap-2"><Compass size={17} aria-hidden="true" />Explore Communities</span><ArrowUpRight size={16} aria-hidden="true" /></Link>

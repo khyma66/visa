@@ -205,8 +205,8 @@ test('mobile navigation retains the creation and production assistant actions mo
       let navigated = false;
       h.render(CommunityNavigation, { mobile: true, onNavigate: () => { navigated = true; } });
       const links = nodes(h.tree).filter(node => node.props?.href);
-      const ask = links.find(node => node.props.href === '/ask');
-      assert(ask, 'Mobile users can always reach the post composer');
+      const ask = links.find(node => new URL(node.props.href, 'https://visathreads.com').searchParams.get('next') === '/ask');
+      assert(ask, 'Signed-out mobile users can reach sign-in and return to the post composer');
       ask.props.onClick();
       assert(navigated, 'Selecting the composer closes the mobile menu');
       assert.equal(links.some(node => node.props.href === '/assistant'), assistant);

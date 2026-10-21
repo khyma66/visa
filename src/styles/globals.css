@@ -129,11 +129,20 @@
   .feed-card { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; box-shadow: 0 2px 4px #0f172a03; }
   .feed-card:hover, .feed-card:focus-within { border-color: #afcfca; background: #fff; }
   .feed-discovery { align-self: start; border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; padding: 16px; }
+  .home-feed-layout { display: grid; min-width: 0; gap: 24px; }
+  .home-feed-resizer { display: none; }
   .feed-heading { border: 1px solid #d9e8e5; border-radius: 16px; background: linear-gradient(115deg, #effaf6, #f2f7ff); padding: 22px; }
   .feed-controls { margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; padding: 12px 14px; }
   /* Sort feedback is immediate and never depends on a hover-triggered request. */
   .feed-sort-button { min-height: 44px; font-size: var(--type-body); font-weight: 600; line-height: 1.5; letter-spacing: normal; cursor: pointer; transition: none; }
   .feed-sort-button:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
+}
+
+@media (min-width: 1280px) {
+  .home-feed-layout { grid-template-columns: minmax(0, 1fr) 18px var(--discovery-width); gap: 6px; }
+  .home-feed-resizer { display: flex; align-items: flex-start; justify-content: center; align-self: stretch; min-height: 120px; border-radius: 9px; background: #edf3f4; color: #475569; cursor: col-resize; touch-action: none; user-select: none; }
+  .home-feed-resizer svg { position: sticky; top: 104px; margin-top: 24px; }
+  .home-feed-resizer:hover, .home-feed-resizer:focus-visible { background: #ccfbf1; color: #115e59; }
 }
 
 @media (max-width: 1023px) {

@@ -42,9 +42,11 @@ class Harness {
   slots = []; index = 0; effects = []; dirty = false; calls = []; writes = [];
   constructor(search = '') {
     this.search = search;
+    this.storage = new Map();
     this.getPage = async () => ({ questions: [question('first')], more: false });
     globalThis.window = {
       location: { href: `https://visa.test/${search}` },
+      localStorage: { getItem: key => this.storage.get(key) ?? null, setItem: (key, value) => this.storage.set(key, value) },
       history: { state: { __NA: true }, replaceState: (state, _title, url) => { this.writes.push({ state, url: String(url) }); this.search = new URL(url).search; window.location.href = String(url); } },
     };
     globalThis.document = { getElementById: () => null };
@@ -97,15 +99,38 @@ test('initial feed and sort clicks start fetching without the search debounce', 
   } finally { h.close(); }
 });
 
-test('home page shows Ask a Question only for signed-in users', async () => {
+test('home page offers Ask a Question to everyone and requires sign-in before composing', async () => {
   const h = new Harness(); h.getPage = async () => ({ questions: [], more: false });
   try {
     h.render(); await h.settle();
-    assert(!nodes(h.tree).some(node => node.props.href === '/ask'));
-    assert.match(textOf(h.tree), /sign in to contribute/i);
+    const signedOut = nodes(h.tree).filter(node => node.props?.href === '/login?next=%2Fask#sign-in' && textOf(node).includes('Ask a Question'));
+    assert.equal(signedOut.length, 2, 'Both the main and empty-state actions remain visible');
     h.auth = { user: { id: 'member-a' }, demoMode: false };
     h.render();
     assert(nodes(h.tree).some(node => node.props.href === '/ask' && textOf(node).includes('Ask a Question')));
+  } finally { h.close(); }
+});
+
+test('desktop feed separator resizes both panels with pointer and keyboard and remembers the width', async () => {
+  const h = new Harness();
+  h.storage.set('visathreads:discovery-panel-width:v1', '420');
+  try {
+    h.render(); await h.settle();
+    const separator = () => nodes(h.tree).find(node => node.props?.role === 'separator');
+    assert.equal(separator().props['aria-valuenow'], 420);
+    assert.equal(nodes(h.tree).find(node => node.props?.className === 'home-feed-layout').props.style['--discovery-width'], '420px');
+    const target = { setPointerCapture() {}, hasPointerCapture: () => true, releasePointerCapture() {} };
+    separator().props.onPointerDown({ button: 0, pointerId: 7, clientX: 500, preventDefault() {}, currentTarget: target });
+    separator().props.onPointerMove({ pointerId: 7, clientX: 440 });
+    h.render();
+    assert.equal(separator().props['aria-valuenow'], 480);
+    separator().props.onPointerUp({ pointerId: 7, currentTarget: target });
+    assert.equal(h.storage.get('visathreads:discovery-panel-width:v1'), '480');
+    separator().props.onKeyDown({ key: 'ArrowRight', preventDefault() {} });
+    h.render();
+    assert.equal(separator().props['aria-valuenow'], 456);
+    separator().props.onDoubleClick(); h.render();
+    assert.equal(separator().props['aria-valuenow'], 300);
   } finally { h.close(); }
 });
 

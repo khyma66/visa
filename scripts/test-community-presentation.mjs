@@ -160,12 +160,13 @@ test('registered member replies on source discussions retain their own message a
   assert(!html.includes('Message author'));assert(html.includes('aria-label="Message bob-test"'));
   assert(!html.includes('Accept this answer'));
 });
-test('home renders community-first copy and only offers Ask a Question after sign-in',()=>{
+test('home renders community-first copy and sends signed-out Ask clicks through sign-in',()=>{
   const html=render(CommunityHome,{}, {values:{0:[source,native],3:false}});
   noPipelineLabels(html);assert(html.includes('All Post Types'));assert(html.includes('All Tags'));
-  assert(html.includes(source.title));assert(html.includes('Top'));assert(!html.includes('Ask a Question'));
+  assert(html.includes(source.title));assert(html.includes('Top'));assert(html.includes('Ask a Question'));
+  assert(html.includes('/login?next=%2Fask#sign-in'));
   const signedIn=render(CommunityHome,{}, {values:{0:[source,native],3:false},user:{id:alice}});
-  assert(signedIn.includes('Ask a Question'));
+  assert(signedIn.includes('Ask a Question'));assert(signedIn.includes('href="/ask"'));
   assert(!html.includes('Privacy-aware import'));
 });
 test('partial feed failures remain visible without exposing ingestion diagnostics',()=>{
