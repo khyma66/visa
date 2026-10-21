@@ -1029,7 +1029,7 @@ test('all intended usecases have semantic expectations and runner cannot silentl
   assert.match(runner, /samples\.every\(sample => sample\.passed === true\)/);
 });
 
-test('both evaluator manifests exactly match authenticated worker readiness order', async () => {
+test('both evaluator manifests and the production verifier match authenticated worker readiness order', async () => {
   const ready = await (await worker.fetch(request({ id: '__ready__' }), env())).json();
   for (const path of ['./evaluate-hosted-assistant.mjs', './evaluate-groq-assistant.mjs']) {
     const runner = await readFile(new URL(path, import.meta.url), 'utf8');
@@ -1040,4 +1040,11 @@ test('both evaluator manifests exactly match authenticated worker readiness orde
     assert.equal(new Set(ids).size, ids.length, 'No duplicate cases');
     assert.deepEqual(ids, ready.cases, path);
   }
+  const verifier = await readFile(new URL('./production-feature-release.mjs', import.meta.url), 'utf8');
+  const required = verifier.match(/const requiredCases = (\[[^;]+\]);/);
+  assert(required, 'Expected explicit production acceptance manifest');
+  const ids = JSON.parse(required[1].replaceAll("'", '"'));
+  for (const match of verifier.matchAll(/requiredCases\.push\('([a-z-]+)'\);/g)) ids.push(match[1]);
+  assert.equal(new Set(ids).size, ids.length, 'No duplicate production cases');
+  assert.deepEqual(ids, ready.cases, 'production verifier');
 });
