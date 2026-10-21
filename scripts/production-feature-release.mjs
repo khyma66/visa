@@ -275,6 +275,7 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
   for (const feature of ['communities', 'catchup']) if (features[feature] === 'true') assert.equal(receipt.features?.[feature], true, `${feature} needs hosted model acceptance.`);
   assert.equal(receipt.repetitions, 3, 'Hosted acceptance requires three independent samples per case.');
   const requiredCases = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context', 'thank-you-confirmation', 'public-multiple-thread-synthesis'];
+  requiredCases.push('hfour-ead-stamping-experience-synthesis');
   requiredCases.push('large-discussion-summary');
   requiredCases.push('numbered-interview-transcript');
   requiredCases.push('heterogeneous-report-summary');

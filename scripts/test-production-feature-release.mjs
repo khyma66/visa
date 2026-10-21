@@ -183,6 +183,7 @@ test('Worker archive recovery interprets only static literals and never executes
 function acceptanceReceipt() {
   const ids = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context', 'thank-you-confirmation', 'public-multiple-thread-synthesis'];
   const model = modelProfile.answer;
+  ids.push('hfour-ead-stamping-experience-synthesis');
   ids.push('large-discussion-summary');
   ids.push('numbered-interview-transcript');
   ids.push('heterogeneous-report-summary');

@@ -21,6 +21,7 @@ name: Release current VisaThreads AI features
 # Require a separate H-4 stamping experience synthesis before releasing the updated assistant.
 # Treat documented H-4 visa interviews as useful partial answers without inventing EAD involvement.
 # Resolve the common H-4/EAD stamping shorthand consistently for generation and independent review.
+# Require the new experience case in the release verifier as well as both evaluator manifests.
 
 on:
   workflow_dispatch:
