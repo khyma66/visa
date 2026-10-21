@@ -48,7 +48,7 @@ export function plan(profile, target = TARGET) {
   const blockers = [];
   if (peak > PUBLISHED.realtimeConnections) blockers.push('CONNECTION_CEILING');
   if (peak / 60 * 4 > PUBLISHED.realtimeEventsPerSecond) blockers.push('DELIVERY_RATE_CEILING');
-  blockers.push('ACCOUNT_PLAN_AND_REMAINING_QUOTAS_UNVERIFIED', 'AUTH_FIXTURES_AND_CLEANUP_UNVERIFIED', 'REALTIME_RUNNER_NOT_IMPLEMENTED');
+  blockers.push('ACCOUNT_PLAN_AND_REMAINING_QUOTAS_UNVERIFIED', 'AUTH_FIXTURES_AND_CLEANUP_UNVERIFIED', 'USE_SEPARATE_GATED_MULTIUSER_LIFECYCLE');
   return {
     schemaVersion: 1, kind: 'planning-only', target, profile, publishedLimits: PUBLISHED,
     stages, maxDistinctIdentities: peak,

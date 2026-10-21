@@ -1,6 +1,6 @@
 # VisaFlow free-tier testing
 
-This implements **Phase 1 feasibility and a public availability canary**, not the complete 10,000-user harness in `Visaflow_Miro.md`. Hosted authenticated load is deliberately unavailable. See [the discovery report](../../docs/FREE_TIER_SCALE_REVIEW.md) for constraints and the real action map.
+This implements feasibility checks, a public availability canary, and a bounded **10 → 50 → 100-user test lifecycle**, not the complete 10,000-user harness in `Visaflow_Miro.md`. See [multi-user operation and verified results](MULTIUSER.md) and [the discovery report](../../docs/FREE_TIER_SCALE_REVIEW.md). Hosted execution requires verified dev quotas and credentials; it has not yet been exercised.
 
 ## Commands
 
@@ -13,7 +13,7 @@ npm run scale:plan -- baseline-100
 npm run scale:plan -- concurrent-10k
 ```
 
-Every plan exits **2** because execution is blocked. Its JSON separates modeled work from measured users (all zero). Published ceilings are a dated planning snapshot, not a substitute for inspecting account usage. Recheck the linked provider documentation before revising the snapshot. There is no force flag, paid upgrade, account creation or load runner.
+Every planning command exits **2** because it is not execution approval. Its JSON separates modeled work from measured users (all zero). Published ceilings are a dated planning snapshot, not a substitute for inspecting account usage. Recheck the linked provider documentation before revising the snapshot. The separate multi-user lifecycle has its own quota, credential and stage gates; there is no force flag or paid upgrade.
 
 For a small operational check, supply the independently verified current dev deployment SHA:
 
@@ -44,6 +44,6 @@ These run against disposable in-process PostgreSQL/WASM and actual application m
 
 Obtain read-only access to the exact dev Supabase project and Cloudflare account usage. Record plan, current utilization, Auth limits/CAPTCHA, deployed migrations, Realtime limits and error rates, database size/connections, and remaining monthly/daily quotas. No paid Supabase database branch is required: the separate dev project already exists.
 
-Implement only a 10-user hosted proof first, then at most a measured 100-user baseline if quota permits, leaving headroom below 200 connections. Keep actor credentials encrypted, admin provisioning separate from ordinary sessions, fixture ownership trusted, and cleanup verified. Use the application policy-acceptance flow before writes. Match `inbox:<user-id>` and active `conversation:<id>` private subscriptions; wait for acknowledgments and re-read message history under RLS after invalidations. Keep AI, SMS, email blasts and scraping disabled. Expand only after collecting real evidence.
+Use the implemented [multi-user lifecycle](MULTIUSER.md) for the 10-user hosted proof, then 50 and 100 only after each earlier run and cleanup pass. It encrypts actor credentials, separates admin commands from ordinary sessions, validates trusted fixture ownership, uses the current policy-acceptance flow and verifies persisted messages after private subscription events. Keep AI, SMS, email blasts and scraping disabled. Expand only after collecting real evidence.
 
 For 10,000 concurrent hosted Realtime users, the existing Supabase Free architecture cannot satisfy the requirement. A fully local/self-hosted stack could test synthetic 10,000-user behavior subject to hardware, but would not prove the hosted dev site's capacity and is not implemented here. Sequential batches of accounts likewise do not satisfy concurrency.

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "target": {
+    "origin": "https://visa-central.com",
+    "projectRef": "ppdwysmeistjxzjpmxyk",
+    "databaseOrigin": "https://ppdwysmeistjxzjpmxyk.supabase.co",
+    "worker": "visathreads-sandbox"
+  },
+  "supabasePlan": null,
+  "checkedAt": null,
+  "applicationCommit": null,
+  "existingConnections": null,
+  "backgroundEventsPerSecond": null,
+  "databaseMB": null,
+  "remainingEgressMB": null,
+  "remainingRealtimeMessages": null,
+  "remainingMAU": null,
+  "noConcurrentLoad": false,
+  "outboundHooksDisabled": false,
+  "passwordAuthVerified": false,
+  "schemaVerified": false,
+  "previousRunId": null,
+  "previousStage": null
+}
