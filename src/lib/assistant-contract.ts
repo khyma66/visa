@@ -50,6 +50,8 @@ export type AssistantResult = {
   /** Direct, server-selected search results; no model-generated claims. */
   kind?: 'posts';
   posts?: AssistantPostMatch[];
+  /** Date-aware lead for unbounded newest-available post lookups. */
+  postsIntro?: string;
   status: 'answered' | 'insufficient';
   claims: AssistantClaim[];
   disagreements: AssistantClaim[];

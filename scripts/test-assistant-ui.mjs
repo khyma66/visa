@@ -347,10 +347,10 @@ test('pagination guidance is conditional for member replies and is never offered
 test('post search shows linked excerpts immediately with compact expandable results', async () => {
   const h=new Harness();
   const posts=Array.from({length:10},(_,i)=>({questionId:`post-${i}`,sourceId:`q:post-${i}`,title:`Stamping delay ${i}`,excerpt:'Passport still pending <script>unsafe()</script>',url:`/questions/post-${i}`,createdAt:'2026-10-01T10:00:00Z'}));
-  h.post=async()=>reply(fixture({kind:'posts',posts:[...posts,{...posts[0],questionId:'unsafe',url:'javascript:alert(1)'}],claims:[],sources:[],coverage:{sourceCount:10,partial:true}}));
+  h.post=async()=>reply(fixture({kind:'posts',postsIntro:'The newest matching discussion was published on 2026-10-01 (UTC). Here are the latest available posts.',posts:[...posts,{...posts[0],questionId:'unsafe',url:'javascript:alert(1)'}],claims:[],sources:[],coverage:{sourceCount:10,partial:true}}));
   try {
     h.render({scope:{kind:'public'},defaultOpen:true});await h.settle();changeQuestion(h,'give all posts related to stamping delay');await submit(h);await h.settle();
-    assert.match(visibleTextOf(h.tree),/Here are discussions that match your question/);assert.match(textOf(h.tree),/Show 2 more posts/);
+    assert.match(visibleTextOf(h.tree),/newest matching discussion was published on 2026-10-01/);assert.match(textOf(h.tree),/Show 2 more posts/);
     assert.match(textOf(h.tree),/Showing\s+10\s+matching discussion\s*s/);
     assert.match(textOf(h.tree),/not an exhaustive list/);assert.doesNotMatch(visibleTextOf(h.tree),/More posts may match|limited posts|not an exhaustive list/);
     assert.doesNotMatch(textOf(h.tree),/Thinking|verify the sources/);

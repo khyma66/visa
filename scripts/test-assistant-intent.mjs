@@ -52,14 +52,17 @@ test('experience and story lookup paraphrases normalize multiple cities without 
   for (const text of ['Explain Hyderabad stamping experiences', 'Give advice based on Chennai experiences', 'Show how posts on stamping differ', 'What are the latest visa rules?', 'Can I get a visa based on these stories?'])
     assert.equal(assistantPostSearchQuery(ask(text), now), null, text);
 });
-test('relative windows are timestamp constraints, latest is unbounded newest, and invalid large windows do not widen silently', () => {
-  for (const [text, days] of [['Show recent Hyderabad stamping experiences', 30], ['Find posts about Chennai stamping in the last week', 7], ['Show stories about Mumbai stamping in the past two weeks', 14], ['Find posts about London stamping in the last month', 30]]) {
+test('only explicit relative windows constrain timestamps; recent and latest order newest available', () => {
+  for (const [text, days] of [['Show recent Hyderabad stamping experiences in the last 30 days', 30], ['Find posts about Chennai stamping in the last week', 7], ['Show stories about Mumbai stamping in the past two weeks', 14], ['Find posts about London stamping in the last month', 30]]) {
     const intent = assistantSearchIntent(ask(text), now);
     assert.equal(intent.since, new Date(now - days * 86_400_000).toISOString()); assert.equal(intent.until, new Date(now).toISOString());
-    assert.equal(intent.order, 'newest'); assert.doesNotMatch(intent.text, /\b(?:recent|last week|two weeks|last month)\b/i);
+    assert.equal(intent.order, 'newest'); assert.equal(intent.softRecent, false); assert.doesNotMatch(intent.text, /\b(?:recent|last week|two weeks|last month)\b/i);
   }
-  const latest = assistantSearchIntent(ask('Show latest posts about Hyderabad stamping'), now);
-  assert.equal(latest.order, 'newest'); assert.equal(latest.since, undefined);
+  for (const text of ['Show latest posts about Hyderabad stamping', 'Show recent Hyderabad stamping experiences', 'give recent h4 ead experiences']) {
+    const intent = assistantSearchIntent(ask(text), now);
+    assert.equal(intent.order, 'newest'); assert.equal(intent.since, undefined); assert.equal(intent.until, undefined);
+    assert.equal(intent.softRecent, /\brecent\b/i.test(text));
+  }
   for (const phrase of ['last 0 days', 'past 400 days']) assert(assistantSearchIntent(ask(`Find posts about Hyderabad stamping in the ${phrase}`), now).unsupportedWindow);
 });
 test('history expansion stays within RPC bounds and extracts only supported visa-code shapes', () => {
@@ -88,24 +91,42 @@ test('requested city survives distractor saturation before both lookup and gener
     assert.deepEqual(result.sources.map(row => row.questionId), ['apify-right'], text);
   }
 });
-test('newest results beat lexical popularity and empty recent results disclose the posting-date window', async () => {
+test('newest available results beat lexical popularity; only explicit windows can exclude older posts', async () => {
   archive([q('apify-old', 'My Hyderabad stamping completed.', '2025-01-01T00:00:00Z', 'Hyderabad stamping'), q('apify-new', 'My Hyderabad stamping completed.')]);
   const latest = ask('Show latest posts about Hyderabad stamping');
   const result = buildAssistantPostSearchResult(latest, await retrieveAssistantCorpus(client(), latest, now), now);
   assert.deepEqual(result.posts.map(post => post.questionId), ['apify-new', 'apify-old']);
   archive([q('apify-old', 'My Hyderabad stamping completed.', '2025-01-01T00:00:00Z')]);
   const recent = ask('Give recent experience for Hyderabad stamping');
-  const empty = buildAssistantPostSearchResult(recent, await retrieveAssistantCorpus(client(), recent, now), now);
+  const available = buildAssistantPostSearchResult(recent, await retrieveAssistantCorpus(client(), recent, now), now);
+  assert.equal(available.status, 'answered'); assert.deepEqual(available.posts.map(post => post.questionId), ['apify-old']);
+  assert.equal(available.coverage.since, undefined); assert.match(available.postsIntro, /2025-01-01/);
+  const explicit = ask('Give Hyderabad stamping experiences from the last 30 days');
+  const empty = buildAssistantPostSearchResult(explicit, await retrieveAssistantCorpus(client(), explicit, now), now);
   assert.equal(empty.status, 'insufficient'); assert.equal(empty.posts.length, 0); assert(empty.coverage.since); assert.match(empty.unanswered[0], /Older discussions may exist/);
+});
+test('H4 EAD lookup returns latest matching experiences across older posting dates without a model', async () => {
+  archive([
+    q('apify-h4-older', 'My H4 EAD renewal was approved.', '2026-08-10T12:00:00Z', 'H4 EAD renewal experience'),
+    q('apify-h1-distractor', 'My H1B EAD experience.', '2026-10-16T12:00:00Z', 'H1B EAD'),
+    q('apify-h4-latest', 'My H-4 EAD application was approved.', '2026-09-11T17:56:57Z', 'H4 EAD experience'),
+    q('apify-h4-no-ead', 'My H4 stamping experience.', '2026-10-15T12:00:00Z', 'H4 stamping'),
+  ]);
+  const input = ask('give recent h4 ead experiences');
+  const query = assistantPostSearchQuery(input, now);
+  assert(query); assert.deepEqual(query.intent.visas, ['h4']); assert.equal(query.intent.since, undefined);
+  const result = buildAssistantPostSearchResult(input, await retrieveAssistantCorpus(client(), input, now), now);
+  assert.deepEqual(result.posts.map(post => post.questionId), ['apify-h4-latest', 'apify-h4-older']);
+  assert.match(result.postsIntro, /2026-09-11/); assert.equal(result.coverage.since, undefined);
 });
 test('native and imported reads receive pre-limit constraints and bounded date filters', async () => {
   archive([q('apify-parent', 'My Hyderabad H-1B stamping report.')]);
   const db = client(); await retrieveAssistantCorpus(db, ask('Show recent Hyderabad H1B stamping experiences'), now);
   const rpc = db.calls.find(call => call.rpc); assert.equal(rpc.rpc, 'assistant_sources_v2');
   assert.deepEqual(rpc.args.required_locations, ['hyderabad', 'hyd']); assert.deepEqual(rpc.args.required_visas, ['h1b']);
-  assert.equal(rpc.args.required_event, 'stamping'); assert.equal(rpc.args.sort_newest, true); assert(rpc.args.since_time);
+  assert.equal(rpc.args.required_event, 'stamping'); assert.equal(rpc.args.sort_newest, true); assert.equal(rpc.args.since_time, null);
   const imported = db.calls.find(call => call.or); assert.match(imported.or, /^and\(or\(/); assert.match(imported.or, /question_id\.in\.\(apify-parent\)/);
-  assert.equal(imported.filters.created_at_gte, rpc.args.since_time); assert.equal(imported.filters.created_at_lt, rpc.args.until_time);
+  assert.equal(imported.filters.created_at_gte, undefined); assert.equal(imported.filters.created_at_lt, undefined);
 });
 test('self-contained city switches ignore focused posts despite incidental pronouns; real references remain scoped', async () => {
   archive([q('apify-hyd', 'My Hyderabad stamping completed.'), q('apify-che', 'My Chennai stamping completed.')]);

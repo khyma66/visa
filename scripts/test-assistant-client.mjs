@@ -128,6 +128,10 @@ test('post matches validate every nested field while dropping unsafe and duplica
   const post = { questionId: 'apify-one', sourceId: 'q:apify-one', title: 'Appointment report', excerpt: 'Posted yesterday.', url: '/questions/apify-one', createdAt: '2026-10-01T10:00:00Z' };
   const input = { ...fixture(), kind: 'posts', claims: [], sources: [], posts: [post, { ...post }, { ...post, questionId: 'unsafe', url: '//external.test' }] };
   assert.deepEqual(parseAssistantResult(input)?.posts, [post]);
+  input.postsIntro = 'The newest matching discussion was published on 2026-10-01 (UTC).';
+  assert.equal(parseAssistantResult(input)?.postsIntro, input.postsIntro);
+  assert.equal(parseAssistantResult({ ...input, postsIntro: 'x'.repeat(401) }), null);
+  assert.equal(parseAssistantResult({ ...fixture(), postsIntro: input.postsIntro }), null);
   for (const key of ['questionId', 'sourceId', 'title', 'excerpt', 'url', 'createdAt']) assert.equal(parseAssistantResult({ ...input, posts: [{ ...post, [key]: null }] }), null, key);
   const empty = parseAssistantResult({ ...input, status: 'insufficient', posts: [], coverage: { sourceCount: 0, partial: false, since: '2026-09-17T00:00:00Z', until: '2026-10-17T00:00:00Z' }, unanswered: ['No matching posts were published in this time range.'] });
   assert(empty); assert.equal(empty.coverage.since, '2026-09-17T00:00:00Z'); assert.equal(empty.posts.length, 0);

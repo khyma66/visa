@@ -30,7 +30,7 @@ function topicEntities(text: string) {
 export type AssistantSearchIntent = {
   task: 'lookup' | 'answer'; text: string; locations: string[]; locationTerms: string[]; visas: string[];
   event: 'stamping' | 'biometrics' | 'passport-delivery' | null;
-  order: 'newest' | 'relevance'; since?: string; until?: string; unsupportedWindow: boolean;
+  order: 'newest' | 'relevance'; softRecent: boolean; since?: string; until?: string; unsupportedWindow: boolean;
 };
 const LOOKUP_NOUN = /\b(?:posts?|threads?|discussions?|experiences?|stor(?:y|ies))\b/i;
 function lookupRequest(question: string): boolean {
@@ -60,8 +60,10 @@ export function assistantSearchIntent(input: AssistantRequest, now = Date.now())
   const temporal = /\b(?:last|past|previous)\s+(?:(\d{1,4}|one|two|three|four)\s+)?(days?|weeks?|months?|years?)\b/i;
   const explicit = temporal.exec(question);
   const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4 };
-  const days = explicit ? (explicit[1] === undefined ? 1 : words[explicit[1].toLowerCase()] ?? Number(explicit[1])) * (/week/i.test(explicit[2]) ? 7 : /month/i.test(explicit[2]) ? 30 : /year/i.test(explicit[2]) ? 365 : 1)
-    : /\brecent(?:ly)?\b/i.test(question) ? 30 : null;
+  const days = explicit ? (explicit[1] === undefined ? 1 : words[explicit[1].toLowerCase()] ?? Number(explicit[1])) * (/week/i.test(explicit[2]) ? 7 : /month/i.test(explicit[2]) ? 30 : /year/i.test(explicit[2]) ? 365 : 1) : null;
+  // "Recent" asks for the newest available evidence, not an invented hard
+  // window. Only a period supplied by the user may exclude older reports.
+  const softRecent = /\brecent(?:ly)?\b/i.test(question) && days === null && !/\b(?:today|yesterday)\b/i.test(question);
   const unsupportedWindow = days !== null && (!Number.isFinite(days) || days < 1 || days > 366);
   let since: string | undefined, until: string | undefined;
   if (days !== null && !unsupportedWindow) { since = new Date(now - days * 86_400_000).toISOString(); until = new Date(now).toISOString(); }
@@ -75,7 +77,7 @@ export function assistantSearchIntent(input: AssistantRequest, now = Date.now())
     task: assistantMorePosts(current) && previous ? 'lookup' : lookupRequest(current) ? 'lookup' : 'answer',
     text: combined.replace(new RegExp(temporal.source, 'gi'), ' ').replace(/\b(?:recent(?:ly)?|latest|newest|today|yesterday)\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500),
     locations, locationTerms: LOCATIONS.filter(([name]) => locations.includes(name)).flatMap(group => [...group]), visas,
-    event: eventOf(question) ?? eventOf(previous), order: days !== null || /\b(?:latest|newest|today|yesterday)\b/i.test(question) ? 'newest' : 'relevance',
+    event: eventOf(question) ?? eventOf(previous), order: days !== null || softRecent || /\b(?:latest|newest|today|yesterday)\b/i.test(question) ? 'newest' : 'relevance', softRecent,
     ...(since && until ? { since, until } : {}), unsupportedWindow,
   };
 }
