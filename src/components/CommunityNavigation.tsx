@@ -2,15 +2,18 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { BookOpen, Compass, Home, MessageCircle, Newspaper, Plus, ShieldCheck, Sparkles, Tags, TrendingUp, Users } from 'lucide-react';
+import { BookOpen, Compass, Home, MessageCircle, Newspaper, NotebookPen, Plus, ShieldCheck, Sparkles, Tags, TrendingUp, Users } from 'lucide-react';
+import { useAuth } from './AuthProvider';
 
 export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const params = useSearchParams();
+  const { user, loading } = useAuth();
+  const askHref = user || loading ? '/ask' : '/login?next=%2Fask#sign-in';
   const popular = pathname === '/' && params.get('sort') === 'score';
   const sections = [
     ...(mobile ? [{ name: 'Create & Ask', links: [
-      { href: '/ask', label: 'Ask a Question', icon: Plus },
+      { href: askHref, label: 'Ask a Question', icon: Plus },
       ...(process.env.NEXT_PUBLIC_SITE_URL === 'https://visathreads.com'
         ? [{ href: '/assistant', label: 'Ask VisaThreads', icon: Sparkles }] : []),
     ] }] : []),
@@ -19,7 +22,7 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
       { href: '/?sort=score', label: 'Popular', icon: TrendingUp, active: popular },
       { href: '/explore', label: 'Explore Communities', icon: Compass },
       { href: '/news', label: 'News', icon: Newspaper },
-      { href: '/experiences', label: 'Experience', icon: MessageCircle },
+      { href: '/experiences', label: 'Experience', icon: NotebookPen },
       { href: '/tags', label: 'Tags', icon: Tags },
     ] },
     { name: 'Your Communities', links: [

@@ -59,11 +59,12 @@ test('brand uses the local mascot with stable dimensions and a named home link f
   }
 });
 
-test('Ask a Question header action appears only after sign-in is confirmed', () => {
-  const ask = auth => links(render(SiteHeader, { auth })).filter(link => link.href === '/ask');
-  assert.equal(ask({ user: null, profile: null, loading: false }).length, 0);
-  assert.equal(ask({ user: null, profile: null, loading: true }).length, 0);
-  assert.equal(ask({ user: { id: 'member-one' }, profile, loading: false }).length, 1);
+test('Ask a Question header action stays visible and routes signed-out members through sign-in', () => {
+  const ask = auth => links(render(SiteHeader, { auth })).find(link => link.label === 'Ask');
+  const signedOut = ask({ user: null, profile: null, loading: false });
+  assert.equal(new URL(signedOut.href, 'https://visathreads.com').searchParams.get('next'), '/ask');
+  assert.equal(ask({ user: null, profile: null, loading: true }).href, '/ask');
+  assert.equal(ask({ user: { id: 'member-one' }, profile, loading: false }).href, '/ask');
 });
 
 test('signed-out account tabs require login and preserve only a recognized return destination', () => {
