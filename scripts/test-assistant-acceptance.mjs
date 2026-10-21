@@ -1017,7 +1017,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 30);
+  assert.equal(acceptanceFixtures.length, 31);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);

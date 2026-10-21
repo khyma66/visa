@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
-import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantStandaloneFollowUp } from './assistant-context';
+import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantSearchIntent, assistantStandaloneFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v25-summary-repeat-collapse';
+export const ASSISTANT_VERSION = 'grounded-chat-v26-experience-synthesis';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -282,6 +282,8 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
 export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus, original: AssistantCorpus = corpus) {
   const evidenceSpans = assistantEvidenceSpans(corpus, original);
   const { resolvedReference, selectedSummary } = assistantPromptSelection(input, corpus);
+  const experienceSynthesis = input.mode === 'ask' && input.scope.kind === 'public'
+    && assistantSearchIntent(input).experience && !resolvedReference;
   const context = assistantPromptContext(input, corpus);
   const taskInstruction = selectedSummary
     ? 'TASK: Give a brief summary of the selected discussion, not an exhaustive retelling. Prioritize the substantive outcome or unresolved status, its explicitly stated dates, and material qualifications. Aim for 3–4 short, atomic, attributed claims and about 60–80 words; use an additional claim only for an essential correction, conflict or qualification. Routine background, historical travel and document inventories are optional, not a checklist. Keep every fact attached to its own event, person and document; do not fill in unstated connections. An undated outcome remains undated. Return status answered with cited claims when substantive reports are present.'
@@ -289,6 +291,8 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
     ? 'TASK: Summarize the supplied discussion. No user question is required for a summary. Use short, atomic, attributed claims and as many of the six available claim slots as needed to preserve material facts and qualifications. Describe substantive reported events and outcomes, useful replies and unresolved points supported by the supplied evidence. Preserve key dates or named days exactly as explicitly stated, and chronology only when the source states it; do not complete missing links between events. An undated outcome remains undated even when nearby sentences describe dated events. Never convert an individual report into a universal timeline or prediction. If substantive reports are present, return status answered with cited claims even though there is no question.'
     : input.mode === 'catchup'
       ? 'TASK: Summarize new discussion events within the supplied interval. No user question is required for catch-up. Preserve reported dates, distinguish individual experiences from rules, and cite the new events. Older parent context must not be described as a new event.'
+      : experienceSynthesis
+        ? 'TASK: Synthesize what different members personally reported about the requested experience, not a list of posts. Lead with two or three short, distinct, attributed observations when the evidence supports them; aim for about 60–90 words total. Prioritize actual events and outcomes over questions, plans or advice, and cite each report separately. If only one firsthand report is supported, say one report rather than implying several. When the question combines H-4 visa stamping with EAD, do not imply the EAD was stamped or involved unless a source explicitly says so; note if the cited stamping reports do not give EAD-specific details. If no relevant firsthand reports exist, return insufficient.'
       : 'TASK: Answer the latest user question directly using only the supplied evidence. Previous questions only clarify references in the latest question; do not answer an older question or summarize unrelated topics. Start with the answer, using 1–3 short, plain-language claims by default, each usually one sentence. Include extra claims only when the question asks for detail or conflicting reports require them. Do not repeat the question, describe your search, or add a long introduction. If the evidence cannot answer the question, return status insufficient.';
   return {
     sourceIds: corpus.sources.map(source => source.id),

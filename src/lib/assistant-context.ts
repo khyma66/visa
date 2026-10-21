@@ -30,12 +30,17 @@ function topicEntities(text: string) {
 export type AssistantSearchIntent = {
   task: 'lookup' | 'answer'; text: string; locations: string[]; locationTerms: string[]; visas: string[];
   event: 'stamping' | 'biometrics' | 'passport-delivery' | null;
-  order: 'newest' | 'relevance'; softRecent: boolean; since?: string; until?: string; unsupportedWindow: boolean;
+  order: 'newest' | 'relevance'; softRecent: boolean; experience: boolean; since?: string; until?: string; unsupportedWindow: boolean;
 };
 const LOOKUP_NOUN = /\b(?:posts?|threads?|discussions?|experiences?|stor(?:y|ies))\b/i;
+const EXPERIENCE_NOUN = /\b(?:experiences?|stor(?:y|ies))\b/i;
 function lookupRequest(question: string): boolean {
   const noun = LOOKUP_NOUN.exec(question);
   if (!noun || /\b(?:explain|explanation|answer|summari[sz]e|synopsis|overview|differences?|compare|comparison|advice|eligib\w*|rules?|polic(?:y|ies)|why|how|whether|should|guarantee\w*)\b/i.test(question)) return false;
+  // "Give me experiences" asks what members said; "show/find experiences"
+  // asks to browse records. Explicit posts/threads/links always stay browseable.
+  if (EXPERIENCE_NOUN.test(question) && !/\b(?:posts?|threads?|discussions?|links?|results?)\b/i.test(question)
+    && /^(?:(?:please|can you|could you|would you)\s+)*(?:(?:give|get|share|tell)(?:\s+me)?|i want|i need)\b/i.test(question)) return false;
   if (/^(?:all\s+)?(?:posts|threads|discussions|experiences|stories)\s+(?:about|on|related to|regarding|in|at|for)\b/i.test(question)) return true;
   if (/^(?:are there|do you have|any|recent|latest|newest)\b/i.test(question)) return true;
   const selection = /^(?:(?:please|can you|could you|would you)\s+)*(?:give|show|find|list|get|share|search|look|i want|i need)\b/i.exec(question);
@@ -78,6 +83,7 @@ export function assistantSearchIntent(input: AssistantRequest, now = Date.now())
     text: combined.replace(new RegExp(temporal.source, 'gi'), ' ').replace(/\b(?:recent(?:ly)?|latest|newest|today|yesterday)\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500),
     locations, locationTerms: LOCATIONS.filter(([name]) => locations.includes(name)).flatMap(group => [...group]), visas,
     event: eventOf(question) ?? eventOf(previous), order: days !== null || softRecent || /\b(?:latest|newest|today|yesterday)\b/i.test(question) ? 'newest' : 'relevance', softRecent,
+    experience: EXPERIENCE_NOUN.test(question),
     ...(since && until ? { since, until } : {}), unsupportedWindow,
   };
 }
@@ -90,6 +96,10 @@ export function assistantSourceMatchesIntent(source: AssistantSource, intent: As
   if (intent.locations.length && !intent.locations.some(value => normalized.includes(` ${value} `))) return false;
   if (intent.visas.length && !intent.visas.some(value => normalized.includes(` ${value} `))) return false;
   if (intent.event === 'stamping' && !/\bstamp(?:ing|ed|s)?\b|\bdrop[ -]?box\b|\b221[ ()-]*g\b|\badministrative processing\b|\bconsular processing\b|\bvisa (?:interview|issuance|issued|appointment)\b|\bpassport\b.{0,60}\b(?:visa|consulate|embassy|ceac)\b/i.test(text)) return false;
+  // An expired stamp mentioned in a driving-license or travel question is not
+  // a stamping experience. Keep actual interview, issuance and 221(g) reports.
+  if (intent.event === 'stamping' && intent.experience
+    && !/\bstamp(?:ing|ed)\b|\bdrop[ -]?box\b|\b221[ ()-]*g\b|\badministrative processing\b|\bconsular processing\b|\bvisa (?:interview|issuance|issued|appointment|approved|refused)\b|\bpassport\b.{0,60}\b(?:consulate|embassy|ceac)\b/i.test(text)) return false;
   if (intent.event === 'biometrics' && !/\bbiometric\w*\b|\bfingerprints?\b/i.test(text)) return false;
   if (intent.event === 'passport-delivery' && !/\bpassport\b/i.test(text)) return false;
   const created = Date.parse(source.createdAt);
