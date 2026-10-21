@@ -32,6 +32,15 @@ const result = {
 const verdict = (checks = [{ id: 'claim:0', supported: true }], fulfillsTask = true) => JSON.stringify({ checks, fulfillsTask });
 const fails = raw => assert.throws(() => validateAssistantReview(raw, result), error => error instanceof AssistantError && error.status === 502);
 
+test('experience reviewer treats sourced H-4 stamping reports as relevant even without EAD details', () => {
+  const request = { mode: 'ask', scope: { kind: 'public' }, question: 'give h4 ead stamping experiences' };
+  const generation = assistantPrompt(request, corpus);
+  const review = assistantReviewPrompt(request, corpus, result);
+  assert.match(generation.system, /Do not return insufficient solely because EAD details are absent/);
+  assert.match(review.system, /do not demand EAD-specific records/);
+  assert.match(review.system, /avoid[s]? asserting EAD involvement/);
+});
+
 test('reporting dates must not become original appointment dates and rejected drafts stay hidden', () => {
   const datedSource = { ...source, body: 'Today, October 13, I reported that my appointment was rescheduled to October 20.' };
   const datedCorpus = { sources: [datedSource], partial: false, since: '2026-10-13T00:00:00Z', until: '2026-10-14T00:00:00Z' };

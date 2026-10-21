@@ -1,5 +1,6 @@
 import type { AssistantCorpus, AssistantRequest, AssistantResult } from './assistant-contract';
 import { AssistantError, assistantPromptContext, redactAssistantText } from './assistant-core';
+import { assistantSearchIntent } from './assistant-context';
 import type { AssistantPrompt } from './assistant-provider';
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -69,6 +70,8 @@ export function assistantReviewPrompt(input: AssistantRequest, corpus: Assistant
   // source text. Do not shrink sources to selected quotes: nearby corrections,
   // who did what, and the parent discussion can change a quote's meaning.
   const task = assistantPromptContext(input, corpus);
+  const experienceReview = input.mode === 'ask' && input.scope.kind === 'public'
+    && assistantSearchIntent(input).experience && !record(task.resolvedDiscussion);
   const taskRubric = input.mode === 'catchup'
     ? 'REVIEW TASK — CATCH-UP: The requested task is to summarize substantive new posts or replies within the supplied interval. No user question is required. fulfillsTask is true when the candidate describes the relevant new reported events, preserves their dates and meaning, and keeps older parent context separate from new events. A concise attributed report of the available event can fulfill this task; do not demand an answer to an absent question.'
     : task.summaryStyle === 'brief'
@@ -84,6 +87,7 @@ export function assistantReviewPrompt(input: AssistantRequest, corpus: Assistant
     sourceIds: corpus.sources.map(source => source.id),
     system: [
       taskRubric,
+      ...(experienceReview ? ['REVIEW TASK — EXPERIENCE SYNTHESIS: Relevant first-person events and outcomes from different members can fulfill an experience question when they are accurately attributed and cited. If the question combines H-4 stamping and EAD, firsthand H-4 stamping reports remain relevant even when they do not describe EAD events. Judge their reported stamping outcomes and whether the candidate avoids asserting EAD involvement; do not demand EAD-specific records or mark a supported H-4 stamping synthesis insufficient solely because EAD details are absent. A brief, accurate note that those cited reports do not give EAD-specific details is appropriate.'] : []),
       ...(record(task.resolvedDiscussion) && task.task === 'summary' ? ['The server has already resolved this SUMMARY to the selected discussion. Apply the stated summary scope, including material qualifications. Do not reconstruct an ordinal or require speculation or information absent from the evidence. A short source may need only one claim; a long mixed report must still preserve its substantive outcome and explicit limitations.'] : []),
       'You are an independent evidence reviewer for a VisaThreads answer. Your only job is to judge the supplied candidate, not write or repair an answer.',
       'A source kind of "question" identifies a discussion post record, not whether every sentence in its body is a question. A declarative first-person report in that body can support an attributed event, outcome, date or reason. Judge the actual wording: interrogative, hypothetical or uncertain statements still cannot prove their premises.',
