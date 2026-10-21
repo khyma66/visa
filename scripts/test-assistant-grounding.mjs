@@ -202,7 +202,7 @@ test('overbudget summaries reserve later replies, preserve sentence boundaries a
   assert(prepared.sources[0].body.endsWith('experience.'));
   assert(prepared.sources.reduce((sum, item) => sum + item.title.length + item.body.length + (item.parentContext?.length ?? 0), 0) <= 24_000);
   assert(core.assistantEvidenceSpans(prepared, original).every(span => span.sourceId !== item.id), 'Original body beyond the review limit remains non-citable');
-  const many = { sources: Array.from({ length: 25 }, (_, index) => source('A complete individual report was received.', { id: `a:source-${index}` })), partial: false };
+  const many = { sources: Array.from({ length: 25 }, (_, index) => source(`A complete individual report number ${index} was received.`, { id: `a:source-${index}` })), partial: false };
   assert.equal(core.prepareAssistantCorpus(many, request).sources.length, 24);
   assert.equal(core.prepareAssistantCorpus(many, request).partial, true);
 });

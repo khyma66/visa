@@ -238,11 +238,12 @@ const representativeSummary = { status: 'answered', claims: [
   { text: 'This is the member’s individual experience, not a standard timeline.', evidence: [repeatedEvidence[2]] },
 ], disagreements: [], unanswered: [] };
 const invalidRepeatedSummaries = [
-  { text: 'Several members reported attending on Monday and receiving their passports on Friday.', evidence: repeatedEvidence },
+  { text: 'Several members reported attending on Monday and receiving their passports on Friday.', evidence: [repeatedEvidence[0]] },
+  { text: 'Several members reported that they attended their Hyderabad visa-stamping appointment on Monday, received visa approval and their passport on Friday, and explicitly stated that this describes their individual experience, not a standard timeline.', evidence: repeatedEvidence.slice(0, 3) },
   { text: 'One report says the passport arrived on the following Friday after the Monday appointment.', evidence: repeatedEvidence.slice(0, 2) },
   { text: 'One report says the visa was approved on Friday.', evidence: [repeatedEvidence[1]] },
   { text: 'Several reports describe visa approval, Friday passport delivery, and an individual-only timeline.',
-    evidence: repeatedSummary.corpus.sources.slice(0, 3).map(item => ({ sourceId: item.id, quote: repeatedQuotes[0] })) },
+    evidence: [repeatedEvidence[1]] },
 ].map(claim => ({ status: 'answered', claims: [claim], disagreements: [], unanswered: [] }));
 function withRepeatedSummary(h, corpus = repeatedSummary.corpus) {
   h.session.corpus = async (_input, signal) => { h.state.reads++; h.state.signals.push(signal); return structuredClone(corpus); };
@@ -256,6 +257,7 @@ test('a singular representative summary keeps exact atomic event, outcome and qu
     prompts.push(prompt);
     if (prompt.outputKind !== 'review') {
       assert.match(prompt.system, /summarize a representative report in the singular/);
+      assert.equal(JSON.parse(prompt.user).sources.length, 1, 'Exact repeated report bodies are supplied once for summaries');
       return JSON.stringify(representativeSummary);
     }
     assert.deepEqual(JSON.parse(prompt.user).candidate.checks.map(({ text, evidence }) => ({ text, evidence })), representativeSummary.claims);
@@ -311,7 +313,7 @@ test('representative-summary recovery reuses the complete original corpus and in
     assert.equal(result.status, 'answered'); assert.deepEqual(result.claims, representativeSummary.claims);
     assert.equal(prompts[2].user, prompts[0].user);
     assert(!prompts[2].user.includes(initial.claims[0].text));
-    assert.deepEqual(JSON.parse(prompts[0].user).sources.map(item => item.id), repeatedSummary.corpus.sources.map(item => item.id));
+    assert.deepEqual(JSON.parse(prompts[0].user).sources.map(item => item.id), [repeatedSource.id], 'Original duplicated records remain in the database corpus but enter summary generation once');
     assert.deepEqual(prompts.map(prompt => prompt.maxAttempts), [undefined, undefined, 1, 1]);
     assert(signals.every(signal => signal === signals[0]));
     assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2); assert.equal(h.state.writes, 1);
@@ -326,12 +328,13 @@ test('near-duplicate report outcomes, qualifications and conflicting details rem
     `${base} Staff allowed phones inside at my visit.`, `${base} Staff did not allow phones inside at my visit.`];
   const corpus = { partial: false, sources: bodies.map((body, index) => ({ ...repeatedSource,
     id: `a:near-repeat-${index}`, title: `Synthetic near-repeat ${index}`, body })) };
+  const distinctReports = corpus.sources.filter((source, index, all) => all.findIndex(item => item.body === source.body) === index);
   const candidate = { ...representativeSummary, claims: representativeSummary.claims.map(claim => ({ ...claim,
     evidence: claim.evidence.map(item => ({ ...item, sourceId: corpus.sources[0].id })) })) };
   const seen = [];
   const h = withRepeatedSummary(harness({ generate: async prompt => {
     const context = JSON.parse(prompt.user);
-    assert.deepEqual(context.sources.map(({ id, body }) => ({ id, body })), corpus.sources.map(({ id, body }) => ({ id, body })));
+    assert.deepEqual(context.sources.map(({ id, body }) => ({ id, body })), distinctReports.map(({ id, body }) => ({ id, body })));
     seen.push(prompt.outputKind ?? 'answer');
     if (prompt.outputKind === 'review') return taskIncompleteReview(prompt);
     return JSON.stringify(seen.length === 1 ? candidate : { status: 'insufficient', claims: [], disagreements: [], unanswered: [] });
@@ -340,7 +343,7 @@ test('near-duplicate report outcomes, qualifications and conflicting details rem
   assert.equal(result.status, 'insufficient'); assert.deepEqual(result.claims, []);
   assert.deepEqual(seen, ['answer', 'review', 'answer']);
   assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2);
-  assert.deepEqual(corpus.sources.map(item => item.body), bodies, 'Preparation must not mutate or deduplicate source reports');
+  assert.deepEqual(corpus.sources.map(item => item.body), bodies, 'Deduplication changes only the prepared summary view, never the original reports');
 });
 
 const conflictSources = ['At my visit, staff allowed phones inside the venue.', 'At my visit, staff did not allow phones inside the venue.']
