@@ -24,7 +24,7 @@ type SortMode = typeof SORTS[number][0];
 type PostKind = '' | 'question' | 'discussion' | 'promotion';
 
 export function CommunityHome({ initialKind = '', experience = false }: { initialKind?: PostKind; experience?: boolean } = {}) {
-  const { user, loading: authLoading, demoMode } = useAuth();
+  const { user, demoMode } = useAuth();
   const searchParams = useSearchParams();
   const queryString = searchParams.toString();
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -53,7 +53,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const [layoutWidth, setLayoutWidth] = useState(1000);
   const maxPanelWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, layoutWidth - 440));
   const visiblePanelWidth = Math.min(panelWidth, maxPanelWidth);
-  const askHref = user || authLoading ? '/ask' : '/login?next=%2Fask#sign-in';
+  const askHref = user ? '/ask' : '/login?next=%2Fask#sign-in';
 
   useEffect(() => {
     try {

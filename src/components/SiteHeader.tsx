@@ -68,7 +68,7 @@ export function SiteHeader() {
         )}
         <FeedbackLauncher />
         {process.env.NEXT_PUBLIC_SITE_URL === 'https://visathreads.com' && <Link href="/assistant" aria-label="Ask VisaThreads assistant" title="Ask VisaThreads assistant" className="header-secondary-action icon-control text-teal-800"><Sparkles size={20} aria-hidden="true" /></Link>}
-        <Link href={loading || user ? '/ask' : '/login?next=%2Fask#sign-in'} aria-label="Ask a Question" title="Ask a Question" className="header-secondary-action header-ask">
+        <Link href={user ? '/ask' : '/login?next=%2Fask#sign-in'} aria-label="Ask a Question" title="Ask a Question" className="header-secondary-action header-ask">
           <Plus size={16} /> <span className="hidden sm:inline">Ask</span>
         </Link>
         {loading ? <span role="status" aria-label="Checking account" className="header-account h-10 w-10 animate-pulse rounded-full bg-slate-100" /> : user ? (

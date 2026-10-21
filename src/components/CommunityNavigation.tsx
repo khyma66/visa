@@ -8,8 +8,8 @@ import { useAuth } from './AuthProvider';
 export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const params = useSearchParams();
-  const { user, loading } = useAuth();
-  const askHref = user || loading ? '/ask' : '/login?next=%2Fask#sign-in';
+  const { user } = useAuth();
+  const askHref = user ? '/ask' : '/login?next=%2Fask#sign-in';
   const popular = pathname === '/' && params.get('sort') === 'score';
   const sections = [
     ...(mobile ? [{ name: 'Create & Ask', links: [

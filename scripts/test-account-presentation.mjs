@@ -63,7 +63,7 @@ test('Ask a Question header action stays visible and routes signed-out members t
   const ask = auth => links(render(SiteHeader, { auth })).find(link => link.label === 'Ask');
   const signedOut = ask({ user: null, profile: null, loading: false });
   assert.equal(new URL(signedOut.href, 'https://visathreads.com').searchParams.get('next'), '/ask');
-  assert.equal(ask({ user: null, profile: null, loading: true }).href, '/ask');
+  assert.equal(ask({ user: null, profile: null, loading: true }).href, '/login?next=%2Fask#sign-in');
   assert.equal(ask({ user: { id: 'member-one' }, profile, loading: false }).href, '/ask');
 });
 
