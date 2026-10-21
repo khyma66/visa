@@ -19,6 +19,7 @@ name: Release current VisaThreads AI features
 # Retry only marked transient Supabase Auth timeouts during post-deploy invalid-session smoke.
 # Keep repeated-report summaries singular and cited at the material-fact level.
 # Require a separate H-4 stamping experience synthesis before releasing the updated assistant.
+# Treat documented H-4 visa interviews as useful partial answers without inventing EAD involvement.
 
 on:
   workflow_dispatch:
