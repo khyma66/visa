@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantSearchIntent, assistantStandaloneFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v27-experience-review';
+export const ASSISTANT_VERSION = 'grounded-chat-v28-experience-intent';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -267,12 +267,20 @@ function assistantPromptSelection(input: AssistantRequest, corpus: AssistantCorp
 /** Shared task/context serialization; reviews need full bodies, never a new span catalog. */
 export function assistantPromptContext(input: AssistantRequest, corpus: AssistantCorpus) {
   const { referencedPost, resolvedReference, resolvedOrdinal, question, selectedSummary } = assistantPromptSelection(input, corpus);
+  // The common shorthand "H4 EAD stamping experiences" can otherwise be read
+  // as a demand for an EAD-stamping event. Share one precise interpretation
+  // between generation and independent review without changing retrieval.
+  const h4EadStampingExperience = input.mode === 'ask' && input.scope.kind === 'public' && !resolvedReference
+    && /^(?:(?:please|can you|could you)\s+)*(?:give|share|tell|get)(?:\s+me)?\s+h-?4\s+ead\s+stamping\s+experiences?[?.!]*$/i.test(question.trim());
+  const resolvedQuestion = h4EadStampingExperience
+    ? 'Summarize members’ firsthand H-4 visa-stamping experiences. Include EAD-specific details only when those same reports explicitly provide them; otherwise state that the cited stamping reports do not give EAD-specific details.'
+    : question;
   return { task: selectedSummary ? 'summary' : input.mode,
     ...(selectedSummary ? { summaryStyle: 'brief' as const } : {}),
     // Equivalent generic Explain/Summarize commands have the same resolved
     // task. Keep the original wording in the UI, not as conflicting model task
     // hints after the server has already selected the discussion.
-    ...(input.mode === 'ask' ? { question: selectedSummary ? 'Summarize the selected discussion.' : redactAssistantText(question), previousQuestions: resolvedOrdinal || selectedSummary ? [] : assistantPreviousQuestions(input).map(redactAssistantText) } : {}),
+    ...(input.mode === 'ask' ? { question: selectedSummary ? 'Summarize the selected discussion.' : redactAssistantText(resolvedQuestion), previousQuestions: resolvedOrdinal || selectedSummary ? [] : assistantPreviousQuestions(input).map(redactAssistantText) } : {}),
     ...(resolvedReference ? { resolvedDiscussion: { questionId: referencedPost!.questionId, sourceIds: corpus.sources.map(source => source.id) } } : {}),
     interval: { since: corpus.since, until: corpus.until }, partial: corpus.partial,
     sources: corpus.sources.map(s => ({ id: s.id, questionId: s.questionId, kind: s.kind, speakerRole: s.speakerRole, title: s.title,

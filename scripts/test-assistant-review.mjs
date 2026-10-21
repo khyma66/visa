@@ -39,6 +39,8 @@ test('experience reviewer treats sourced H-4 stamping reports as relevant even w
   assert.match(generation.system, /Do not return insufficient solely because EAD details are absent/);
   assert.match(review.system, /do not demand EAD-specific records/);
   assert.match(review.system, /avoid[s]? asserting EAD involvement/);
+  assert.match(JSON.parse(generation.user).question, /Include EAD-specific details only when those same reports explicitly provide them/);
+  assert.equal(JSON.parse(review.user).question, JSON.parse(generation.user).question);
 });
 
 test('reporting dates must not become original appointment dates and rejected drafts stay hidden', () => {
