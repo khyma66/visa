@@ -46,7 +46,7 @@ function PostResults({ result }: { result: AssistantResult }) {
     <time dateTime={post.createdAt} className="mt-2 block text-xs text-slate-500">{dateLabel(post.createdAt)}</time>
   </li>)}</ol>;
   return <div aria-label="Assistant response">
-    <p className="text-base leading-relaxed text-slate-800">{posts.length ? 'Here are discussions that match your question.' : result.unanswered[0] || 'No matching posts found. Try a visa type, location, or another keyword.'}</p>
+    <p className="text-base leading-relaxed text-slate-800">{posts.length ? result.postsIntro ?? 'Here are discussions that match your question.' : result.unanswered[0] || 'No matching posts found. Try a visa type, location, or another keyword.'}</p>
     {cards(posts.slice(0, 8))}
     {posts.length > 8 && <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-teal-700">{`Show ${posts.length - 8} more posts`}</summary>{cards(posts.slice(8), 8)}</details>}
     <p className="mt-3 text-xs leading-5 text-slate-500">{result.notice}</p>
@@ -80,7 +80,7 @@ function Result({ result, catchup }: { result: AssistantResult; catchup: boolean
     {!!result.disagreements.length && <div className="mt-3 border-l-2 border-amber-300 pl-3"><p className="mb-2 text-xs font-semibold text-amber-900">Related perspectives</p><Claims claims={result.disagreements} sources={result.sources} /></div>}
     {result.status !== 'insufficient' && !!result.unanswered.length && <details className="mt-3 text-xs text-slate-500"><summary className="cursor-pointer">Still unclear</summary><ul className="mt-2 list-disc space-y-1 pl-4 leading-5">{result.unanswered.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
     {limitation && <p className="mt-3 text-xs leading-5 text-amber-800">{limitation}</p>}
-    <details className="mt-3 text-xs text-slate-500">
+    {(citedSources.length > 0 || result.coverage.partial) && <details className="mt-3 text-xs text-slate-500">
       <summary className="cursor-pointer font-medium">{citedSources.length ? `Sources · ${citedSources.length}` : 'About this answer'}</summary>
       <div className="mt-3 space-y-3 leading-5">{citedSources.map(({ source, index, href, quotes }) => <div key={source.id} className="border-l-2 border-teal-100 pl-3">
           <a href={href} className="font-semibold text-teal-700 underline">[{index + 1}] {source.title}</a>
@@ -93,7 +93,7 @@ function Result({ result, catchup }: { result: AssistantResult; catchup: boolean
         <p>{result.notice}</p>
         <p>{result.coverage.sourceCount} source{result.coverage.sourceCount === 1 ? '' : 's'} checked{result.coverage.since && <> · {dateLabel(result.coverage.since)}</>}{result.coverage.until && <> to {dateLabel(result.coverage.until)}</>}<br />Generated {dateLabel(result.generatedAt)}{result.cached && ' · Cached answer'}</p>
       </div>
-    </details>
+    </details>}
   </div>;
 }
 

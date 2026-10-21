@@ -66,7 +66,7 @@ export function parseAssistantResult(value: unknown): AssistantResult | null {
     || (typeof coverage.since === 'string' && typeof coverage.until === 'string' && Date.parse(coverage.since) >= Date.parse(coverage.until))) return null;
   const posts: AssistantPostMatch[] = [];
   if (value.kind === 'posts') {
-    if (!list(value.posts, 48) || parsedClaims.length || disagreements.length) return null;
+    if (!list(value.posts, 48) || parsedClaims.length || disagreements.length || (value.postsIntro !== undefined && !text(value.postsIntro, 400))) return null;
     const seen = new Set<string>();
     for (const post of value.posts) {
       if (!object(post) || !id(post.questionId) || !id(post.sourceId) || !text(post.title, 1000) || !text(post.excerpt, 2000, 0)
@@ -75,9 +75,9 @@ export function parseAssistantResult(value: unknown): AssistantResult | null {
       seen.add(post.questionId);
       posts.push({ questionId: post.questionId, sourceId: post.sourceId, title: post.title, excerpt: post.excerpt, url: post.url, createdAt: post.createdAt });
     }
-  } else if (value.posts !== undefined || (value.status === 'answered' && !parsedClaims.length && !disagreements.length)) return null;
+  } else if (value.posts !== undefined || value.postsIntro !== undefined || (value.status === 'answered' && !parsedClaims.length && !disagreements.length)) return null;
   return {
-    ...(value.kind === 'posts' ? { kind: 'posts' as const, posts } : {}), status: value.status as AssistantResult['status'],
+    ...(value.kind === 'posts' ? { kind: 'posts' as const, posts, ...(value.postsIntro !== undefined ? { postsIntro: value.postsIntro as string } : {}) } : {}), status: value.status as AssistantResult['status'],
     // A malformed insufficient result must never display unsupported claims.
     claims: value.status === 'insufficient' ? [] : parsedClaims, disagreements: value.status === 'insufficient' ? [] : disagreements,
     unanswered: value.unanswered as string[], sources,

@@ -148,6 +148,7 @@ export function buildAssistantPostSearchResult(input: AssistantRequest, corpus: 
   }));
   return {
     kind: 'posts', status: sources.length ? 'answered' : 'insufficient',
+    ...(sources.length && query?.intent.softRecent ? { postsIntro: `The newest matching discussion I found was published on ${sources[0].createdAt.slice(0, 10)} (UTC). Here are the latest available posts, newest first.` } : {}),
     posts: sources.map(source => ({ questionId: source.questionId, sourceId: source.id, title: source.title,
       url: source.url, excerpt: source.body, createdAt: source.createdAt })),
     claims: [], disagreements: [], unanswered: sources.length ? [] : [query?.intent.unsupportedWindow ? 'Choose a time window of at most 366 days.' : query?.intent.since ? 'No matching posts were found in the requested posting-date window. Older discussions may exist; ask for latest posts without a date limit to search them.' : assistantMorePosts(input.question ?? '') ? 'No additional posts in this search window. Try a more specific topic.' : 'No matching posts found. Try a broader topic.'], sources,

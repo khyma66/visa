@@ -660,13 +660,13 @@ const routeImports = {
 const routeJs = (await transform(routeSource, { loader: 'ts', format: 'esm', target: 'es2022' })).code.replace(/(from\s+)(['"])([^'"]+)\2/g, (_, prefix, _quote, name) => { assert(routeImports[name], name); return prefix + JSON.stringify(routeImports[name]); });
 const route = await import(moduleUrl(routeJs));
 
-test('actual route and retrieval keep recent and calendar windows fixed through revalidation across midnight', async () => {
+test('actual route and retrieval keep soft recency and explicit windows stable through revalidation across midnight', async () => {
   const env = { NEXT_PUBLIC_SITE_URL: 'https://visathreads.com', NEXT_PUBLIC_SUPABASE_URL: 'https://cycnichledvqbxevrwnt.supabase.co', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'public-fixture-key', ASSISTANT_PROJECT_REF: 'cycnichledvqbxevrwnt', ASSISTANT_PROVIDER: 'groq', GROQ_API_KEY: 'synthetic-local-key', ASSISTANT_ENABLED: 'true', COMMUNITY_SOURCE_MODE: 'live' };
   const previous = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));
   const realNow = Date.now; Object.assign(process.env, env);
   try {
     for (const [question, location, createdAt, expectedSince, expectedUntil] of [
-      ['give recent experience for hyderabad stamping', 'Hyderabad', '2026-10-17T12:00:00Z', '2026-09-17T23:59:59.990Z', '2026-10-17T23:59:59.990Z'],
+      ['give recent experience for hyderabad stamping', 'Hyderabad', '2026-10-17T12:00:00Z', null, null],
       ['find Chennai stamping experiences from the last 7 days', 'Chennai', '2026-10-17T12:00:00Z', '2026-10-10T23:59:59.990Z', '2026-10-17T23:59:59.990Z'],
       ['show Delhi stamping experiences from yesterday', 'Delhi', '2026-10-16T12:00:00Z', '2026-10-16T00:00:00.000Z', '2026-10-17T00:00:00.000Z'],
     ]) {
@@ -695,7 +695,7 @@ test('actual route and retrieval keep recent and calendar windows fixed through 
       assert.deepEqual(anchors, [start, start]); assert.equal(searches.length, 2);
       assert.deepEqual(searches[0], searches[1], 'Source revalidation must use the original window');
       assert.equal(searches[0].since_time, expectedSince); assert.equal(searches[0].until_time, expectedUntil);
-      assert.equal(result.coverage.since, expectedSince); assert.equal(result.coverage.until, expectedUntil);
+      assert.equal(result.coverage.since, expectedSince ?? undefined); assert.equal(result.coverage.until, expectedUntil ?? undefined);
       assert.equal(result.generatedAt, new Date(start).toISOString());
       assert.equal(providerCalls, 0); assert.equal(reservations, 0);
     }
