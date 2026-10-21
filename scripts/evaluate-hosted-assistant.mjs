@@ -29,6 +29,7 @@ async function api(path, options = {}) {
   assert(value.success === true, `Cloudflare ${options.method ?? 'GET'} ${path} was unsuccessful`);
   return value.result;
 }
+cases.push('hfour-ead-stamping-experience-synthesis');
 cases.push('large-discussion-summary');
 cases.push('numbered-interview-transcript');
 cases.push('heterogeneous-report-summary');

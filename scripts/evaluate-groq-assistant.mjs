@@ -19,6 +19,7 @@ const worker = 'visaflow';
 const apiRoot = `https://api.cloudflare.com/client/v4/accounts/${account}`;
 const cases = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context', 'thank-you-confirmation', 'public-multiple-thread-synthesis'];
 const smoke = process.argv.includes('--smoke');
+cases.push('hfour-ead-stamping-experience-synthesis');
 cases.push('large-discussion-summary');
 cases.push('numbered-interview-transcript');
 cases.push('heterogeneous-report-summary');

@@ -666,7 +666,7 @@ test('actual route and retrieval keep soft recency and explicit windows stable t
   const realNow = Date.now; Object.assign(process.env, env);
   try {
     for (const [question, location, createdAt, expectedSince, expectedUntil] of [
-      ['give recent experience for hyderabad stamping', 'Hyderabad', '2026-10-17T12:00:00Z', null, null],
+      ['show recent experience for hyderabad stamping', 'Hyderabad', '2026-10-17T12:00:00Z', null, null],
       ['find Chennai stamping experiences from the last 7 days', 'Chennai', '2026-10-17T12:00:00Z', '2026-10-10T23:59:59.990Z', '2026-10-17T23:59:59.990Z'],
       ['show Delhi stamping experiences from yesterday', 'Delhi', '2026-10-16T12:00:00Z', '2026-10-16T00:00:00.000Z', '2026-10-17T00:00:00.000Z'],
     ]) {

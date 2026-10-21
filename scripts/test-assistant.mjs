@@ -283,7 +283,7 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v25-summary-repeat-collapse','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v26-experience-synthesis','Semantic change invalidates old cached answers');
 });
 test('summary preparation collapses exact repeated reports but preserves distinct material differences',()=>{
   const repeated='I attended my appointment on Wednesday. My application was approved. My document arrived on Saturday. This is only my own experience, not a standard timeline.';

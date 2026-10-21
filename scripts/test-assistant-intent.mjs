@@ -12,6 +12,7 @@ const search = moduleUrl(compile(await read('assistant-search')).replace("'./ass
 const data = moduleUrl(compile(await read('assistant-data')).replace("import archive from '@visa/archive';", 'const archive = new Proxy({}, { get: (_, key) => globalThis.__intentArchive[key] });')
   .replace("'./tagging'", JSON.stringify(tagging)).replace("'./assistant-core'", JSON.stringify(core)).replace("'./assistant-search'", JSON.stringify(search)).replace("'./assistant-context'", JSON.stringify(context)));
 const { assistantSearchIntent, assistantSourceMatchesIntent, assistantRefersToEarlierTurn, assistantPreviousPost } = await import(context);
+const { assistantPrompt } = await import(core);
 const { assistantPostSearchQuery, buildAssistantPostSearchResult } = await import(search);
 const { retrieveAssistantCorpus } = await import(data);
 const now = Date.parse('2026-10-17T12:00:00Z');
@@ -37,9 +38,7 @@ function client() {
 
 test('experience and story lookup paraphrases normalize multiple cities without rerouting explanation/policy asks', () => {
   for (const [text, city] of [
-    ['give recent experience for hyderabad stamping', 'hyderabad'],
     ['Show recent experiences about Chennai stamping', 'chennai'],
-    ['Can you share stories about Mumbai visa interviews?', 'mumbai'],
     ['Are there recent Toronto stamping experiences?', 'toronto'],
     ['Find recent London stamping experiences', 'london'],
     ['Show me the most recent Chennai experience', 'chennai'],
@@ -49,7 +48,9 @@ test('experience and story lookup paraphrases normalize multiple cities without 
     assert(query, text); assert.deepEqual(query.intent.locations, [city]);
     assert(!query.terms.includes('recent')); assert(!query.terms.includes('experience')); assert(!query.terms.includes('story'));
   }
-  for (const text of ['Explain Hyderabad stamping experiences', 'Give advice based on Chennai experiences', 'Show how posts on stamping differ', 'What are the latest visa rules?', 'Can I get a visa based on these stories?'])
+  for (const text of ['give recent experience for hyderabad stamping', 'Can you share stories about Mumbai visa interviews?',
+    'give h4 ead stamping experiences', 'Explain Hyderabad stamping experiences', 'Give advice based on Chennai experiences',
+    'Show how posts on stamping differ', 'What are the latest visa rules?', 'Can I get a visa based on these stories?'])
     assert.equal(assistantPostSearchQuery(ask(text), now), null, text);
 });
 test('only explicit relative windows constrain timestamps; recent and latest order newest available', () => {
@@ -97,11 +98,11 @@ test('newest available results beat lexical popularity; only explicit windows ca
   const result = buildAssistantPostSearchResult(latest, await retrieveAssistantCorpus(client(), latest, now), now);
   assert.deepEqual(result.posts.map(post => post.questionId), ['apify-new', 'apify-old']);
   archive([q('apify-old', 'My Hyderabad stamping completed.', '2025-01-01T00:00:00Z')]);
-  const recent = ask('Give recent experience for Hyderabad stamping');
+  const recent = ask('Show recent experience for Hyderabad stamping');
   const available = buildAssistantPostSearchResult(recent, await retrieveAssistantCorpus(client(), recent, now), now);
   assert.equal(available.status, 'answered'); assert.deepEqual(available.posts.map(post => post.questionId), ['apify-old']);
   assert.equal(available.coverage.since, undefined); assert.match(available.postsIntro, /2025-01-01/);
-  const explicit = ask('Give Hyderabad stamping experiences from the last 30 days');
+  const explicit = ask('Show Hyderabad stamping experiences from the last 30 days');
   const empty = buildAssistantPostSearchResult(explicit, await retrieveAssistantCorpus(client(), explicit, now), now);
   assert.equal(empty.status, 'insufficient'); assert.equal(empty.posts.length, 0); assert(empty.coverage.since); assert.match(empty.unanswered[0], /Older discussions may exist/);
 });
@@ -112,12 +113,27 @@ test('H4 EAD lookup returns latest matching experiences across older posting dat
     q('apify-h4-latest', 'My H-4 EAD application was approved.', '2026-09-11T17:56:57Z', 'H4 EAD experience'),
     q('apify-h4-no-ead', 'My H4 stamping experience.', '2026-10-15T12:00:00Z', 'H4 stamping'),
   ]);
-  const input = ask('give recent h4 ead experiences');
+  const input = ask('show recent h4 ead experiences');
   const query = assistantPostSearchQuery(input, now);
   assert(query); assert.deepEqual(query.intent.visas, ['h4']); assert.equal(query.intent.since, undefined);
   const result = buildAssistantPostSearchResult(input, await retrieveAssistantCorpus(client(), input, now), now);
   assert.deepEqual(result.posts.map(post => post.questionId), ['apify-h4-latest', 'apify-h4-older']);
   assert.match(result.postsIntro, /2026-09-11/); assert.equal(result.coverage.since, undefined);
+});
+test('an H4 EAD stamping experience request synthesizes consular reports, never a driving-license stamp mention', async () => {
+  archive([
+    q('apify-2257869925028123', 'I am on an H4 dependent visa (no EAD). Both our visa stamps expired. Today I got a new driving license at the Houston DPS.', undefined, 'New DL approval in Houston'),
+    q('apify-london', 'I attended my H4 stamping renewal appointment in London. The officer said it was approved, and the portal later changed from refused to approved.', undefined, 'H4 stamping renewal'),
+    q('apify-chennai', 'I attended my H4 visa interview in Chennai. I received a 221(g) slip; my passport came back without a visa after three months.', undefined, 'H4 visa interview'),
+  ]);
+  const input = ask('give h4 ead stamping experiences');
+  const intent = assistantSearchIntent(input, now);
+  assert.equal(intent.task, 'answer'); assert.equal(intent.experience, true);
+  const corpus = await retrieveAssistantCorpus(client(), input, now);
+  assert.deepEqual(new Set(corpus.sources.map(row => row.questionId)), new Set(['apify-london', 'apify-chennai']));
+  const prompt = assistantPrompt(input, corpus);
+  assert.match(prompt.system, /Synthesize what different members personally reported/);
+  assert.match(prompt.system, /EAD/);
 });
 test('native and imported reads receive pre-limit constraints and bounded date filters', async () => {
   archive([q('apify-parent', 'My Hyderabad H-1B stamping report.')]);
