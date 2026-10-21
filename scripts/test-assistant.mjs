@@ -283,19 +283,30 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v24-summary-attribution','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v25-summary-repeat-collapse','Semantic change invalidates old cached answers');
 });
-test('representative summary instructions preserve duplicate provenance and every material difference',()=>{
+test('summary preparation collapses exact repeated reports but preserves distinct material differences',()=>{
   const repeated='I attended my appointment on Wednesday. My application was approved. My document arrived on Saturday. This is only my own experience, not a standard timeline.';
   const reports=[repeated,repeated,'I attended my appointment on Wednesday. My application is still pending. I do not know the decision date. This is only my personal experience.']
-    .map((body,index)=>({...source,id:`a:summary-${index}`,kind:'reply',body}));
+    .map((body,index)=>({...source,id:`a:summary-${index}`,body}));
   const corpus={sources:reports,partial:false};
-  const prompt=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},corpus);
+  const summaryInput={mode:'summary',scope:{kind:'post',id}};
+  const prepared=core.prepareAssistantCorpus(corpus,summaryInput);
+  const prompt=core.assistantPrompt(summaryInput,prepared,corpus);
   const data=JSON.parse(prompt.user);
-  assert.deepEqual(data.sources.map(item=>[item.id,item.body]),reports.map(item=>[item.id,item.body]),'Representative wording must not deduplicate or edit the evidence');
-  for(const report of reports) assert(prompt.evidenceSpans.some(span=>span.sourceId===report.id));
+  assert.deepEqual(data.sources.map(item=>[item.id,item.body]),[[reports[0].id,reports[0].body],[reports[2].id,reports[2].body]],'Only exact repeated summary material is represented once');
+  assert(prompt.evidenceSpans.some(span=>span.sourceId===reports[0].id));
+  assert(!prompt.evidenceSpans.some(span=>span.sourceId===reports[1].id));
+  assert(prompt.evidenceSpans.some(span=>span.sourceId===reports[2].id));
   assert(prompt.evidenceSpans.some(span=>span.quote.includes('still pending')));
   assert(prompt.evidenceSpans.some(span=>span.quote.includes('do not know the decision date')));
+  const questionPrompt=core.assistantPrompt(input,core.prepareAssistantCorpus(corpus,input),corpus);
+  assert.equal(JSON.parse(questionPrompt.user).sources.length,3,'Deduplication is limited to summaries');
+  const separateReports={sources:[reports[0],
+    {...reports[1],questionId:'00000000-0000-4000-8000-000000000099'},
+    {...reports[1],id:'a:summary-later',createdAt:'2026-10-14T10:00:00Z',updatedAt:'2026-10-14T10:00:00Z'}],partial:false};
+  assert.equal(core.prepareAssistantCorpus(separateReports,summaryInput).sources.length,3,'Identical words in a different discussion or at a different time remain independent reports');
+  assert.match(prompt.system,/the server presents exact repeated records from the same discussion and timestamps/);
   assert.match(prompt.system,/Add other reports when they contribute distinct material facts, corrections, uncertainty or relevant differences/);
   assert.match(prompt.system,/A requested comparison must still preserve both sides and their citations/);
   assert.match(prompt.system,/SUMMARY FORMAT EXAMPLE ONLY, NOT EVIDENCE/);

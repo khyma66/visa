@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantStandaloneFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v24-summary-attribution';
+export const ASSISTANT_VERSION = 'grounded-chat-v25-summary-repeat-collapse';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -202,18 +202,33 @@ export function prepareAssistantCorpus(corpus: AssistantCorpus, input?: Assistan
     ids.add(source.id);
     return true;
   });
-  if (eligible.length > 24) { partial = true; reasons.add('context-limit'); }
   const summary = input?.mode === 'summary' || !!(input && assistantPromptSelection(input, corpus).selectedSummary);
-  const candidates = eligible.slice(0, 24).map(source => ({ source, body: redactAssistantText(source.body),
+  const preparedCandidates = eligible.map(source => ({ source, body: redactAssistantText(source.body),
     title: redactAssistantText(source.title).slice(0, 240),
     parentContext: source.parentContext ? redactAssistantText(source.parentContext).slice(0, 1000) : undefined }));
-  for (const [index, { source, body, title, parentContext }] of candidates.entries()) {
+  const seenSummaryBodies = new Set<string>();
+  const candidates = summary ? preparedCandidates.filter(candidate => {
+    // Repeated archive copies can have different IDs/titles without adding
+    // evidence. Keep one representative body so the model cannot turn record
+    // count into a claim about multiple people; preserve distinct discussions,
+    // events, roles, provenance or context as separate reports.
+    const identity = JSON.stringify([candidate.source.kind, candidate.source.questionId,
+      candidate.source.createdAt, candidate.source.updatedAt,
+      candidate.source.speakerRole ?? null, candidate.source.provenance ?? null, candidate.source.communityId ?? null,
+      candidate.parentContext ?? '', candidate.body.replace(/\s+/g, ' ').trim()]);
+    if (seenSummaryBodies.has(identity)) return false;
+    seenSummaryBodies.add(identity);
+    return true;
+  }) : preparedCandidates;
+  if (candidates.length > 24) { partial = true; reasons.add('context-limit'); }
+  const boundedCandidates = candidates.slice(0, 24);
+  for (const [index, { source, body, title, parentContext }] of boundedCandidates.entries()) {
     if (remaining <= 0 || (!summary && remaining < 200)) { partial = true; reasons.add('context-limit'); break; }
     const available = remaining - title.length - (parentContext?.length ?? 0);
     // Summaries need conclusions, not just the first 4000 characters. Preserve
     // full contiguous reports within the unchanged total budget, reserving
     // small later reports/replies and their exact metadata costs where feasible.
-    const reserve = summary ? candidates.slice(index + 1).reduce((sum, item) => sum + item.title.length
+    const reserve = summary ? boundedCandidates.slice(index + 1).reduce((sum, item) => sum + item.title.length
       + (item.parentContext?.length ?? 0) + Math.min(item.body.length, 400), 0) : 0;
     const cap = summary ? Math.min(available, Math.max(400, available - reserve)) : Math.min(4000, available);
     if (cap <= 0 || (!summary && cap < 100)) { partial = true; reasons.add('context-limit'); break; }
@@ -293,6 +308,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       'Attribute reports to members. A question is not evidence its premise is true. Never infer current visa rules, eligibility, legal advice, universal consensus, predictions or general timelines from anecdotes. Explicitly stated individual events, outcomes, dates and timing ARE evidence of what that member reported and may be summarized with attribution; they are not evidence of a rule or of another person\'s outcome.',
       'Preserve explicit material qualifications in the claim text, not only inside its evidence quote. If a source says its timeline is only an individual experience, not standard or guaranteed, say that clearly alongside the reported events. Attribution alone must not hide that stated limitation. Preserve uncertainty, conditions and corrections the same way.',
       'Build each statement evidence-first: select the spans covering its event, stated timing and material qualification, then write only those supported facts. Prefer one reported event or outcome per claim rather than compressing a whole timeline into one sentence. A citation for an opening event is not a useful citation for a later outcome or qualification: select those spans too, or split the facts into separate claims. Do not attach one event\'s date to another undated event.',
+      'For a summary, the server presents exact repeated records from the same discussion and timestamps once under one representative source ID. Treat those exact repeats as one report. Different discussions, timing, bodies or contexts remain separate, and their material differences must be preserved.',
       'When multiple records repeat the same material facts, summarize a representative report in the singular: "One report...", then "The same report..." with that report\'s own supporting spans. Do not describe several people, consensus, prevalence or corroboration merely because repeated text or different source IDs exist. Add other reports when they contribute distinct material facts, corrections, uncertainty or relevant differences; never discard those differences to make a representative summary. A requested comparison must still preserve both sides and their citations.',
       'For a genuinely multi-report statement, cite the evidence from each report that the statement actually describes. If a compound statement needs more than four spans to cover its facts across those reports, split it into atomic claims or narrow its attribution. Never solve the citation limit by citing only one report for plural wording or only the same opening event from several reports. This is a limit on each statement\'s evidence, not a reason to omit essential outcomes or qualifications.',
       'Do not invent facts, URLs or statistics. Do not treat votes or accepted answers as verification.',
