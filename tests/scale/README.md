@@ -18,7 +18,7 @@ Every planning command exits **2** because it is not execution approval. Its JSO
 For a small operational check, supply the independently verified current dev deployment SHA:
 
 ```sh
-npm run scale:canary -- 6f494db74c00feb652adcb49a5b12960de23793f
+npm run scale:canary -- 0715bcb2b9652e9eed94fae38040a2704d4c8708
 ```
 
 This makes **six sequential GET requests** to the exact dev origin: health, home, login, messages, AI capability flags, health again. It verifies the expected clean deployment at both ends, development environment, noindex headers, app responses and disabled AI flags. It does not sign in or execute browser JavaScript. A redirect, challenge, non-200 response, changed build or malformed API response fails immediately without retries. It does not inspect private data or measure database health.
