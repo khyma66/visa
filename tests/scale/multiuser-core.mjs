@@ -3,11 +3,11 @@ import { randomUUID, randomBytes, createCipheriv, createDecipheriv } from 'node:
 import { setTimeout as delay } from 'node:timers/promises';
 import { TARGET, validateTarget, boundedBody } from './free-tier.mjs';
 
-export const COHORTS = Object.freeze([10, 50, 100]);
+export const COHORTS = Object.freeze([10, 50, 100, 150]);
 export const POLICY = '2026-10-06-preview-v2';
 export const MARKER = '[SYNTHETIC TEST — NOT IMMIGRATION ADVICE]';
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-export function checkCount(count) { assert(COHORTS.includes(count), 'Only 10, 50 or 100 users; Free has a 200-connection ceiling.'); }
+export function checkCount(count) { assert(COHORTS.includes(count), 'Only 10, 50, 100 or 150 users; Free has a 200-connection ceiling.'); }
 export function checkEvidence(e, count, now = Date.now()) {
   checkCount(count); validateTarget(e?.target);
   assert(e.schemaVersion === 1 && e.supabasePlan === 'free', 'Verify the actual Free plan');
@@ -15,12 +15,13 @@ export function checkEvidence(e, count, now = Date.now()) {
   assert(Number.isFinite(age) && age >= 0 && age <= 3600000, 'Quota evidence must be less than one hour old');
   for (const key of ['existingConnections', 'backgroundEventsPerSecond', 'databaseMB', 'remainingEgressMB', 'remainingRealtimeMessages', 'remainingMAU'])
     assert(Number.isFinite(e[key]) && e[key] >= 0, `Missing quota evidence: ${key}`);
-  assert(e.existingConnections + count <= 150, 'Reserve at least 50 of the 200 connections');
+  assert(e.existingConnections + count <= (count === 150 ? 180 : 150),
+    'Reserve at least 50 connections through 100 users or 20 connections at 150 users');
   assert(e.backgroundEventsPerSecond <= 20 && e.databaseMB <= 400, 'Insufficient operating headroom');
   assert(e.remainingEgressMB >= 50 && e.remainingRealtimeMessages >= 20000 && e.remainingMAU >= count, 'Insufficient remaining quota');
   assert(e.noConcurrentLoad === true && e.outboundHooksDisabled === true && e.passwordAuthVerified === true && e.schemaVerified === true,
     'Verify exclusive test window, disabled outbound hooks, password/CAPTCHA compatibility and deployed schema');
-  if (count > 10) assert(e.previousStage?.users === (count === 50 ? 10 : 50) && e.previousStage?.passed === true && e.previousStage?.cleanupVerified === true,
+  if (count > 10) assert(e.previousStage?.users === COHORTS[COHORTS.indexOf(count) - 1] && e.previousStage?.passed === true && e.previousStage?.cleanupVerified === true,
     'Previous smaller hosted stage and cleanup must pass first');
 }
 export function newManifest(count) {

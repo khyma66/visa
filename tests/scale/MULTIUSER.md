@@ -6,13 +6,13 @@ Checked October 21, 2026: Supabase Free permits **200 concurrent Realtime connec
 
 200 connections is at most 200 users if each has one connected client and no other sockets use the project. Extra tabs, background clients and reconnect overlap reduce the number. Monthly active users are not simultaneous users. There is no single guaranteed maximum for non-Realtime traffic; workload, query costs, database resources, request rates and remaining allowances determine it.
 
-This harness supports **10 → 50 → 100 users**. It intentionally refuses 200: the enforced test maximum is 100, existing connections plus the cohort cannot exceed 150, and at least 50 connections remain reserved. This is a conservative operator policy, not a provider guarantee. It does not change the provider limit or prove 100-user hosted capacity.
+This harness supports **10 → 50 → 100 → 150 users**. It intentionally refuses 200: the enforced test maximum is 150. Through the 100-user stage, existing connections plus the cohort cannot exceed 150, leaving at least 50 reserved. At 150 users, the aggregate cannot exceed 180, leaving at least 20 reserved; this stage requires no more than 30 existing connections. This is an operator policy, not a provider guarantee. It does not prove 150-user hosted capacity.
 
 ## Implemented and verified
 
-`npm run test:multiuser` runs the same paired-message journey at 10, 50 and 100 distinct local PostgreSQL identities using the real application migrations and RLS. Each user sends and reads a partner message; every pair checks idempotency, conflicting-ID rejection, outsider read/write denial, read receipts, blocking and persistent history. The local tests also exercise posting, replies, votes and accepted answers. The 100-user case has 50 conversations and 100 messages, plus 50 posts, 50 replies and 100 votes.
+`npm run test:multiuser` runs the same paired-message journey at 10, 50, 100 and 150 distinct local PostgreSQL identities using the real application migrations and RLS. Each user sends and reads a partner message; every pair checks idempotency, conflicting-ID rejection, outsider read/write denial, read receipts, blocking and persistent history. The local tests also exercise posting, replies, votes and accepted answers. The 150-user case has 75 conversations and 150 messages, plus 75 posts, 75 replies and 150 votes.
 
-The local tests use an in-process disposable database. Local Auth and Realtime are platform stubs, not real logins/WebSockets. Thirteen tests passed across the three local cohorts and safety/failure checks. This is functional coverage, not a hosted concurrency benchmark.
+The local tests use an in-process disposable database. Local Auth and Realtime are platform stubs, not real logins/WebSockets. These are functional checks, not a hosted concurrency benchmark.
 
 Hosted commands are implemented for provisioning, ordinary-user execution and cleanup. They **have not been run against hosted Supabase** because the connector still denied access to `ppdwysmeistjxzjpmxyk`; no dev administrative key or verified account quotas were available. Reconnection must grant access to this exact dev project. No production or unrelated Supabase project is a substitute.
 
@@ -34,7 +34,7 @@ Use one operator process/check-out and an exclusive dev testing window. The targ
 4. Supply `VISAFLOW_MULTIUSER_PUBLIC_KEY` with the **dev publishable key**. Administrative commands additionally require `VISAFLOW_MULTIUSER_ADMIN_KEY`, the **dev secret API key**, in the process environment. No application `.env.local` is loaded or reused. Keep all keys out of source control, command-line arguments, screenshots and chat.
 5. Supply `VISAFLOW_MULTIUSER_ENCRYPTION_KEY`, a separately generated 32-byte hexadecimal key kept in a local secret manager. Credentials are AES-256-GCM encrypted and bound to the run UUID. Files are owner-readable/writable only under ignored `.local/multiuser/<run-id>/`. Preserve the encryption key until the test finishes; cleanup itself needs only the manifest and admin key.
 
-For 50/100 users, `previousStage` must identify the immediately smaller stage with `passed: true` and `cleanupVerified: true`. `previousRunId` must reference its actual local manifest, passing hosted result and passing cleanup report. The CLI checks those artifacts and requires the same application commit. Local database tests cannot unlock a hosted ramp.
+For 50/100/150 users, `previousStage` must identify the immediately smaller stage with `passed: true` and `cleanupVerified: true`. `previousRunId` must reference its actual local manifest, passing hosted result and passing cleanup report. The CLI checks those artifacts and requires the same application commit. Local database tests cannot unlock a hosted ramp.
 
 ## Hosted lifecycle
 
@@ -58,7 +58,7 @@ For each delivery, the receiving actor must observe an actual private Broadcast 
 
 ## Safety and evidence
 
-- At most 100 accounts/clients; sequential setup; one HTTP request start every 300 ms globally; password sign-ins at least 2.1 seconds apart. Admin provisioning uses the same request budget.
+- At most 150 accounts/clients; sequential setup; one HTTP request start every 300 ms globally; password sign-ins at least 2.1 seconds apart. Admin provisioning uses the same request budget.
 - Each command has a 20-minute deadline, 3,000 HTTP-request budget and 20 MiB decoded HTTP-response budget; each response is limited to 2 MiB. Actor execution also stops above 20,000 observed Broadcast events. These are local bounds, not a billing guarantee or complete metering of WebSocket protocol overhead.
 - Redirects and requests to any other backend origin are rejected before credentials are sent. HTTP 429/5xx responses and subscription failure stop the run without automatic retries. A deliberate duplicate-message assertion is the only repeated logical write.
 - Refresh is disabled for this short test; sessions must have enough validity remaining. A disconnect fails the test instead of starting a reconnect storm. Reconnect/recovery and session-refresh tests are not covered.

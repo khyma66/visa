@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { TARGET, canary } from './free-tier.mjs';
-import { checkEvidence, newManifest, checkManifest, checkOwned, seal, unseal, networkBudget, pairJourney, POLICY, MARKER, UUID } from './multiuser-core.mjs';
+import { COHORTS, checkEvidence, newManifest, checkManifest, checkOwned, seal, unseal, networkBudget, pairJourney, POLICY, MARKER, UUID } from './multiuser-core.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const base = resolve(root, '.local/multiuser');
@@ -168,7 +168,7 @@ async function main([command, arg, ...extra]) {
         assert(UUID.test(evidence.previousRunId ?? ''), 'Previous hosted run artifacts required');
         const previousDir = resolve(base, evidence.previousRunId);
         const previous = await json(resolve(previousDir, 'manifest.json')); checkManifest(previous, { expired: true });
-        assert.equal(previous.state, 'cleaned'); assert.equal(previous.users.length, count === 50 ? 10 : 50);
+        assert.equal(previous.state, 'cleaned'); assert.equal(previous.users.length, COHORTS[COHORTS.indexOf(count) - 1]);
         const previousResult = await json(resolve(previousDir, 'result.json'));
         const previousCleanup = await json(resolve(previousDir, 'cleanup.json'));
         assert.equal(previousResult.runId, evidence.previousRunId); assert.equal(previousCleanup.runId, evidence.previousRunId);

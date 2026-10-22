@@ -11,7 +11,7 @@ const evidence = () => ({ schemaVersion: 1, target: TARGET, supabasePlan: 'free'
   passwordAuthVerified: true, schemaVerified: true });
 test('only supported cohorts and recently verified Free quota evidence pass', () => {
   checkEvidence(evidence(), 10);
-  for (const count of [0, 2, 99, 101, 150, 200, 10000, NaN]) assert.throws(() => checkEvidence(evidence(), count));
+  for (const count of [0, 2, 99, 101, 149, 151, 200, 10000, NaN]) assert.throws(() => checkEvidence(evidence(), count));
   for (const replacement of [
     { supabasePlan: 'pro' }, { remainingMAU: 0 }, { existingConnections: 141 }, { remainingEgressMB: 49 },
     { databaseMB: 401 }, { backgroundEventsPerSecond: 21 }, { remainingRealtimeMessages: 19999 },
@@ -25,6 +25,11 @@ test('larger stages require successful smaller hosted stage including cleanup', 
   checkEvidence({ ...evidence(), previousStage: { users: 10, passed: true, cleanupVerified: true } }, 50);
   assert.throws(() => checkEvidence({ ...evidence(), previousStage: { users: 10, passed: true, cleanupVerified: true } }, 100));
   checkEvidence({ ...evidence(), previousStage: { users: 50, passed: true, cleanupVerified: true } }, 100);
+  assert.throws(() => checkEvidence({ ...evidence(), previousStage: { users: 50, passed: true, cleanupVerified: true } }, 150));
+  const finalStage = { ...evidence(), previousStage: { users: 100, passed: true, cleanupVerified: true } };
+  checkEvidence(finalStage, 150);
+  checkEvidence({ ...finalStage, existingConnections: 30 }, 150);
+  assert.throws(() => checkEvidence({ ...finalStage, existingConnections: 31 }, 150));
 });
 test('manifests are unique, expiring and pinned to synthetic emails and exact dev target', () => {
   const m = newManifest(100); checkManifest(m); assert.equal(new Set(m.users.map(u => u.id)).size, 100);

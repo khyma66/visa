@@ -2,7 +2,7 @@
 
 Review date: October 21, 2026. Input: the user's `Visaflow_Miro.md` blueprint. Its proposed configurations were treated as design input, not as evidence of capacity or authorization to incur costs.
 
-**Follow-up implementation:** The subsequent user request added the [10/50/100-user testing lifecycle](../tests/scale/MULTIUSER.md): guarded provisioning, encrypted credentials, ordinary-user sessions, private subscription acknowledgments, paired-message verification, posting/replies/votes and scoped cleanup. Local functional cohorts at all three sizes passed. Hosted execution is still pending dev project access and verified quotas. The initial review below describes what had been implemented at the time of that first review; its "unimplemented" Phase 2 notes are superseded by the linked follow-up where specified. The 10,000-user Free-tier decision is unchanged.
+**Follow-up implementation:** The subsequent user request added the [10/50/100/150-user testing lifecycle](../tests/scale/MULTIUSER.md): guarded provisioning, encrypted credentials, ordinary-user sessions, private subscription acknowledgments, paired-message verification, posting/replies/votes and scoped cleanup. Local functional cohorts at all four sizes passed. Hosted execution is still pending dev project access and verified quotas. The initial review below describes what had been implemented at the time of that first review; its "unimplemented" Phase 2 notes are superseded by the linked follow-up where specified. The 10,000-user Free-tier decision is unchanged.
 
 ## Decision
 

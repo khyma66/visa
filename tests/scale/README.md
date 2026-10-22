@@ -1,6 +1,6 @@
 # VisaFlow free-tier testing
 
-This implements feasibility checks, a public availability canary, and a bounded **10 → 50 → 100-user test lifecycle**, not the complete 10,000-user harness in `Visaflow_Miro.md`. See [multi-user operation and verified results](MULTIUSER.md) and [the discovery report](../../docs/FREE_TIER_SCALE_REVIEW.md). Hosted execution requires verified dev quotas and credentials; it has not yet been exercised.
+This implements feasibility checks, a public availability canary, and a bounded **10 → 50 → 100 → 150-user test lifecycle**, not the complete 10,000-user harness in `Visaflow_Miro.md`. See [multi-user operation and verified results](MULTIUSER.md) and [the discovery report](../../docs/FREE_TIER_SCALE_REVIEW.md). Hosted execution requires verified dev quotas and credentials; it has not yet been exercised.
 
 ## Commands
 
@@ -44,6 +44,6 @@ These run against disposable in-process PostgreSQL/WASM and actual application m
 
 Obtain read-only access to the exact dev Supabase project and Cloudflare account usage. Record plan, current utilization, Auth limits/CAPTCHA, deployed migrations, Realtime limits and error rates, database size/connections, and remaining monthly/daily quotas. No paid Supabase database branch is required: the separate dev project already exists.
 
-Use the implemented [multi-user lifecycle](MULTIUSER.md) for the 10-user hosted proof, then 50 and 100 only after each earlier run and cleanup pass. It encrypts actor credentials, separates admin commands from ordinary sessions, validates trusted fixture ownership, uses the current policy-acceptance flow and verifies persisted messages after private subscription events. Keep AI, SMS, email blasts and scraping disabled. Expand only after collecting real evidence.
+Use the implemented [multi-user lifecycle](MULTIUSER.md) for the 10-user hosted proof, then 50, 100 and 150 only after each earlier run and cleanup pass. It encrypts actor credentials, separates admin commands from ordinary sessions, validates trusted fixture ownership, uses the current policy-acceptance flow and verifies persisted messages after private subscription events. Keep AI, SMS, email blasts and scraping disabled. Expand only after collecting real evidence.
 
 For 10,000 concurrent hosted Realtime users, the existing Supabase Free architecture cannot satisfy the requirement. A fully local/self-hosted stack could test synthetic 10,000-user behavior subject to hardware, but would not prove the hosted dev site's capacity and is not implemented here. Sequential batches of accounts likewise do not satisfy concurrency.
