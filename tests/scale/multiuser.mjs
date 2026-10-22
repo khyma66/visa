@@ -70,7 +70,7 @@ export async function hostedRun({ manifest, passwords, createClient, budget, sig
         realtime: { timeout: 12000, reconnectAfterMs: () => 3600000 },
       });
       clients.push(client);
-      const password = passwords[fixture.id]; assert(typeof password === 'string' && password.length >= 24);
+      const password = passwords[fixture.email]; assert(typeof password === 'string' && password.length >= 24);
       const auth = ok(await client.auth.signInWithPassword({ email: fixture.email, password }));
       checkOwned(auth.user, fixture, manifest.runId);
       assert(auth.session.expires_at * 1000 > Date.now() + 1200000, 'Session too short for bounded test');
@@ -148,7 +148,7 @@ async function main([command, arg, ...extra]) {
   const stopWatcher = setInterval(() => {
     if (command !== 'cleanup' && existsSync(resolve(base, 'STOP'))) abort();
   }, 250);
-  const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(1200000)]);
+  const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(1800000)]);
   const budget = networkBudget({ signal, stopped: () => command !== 'cleanup' && existsSync(resolve(base, 'STOP')) });
   let manifest, dir;
   try {
@@ -181,17 +181,19 @@ async function main([command, arg, ...extra]) {
     }
     if (command === 'provision') {
       const count = Number(arg); checkEvidence(evidence, count);
-      manifest = newManifest(count); dir = resolve(base, manifest.runId); await mkdir(dir, { mode: 0o700 });
-      const passwords = Object.fromEntries(manifest.users.map(u => [u.id, randomBytes(24).toString('base64url')]));
+      manifest = newManifest(count, { serverAssignedIds: true }); dir = resolve(base, manifest.runId); await mkdir(dir, { mode: 0o700 });
+      const passwords = Object.fromEntries(manifest.users.map(u => [u.email, randomBytes(24).toString('base64url')]));
       await save(resolve(dir, 'credentials.enc.json'), seal(passwords, process.env.VISAFLOW_MULTIUSER_ENCRYPTION_KEY, manifest.runId));
       await save(resolve(dir, 'manifest.json'), manifest); // Record every UUID BEFORE any creation request.
       const admin = createClient(TARGET.databaseOrigin, adminKey(), { global: { fetch: budget.fetch }, auth: { persistSession: false, autoRefreshToken: false } });
       try {
         for (const user of manifest.users) {
-          const created = ok(await admin.auth.admin.createUser({ ...user, password: passwords[user.id], email_confirm: true,
+          const created = ok(await admin.auth.admin.createUser({ email: user.email, password: passwords[user.email], email_confirm: true,
             user_metadata: { first_name: 'Synthetic', last_name: 'Tester' },
             app_metadata: { visaflow_test_run: manifest.runId, visaflow_test_purpose: 'free-tier-multiuser' } }));
           checkOwned(created.user, user, manifest.runId);
+          user.id = created.user.id;
+          await save(resolve(dir, 'manifest.json'), manifest);
         }
         manifest.state = 'provisioned';
       } catch { manifest.state = 'provisioning-failed'; process.exitCode = 1; }

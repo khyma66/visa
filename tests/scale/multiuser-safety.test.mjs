@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { TARGET } from './free-tier.mjs';
 import { checkEvidence, newManifest, checkManifest, checkOwned, seal, unseal, networkBudget } from './multiuser-core.mjs';
@@ -7,7 +8,8 @@ import { hostedRun } from './multiuser.mjs';
 
 const evidence = () => ({ schemaVersion: 1, target: TARGET, supabasePlan: 'free', checkedAt: new Date().toISOString(),
   existingConnections: 0, backgroundEventsPerSecond: 0, databaseMB: 10, remainingEgressMB: 100,
-  remainingRealtimeMessages: 100000, remainingMAU: 1000, noConcurrentLoad: true, outboundHooksDisabled: true,
+  remainingRealtimeMessages: 100000, remainingMAU: 1000, tokenRequestsPer5Min: 150, accessTokenSeconds: 3600,
+  noConcurrentLoad: true, outboundHooksDisabled: true,
   passwordAuthVerified: true, schemaVerified: true });
 test('only supported cohorts and recently verified Free quota evidence pass', () => {
   checkEvidence(evidence(), 10);
@@ -15,6 +17,7 @@ test('only supported cohorts and recently verified Free quota evidence pass', ()
   for (const replacement of [
     { supabasePlan: 'pro' }, { remainingMAU: 0 }, { existingConnections: 141 }, { remainingEgressMB: 49 },
     { databaseMB: 401 }, { backgroundEventsPerSecond: 21 }, { remainingRealtimeMessages: 19999 },
+    { tokenRequestsPer5Min: 99 }, { tokenRequestsPer5Min: Infinity }, { accessTokenSeconds: 3599 },
     { noConcurrentLoad: false }, { outboundHooksDisabled: false }, { checkedAt: '2020-01-01' },
     { passwordAuthVerified: false }, { schemaVerified: false }, { databaseMB: NaN },
     { target: { ...TARGET, projectRef: 'cycnichledvqbxevrwnt' } },
@@ -33,6 +36,8 @@ test('larger stages require successful smaller hosted stage including cleanup', 
 });
 test('manifests are unique, expiring and pinned to synthetic emails and exact dev target', () => {
   const m = newManifest(100); checkManifest(m); assert.equal(new Set(m.users.map(u => u.id)).size, 100);
+  const hosted = newManifest(10, { serverAssignedIds: true }); checkManifest(hosted);
+  hosted.state = 'provisioned'; assert.throws(() => checkManifest(hosted));
   for (const alter of [m => m.users[0].email = 'person@example.com', m => m.users[0].id = m.users[1].id,
     m => m.target = { ...TARGET, origin: 'https://visathreads.com' }, m => m.expiresAt = m.createdAt]) {
     const copy = structuredClone(m); alter(copy); assert.throws(() => checkManifest(copy));
@@ -64,6 +69,14 @@ test('request wrapper denies production, redirect and exhausted request budget',
   const redirects = networkBudget({ fetcher: async () => new Response('', { status: 302 }) });
   await assert.rejects(redirects.fetch(TARGET.databaseOrigin));
 });
+test('password token requests are spaced below the verified project limit', async () => {
+  const times = [];
+  const budget = networkBudget({ intervalMs: 0, authIntervalMs: 30,
+    fetcher: async () => { times.push(Date.now()); return Response.json({ ok: true }); } });
+  await budget.fetch(TARGET.databaseOrigin + '/auth/v1/token?grant_type=password', { method: 'POST' });
+  await budget.fetch(TARGET.databaseOrigin + '/auth/v1/token?grant_type=password', { method: 'POST' });
+  assert(times[1] - times[0] >= 25);
+});
 test('429, server failures, aborted and stopped tests do not retry', async () => {
   for (const status of [429, 500, 503]) {
     let calls = 0;
@@ -77,12 +90,13 @@ test('429, server failures, aborted and stopped tests do not retry', async () =>
   }
 });
 function fakeAdmin(m, { foreign = false, foreignReply = false } = {}) {
-  const users = new Map(m.users.map(u => [u.id, { ...u, role: 'authenticated', app_metadata: { visaflow_test_run: m.runId, visaflow_test_purpose: 'free-tier-multiuser' } }]));
+  const users = new Map(m.users.map(u => { const id = u.id ?? randomUUID(); return [id, { ...u, id, role: 'authenticated', app_metadata: { visaflow_test_run: m.runId, visaflow_test_purpose: 'free-tier-multiuser' } }]; }));
   if (foreign) users.get(m.users[0].id).app_metadata = {};
   let mutations = 0;
   const missing = { data: null, error: { code: 'user_not_found', status: 404 } };
   return { get mutations() { return mutations; },
     auth: { admin: {
+      listUsers: async ({ page, perPage }) => ({ data: { users: [...users.values()].slice((page - 1) * perPage, page * perPage) }, error: null }),
       getUserById: async id => users.has(id) ? { data: { user: users.get(id) }, error: null } : missing,
       updateUserById: async () => { mutations++; return { data: {}, error: null }; },
       deleteUser: async id => { mutations++; users.delete(id); return { data: {}, error: null }; },
@@ -112,13 +126,21 @@ test('cleanup verifies missing users and is idempotent for empty fixtures', asyn
   assert.equal((await cleanup(admin, m)).passed, true);
   const again = await cleanup(admin, m); assert.equal(again.passed, true); assert.equal(again.absentUsers, 10);
 });
+test('cleanup finds Supabase-assigned IDs even after a lost create response', async () => {
+  const m = newManifest(10, { serverAssignedIds: true });
+  m.state = 'provisioning-failed';
+  const admin = fakeAdmin(m);
+  const result = await cleanup(admin, m);
+  assert.equal(result.passed, true);
+  assert.equal(result.deletedUsers, 10);
+});
 test('hosted runner fails closed on lost subscriptions and closes its actor connection', async () => {
   const old = process.env.VISAFLOW_MULTIUSER_PUBLIC_KEY;
   process.env.VISAFLOW_MULTIUSER_PUBLIC_KEY = 'sb_publishable_' + 'a'.repeat(30);
   const manifest = newManifest(10), fixture = manifest.users[0], controller = new AbortController();
   let disconnected = 0, stopped = 0;
   try {
-    const result = await hostedRun({ manifest, passwords: { [fixture.id]: 'p'.repeat(30) }, signal: controller.signal,
+    const result = await hostedRun({ manifest, passwords: { [fixture.email]: 'p'.repeat(30) }, signal: controller.signal,
       stop: () => { stopped++; controller.abort(); }, budget: { stats: {}, fetch: () => { throw new Error('No network in test'); } },
       createClient: (url, key, options) => {
         assert.equal(url, TARGET.databaseOrigin); assert(key.startsWith('sb_publishable_'));

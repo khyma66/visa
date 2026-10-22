@@ -4,16 +4,43 @@ const ok = result => { if (result.error) throw new Error('Cleanup operation fail
 
 // Run only after the actor process exits, under the shared exclusive lock.
 // Never trusts a text marker alone: Auth admin metadata, UUID and email must match.
+// An Auth create response may be lost after the server creates an account, so
+// reconcile the run's reserved emails before touching any application data.
 export async function cleanup(admin, manifest) {
   checkManifest(manifest, { expired: true });
   const result = { schemaVersion: 1, runId: manifest.runId, passed: false, deletedUsers: 0, absentUsers: 0, checkedAt: new Date().toISOString() };
   try {
-    const ids = manifest.users.map(u => u.id), set = new Set(ids), present = [];
+    const inventory = async () => {
+      const users = [];
+      for (let page = 1; page <= 10; page++) {
+        const data = ok(await admin.auth.admin.listUsers({ page, perPage: 200 }));
+        assert(Array.isArray(data.users), 'Auth inventory unavailable');
+        users.push(...data.users);
+        if (data.users.length < 200) return users;
+      }
+      throw new Error('Auth inventory exceeds scan bound');
+    };
+    const fixtures = new Map(manifest.users.map(u => [u.email, u]));
+    const runPrefix = `vf-${manifest.runId}-`;
+    const candidates = (await inventory()).filter(u => u.email?.startsWith(runPrefix) || u.app_metadata?.visaflow_test_run === manifest.runId);
+    assert(candidates.every(u => fixtures.has(u.email)), 'Unexpected account claims test ownership');
+    const byEmail = new Map(candidates.map(u => [u.email, u]));
+    assert.equal(byEmail.size, candidates.length, 'Duplicate fixture email');
+    const present = [];
+    const recordedIds = manifest.users.map(u => u.id).filter(Boolean);
     for (const fixture of manifest.users) {
-      const found = await admin.auth.admin.getUserById(fixture.id);
-      if (found.error?.code === 'user_not_found' && found.error?.status === 404) { result.absentUsers++; continue; }
-      const user = ok(found).user; checkOwned(user, fixture, manifest.runId); present.push(fixture.id);
+      const user = byEmail.get(fixture.email);
+      if (!user) {
+        if (fixture.id) {
+          const found = await admin.auth.admin.getUserById(fixture.id);
+          assert(found.error?.code === 'user_not_found' && found.error?.status === 404, 'Recorded user changed or inventory incomplete');
+        }
+        result.absentUsers++; continue;
+      }
+      checkOwned(user, fixture, manifest.runId); present.push(user.id);
     }
+    const set = new Set([...recordedIds, ...present]);
+    const ids = [...set];
     const rows = async (table, column, values) => {
       if (!values.length) return [];
       const data = ok(await admin.from(table).select('*').in(column, values).limit(1001));
@@ -47,10 +74,11 @@ export async function cleanup(admin, manifest) {
     await remove('direct_messages', 'id', messages.map(m => m.id));
     await remove('direct_conversations', 'id', conversationIds);
     for (const id of present) { ok(await admin.auth.admin.deleteUser(id)); result.deletedUsers++; }
-    for (const fixture of manifest.users) {
-      const found = await admin.auth.admin.getUserById(fixture.id);
+    for (const id of set) {
+      const found = await admin.auth.admin.getUserById(id);
       assert(found.error?.status === 404 && found.error?.code === 'user_not_found', 'Auth deletion not verified');
     }
+    assert(!(await inventory()).some(u => u.email?.startsWith(runPrefix) || u.app_metadata?.visaflow_test_run === manifest.runId), 'Run account remains');
     for (const [table, column, values] of [
       ['profiles', 'id', ids], ['policy_acceptances', 'user_id', ids], ['questions', 'author_id', ids],
       ['answers', 'author_id', ids], ['direct_messages', 'sender_id', ids],

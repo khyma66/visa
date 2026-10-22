@@ -13,22 +13,24 @@ export function checkEvidence(e, count, now = Date.now()) {
   assert(e.schemaVersion === 1 && e.supabasePlan === 'free', 'Verify the actual Free plan');
   const age = now - Date.parse(e.checkedAt);
   assert(Number.isFinite(age) && age >= 0 && age <= 3600000, 'Quota evidence must be less than one hour old');
-  for (const key of ['existingConnections', 'backgroundEventsPerSecond', 'databaseMB', 'remainingEgressMB', 'remainingRealtimeMessages', 'remainingMAU'])
+  for (const key of ['existingConnections', 'backgroundEventsPerSecond', 'databaseMB', 'remainingEgressMB', 'remainingRealtimeMessages', 'remainingMAU', 'tokenRequestsPer5Min', 'accessTokenSeconds'])
     assert(Number.isFinite(e[key]) && e[key] >= 0, `Missing quota evidence: ${key}`);
   assert(e.existingConnections + count <= (count === 150 ? 180 : 150),
     'Reserve at least 50 connections through 100 users or 20 connections at 150 users');
   assert(e.backgroundEventsPerSecond <= 20 && e.databaseMB <= 400, 'Insufficient operating headroom');
   assert(e.remainingEgressMB >= 50 && e.remainingRealtimeMessages >= 20000 && e.remainingMAU >= count, 'Insufficient remaining quota');
+  assert(e.tokenRequestsPer5Min >= 100 && e.accessTokenSeconds >= 3600,
+    'Token-endpoint allowance or access-token lifetime is too low for the paced test');
   assert(e.noConcurrentLoad === true && e.outboundHooksDisabled === true && e.passwordAuthVerified === true && e.schemaVerified === true,
     'Verify exclusive test window, disabled outbound hooks, password/CAPTCHA compatibility and deployed schema');
   if (count > 10) assert(e.previousStage?.users === COHORTS[COHORTS.indexOf(count) - 1] && e.previousStage?.passed === true && e.previousStage?.cleanupVerified === true,
     'Previous smaller hosted stage and cleanup must pass first');
 }
-export function newManifest(count) {
+export function newManifest(count, { serverAssignedIds = false } = {}) {
   checkCount(count);
   const runId = randomUUID(), createdAt = new Date().toISOString();
   return { schemaVersion: 1, target: TARGET, runId, createdAt, expiresAt: new Date(Date.now() + 86400000).toISOString(),
-    state: 'provisioning', users: Array.from({ length: count }, (_, i) => ({ id: randomUUID(), email: `vf-${runId}-${i}@example.invalid` })) };
+    state: 'provisioning', users: Array.from({ length: count }, (_, i) => ({ id: serverAssignedIds ? null : randomUUID(), email: `vf-${runId}-${i}@example.invalid` })) };
 }
 export function checkManifest(m, { expired = false } = {}) {
   validateTarget(m?.target); assert(m.schemaVersion === 1 && UUID.test(m.runId)); checkCount(m.users?.length);
@@ -37,13 +39,17 @@ export function checkManifest(m, { expired = false } = {}) {
   if (!expired) assert(Date.parse(m.expiresAt) > Date.now(), 'Fixture expiry reached');
   const ids = new Set();
   for (const [i, u] of m.users.entries()) {
-    assert(UUID.test(u.id)); ids.add(u.id);
+    assert(u.id === null && ['provisioning', 'provisioning-failed'].includes(m.state) || UUID.test(u.id));
+    if (u.id) ids.add(u.id);
     assert.equal(u.email, `vf-${m.runId}-${i}@example.invalid`);
   }
-  assert.equal(ids.size, m.users.length);
+  assert.equal(ids.size, m.users.filter(u => u.id).length);
+  if (!['provisioning', 'provisioning-failed'].includes(m.state)) assert.equal(ids.size, m.users.length);
 }
 export function checkOwned(user, fixture, runId) {
-  assert.equal(user?.id, fixture.id); assert.equal(user?.email, fixture.email);
+  assert(UUID.test(user?.id));
+  if (fixture.id) assert.equal(user.id, fixture.id);
+  assert.equal(user?.email, fixture.email);
   assert.equal(user?.app_metadata?.visaflow_test_run, runId);
   assert.equal(user?.app_metadata?.visaflow_test_purpose, 'free-tier-multiuser');
   assert.equal(user?.role, 'authenticated', 'Test accounts must be ordinary users');
@@ -62,7 +68,7 @@ export function unseal(value, key, runId) {
 }
 
 // Shared across all actor clients, including SDK authentication requests.
-export function networkBudget({ signal, stopped = () => false, fetcher = fetch, maxRequests = 3000, intervalMs = 300 } = {}) {
+export function networkBudget({ signal, stopped = () => false, fetcher = fetch, maxRequests = 3000, intervalMs = 300, authIntervalMs = 4000 } = {}) {
   let next = 0, authNext = 0, tail = Promise.resolve();
   const stats = { requests: 0, responseBytes: 0 };
   const guarded = async (input, init = {}) => {
@@ -75,7 +81,7 @@ export function networkBudget({ signal, stopped = () => false, fetcher = fetch, 
       await delay(Math.max(0, next - Date.now(), auth ? authNext - Date.now() : 0), undefined, { signal });
       assert(!stopped(), 'Stopped'); signal?.throwIfAborted();
       stats.requests++; next = Date.now() + intervalMs;
-      if (auth) authNext = Date.now() + 2100;
+      if (auth) authNext = Date.now() + authIntervalMs;
     });
     tail = turn.catch(() => {}); await turn;
     const signals = [AbortSignal.timeout(15000), signal, init.signal].filter(Boolean);
