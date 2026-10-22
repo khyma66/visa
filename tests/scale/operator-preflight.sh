@@ -4,6 +4,8 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
 workdir='.local/supabase-protocol'
+cohort="${1:-4}"
+case "$cohort" in 4|10|50|100|150) ;; *) echo 'Choose 4, 10, 50, 100 or 150 local users.' >&2; exit 2 ;; esac
 if [[ -x /opt/homebrew/bin/supabase ]]; then
   cli=/opt/homebrew/bin/supabase
 else
@@ -48,4 +50,4 @@ for migration in \
 done
 "$cli" start --workdir "$workdir" -x studio,postgres-meta,mailpit,imgproxy,storage-api,edge-runtime,logflare,vector,supavisor >/dev/null
 trap '"$cli" stop --workdir "$workdir" >/dev/null' EXIT
-node tests/scale/local-protocol-smoke.mjs
+node tests/scale/local-protocol-smoke.mjs "$cohort"

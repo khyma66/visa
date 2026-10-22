@@ -25,9 +25,26 @@ A third 10-user attempt provisioned all accounts but stopped at the first policy
 ```sh
 npm run test:multiuser
 npm run test:multiuser:protocol
+npm run test:multiuser:e2e
 ```
 
 Requires the repository's pinned dependencies (`npm ci` on a fresh checkout). The protocol preflight additionally requires Docker and the Supabase CLI; it uses a disposable local stack on ports 55430–55432 and stops it afterward. The full migration history currently cannot replay into a blank database because an older community table is absent, so the preflight copies the twelve migrations needed by this journey. Fix that history separately before treating a blank-database replay as deployment validation. No new packages, hosted migrations, website deployment or paid resources are required. The fast tests are also included in `npm test`.
+
+`test:multiuser:protocol` defaults to four users. `test:multiuser:e2e` runs 100 real local Supabase users through the same SDK journey: create accounts, sign in, subscribe to private inboxes, hold every connection, exchange messages, check authorization and blocking, post/reply/vote, then verify cleanup. It requires no hosted secret. The sanitized report is saved at `.local/multiuser/local-protocol-100.json`; success requires both the workflow and cleanup to pass. `npm run test:multiuser:protocol -- 150` selects the optional local 150-user cohort. Run only one local protocol test at a time.
+
+Verified October 22, 2026, run `25707bbe-3a5c-4736-bd74-99f5e27684c6`: **passed**. All 100 users authenticated and maintained inbox subscriptions together for 63 seconds. All 100 sent and received a persisted message across 50 conversations; all 50 pairs passed outsider-denial, idempotency and blocked-send checks. The run created 50 posts, 50 replies and 100 votes, then verified removal of its accounts and related data. Local send-to-event-and-history-read latency was 123 ms p50 / 126 ms p95; these values include the runner's observation interval and are not hosted latency measurements. The workflow used 1,800 HTTP requests plus 322 cleanup requests. The local services shut down successfully afterward.
+
+## Applying the Stayhub approach
+
+The Stayhub chat “100-user E2E testing” and its saved September 3 report establish two different local checks: a 100-user HTTP journey with 200 messages and a randomized in-memory service test with 3,100 messages. The HTTP suite used 20 concurrent request workers; the randomized suite advanced a controlled clock to check rate-window resets. Neither established 100 deployed browser sessions or hosted Supabase capacity. Stayhub's 30-message/minute rule belongs to its reference service and is not a VisaFlow or Supabase limit.
+
+The efficient VisaFlow sequence is:
+
+1. Run the fast database checks and the one-command 100-user local protocol test during development. Use VisaFlow's actual SQL and SDK interfaces rather than porting Stayhub's separate Python service. Keep fixture assignment reproducible while generating fresh passwords and run IDs.
+2. Add a small set of browser journeys covering login, policy acceptance, posting, inbox discovery, message send/receive and page reload. The current protocol runner does not exercise UI rendering, browser session storage or website routing. A small browser suite complements the 100 connected SDK clients without requiring 100 browser processes.
+3. After local and browser checks pass, run a bounded hosted campaign with fresh quota evidence and stop-on-failure gates. A future campaign wrapper should obtain the secret once, automatically advance through the verified cohort sizes, clean each stage, and produce one report. The current hosted wrapper still runs one cohort per invocation; this automation is not implemented yet. Hosted capacity must be reported separately from local correctness.
+
+This local-first approach consumes no hosted quota ([Supabase local development](https://supabase.com/docs/guides/local-development)). A hosted 100-user test can fit below the Free plan's published 200-connection ceiling when existing clients and event throughput leave sufficient headroom, but that ceiling is not a performance guarantee ([Realtime limits](https://supabase.com/docs/guides/realtime/limits)). Avoid copying Stayhub's controlled-clock message bursts into a hosted test.
 
 ## Prepare a hosted run
 
