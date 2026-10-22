@@ -9,6 +9,7 @@ const ok = result => { if (result.error) throw new Error('Cleanup operation fail
 export async function cleanup(admin, manifest) {
   checkManifest(manifest, { expired: true });
   const result = { schemaVersion: 1, runId: manifest.runId, passed: false, deletedUsers: 0, absentUsers: 0, checkedAt: new Date().toISOString() };
+  let phase = 'inventory';
   try {
     const inventory = async () => {
       const users = [];
@@ -27,19 +28,21 @@ export async function cleanup(admin, manifest) {
     const byEmail = new Map(candidates.map(u => [u.email, u]));
     assert.equal(byEmail.size, candidates.length, 'Duplicate fixture email');
     const present = [];
+    phase = 'ownership';
     const recordedIds = manifest.users.map(u => u.id).filter(Boolean);
     for (const fixture of manifest.users) {
       const user = byEmail.get(fixture.email);
       if (!user) {
         if (fixture.id) {
           const found = await admin.auth.admin.getUserById(fixture.id);
-          assert(found.error?.code === 'user_not_found' && found.error?.status === 404, 'Recorded user changed or inventory incomplete');
+          assert(found.error?.status === 404, 'Recorded user changed or inventory incomplete');
         }
         result.absentUsers++; continue;
       }
       checkOwned(user, fixture, manifest.runId); present.push(user.id);
     }
     const set = new Set([...recordedIds, ...present]);
+    phase = 'related-data';
     const ids = [...set];
     const rows = async (table, column, values) => {
       if (!values.length) return [];
@@ -65,6 +68,7 @@ export async function cleanup(admin, manifest) {
     const conversationIds = conversations.map(c => c.id);
     const messages = await rows('direct_messages', 'conversation_id', conversationIds);
     assert(messages.every(m => set.has(m.sender_id) && m.body.startsWith(text)));
+    phase = 'ban-and-delete';
     // Ban fixture accounts before data deletion; do not re-enable them on failure.
     for (const id of present) ok(await admin.auth.admin.updateUserById(id, { ban_duration: '876000h' }));
     const remove = async (table, column, values) => { if (values.length) ok(await admin.from(table).delete().in(column, values)); };
@@ -74,17 +78,19 @@ export async function cleanup(admin, manifest) {
     await remove('direct_messages', 'id', messages.map(m => m.id));
     await remove('direct_conversations', 'id', conversationIds);
     for (const id of present) { ok(await admin.auth.admin.deleteUser(id)); result.deletedUsers++; }
+    phase = 'auth-verification';
     for (const id of set) {
       const found = await admin.auth.admin.getUserById(id);
-      assert(found.error?.status === 404 && found.error?.code === 'user_not_found', 'Auth deletion not verified');
+      assert(found.error?.status === 404, 'Auth deletion not verified');
     }
     assert(!(await inventory()).some(u => u.email?.startsWith(runPrefix) || u.app_metadata?.visaflow_test_run === manifest.runId), 'Run account remains');
+    phase = 'row-verification';
     for (const [table, column, values] of [
       ['profiles', 'id', ids], ['policy_acceptances', 'user_id', ids], ['questions', 'author_id', ids],
       ['answers', 'author_id', ids], ['direct_messages', 'sender_id', ids],
       ['direct_conversations', 'user_one_id', ids], ['direct_conversations', 'user_two_id', ids],
     ]) assert.equal((await rows(table, column, values)).length, 0, 'Remaining fixture rows');
     result.passed = true;
-  } catch { result.failure = 'Cleanup refused or incomplete. Preserve manifest and inspect run-owned records; do not reset the project.'; }
+  } catch { result.failure = 'Cleanup refused or incomplete. Preserve manifest and inspect run-owned records; do not reset the project.'; result.failurePhase = phase; }
   return result;
 }

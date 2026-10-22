@@ -34,6 +34,7 @@ export async function hostedRun({ manifest, passwords, createClient, budget, sig
   const clients = [], actors = [];
   const ready = new Set(), sent = new Set(), received = new Set();
   let closing = false, events = 0;
+  let phase = 'starting';
   const result = { schemaVersion: 1, kind: 'hosted-multiuser', target: TARGET, runId: manifest.runId, users: manifest.users.length,
     passed: false, startedAt: new Date().toISOString(), authenticated: 0, peakSubscribed: 0,
     readiness: [], pairs: [], deliveries: [], posts: 0, replies: 0, votes: 0, cleanupVerified: false };
@@ -65,6 +66,7 @@ export async function hostedRun({ manifest, passwords, createClient, budget, sig
   try {
     for (const fixture of manifest.users) {
       signal.throwIfAborted();
+      phase = 'sign-in';
       const client = createClient(TARGET.databaseOrigin, publicKey(), {
         global: { fetch: budget.fetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
         realtime: { timeout: 12000, reconnectAfterMs: () => 3600000 },
@@ -75,12 +77,17 @@ export async function hostedRun({ manifest, passwords, createClient, budget, sig
       checkOwned(auth.user, fixture, manifest.runId);
       assert(auth.session.expires_at * 1000 > Date.now() + 1200000, 'Session too short for bounded test');
       result.authenticated++;
+      phase = 'profile';
       const profile = ok(await client.from('profiles').select('id,username').eq('id', fixture.id).single());
       assert.equal(profile.id, fixture.id);
+      phase = 'fresh-conversations';
       assert.equal(ok(await client.rpc('conversation_page', {})).length, 0, 'Fresh fixtures required');
+      phase = 'policy-acceptance';
       ok(await client.from('policy_acceptances').insert({ user_id: fixture.id, policy_version: POLICY, market: 'US', terms_accepted: true, privacy_acknowledged: true, adult_confirmed: true }));
+      phase = 'realtime-auth';
       await client.realtime.setAuth(auth.session.access_token);
       const actor = { id: fixture.id, username: profile.username, client, rpc: async (name, args) => ok(await client.rpc(name, args)) };
+      phase = 'inbox-subscription';
       actors.push(actor); await subscribe(actor, `inbox:${actor.id}`); ready.add(actor.id);
     }
     checkpoint(); assert.equal(ready.size, actors.length);
@@ -116,7 +123,12 @@ export async function hostedRun({ manifest, passwords, createClient, budget, sig
     assert.equal(sent.size, actors.length); assert.equal(received.size, actors.length);
     assert.equal(ready.size, actors.length); result.passed = true;
     result.allInboxesReadyThrough = new Date().toISOString();
-  } catch { result.failure = 'Authentication, subscription, budget, persistence or permission assertion failed; no retries.'; }
+  } catch (error) {
+    result.failure = 'Authentication, subscription, budget, persistence or permission assertion failed; no retries.';
+    result.failurePhase = phase;
+    if (typeof error?.code === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(error.code)) result.failureCode = error.code;
+    if (Number.isInteger(error?.status) && error.status >= 400 && error.status < 600) result.failureStatus = error.status;
+  }
   finally {
     checkpoint(); clearInterval(timer); closing = true;
     // Disconnect immediately, including on stop; do not wait for a failed network.
