@@ -74,6 +74,7 @@ export function networkBudget({ signal, stopped = () => false, fetcher = fetch, 
   const guarded = async (input, init = {}) => {
     const url = new URL(input instanceof Request ? input.url : input);
     assert.equal(url.origin, TARGET.databaseOrigin); assert(!url.username && !url.password);
+    assert(!new Headers(init.headers).has('X-Retry-Count'), 'Automatic retry refused');
     const turn = tail.then(async () => {
       signal?.throwIfAborted(); assert(!stopped(), 'Stopped');
       assert(stats.requests < maxRequests, 'Request budget exhausted');
@@ -92,8 +93,9 @@ export function networkBudget({ signal, stopped = () => false, fetcher = fetch, 
     if (response.status === 204) return response;
     const body = await boundedBody(response); stats.responseBytes += body.bytes;
     assert(stats.responseBytes <= 20 * 1024 * 1024, 'Response byte budget exhausted');
-    assert(/^application\/json(?:;|$)/i.test(response.headers.get('content-type') ?? ''), 'Non-JSON service response');
-    return new Response(body.text, { status: response.status, headers: { 'content-type': 'application/json' } });
+    const mediaType = response.headers.get('content-type') ?? '';
+    assert(/^application\/(?:json|vnd\.pgrst\.(?:object|array)\+json)(?:\s*;|$)/i.test(mediaType), 'Non-JSON service response');
+    return new Response(body.text, { status: response.status, headers: { 'content-type': mediaType } });
   };
   return { fetch: guarded, stats };
 }

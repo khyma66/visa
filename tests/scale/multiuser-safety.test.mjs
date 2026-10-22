@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
+import { createClient } from '@supabase/supabase-js';
 import { TARGET } from './free-tier.mjs';
 import { checkEvidence, newManifest, checkManifest, checkOwned, seal, unseal, networkBudget } from './multiuser-core.mjs';
 import { cleanup } from './multiuser-cleanup.mjs';
@@ -68,6 +69,24 @@ test('request wrapper denies production, redirect and exhausted request budget',
   await assert.rejects(budget.fetch(TARGET.databaseOrigin + '/rest/v1/profiles')); assert.equal(calls, 1);
   const redirects = networkBudget({ fetcher: async () => new Response('', { status: 302 }) });
   await assert.rejects(redirects.fetch(TARGET.databaseOrigin));
+});
+test('single-object PostgREST response reaches the SDK without a retry', async () => {
+  const id = randomUUID(); let calls = 0;
+  const budget = networkBudget({ intervalMs: 0, fetcher: async () => {
+    calls++;
+    return new Response(JSON.stringify({ id, username: 'synthetic-user' }),
+      { headers: { 'content-type': 'application/vnd.pgrst.object+json; charset=utf-8' } });
+  } });
+  const client = createClient(TARGET.databaseOrigin, 'sb_publishable_' + 'a'.repeat(30), {
+    global: { fetch: budget.fetch }, auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const result = await client.from('profiles').select('id,username').eq('id', id).single();
+  assert.equal(result.error, null);
+  assert.deepEqual(result.data, { id, username: 'synthetic-user' });
+  assert.equal(calls, 1);
+  await assert.rejects(budget.fetch(TARGET.databaseOrigin + '/rest/v1/profiles',
+    { headers: { 'X-Retry-Count': '1' } }), /Automatic retry refused/);
+  assert.equal(calls, 1);
 });
 test('password token requests are spaced below the verified project limit', async () => {
   const times = [];
