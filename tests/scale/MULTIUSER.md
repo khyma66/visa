@@ -12,21 +12,22 @@ This harness supports **10 → 50 → 100 → 150 users**. It intentionally refu
 
 `npm run test:multiuser` runs the same paired-message journey at 10, 50, 100 and 150 distinct local PostgreSQL identities using the real application migrations and RLS. Each user sends and reads a partner message; every pair checks idempotency, conflicting-ID rejection, outsider read/write denial, read receipts, blocking and persistent history. The local tests also exercise posting, replies, votes and accepted answers. The 150-user case has 75 conversations and 150 messages, plus 75 posts, 75 replies and 150 votes.
 
-The local tests use an in-process disposable database. Local Auth and Realtime are platform stubs, not real logins/WebSockets. These are functional checks, not a hosted concurrency benchmark.
+The fast local tests use an in-process disposable database. They do not include Auth or WebSockets. An additional Docker-backed preflight starts local Supabase Auth, PostgREST and Realtime, then exercises four real SDK sessions and private subscriptions, paired messages, community writes and verified cleanup. It tests the protocol without hosted quota or a dev secret. Neither local suite proves hosted concurrency capacity.
 
 Hosted commands are implemented for provisioning, ordinary-user execution and cleanup. On October 21, 2026, the logged-in dashboard for exact project `ppdwysmeistjxzjpmxyk` showed the Free plan, 29/500 MB database use, 0/50,000 monthly active users, 0/2,000,000 Realtime messages, 0/200 recorded peak Realtime connections, and 0.00/5 GB rounded egress. A read-only SQL check found zero Auth users, zero outbound-trigger candidates and all eight required messaging/voting functions; the required migrations were listed. Email/password login was enabled, CAPTCHA was already disabled, Auth Hooks had no entries, token requests were limited to 150 per five minutes and access tokens lasted 3,600 seconds. Usage panels can lag by an hour or more, so refresh evidence before each hosted stage. The Supabase connector still denied project access. No production or unrelated project is a substitute.
 
 On October 22, 2026, two 10-user hosted attempts were made with the operator's dev secret. The first stopped during provisioning because the submitted key was rejected with HTTP 401, before an actor run. The second provisioned all ten accounts but stopped after one authentication and before any inbox subscription, post or message. Neither passed. Log inspection showed the profile read received HTTP 200 four times: the harness rejected PostgREST's `application/vnd.pgrst.object+json` response media type, and the SDK retried that GET. The response guard now accepts this JSON media type while blocking SDK retry requests. Both previously failed cleanup reports were reconciled and passed on October 22; a dashboard and read-only SQL check showed zero synthetic Auth users and zero marked questions or answers. The next hosted 10-user attempt must use fresh quota evidence and a new run ID. Do not claim hosted concurrency capacity from these attempts.
 
-A third 10-user attempt provisioned all accounts but stopped at the first policy acceptance. The dev gateway logged an HTTP 201 for that insert; the harness rejected its empty success body. Cleanup passed and deleted all ten synthetic accounts. The request guard now accepts empty successful write responses while continuing to reject empty reads. Hosted capacity remains unverified.
+A third 10-user attempt provisioned all accounts but stopped at the first policy acceptance. The dev gateway logged an HTTP 201 for that insert; the harness rejected its empty success body. Cleanup passed and deleted all ten synthetic accounts. The request guard now accepts empty successful write responses while continuing to reject empty reads. A manifest timing error that could also refuse cleanup was fixed. The Docker-backed four-user preflight passed with four live subscriptions, four persisted deliveries, two posts, two replies, four votes and verified account cleanup. Hosted capacity remains unverified; do not repeat a hosted attempt merely to debug the harness.
 
 ## Run the local tests now
 
 ```sh
 npm run test:multiuser
+npm run test:multiuser:protocol
 ```
 
-Requires the repository's pinned dependencies (`npm ci` on a fresh checkout). No new packages, migrations, website deployment or paid resources are required. These tests are also included in `npm test`.
+Requires the repository's pinned dependencies (`npm ci` on a fresh checkout). The protocol preflight additionally requires Docker and the Supabase CLI; it uses a disposable local stack on ports 55430–55432 and stops it afterward. The full migration history currently cannot replay into a blank database because an older community table is absent, so the preflight copies the twelve migrations needed by this journey. Fix that history separately before treating a blank-database replay as deployment validation. No new packages, hosted migrations, website deployment or paid resources are required. The fast tests are also included in `npm test`.
 
 ## Prepare a hosted run
 
@@ -40,7 +41,7 @@ Use one operator process/check-out and an exclusive dev testing window. The targ
 
 For 50/100/150 users, `previousStage` must identify the immediately smaller stage with `passed: true` and `cleanupVerified: true`. `previousRunId` must reference its actual local manifest, passing hosted result and passing cleanup report. The CLI checks those artifacts and requires the same application commit. Local database tests cannot unlock a hosted ramp.
 
-For a single stage in a private interactive terminal, set only the dev publishable key in the environment and run `bash tests/scale/operator-stage.sh 10` (or the next gated size). The wrapper prompts without echoing for the existing dev secret key, generates an in-memory encryption key, separates administrative and ordinary-user processes, and attempts cleanup even when provisioning or execution fails. It never saves the secret key. Inspect the cleanup report before moving on. Refresh `limits.json` and its evidence before each subsequent stage.
+For a single stage in a private interactive terminal, set only the dev publishable key in the environment and run `bash tests/scale/operator-stage.sh 10` (or the next gated size). The wrapper first runs the local Auth/Realtime/cleanup preflight and stops before requesting the secret if it fails. It then prompts without echoing for the existing dev secret key, generates an in-memory encryption key, separates administrative and ordinary-user processes, and attempts cleanup even when provisioning or execution fails. It never saves the secret key. Inspect the cleanup report before moving on. Refresh `limits.json` and its evidence before each subsequent stage. Each stage has one credential prompt; repeated failed hosted runs are not part of the testing method.
 
 ## Hosted lifecycle
 

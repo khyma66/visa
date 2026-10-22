@@ -29,8 +29,11 @@ function adminKey() {
   assert(/^sb_secret_[\w-]{20,}$/.test(key ?? ''), 'Dedicated dev secret key required for provisioning/cleanup only'); return key;
 }
 
-export async function hostedRun({ manifest, passwords, createClient, budget, signal, progress = () => {}, stop }) {
+export async function hostedRun({ manifest, passwords, createClient, budget, signal, progress = () => {}, stop,
+  clientOrigin = TARGET.databaseOrigin, clientPublicKey = publicKey() }) {
   checkManifest(manifest);
+  if (clientOrigin !== TARGET.databaseOrigin)
+    assert(process.env.VISAFLOW_LOCAL_PROTOCOL_TEST === '1' && /^http:\/\/127\.0\.0\.1:\d+$/.test(clientOrigin), 'Only an explicitly enabled loopback test may override the dev origin');
   const clients = [], actors = [];
   const ready = new Set(), sent = new Set(), received = new Set();
   let closing = false, events = 0;
@@ -67,7 +70,7 @@ export async function hostedRun({ manifest, passwords, createClient, budget, sig
     for (const fixture of manifest.users) {
       signal.throwIfAborted();
       phase = 'sign-in';
-      const client = createClient(TARGET.databaseOrigin, publicKey(), {
+      const client = createClient(clientOrigin, clientPublicKey, {
         global: { fetch: budget.fetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
         realtime: { timeout: 12000, reconnectAfterMs: () => 3600000 },
       });

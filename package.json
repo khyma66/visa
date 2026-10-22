@@ -59,6 +59,7 @@
     "scale:plan": "node tests/scale/free-tier.mjs plan",
     "scale:canary": "node tests/scale/free-tier.mjs canary",
     "test:multiuser": "node --test --test-concurrency=1 --test-timeout=120000 tests/scale/multiuser-safety.test.mjs tests/scale/multiuser-local.test.mjs",
+    "test:multiuser:protocol": "bash tests/scale/operator-preflight.sh",
     "scale:multiuser": "node tests/scale/multiuser.mjs"
   },
   "keywords": [

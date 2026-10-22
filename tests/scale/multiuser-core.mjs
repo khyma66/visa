@@ -3,11 +3,11 @@ import { randomUUID, randomBytes, createCipheriv, createDecipheriv } from 'node:
 import { setTimeout as delay } from 'node:timers/promises';
 import { TARGET, validateTarget, boundedBody } from './free-tier.mjs';
 
-export const COHORTS = Object.freeze([10, 50, 100, 150]);
+export const COHORTS = Object.freeze([4, 10, 50, 100, 150]);
 export const POLICY = '2026-10-06-preview-v2';
 export const MARKER = '[SYNTHETIC TEST — NOT IMMIGRATION ADVICE]';
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-export function checkCount(count) { assert(COHORTS.includes(count), 'Only 10, 50, 100 or 150 users; Free has a 200-connection ceiling.'); }
+export function checkCount(count) { assert(COHORTS.includes(count), 'Only 4, 10, 50, 100 or 150 users; Free has a 200-connection ceiling.'); }
 export function checkEvidence(e, count, now = Date.now()) {
   checkCount(count); validateTarget(e?.target);
   assert(e.schemaVersion === 1 && e.supabasePlan === 'free', 'Verify the actual Free plan');
@@ -29,7 +29,7 @@ export function checkEvidence(e, count, now = Date.now()) {
 export function newManifest(count, { serverAssignedIds = false } = {}) {
   checkCount(count);
   const runId = randomUUID(), createdAt = new Date().toISOString();
-  return { schemaVersion: 1, target: TARGET, runId, createdAt, expiresAt: new Date(Date.now() + 86400000).toISOString(),
+  return { schemaVersion: 1, target: TARGET, runId, createdAt, expiresAt: new Date(Date.parse(createdAt) + 86400000).toISOString(),
     state: 'provisioning', users: Array.from({ length: count }, (_, i) => ({ id: serverAssignedIds ? null : randomUUID(), email: `vf-${runId}-${i}@example.invalid` })) };
 }
 export function checkManifest(m, { expired = false } = {}) {
@@ -68,12 +68,15 @@ export function unseal(value, key, runId) {
 }
 
 // Shared across all actor clients, including SDK authentication requests.
-export function networkBudget({ signal, stopped = () => false, fetcher = fetch, maxRequests = 3000, intervalMs = 300, authIntervalMs = 4000 } = {}) {
+export function networkBudget({ signal, stopped = () => false, fetcher = fetch, maxRequests = 3000, intervalMs = 300, authIntervalMs = 4000,
+  expectedOrigin = TARGET.databaseOrigin } = {}) {
+  if (expectedOrigin !== TARGET.databaseOrigin)
+    assert(process.env.VISAFLOW_LOCAL_PROTOCOL_TEST === '1' && /^http:\/\/127\.0\.0\.1:\d+$/.test(expectedOrigin), 'Only an explicitly enabled loopback test may override the dev origin');
   let next = 0, authNext = 0, tail = Promise.resolve();
   const stats = { requests: 0, responseBytes: 0 };
   const guarded = async (input, init = {}) => {
     const url = new URL(input instanceof Request ? input.url : input);
-    assert.equal(url.origin, TARGET.databaseOrigin); assert(!url.username && !url.password);
+    assert.equal(url.origin, expectedOrigin); assert(!url.username && !url.password);
     assert(!new Headers(init.headers).has('X-Retry-Count'), 'Automatic retry refused');
     const turn = tail.then(async () => {
       signal?.throwIfAborted(); assert(!stopped(), 'Stopped');

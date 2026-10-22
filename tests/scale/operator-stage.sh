@@ -12,6 +12,12 @@ if [[ -n "${VISAFLOW_MULTIUSER_ADMIN_KEY:-}" ]]; then echo 'Unset the admin key 
 if [[ ! -f .local/multiuser/limits.json ]]; then echo 'Fresh limits.json evidence is required.' >&2; exit 2; fi
 if [[ -z "${VISAFLOW_MULTIUSER_PUBLIC_KEY:-}" ]]; then echo 'Set the exact dev publishable key first.' >&2; exit 2; fi
 
+echo 'Running local Auth, Realtime and cleanup preflight before requesting a hosted credential.'
+if ! bash tests/scale/operator-preflight.sh; then
+  echo 'Local preflight failed. Hosted stage was not started and no dev secret was requested.' >&2
+  exit 1
+fi
+
 IFS= read -r -s -p 'Paste the dev Supabase secret API key, then press Enter: ' admin_key
 printf '\n'
 if [[ ! "$admin_key" =~ ^sb_secret_[A-Za-z0-9_-]{20,}$ ]]; then echo 'Invalid dev secret key format.' >&2; exit 2; fi
