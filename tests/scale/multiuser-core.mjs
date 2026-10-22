@@ -90,9 +90,14 @@ export function networkBudget({ signal, stopped = () => false, fetcher = fetch, 
     if (response.status === 429 || response.status >= 500 || response.status >= 300 && response.status < 400) {
       await response.body?.cancel(); throw new Error('Service limit or failure; no retries');
     }
+    const method = (init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     if (response.status === 204) return response;
+    if (response.body === null && response.ok && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
+      return response;
     const body = await boundedBody(response); stats.responseBytes += body.bytes;
     assert(stats.responseBytes <= 20 * 1024 * 1024, 'Response byte budget exhausted');
+    if (body.bytes === 0 && response.ok && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
+      return new Response(null, { status: response.status, headers: response.headers });
     const mediaType = response.headers.get('content-type') ?? '';
     assert(/^application\/(?:json|vnd\.pgrst\.(?:object|array)\+json)(?:\s*;|$)/i.test(mediaType), 'Non-JSON service response');
     return new Response(body.text, { status: response.status, headers: { 'content-type': mediaType } });

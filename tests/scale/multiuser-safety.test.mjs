@@ -88,6 +88,21 @@ test('single-object PostgREST response reaches the SDK without a retry', async (
     { headers: { 'X-Retry-Count': '1' } }), /Automatic retry refused/);
   assert.equal(calls, 1);
 });
+test('empty successful PostgREST insert reaches the SDK, but empty reads fail', async () => {
+  let calls = 0;
+  const budget = networkBudget({ intervalMs: 0, fetcher: async () => {
+    calls++;
+    return new Response(null, { status: 201 });
+  } });
+  const client = createClient(TARGET.databaseOrigin, 'sb_publishable_' + 'a'.repeat(30), {
+    global: { fetch: budget.fetch }, auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const result = await client.from('policy_acceptances').insert({ user_id: randomUUID() });
+  assert.equal(result.error, null);
+  assert.equal(result.data, null);
+  assert.equal(calls, 1);
+  await assert.rejects(budget.fetch(TARGET.databaseOrigin + '/rest/v1/profiles'), /Missing response body/);
+});
 test('password token requests are spaced below the verified project limit', async () => {
   const times = [];
   const budget = networkBudget({ intervalMs: 0, authIntervalMs: 30,

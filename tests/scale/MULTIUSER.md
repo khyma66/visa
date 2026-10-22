@@ -18,6 +18,8 @@ Hosted commands are implemented for provisioning, ordinary-user execution and cl
 
 On October 22, 2026, two 10-user hosted attempts were made with the operator's dev secret. The first stopped during provisioning because the submitted key was rejected with HTTP 401, before an actor run. The second provisioned all ten accounts but stopped after one authentication and before any inbox subscription, post or message. Neither passed. Log inspection showed the profile read received HTTP 200 four times: the harness rejected PostgREST's `application/vnd.pgrst.object+json` response media type, and the SDK retried that GET. The response guard now accepts this JSON media type while blocking SDK retry requests. Both previously failed cleanup reports were reconciled and passed on October 22; a dashboard and read-only SQL check showed zero synthetic Auth users and zero marked questions or answers. The next hosted 10-user attempt must use fresh quota evidence and a new run ID. Do not claim hosted concurrency capacity from these attempts.
 
+A third 10-user attempt provisioned all accounts but stopped at the first policy acceptance. The dev gateway logged an HTTP 201 for that insert; the harness rejected its empty success body. Cleanup passed and deleted all ten synthetic accounts. The request guard now accepts empty successful write responses while continuing to reject empty reads. Hosted capacity remains unverified.
+
 ## Run the local tests now
 
 ```sh
