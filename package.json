@@ -61,6 +61,8 @@
     "test:multiuser": "node --test --test-concurrency=1 --test-timeout=120000 tests/scale/multiuser-safety.test.mjs tests/scale/multiuser-local.test.mjs",
     "test:multiuser:protocol": "bash tests/scale/operator-preflight.sh",
     "test:multiuser:e2e": "bash tests/scale/operator-preflight.sh 100",
+    "test:multiuser:hosted": "node tests/scale/operator-campaign-server.mjs",
+    "test:multiuser:resume100": "node tests/scale/operator-campaign-server.mjs --resume-100",
     "scale:multiuser": "node tests/scale/multiuser.mjs"
   },
   "keywords": [

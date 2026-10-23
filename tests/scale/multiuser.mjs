@@ -96,6 +96,7 @@ export async function hostedRun({ manifest, passwords, createClient, budget, sig
     checkpoint(); assert.equal(ready.size, actors.length);
     result.allInboxesReadyAt = new Date().toISOString();
     // All users stay signed in and subscribed while pairs exercise their own conversations.
+    phase = 'all-inboxes-hold';
     await delay(30000, undefined, { signal });
     const observation = async (recipient, send, conversation, messageId) => {
       signal.throwIfAborted();
@@ -110,25 +111,44 @@ export async function hostedRun({ manifest, passwords, createClient, budget, sig
       received.add(recipient.id);
     };
     for (let i = 0; i < actors.length; i += 2) {
+      result.activePair = i / 2 + 1;
+      phase = 'pair-readiness';
       signal.throwIfAborted(); assert.equal(ready.size, actors.length);
       const [a, b] = [actors[i], actors[i + 1]], outsider = actors[(i + 2) % actors.length];
+      phase = 'pair-messaging';
       const pair = await pairJourney(a, b, outsider, manifest.runId, observation);
       result.pairs.push(pair); sent.add(a.id); sent.add(b.id);
+      phase = 'question-insert';
       const q = ok(await a.client.from('questions').insert({ author_id: a.id, title: `${MARKER} ${manifest.runId}`, body: `${MARKER} ${manifest.runId} Synthetic visa timeline question for testing only.`, tags: ['timeline'] }).select('id').single());
       result.posts++;
+      phase = 'answer-insert';
       const answer = ok(await b.client.from('answers').insert({ author_id: b.id, question_id: q.id, body: `${MARKER} ${manifest.runId} Synthetic reply for testing only.` }).select('id').single()); result.replies++;
+      phase = 'answer-vote';
       await a.rpc('vote_answer', { target_answer_id: answer.id, vote_value: 1 });
+      phase = 'question-vote';
       await b.rpc('vote_question', { target_question_id: q.id, vote_value: 1 }); result.votes += 2;
+      phase = 'answer-acceptance';
       await a.rpc('accept_answer', { target_answer_id: answer.id });
+      phase = 'answer-acceptance-read';
       const persisted = ok(await b.client.from('answers').select('id,is_accepted').eq('id', answer.id).single());
       assert.equal(persisted.is_accepted, true);
     }
+    delete result.activePair;
+    phase = 'final-checks';
     assert.equal(sent.size, actors.length); assert.equal(received.size, actors.length);
     assert.equal(ready.size, actors.length); result.passed = true;
     result.allInboxesReadyThrough = new Date().toISOString();
   } catch (error) {
     result.failure = 'Authentication, subscription, budget, persistence or permission assertion failed; no retries.';
     result.failurePhase = phase;
+    result.failureKind = error?.name === 'AssertionError' ? 'assertion' :
+      error?.name === 'AbortError' || error?.name === 'TimeoutError' ? 'timeout-or-abort' :
+      error?.message === 'Application request rejected' ? 'application-request' :
+      error?.name === 'TypeError' ? 'network-or-type' : 'other';
+    if (result.failureKind === 'assertion' && typeof error.actual === 'boolean' && typeof error.expected === 'boolean') {
+      result.assertionActual = error.actual;
+      result.assertionExpected = error.expected;
+    }
     if (typeof error?.code === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(error.code)) result.failureCode = error.code;
     if (Number.isInteger(error?.status) && error.status >= 400 && error.status < 600) result.failureStatus = error.status;
   }
