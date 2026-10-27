@@ -102,14 +102,18 @@
   .header-search input { width: 100%; height: 42px; border: 0; background: transparent; font-size: var(--type-ui); outline: none; box-shadow: none; }
   .icon-control { display: inline-flex; height: 44px; width: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; cursor: pointer; }
   .icon-control:hover { background: #e5ebee; }
-  .header-ask { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 6px; margin-left: auto; border-radius: 999px; padding: 8px 14px; font-size: var(--type-ui); font-weight: 600; white-space: nowrap; }
+  .header-ask { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 6px; margin-left: auto; border-radius: 999px; padding: 8px 14px; font-size: var(--type-ui); font-weight: 600; white-space: nowrap; transition: background-color 150ms ease, color 150ms ease; }
   .header-ask { background: #f0fdfa; color: #115e59; }
   .header-ask:hover { background: #ccfbf1; }
-  .header-login { display: inline-flex; min-height: 42px; flex-shrink: 0; align-items: center; border-radius: 999px; background: #0f766e; padding: 8px 20px; font-size: var(--type-ui); font-weight: 600; color: #fff; }
-  .header-login:hover { background: #115e59; }
-  .header-auth-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
-  .header-signin { display: inline-flex; min-height: 42px; align-items: center; padding: 8px 12px; border-radius: 999px; font-size: var(--type-ui); font-weight: 600; color: #334155; }
-  .header-signin:hover { background: #f1f5f9; }
+  .header-ask:active { background: #99f6e4; }
+  .header-login { display: inline-flex; min-height: 42px; flex-shrink: 0; align-items: center; border-radius: 999px; background: #0f766e; padding: 8px 20px; font-size: var(--type-ui); font-weight: 600; color: #fff; cursor: pointer; transition: background-color 150ms ease, box-shadow 150ms ease; }
+  .header-login:hover { background: #115e59; box-shadow: 0 1px 2px #0f383833; }
+  .header-login:active { background: #134e4a; box-shadow: none; }
+  .header-auth-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .header-signin { display: inline-flex; min-height: 42px; align-items: center; padding: 8px 12px; border-radius: 999px; font-size: var(--type-ui); font-weight: 600; color: #334155; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
+  .header-signin:hover { background: #e2e8f0; color: #0f172a; }
+  .header-signin:active { background: #cbd5e1; }
+  .header-login:focus-visible, .header-signin:focus-visible, .header-ask:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
   .brand-wordmark { color: #1e293b; white-space: nowrap; text-transform: none; letter-spacing: -0.65px; }
   .brand-mark { display: block; width: 40px; height: 40px; flex-shrink: 0; object-fit: contain; }
   .app-layout { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); margin-inline: auto; }
@@ -162,7 +166,7 @@
   .site-brand { flex: 1 1 130px; min-width: 130px; max-width: 172px; font-size: 16px; }
   .integrated-brand-logo-frame { width: 100%; max-width: 172px; }
   .header-secondary-action { display: none; }
-  .header-account, .header-login { margin-left: auto; flex-shrink: 0; }
+  .header-account { margin-left: auto; flex-shrink: 0; }
   .brand-mark { width: 32px; height: 32px; }
   .header-search { order: 5; flex-basis: 100%; max-width: none; }
   .header-login { padding-inline: 16px; }

@@ -10,7 +10,8 @@ import { getAuthMethods } from '@/lib/supabase/client';
 import { authCallbackUrl, authErrorMessage, authCaptchaOptions, safeAuthNext, type AuthErrorContext, type AuthMethods, type SocialProvider } from '@/lib/auth-flow';
 
 const inputClass = 'mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 font-normal outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100';
-const buttonClass = 'flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50';
+const buttonClass = 'flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white transition-colors duration-150 hover:bg-blue-800 active:bg-blue-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+const accountTabClass = 'rounded-lg px-3 py-2.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1';
 type CodeChannel = 'email' | 'phone';
 
 export function AuthForm({ signup = false }: { signup?: boolean }) {
@@ -141,15 +142,15 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
         </div> : <>
           {loading && <p role="status" className="mb-4 text-sm text-slate-600">Checking your session… {sessionSlow && <>This is taking longer than expected. <button type="button" onClick={() => window.location.reload()} className="underline">Reload sign-in</button></>}</p>}
           <nav aria-label="Account access" className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-center text-sm font-semibold">
-            <a href={accountHref(false)} aria-current={!signup ? 'page' : undefined} className={`rounded-lg px-3 py-2.5 ${!signup ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}>Log in</a>
-            <a href={accountHref(true)} aria-current={signup ? 'page' : undefined} className={`rounded-lg px-3 py-2.5 ${signup ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}>Create account</a>
+            <a href={accountHref(false)} aria-current={!signup ? 'page' : undefined} className={`${accountTabClass} ${!signup ? 'bg-white text-slate-950 shadow-sm hover:bg-slate-50 active:bg-slate-100' : 'cursor-pointer text-slate-600 hover:bg-white hover:text-slate-950 active:bg-slate-200'}`}>Log in</a>
+            <a href={accountHref(true)} aria-current={signup ? 'page' : undefined} className={`${accountTabClass} ${signup ? 'bg-white text-slate-950 shadow-sm hover:bg-slate-50 active:bg-slate-100' : 'cursor-pointer text-slate-600 hover:bg-white hover:text-slate-950 active:bg-slate-200'}`}>Create account</a>
           </nav>
           <div className="mb-5 inline-flex rounded-xl bg-blue-50 p-3 text-blue-700"><Mail aria-hidden="true" size={24} /></div>
           <h1 className="text-2xl font-black text-slate-950">{step === 'code' ? `Check your ${codeChannel === 'phone' ? 'phone' : 'email'}` : signup ? 'Join VisaThreads' : 'Welcome Back'}</h1>
           <p className="mt-2 text-base text-slate-600">{step === 'code' ? <>Enter the latest one-time code for <strong className="break-all">{codeChannel === 'phone' ? phone.trim() : email.trim()}</strong>.</> : signup ? 'Create your account with Google or verify your email below.' : 'Welcome back. New here? Choose Create account above.'}</p>
           {step === 'email' && <>
             <div className="mt-6 grid gap-3">
-              {(['google'] as const).map(provider => <button key={provider} type="button" disabled={busy || loading || !methods?.[provider]} onClick={() => social(provider)} className="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+              {(['google'] as const).map(provider => <button key={provider} type="button" disabled={busy || loading || !methods?.[provider]} onClick={() => social(provider)} className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-800 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
                 <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2.1H12v4h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.2 3-7.4Z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4L15.4 17c-.9.6-2 .9-3.4.9-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 13.8a6 6 0 0 1 0-3.6V7.6H3.1a10 10 0 0 0 0 8.8l3.3-2.6Z"/><path fill="#EA4335" d="M12 6.1c1.5 0 2.8.5 3.8 1.5l2.8-2.8A9.5 9.5 0 0 0 12 2a10 10 0 0 0-8.9 5.6l3.3 2.6C7.2 7.9 9.4 6.1 12 6.1Z"/></svg>
                 Continue with Google{methods && !methods.google && <span className="text-xs font-normal">Not available yet</span>}
               </button>)}

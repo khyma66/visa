@@ -165,6 +165,8 @@ test('header shows both login and signup document links before authentication', 
     assert(nav);
     assert(nodes(nav).includes(link));
     assert(nodes(nav).includes(signup));
+    assert.match(link.props.className, /header-signin/);
+    assert.match(signup.props.className, /header-login/);
   } finally { h.close(); }
 });
 
@@ -325,6 +327,9 @@ test('signup and login are visible before provider actions and keep only safe re
       assert.deepEqual(links.map(link => link.props.href), ['/login?next=%2Fmessages#sign-in', '/signup?next=%2Fmessages#sign-in']);
       assert.equal(links[signup ? 1 : 0].props['aria-current'], 'page');
       assert.equal(links[signup ? 0 : 1].props['aria-current'], undefined);
+      assert(links.every(link => link.props.className.includes('focus-visible:ring-2')), 'Account tabs retain a keyboard-visible focus state');
+      assert.match(links[signup ? 1 : 0].props.className, /hover:bg-slate-50/, 'The selected tab has immediate hover feedback');
+      assert.match(links[signup ? 0 : 1].props.className, /hover:bg-white/, 'The alternate tab has immediate hover feedback');
       assert(links.every(link => !link.props.href.includes('email=')), 'Only the sanitized return destination is forwarded');
     } finally { h.close(); }
   }
