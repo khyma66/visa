@@ -53,4 +53,4 @@ await verifyStableRollout({ expected, previous: receipt.health,
     await probeRolloutHealth(probe, 'end');
   },
 });
-console.log(JSON.stringify({ status: 'verified', source: expected.gitSha, features, archiveUnchanged: true, questions: receipt.questionCount, replies: receipt.replyCount, assetsVerified: assets.length, signedInAcceptance: 'requires real user session; not established by this smoke check' }));
+console.log(JSON.stringify({ status: 'verified', source: expected.gitSha, features, archiveUnchanged: !receipt.archiveRefresh, archiveRefresh: receipt.archiveRefresh?.status ?? null, questions: receipt.questionCount, replies: receipt.replyCount, assetsVerified: assets.length, signedInAcceptance: 'requires real user session; not established by this smoke check' }));

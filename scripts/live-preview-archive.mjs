@@ -9,7 +9,7 @@ export const LIVE_DATABASE = 'https://cycnichledvqbxevrwnt.supabase.co';
 export const LIVE_WORKER = 'visaflow-dev';
 export const sha256 = value => createHash('sha256').update(value).digest('hex');
 
-/** Only the existing, already-served preview snapshot may enter this feature build. */
+/** Only a captured live snapshot or its separately checked additive refresh may enter this build. */
 export function checkedLiveArchive(root, env) {
   assert.equal(env.VISATHREADS_EXISTING_PREVIEW, 'true', 'Existing-preview mode must be explicit.');
   assert.equal(env.CLOUDFLARE_ENV, 'development', 'This does not open the formal production launch.');
@@ -24,11 +24,23 @@ export function checkedLiveArchive(root, env) {
   assert(receipt.health?.build?.dirty === false || pinnedChatbotRecovery(receipt.health?.build, receipt), 'Unreviewed dirty archive baseline.');
   assert.match(receipt.health?.build?.gitSha ?? '', /^[a-f0-9]{40}$/);
   assert.match(receipt.deploymentId ?? '', /^[a-f0-9-]{36}$/);
-  assert.equal(receipt.questionCount, 563, 'Existing archive baseline changed; review before deployment.');
-  assert.equal(receipt.replyCount, 628, 'Existing reply baseline changed; review before deployment.');
+  assert(Number.isSafeInteger(receipt.questionCount) && receipt.questionCount >= 563, 'Archive post count is below the reviewed baseline.');
+  assert(Number.isSafeInteger(receipt.replyCount) && receipt.replyCount >= 628, 'Archive reply count is below the reviewed baseline.');
   const age = Date.now() - Date.parse(receipt.capturedAt);
   assert(age >= 0 && age < 2 * 60 * 60 * 1000, 'Live archive receipt is expired.');
   const file = resolve(root, 'src/data/api-archive.json');
-  assert.equal(sha256(readFileSync(file)), receipt.archiveSha256, 'Recovered archive changed after capture.');
+  const bytes = readFileSync(file);
+  assert.equal(sha256(bytes), receipt.archiveSha256, 'Recovered archive changed after capture.');
+  const archive = JSON.parse(bytes.toString('utf8'));
+  assert.equal(archive.questions?.length, receipt.questionCount, 'Archive post count does not match the captured receipt.');
+  assert.equal(new Set(archive.questions.map(row => row.id)).size, receipt.questionCount, 'Archive contains duplicate post IDs.');
+  assert.equal(Object.values(archive.answersByQuestionId ?? {}).flat().length, receipt.replyCount, 'Archive reply count does not match the captured receipt.');
+  assert.equal(archive.source?.importedItems, receipt.questionCount, 'Archive source post count does not match the captured receipt.');
+  assert.equal(archive.source?.commentCount, receipt.replyCount, 'Archive source reply count does not match the captured receipt.');
+  if (receipt.archiveRefresh) {
+    assert.equal(receipt.archiveRefresh.status, 'additive-verified', 'Unreviewed archive refresh.');
+    assert(receipt.questionCount > receipt.archiveRefresh.previousQuestionCount, 'Archive refresh added no posts.');
+    assert(receipt.replyCount >= receipt.archiveRefresh.previousReplyCount, 'Archive refresh lost replies.');
+  }
   return file;
 }

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import ts from 'typescript';
 
 const root = new URL('../', import.meta.url);
-const token = parseEnv(await readFile(new URL('.dev.vars',root),'utf8')).APIFY_TOKEN;
+const token = process.env.APIFY_TOKEN ?? parseEnv(await readFile(process.env.APIFY_CREDENTIAL_FILE ?? new URL('.dev.vars',root),'utf8')).APIFY_TOKEN;
 assert(token && !token.includes('replace_'), 'Configure the existing local Apify credential first.');
 const actor='2chN8UQcH1CfxLRNE';
 const baseline='9iVj9RajtVcIVkzgZ';

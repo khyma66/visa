@@ -149,21 +149,23 @@ export async function captureFeatureBaseline() {
     headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` }, redirect: 'error', signal: AbortSignal.timeout(30_000),
   }));
   assert.equal(sha256(canonicalJson(publishedArchive(archive))), sha256(canonicalJson(publicArchive)), 'Deployed snapshot does not match the live feed.');
-  assert.equal(archive.questions?.length, 563, 'Original archive post count differs from baseline.');
-  assert.equal(new Set(archive.questions.map(row => row.id)).size, 563, 'Original archive contains duplicate post IDs.');
-  assert.equal(Object.values(archive.answersByQuestionId ?? {}).flat().length, 628, 'Original archive reply count differs from baseline.');
-  assert.equal(archive.source?.importedItems, 563, 'Original archive import metadata differs from baseline.');
-  assert.equal(archive.source?.commentCount, 628, 'Original archive reply metadata differs from baseline.');
+  const questionCount = archive.questions?.length;
+  const replyCount = Object.values(archive.answersByQuestionId ?? {}).flat().length;
+  assert(Number.isSafeInteger(questionCount) && questionCount >= 563, 'Live archive post count is below the reviewed baseline.');
+  assert(Number.isSafeInteger(replyCount) && replyCount >= 628, 'Live archive reply count is below the reviewed baseline.');
+  assert.equal(new Set(archive.questions.map(row => row.id)).size, questionCount, 'Live archive contains duplicate post IDs.');
+  assert.equal(archive.source?.importedItems, questionCount, 'Live archive post metadata differs from content.');
+  assert.equal(archive.source?.commentCount, replyCount, 'Live archive reply metadata differs from content.');
   const bytes = `${JSON.stringify(archive)}\n`;
   await mkdir(privateDirectory, { recursive: true, mode: 0o700 });
   await writeFile(resolve(root, 'src/data/api-archive.json'), bytes, { mode: 0o600 });
   await writeFile(resolve(privateDirectory, 'public-build-values.json'), JSON.stringify(values), { mode: 0o600 });
   const receipt = { schemaVersion: 1, siteOrigin: LIVE_SITE, databaseOrigin: LIVE_DATABASE, worker: LIVE_WORKER,
     capturedAt: new Date().toISOString(), deploymentId: deployment.id, previousVersion: deployment.versions[0].version_id,
-    health, archiveSha256: sha256(bytes), publishedArchiveSha256: sha256(canonicalJson(publicArchive)), questionCount: 563, replyCount: 628 };
+    health, archiveSha256: sha256(bytes), publishedArchiveSha256: sha256(canonicalJson(publicArchive)), questionCount, replyCount };
   await writeFile(receiptPath, JSON.stringify(receipt), { mode: 0o600 });
   const safeInventory = (settings.bindings ?? []).map(binding => ({ name: binding.name, type: binding.type, ...(binding.type === 'plain_text' && ['APP_ENV', 'PUBLIC_LAUNCH_APPROVED', 'IMPORTED_CONTENT_APPROVED', 'ASSISTANT_ENABLED', 'ASSISTANT_COMMUNITIES_ENABLED', 'ASSISTANT_CATCHUP_ENABLED', 'GOOGLE_NEWS_RSS_ENABLED'].includes(binding.name) ? { value: binding.text } : {}) }));
-  console.log(JSON.stringify({ operation: 'captured-existing-preview', source: health.build.gitSha, previousVersion: receipt.previousVersion, archiveSha256: receipt.archiveSha256, publishedArchiveSha256: receipt.publishedArchiveSha256, questionCount: 563, replyCount: 628, bindings: safeInventory }));
+  console.log(JSON.stringify({ operation: 'captured-existing-preview', source: health.build.gitSha, previousVersion: receipt.previousVersion, archiveSha256: receipt.archiveSha256, publishedArchiveSha256: receipt.publishedArchiveSha256, questionCount, replyCount, bindings: safeInventory }));
 }
 
 function run(command, args, env) {
