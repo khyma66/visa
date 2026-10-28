@@ -37,7 +37,7 @@ test('one compact footer reminder preserves essential safety facts without a war
   assert.doesNotMatch(html, /<details[^>]*open/);
   assert.equal((html.slice(0, html.indexOf('<details')).match(/<p>/g) ?? []).length, 1, 'Only one short reminder is visible by default');
 });
-test('safety and early-preview disclosures appear once in the footer, not above each page', async () => {
+test('safety and professional community description appear once in the footer in every environment', async () => {
   const safety = await component('../src/components/SafetyNotice.tsx');
   const { default: Layout } = await component('../src/app/layout.tsx', {
     react: pathToFileURL(require.resolve('react')).href,
@@ -57,11 +57,9 @@ test('safety and early-preview disclosures appear once in the footer, not above 
       assert(html.indexOf('<footer') < html.indexOf('Community Safety reminders'));
       assert(html.includes('href="/contact"'));
       assert(html.includes('href="/privacy"'));
-      if (environment === 'production') assert(!html.includes('Early preview'));
-      else {
-        assert.equal((html.match(/Early preview/g) ?? []).length, 1);
-        assert(html.indexOf('<footer') < html.indexOf('Early preview'));
-      }
+      assert.doesNotMatch(html, /Early preview|Not open for general public signup|Preview Privacy Notice/);
+      assert.equal((html.match(/U.S. visa questions, shared experiences, and helpful resources/g) ?? []).length, 1);
+      assert.match(html, /Terms and Conditions/);
     }
   } finally {
     if (originalEnvironment === undefined) delete process.env.NEXT_PUBLIC_APP_ENV;
@@ -81,5 +79,14 @@ test('policy pages clearly disclose missing operator processes rather than prete
     assert(html.includes(phrase),page);
     if (page === 'contact') assert(html.includes('href="mailto:varunchinna5966@gmail.com"'), 'Use only the approved temporary contact');
     else assert(!html.includes('mailto:'),'Do not invent a support mailbox');
+  }
+});
+
+test('public community pages use clear copy without stale launch labels', async () => {
+  for (const page of ['us', 'countries', 'community-safety', 'contact']) {
+    const { default: Page } = await component(`../src/app/${page}/page.tsx`, { '@/lib/search-metadata': searchMetadata.moduleUrl });
+    const html = renderToStaticMarkup(createElement(Page));
+    assert.doesNotMatch(html, /early.access|not open|general public signup|This preview/i, page);
+    assert.match(html, /href="\//, `${page} keeps working navigation`);
   }
 });
