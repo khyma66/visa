@@ -30,7 +30,7 @@ function topicEntities(text: string) {
 export type AssistantSearchIntent = {
   task: 'lookup' | 'answer'; text: string; locations: string[]; locationTerms: string[]; visas: string[];
   event: 'stamping' | 'biometrics' | 'passport-delivery' | null;
-  order: 'newest' | 'relevance'; softRecent: boolean; experience: boolean; since?: string; until?: string; unsupportedWindow: boolean;
+  order: 'newest' | 'relevance'; softRecent: boolean; experience: boolean; overview: boolean; since?: string; until?: string; unsupportedWindow: boolean;
 };
 const LOOKUP_NOUN = /\b(?:posts?|threads?|discussions?|experiences?|stor(?:y|ies))\b/i;
 const EXPERIENCE_NOUN = /\b(?:experiences?|stor(?:y|ies))\b/i;
@@ -52,6 +52,10 @@ function lookupRequest(question: string): boolean {
 /** One deterministic interpretation, shared by all retrieval sources. */
 export function assistantSearchIntent(input: AssistantRequest, now = Date.now()): AssistantSearchIntent {
   const current = (input.question ?? '').trim();
+  // Conversational requests get a synthesis; explicit browsing stays cheap
+  // and non-generative. Both use the same strict topic retrieval below.
+  const overview = lookupRequest(current) && /^(?:(?:please|can you|could you|would you)\s+)*(?:give|get|share|tell|recent|latest|newest|i want|i need)\b/i.test(current)
+    && !/\b(?:show|find|list|search|look|links?)\b|\ball (?:posts|threads|discussions)\b/i.test(current);
   const previous = assistantRefersToEarlierTurn(current)
     ? assistantBoundedHistory(input.previousQuestions ?? []).filter(value => !assistantStandaloneFollowUp(value) && !assistantMorePosts(value) && assistantPostOrdinal(value) === null).join(' ') : '';
   const question = assistantMorePosts(current) || assistantStandaloneFollowUp(current) ? previous || current : current;
@@ -79,11 +83,11 @@ export function assistantSearchIntent(input: AssistantRequest, now = Date.now())
     until = new Date(yesterday ? midnight.getTime() : now).toISOString();
   }
   return {
-    task: assistantMorePosts(current) && previous ? 'lookup' : lookupRequest(current) ? 'lookup' : 'answer',
+    task: assistantMorePosts(current) && previous ? 'lookup' : lookupRequest(current) && !overview ? 'lookup' : 'answer',
     text: combined.replace(new RegExp(temporal.source, 'gi'), ' ').replace(/\b(?:recent(?:ly)?|latest|newest|today|yesterday)\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500),
     locations, locationTerms: LOCATIONS.filter(([name]) => locations.includes(name)).flatMap(group => [...group]), visas,
     event: eventOf(question) ?? eventOf(previous), order: days !== null || softRecent || /\b(?:latest|newest|today|yesterday)\b/i.test(question) ? 'newest' : 'relevance', softRecent,
-    experience: EXPERIENCE_NOUN.test(question),
+    experience: EXPERIENCE_NOUN.test(question), overview,
     ...(since && until ? { since, until } : {}), unsupportedWindow,
   };
 }
@@ -108,7 +112,30 @@ export function assistantSourceMatchesIntent(source: AssistantSource, intent: As
 
 /** Shared, bounded conversation hints. None of these values confer access. */
 export function assistantStandaloneFollowUp(question: string): boolean {
-  return /^(?:why|how|what happened next|how long|how much)[?!.]*$/i.test(question.trim().replace(/\s+/g, ' '));
+  return /^(?:why|how|what happened next|how long|how much)[?!.]*$/i.test(question.trim().replace(/\s+/g, ' '))
+    || assistantSummaryFollowUp(question)
+    || /^(?:(?:please|can you|could you)\s+)*(?:compare(?:\s+(?:them|these|those|the posts))?|what (?:are|were) the differences)[?!.]*$/i.test(question.trim());
+}
+
+/** Transform the last evidence set, not a new search for the word summary. */
+export function assistantSummaryFollowUp(question: string): boolean {
+  return /^(?:(?:please|can you|could you|would you)\s+)*(?:(?:summari[sz]e|sum up)(?:\s+(?:them|these|those|it|that|the above|all|all of them|these posts|those posts|the posts|the results))?|(?:give(?: me)?\s+)?(?:a\s+)?(?:brief\s+|short\s+)?(?:summary|overview|key takeaways)|tl;?dr|make (?:it|that) (?:shorter|simpler|concise))(?:\s+please)?[?!.]*$/i.test(question.trim());
+}
+
+export function assistantPluralReference(question: string): boolean {
+  return /\b(?:these|those|all|posts|threads|results|discussions)\b|\b(?:summari[sz]e|compare|sum up) them\b/i.test(question);
+}
+
+/** The IDs remain locators only; retrieval rechecks visibility and content. */
+export function assistantResultSetFollowUp(input: AssistantRequest): boolean {
+  const question = input.question ?? '';
+  const current = topicEntities(question), prior = topicEntities(assistantBoundedHistory(input.previousQuestions ?? []).join(' '));
+  if (current.locations.length && !current.locations.some(value => prior.locations.includes(value))
+    || current.visas.length && !current.visas.some(value => prior.visas.includes(value))) return false;
+  return input.mode === 'ask' && input.scope.kind === 'public'
+    && assistantRefersToEarlierTurn(question) && !assistantMorePosts(question)
+    && assistantPostOrdinal(question) === null && !assistantPreviousPost(input)
+    && (!!input.previousPosts?.length || assistantSummaryFollowUp(question));
 }
 
 export function assistantMorePosts(question: string): boolean {
@@ -162,6 +189,7 @@ export function assistantPreviousPost(input: AssistantRequest): AssistantPostRef
   if (!assistantRefersToEarlierTurn(question) || assistantMorePosts(question)) return null;
   const ordinal = assistantPostOrdinal(question);
   if (ordinal === null) {
+    if (assistantPluralReference(question)) return null;
     if (!explicitDiscussionReference(question)) {
       const current = topicEntities(question);
       const prior = topicEntities(assistantBoundedHistory(input.previousQuestions ?? []).join(' '));

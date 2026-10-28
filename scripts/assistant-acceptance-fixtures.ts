@@ -45,6 +45,14 @@ const acknowledgementIsQualified = (result: AssistantResult) => result.status ==
     && /does(?:n[’']t| not) (?:(?:itself|independently) )?(?:establish|confirm|prove|verify|mean|demonstrate|show|(?:provide|constitute) (?:any |independent )?(?:evidence|proof|confirmation))|can(?:not|[’']t) (?:establish|confirm|prove|verify)|no (?:independent )?(?:confirmation|evidence|proof)|unconfirmed|unverified|not (?:(?:an? )?independent )?(?:confirmation|evidence|proof)|(?:only|merely|just) (?:shows?|reflects?|repeats?|restates?|express(?:es)?) .{0,70}(?:understanding|assumption)/i.test(words(result));
 const assertsWorkPermission = /(?:^|[.!?;]\s*|\bbut\s+)(?:yes[,\s]+)?(?:the (?:author|original poster|member)|they|you)\s+(?:can|may|(?:was|is|were|are)\s+(?:(?:actually|legally)\s+)?authorized to|(?:had|has|have)\s+(?:valid\s+)?(?:authorization|permission) to)\s+(?:(?:keep|continue)\s+)?work(?:ing)?\b/i;
 const post = { kind: 'post' as const, id: postId };
+const stemSources = [
+  source(401, 'My STEM OPT extension was approved on October 12, 2026. This is my individual case, not a standard timeline.', { kind: 'question', id: 'q:apify-fixture-stem-approved', questionId: 'apify-fixture-stem-approved', communityId: null, title: 'STEM OPT approval report', url: '/questions/apify-fixture-stem-approved' }),
+  source(402, 'My STEM OPT extension is still pending. I do not know when a decision will arrive.', { kind: 'question', id: 'q:apify-fixture-stem-pending', questionId: 'apify-fixture-stem-pending', communityId: null, title: 'STEM OPT pending report', url: '/questions/apify-fixture-stem-pending' }),
+];
+const stemChecks: Check[] = [answered, mentions('approval_report', /approv/), mentions('pending_report', /pending/),
+  mentions('unknown_decision_preserved', /unknown|uncertain|not know|no (?:known|confirmed|expected) (?:decision )?date|not (?:yet )?(?:known|stated)/),
+  { name: 'separate_reports_cited', test: result => stemSources.every(source => [...result.claims, ...result.disagreements].some(claim => claim.evidence.some(item => item.sourceId === source.id))) },
+  absent('no_universal_timeline', /typically|usually|everyone|all applicants|guaranteed/)];
 const community = { kind: 'community' as const, id: groupId };
 const since = '2026-10-13T00:00:00Z', until = '2026-10-14T00:00:00Z';
 const catchupCorpus: AssistantCorpus = { sources: [source(2, 'Today, October 13, I reported that my appointment was rescheduled to October 20.', { parentContext: 'An older July discussion asked about a July 25 appointment.', parentUpdatedAt: '2026-07-01T00:00:00Z' })], partial: false, since, until };
@@ -231,6 +239,15 @@ export const acceptanceFixtures: AcceptanceFixture[] = [
         && historicalCurrentDocumentBody.replace(/\s+/gu, ' ').includes(item.quote.replace(/\s+/gu, ' ')))) },
   ] },
 ];
+
+acceptanceFixtures.push(
+  ...(['stem-post-overview', 'stem-followup-summary', 'stem-followup-comparison'] as const).map((id): AcceptanceFixture => ({
+    id, input: { mode: 'ask', scope: { kind: 'public' },
+      question: id === 'stem-post-overview' ? 'give stem opt recent posts' : id === 'stem-followup-summary' ? 'summarize' : 'compare them',
+      ...(id === 'stem-post-overview' ? {} : { previousQuestions: ['Show recent STEM OPT posts'], previousPosts: stemSources.map(s => ({ questionId: s.questionId, sourceId: s.id })) }),
+    }, corpus: { sources: stemSources, partial: false }, checks: stemChecks,
+  }))
+);
 
 export function evaluateAcceptance(fixture: AcceptanceFixture, result: AssistantResult) {
   const checks = fixture.checks.map(check => ({ name: check.name, passed: check.test(result) }));

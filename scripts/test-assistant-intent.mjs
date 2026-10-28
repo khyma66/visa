@@ -11,7 +11,7 @@ const core = moduleUrl(compile(await read('assistant-core')).replace("'./assista
 const search = moduleUrl(compile(await read('assistant-search')).replace("'./assistant-core'", JSON.stringify(core)).replace("'./assistant-context'", JSON.stringify(context)));
 const data = moduleUrl(compile(await read('assistant-data')).replace("import archive from '@visa/archive';", 'const archive = new Proxy({}, { get: (_, key) => globalThis.__intentArchive[key] });')
   .replace("'./tagging'", JSON.stringify(tagging)).replace("'./assistant-core'", JSON.stringify(core)).replace("'./assistant-search'", JSON.stringify(search)).replace("'./assistant-context'", JSON.stringify(context)));
-const { assistantSearchIntent, assistantSourceMatchesIntent, assistantRefersToEarlierTurn, assistantPreviousPost } = await import(context);
+const { assistantSearchIntent, assistantSourceMatchesIntent, assistantRefersToEarlierTurn, assistantPreviousPost, assistantDisplayedPosts, assistantResultSetFollowUp } = await import(context);
 const { assistantPrompt } = await import(core);
 const { assistantPostSearchQuery, buildAssistantPostSearchResult } = await import(search);
 const { retrieveAssistantCorpus } = await import(data);
@@ -35,6 +35,54 @@ function client() {
     },
   };
 }
+
+test('STEM OPT browse → summarize → compare reuses freshly read displayed posts, not a new search', async () => {
+  const rows = [q('apify-stem-a', 'My STEM OPT extension was approved on October 10.'), q('apify-stem-b', 'My STEM OPT extension is pending. I do not know the decision date.'), q('apify-unrelated', 'My H4 driving license was issued.')];
+  archive(rows);
+  const browse = ask('Show recent STEM OPT posts');
+  const list = buildAssistantPostSearchResult(browse, await retrieveAssistantCorpus(client(), browse, now), now);
+  const refs = assistantDisplayedPosts(list);
+  assert.equal(refs.length, 2);
+  // A newer match appears after browsing. Follow-ups must not silently switch.
+  globalThis.__intentArchive.questions.push(q('apify-new', 'My STEM OPT extension was denied.'));
+  globalThis.__intentArchive.questions[0].body = 'Correction: my STEM OPT extension is still pending.';
+  for (const question of ['summarize', 'Can you summarize?', 'Summarize these posts', 'give me a summary', 'compare them', 'What happened next?', 'What outcomes did they report?', 'Make it shorter']) {
+    const input = { ...ask(question), previousQuestions: [browse.question], previousPosts: refs };
+    assert(assistantRefersToEarlierTurn(question), question);
+    assert(assistantResultSetFollowUp(input), question);
+    const db = client();
+    const corpus = await retrieveAssistantCorpus(db, input, now);
+    assert.deepEqual(new Set(corpus.sources.map(s => s.questionId)), new Set(refs.map(r => r.questionId)), question);
+    assert(!db.calls.some(c => c.rpc), 'No new global search for a result-set continuation');
+    assert(corpus.sources.some(s => s.body.startsWith('Correction:')), 'Re-read edited bodies instead of trusting prior output');
+    const prompt = JSON.parse(assistantPrompt(input, corpus).user);
+    assert.equal(prompt.resolvedDiscussions.length, 2);
+    assert.equal(prompt.collectionTask, /compare|happened|outcomes/.test(question) ? 'followup' : 'summary');
+  }
+  globalThis.__intentArchive.questions[0].status = 'archived';
+  const removed = await retrieveAssistantCorpus(client(), { ...ask('summarize'), previousPosts: refs }, now);
+  assert.equal(removed.sources.length, 1); assert(removed.partial);
+  const empty = await retrieveAssistantCorpus(client(), ask('summarize'), now);
+  assert.equal(empty.sources.length, 0, 'No context must not generate an unrelated summary');
+});
+
+test('conversational post requests synthesize while explicit browse keeps strict retrieval', async () => {
+  archive([q('apify-stem', 'My STEM OPT extension was approved.'), q('apify-opt', 'My OPT application was received.'), q('apify-other', 'Recent posts about employment options.')]);
+  for (const text of ['give stem opt recent posts', 'get recent STEM OPT posts', 'Recent STEM OPT posts']) {
+    const input = ask(text);
+    assert.equal(assistantPostSearchQuery(input, now), null);
+    assert.equal(assistantSearchIntent(input, now).overview, true);
+    const corpus = await retrieveAssistantCorpus(client(), input, now);
+    assert.deepEqual(corpus.sources.map(s => s.questionId), ['apify-stem']);
+    assert.equal(JSON.parse(assistantPrompt(input, corpus).user).collectionTask, 'summary');
+  }
+  for (const text of ['Show recent STEM OPT posts', 'List recent STEM OPT posts', 'Find recent STEM OPT posts']) assert(assistantPostSearchQuery(ask(text), now));
+  const focusedPost = { questionId: 'apify-stem', sourceId: 'q:apify-stem' };
+  assert.deepEqual(assistantPreviousPost({ ...ask('summarize'), focusedPost }), focusedPost);
+  assert.deepEqual(assistantPreviousPost({ ...ask('What happened to them?'), focusedPost }), focusedPost, 'A person-reference keeps the selected discussion');
+  assert.equal(assistantPreviousPost({ ...ask('summarize these posts'), focusedPost }), null);
+  assert.equal(assistantResultSetFollowUp({ ...ask('Find H4 posts'), previousPosts: [focusedPost] }), false);
+});
 
 test('experience and story lookup paraphrases normalize multiple cities without rerouting explanation/policy asks', () => {
   for (const [text, city] of [

@@ -274,6 +274,9 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
               {turn.state === 'pending' ? <p role="status" className="flex items-center gap-2 text-sm text-slate-500"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-500 motion-reduce:animate-none" aria-hidden="true" />Thinking…</p> : turn.result ? <Result result={turn.result} catchup={turn.mode === 'catchup'} /> : <p className="text-xs text-slate-500">{turn.state === 'cancelled' ? 'Stopped.' : 'No answer received.'}</p>}
             </div></div>
           </div>)}
+          {scope.kind === 'public' && !busy && turns.at(-1)?.state === 'complete' && assistantDisplayedPosts(turns.at(-1)?.result).length > 0 && <div className="flex flex-wrap gap-2 pl-8" role="group" aria-label="Continue this conversation">
+            {(turns.at(-1)?.result?.kind === 'posts' ? ['Summarize these posts', 'Compare them'] : ['Make it shorter', 'What outcomes did they report?']).map(prompt => <button key={prompt} type="button" className={`${controlClass} hover:border-teal-400 hover:text-teal-800`} onClick={() => { setMode('ask'); setDraft({ identity, text: prompt }); setError(''); }}>{prompt}</button>)}
+          </div>}
           <div ref={endOfChat} />
         </div>
         <form onSubmit={submit} className="border-t border-slate-100 p-3 sm:p-4">

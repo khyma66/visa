@@ -284,6 +284,9 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
   requiredCases.push('numbered-interview-transcript');
   requiredCases.push('heterogeneous-report-summary');
   requiredCases.push('historical-current-document-separation');
+  requiredCases.push('stem-post-overview');
+  requiredCases.push('stem-followup-summary');
+  requiredCases.push('stem-followup-comparison');
   assert(Array.isArray(receipt.cases) && receipt.cases.length === requiredCases.length && requiredCases.every(id => receipt.cases.some(row => row.id === id)), 'Every required hosted case must occur exactly once.');
   for (const row of receipt.cases) {
     assert.equal(row.model, receipt.model);
