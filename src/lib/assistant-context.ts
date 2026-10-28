@@ -123,7 +123,7 @@ export function assistantSummaryFollowUp(question: string): boolean {
 }
 
 export function assistantPluralReference(question: string): boolean {
-  return /\b(?:these|those|them|all|posts|threads|results|discussions)\b/i.test(question);
+  return /\b(?:these|those|all|posts|threads|results|discussions)\b|\b(?:summari[sz]e|compare|sum up) them\b/i.test(question);
 }
 
 /** The IDs remain locators only; retrieval rechecks visibility and content. */

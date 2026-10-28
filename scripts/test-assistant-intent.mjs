@@ -79,6 +79,7 @@ test('conversational post requests synthesize while explicit browse keeps strict
   for (const text of ['Show recent STEM OPT posts', 'List recent STEM OPT posts', 'Find recent STEM OPT posts']) assert(assistantPostSearchQuery(ask(text), now));
   const focusedPost = { questionId: 'apify-stem', sourceId: 'q:apify-stem' };
   assert.deepEqual(assistantPreviousPost({ ...ask('summarize'), focusedPost }), focusedPost);
+  assert.deepEqual(assistantPreviousPost({ ...ask('What happened to them?'), focusedPost }), focusedPost, 'A person-reference keeps the selected discussion');
   assert.equal(assistantPreviousPost({ ...ask('summarize these posts'), focusedPost }), null);
   assert.equal(assistantResultSetFollowUp({ ...ask('Find H4 posts'), previousPosts: [focusedPost] }), false);
 });
