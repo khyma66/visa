@@ -14,6 +14,17 @@ const presentation = moduleUrl(compile(await read('post-presentation')));
 const metadataUrl = moduleUrl(compile(await read('search-metadata')).replace("'./search-visibility'", JSON.stringify(visibility)).replace("'./post-presentation'", JSON.stringify(presentation)));
 const { publicPageMetadata, eligibleNativeThread, threadStructuredData, serializeStructuredData } = await import(metadataUrl);
 const approved = { APP_ENV: 'production', PUBLIC_LAUNCH_APPROVED: 'true', NEXT_PUBLIC_SITE_URL: 'https://visathreads.com' };
+
+test('editorial discovery indexes canonical resources but not filters or individual discussions', () => {
+  const env = { ...approved, APP_ENV: 'development', PUBLIC_LAUNCH_APPROVED: 'false', SEARCH_DISCOVERY_ENABLED: 'true' };
+  for (const path of ['/', '/about', '/guides', `/guides/${VISA_GUIDES[0].slug}`]) {
+    assert.equal(publicPageMetadata(path, 'Title', 'Description', {}, true, env).robots.index, true);
+    assert.equal(publicPageMetadata(path, 'Title', 'Description', { sort: 'unanswered' }, true, env).robots.index, false);
+  }
+  for (const path of ['/questions/apify-123', '/questions/11111111-1111-4111-8111-111111111111', '/admin/analytics']) {
+    assert.equal(publicPageMetadata(path, 'Title', 'Description', {}, true, env).robots.index, false);
+  }
+});
 const qid = '11111111-1111-4111-8111-111111111111';
 const aid = '22222222-2222-4222-8222-222222222222';
 const uid = '33333333-3333-4333-8333-333333333333';

@@ -176,7 +176,7 @@ test('feature integration retains original whole-site assertions and both post-a
   assert(source.includes('receipt.publishedArchiveSha256')); assert(source.includes('assert.deepEqual(await flagsResponse.json(), features)'));
   assert(source.includes("['anonymous-denial', {}, 401]")); assert(source.includes("Origin: 'https://untrusted.example' }, 403")); assert(source.includes("'invalid-session-denial'"));
   assert(source.includes('/private, no-store/')); assert(source.includes('rollout-verification.json'));
-  assert(source.includes('await verifyPlaybookPages(probe, feed)'));
+  assert(source.includes('await verifyPlaybookPages(probe, feed, true)'));
 });
 
 const playbookPost = { id: 'apify-smoke-public-post', status: 'open', destination_country: 'United States', post_kind: 'question', title: 'Public question & source', body: 'Public community content is rendered on the server, without depending on client scripts.' };

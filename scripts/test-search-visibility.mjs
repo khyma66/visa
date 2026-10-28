@@ -13,6 +13,17 @@ const helperUrl = moduleUrl(transpile(await readFile(new URL('../src/lib/search-
 const { publicSearchOrigin, publicSitemap, publicRobots, PUBLIC_SITEMAP_PATHS, PRIVATE_CRAWL_PATHS, MODEL_USE_CRAWLERS } = await import(helperUrl);
 const approved = { APP_ENV: 'production', PUBLIC_LAUNCH_APPROVED: 'true', NEXT_PUBLIC_SITE_URL: 'https://visathreads.com' };
 
+test('owner-enabled editorial discovery publishes resources without opening native thread indexing or dev', () => {
+  const discovery = { ...approved, APP_ENV: 'development', PUBLIC_LAUNCH_APPROVED: 'false', SEARCH_DISCOVERY_ENABLED: 'true' };
+  assert.equal(publicSearchOrigin(discovery), null);
+  assert(publicSitemap(discovery).some(row => row.url === 'https://visathreads.com/about'));
+  assert(publicSitemap(discovery).every(row => !/\/(questions|experiences)\//.test(row.url)));
+  assert.equal(publicRobots(discovery).sitemap, 'https://visathreads.com/sitemap.xml');
+  for (const override of [{ NEXT_PUBLIC_SITE_URL: 'https://visa-central.com' }, { NEXT_PUBLIC_DEPLOYMENT_TARGET: 'sandbox' }, { SEARCH_DISCOVERY_ENABLED: 'false' }]) {
+    assert.deepEqual(publicSitemap({ ...discovery, ...override }), []);
+  }
+});
+
 test('only a reviewed production deployment publishes a sitemap', () => {
   assert.equal(publicSearchOrigin(approved), 'https://visathreads.com');
   assert.equal(publicSearchOrigin({ ...approved, NEXT_PUBLIC_SITE_URL: 'https://www.visathreads.com/' }), 'https://visathreads.com');

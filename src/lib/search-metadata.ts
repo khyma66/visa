@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import type { Answer, Question } from './types';
-import { publicSearchOrigin, type SearchEnvironment } from './search-visibility';
+import { publicSearchOrigin, discoveryOrigin, discoveryPath, type SearchEnvironment } from './search-visibility';
 import { isImportedPost, usVisaPost } from './post-presentation';
 
 export type SearchParameters = Record<string, string | string[] | undefined>;
@@ -21,7 +21,7 @@ export function eligibleNativeThread(question: Question): boolean {
 export function publicPageMetadata(path: string, title: string, description: string,
   searchParams: SearchParameters = {}, eligible = true, env: SearchEnvironment = process.env): Metadata {
   const canonical = new URL(path, SITE_ORIGIN).href;
-  const approved = Boolean(publicSearchOrigin(env));
+  const approved = Boolean(publicSearchOrigin(env) || (discoveryOrigin(env) && discoveryPath(path)));
   const filtered = Object.values(searchParams).some(value => value !== undefined);
   return {
     title: path === '/' ? { absolute: `${title} · VisaThreads` } : title,

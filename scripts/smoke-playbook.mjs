@@ -25,13 +25,13 @@ function visible(html) {
   return decodeHtml(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 }
-function checkMetadata(html, path, title, label) {
+function checkMetadata(html, path, title, label, indexable = false) {
   const canonicals = [...html.matchAll(/<link\b[^>]*>/gi)].map(([tag]) => attributes(tag)).filter(tag => tag.rel === 'canonical');
   requireCheck(canonicals.length === 1 && canonicals[0].href === new URL(path, ORIGIN).href, `${label}-canonical`);
   const titles = [...html.matchAll(/<title\b[^>]*>([\s\S]*?)<\/title>/gi)].map(([, value]) => decodeHtml(value));
   requireCheck(titles.length === 1 && titles[0] === `${title} · VisaThreads`, `${label}-title`);
   const robots = [...html.matchAll(/<meta\b[^>]*>/gi)].map(([tag]) => attributes(tag)).find(tag => tag.name === 'robots');
-  requireCheck(robots && /\bnoindex\b/.test(robots.content ?? ''), `${label}-preview-noindex`);
+  requireCheck(robots && (indexable ? /\bindex\b/ : /\bnoindex\b/).test(robots.content ?? ''), `${label}-indexing`);
 }
 function hasLink(html, href) {
   return [...html.matchAll(/<a\b[^>]*>/gi)].some(([tag]) => attributes(tag).href === href);
@@ -39,12 +39,12 @@ function hasLink(html, href) {
 
 /** Seven extra public requests per complete rollout round. All use its existing
  * bounded provenance-aware probe; no accounts, sessions, writes or private reads. */
-export async function verifyPlaybookPages(probe, feed) {
-  async function page(label, path) {
+export async function verifyPlaybookPages(probe, feed, discovery = false) {
+  async function page(label, path, indexable = false) {
     const response = await probe.request(`playbook:${label}`, path);
     requireCheck(response.headers.get('content-type')?.includes('text/html'), `${label}-html`);
     requireCheck(response.headers.get('cache-control')?.includes('no-store'), `${label}-uncached`);
-    requireCheck(response.headers.get('x-robots-tag')?.includes('noindex'), `${label}-preview-header`);
+    requireCheck(indexable ? !response.headers.get('x-robots-tag')?.includes('noindex') : response.headers.get('x-robots-tag')?.includes('noindex'), `${label}-indexing-header`);
     const html = await response.text();
     requireCheck(html.length < 2_000_000 && !html.includes('sb_secret_'), `${label}-document`);
     return html;
@@ -54,14 +54,14 @@ export async function verifyPlaybookPages(probe, feed) {
   requireCheck(visible(index).includes('U.S. Visa Guides'), 'guides-visible-heading');
   for (const guide of PLAYBOOK_GUIDE_CHECKS) {
     requireCheck(hasLink(index, `/guides/${guide.slug}`), 'guides-navigation');
-    const html = await page(`guide-${guide.slug}`, `/guides/${guide.slug}`);
-    checkMetadata(html, `/guides/${guide.slug}`, guide.title, 'guide');
+    const html = await page(`guide-${guide.slug}`, `/guides/${guide.slug}`, discovery);
+    checkMetadata(html, `/guides/${guide.slug}`, guide.title, 'guide', discovery);
     const text = visible(html);
     requireCheck(text.includes(guide.title) && text.includes('Your preparation checklist') && text.includes('Official references'), 'guide-visible-content');
     requireCheck(hasLink(html, guide.source) && hasLink(html, '/contact'), 'guide-source-and-correction');
   }
-  const about = await page('about', '/about');
-  checkMetadata(about, '/about', 'About VisaThreads', 'about');
+  const about = await page('about', '/about', discovery);
+  checkMetadata(about, '/about', 'About VisaThreads', 'about', discovery);
   requireCheck(visible(about).includes('independent community') && hasLink(about, '/guides') && hasLink(about, '/contact'), 'about-scope-and-links');
 
   const owner = await page('owner-launch-shell', '/admin/launch');

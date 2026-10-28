@@ -45,6 +45,7 @@ export function buildProvenance(root = process.cwd(), env = process.env) {
     ...(env.VISATHREADS_EXISTING_PREVIEW === 'true' ? { existingPreviewFeatures: {
       assistant: env.ASSISTANT_ENABLED, communities: env.ASSISTANT_COMMUNITIES_ENABLED, catchup: env.ASSISTANT_CATCHUP_ENABLED,
       provider: env.ASSISTANT_PROVIDER,
+      searchDiscovery: env.SEARCH_DISCOVERY_ENABLED,
       archiveSha256: JSON.parse(readFileSync(resolve(root, '.cache/visaflow/live-preview/receipt.json'), 'utf8')).archiveSha256,
     } } : {}),
     ...(env.VISATHREADS_DEV_SYNC === 'true' ? { developmentSyncArchiveSha256:

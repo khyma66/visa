@@ -37,7 +37,18 @@ await verifyStableRollout({ expected, previous: receipt.health,
       await response.body?.cancel();
     }
     await smokeSite(LIVE_SITE, expected, { fetchImpl: probe.siteFetch, skipHealthWait: true });
-    await verifyPlaybookPages(probe, feed);
+    await verifyPlaybookPages(probe, feed, true);
+    const home = await probe.request('search-home', '/');
+    assert.equal(home.headers.get('x-visathreads-search'), 'editorial');
+    assert(!/noindex/i.test(home.headers.get('x-robots-tag') ?? ''));
+    const html = await home.text();
+    assert(!/<meta[^>]+name="robots"[^>]+content="[^"]*noindex/i.test(html));
+    const robots = await (await probe.request('search-robots', '/robots.txt')).text();
+    assert.match(robots, /Allow: \/\s/);
+    assert.match(robots, /Sitemap: https:\/\/visathreads.com\/sitemap.xml/);
+    const sitemap = await (await probe.request('search-sitemap', '/sitemap.xml')).text();
+    assert.match(sitemap, /<loc>https:\/\/visathreads.com\/guides/);
+    assert(!/<loc>[^<]*\/(questions|experiences|admin|owner|account|messages)\//.test(sitemap));
     await verifyClientAssets(probe, assets);
     await probeRolloutHealth(probe, 'end');
   },

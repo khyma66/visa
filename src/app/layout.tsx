@@ -56,6 +56,8 @@ export default function RootLayout({
             {process.env.NEXT_PUBLIC_APP_ENV !== 'production' && <p role="note" className="mb-2 font-semibold text-slate-700">Early preview · Not open for general public signup.</p>}
             <SafetyNotice />
             <nav aria-label="Policies and support" className="mt-2 flex flex-wrap gap-x-4">
+              <Link href="/guides" className="underline">U.S. Visa Guides</Link>
+              <Link href="/about" className="underline">About VisaThreads</Link>
               <Link href="/privacy" className="underline">Preview Privacy Notice</Link>
               <Link href="/terms" className="underline">Community Rules</Link>
               <Link href="/cookies" className="underline">Cookies and Storage</Link>
