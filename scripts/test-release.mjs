@@ -26,7 +26,32 @@ test('CI and production never include the private development archive', () => {
 });
 
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
-const transpile = (source) => ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+const compile = (source) => ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+const guideModule = moduleUrl(compile(await readFile(new URL('../src/lib/visa-guides.ts',import.meta.url),'utf8')));
+const searchModule = moduleUrl(compile(await readFile(new URL('../src/lib/search-visibility.ts',import.meta.url),'utf8')).replace("'./visa-guides'",JSON.stringify(guideModule)));
+const transpile = source => compile(source).replace("'./lib/search-visibility'",JSON.stringify(searchModule));
+
+test('editorial crawl headers match metadata while dev, filters and private routes stay excluded', async () => {
+  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } }');
+  const source = transpile(await readFile(new URL('../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub));
+  const { middleware } = await import(moduleUrl(source));
+  const env = { APP_ENV: 'development', PUBLIC_LAUNCH_APPROVED: 'false', SEARCH_DISCOVERY_ENABLED: 'true', NEXT_PUBLIC_SITE_URL: 'https://visathreads.com' };
+  const previous = Object.fromEntries(Object.keys(env).map(key => [key,process.env[key]]));
+  try {
+    Object.assign(process.env,env);
+    for (const path of ['/', '/about', '/guides', '/robots.txt', '/sitemap.xml']) {
+      const response = middleware({ nextUrl: new URL(path,env.NEXT_PUBLIC_SITE_URL) });
+      assert.equal(response.status,200);
+      assert.equal(response.headers.get('x-robots-tag'),null);
+      assert.equal(response.headers.get('x-visathreads-search'),'editorial');
+    }
+    for (const url of ['https://visa-central.com/', 'https://visathreads.com/?sort=unanswered', 'https://visathreads.com/admin/analytics', 'https://visathreads.com/questions/apify-123', 'https://visathreads.com/guides/not-a-guide']) {
+      assert.match(middleware({ nextUrl:new URL(url) }).headers.get('x-robots-tag'),/noindex/);
+    }
+  } finally {
+    for (const [key,value] of Object.entries(previous)) value === undefined ? delete process.env[key] : process.env[key] = value;
+  }
+});
 
 const env = { NEXT_PUBLIC_SUPABASE_URL:'https://fixture.supabase.co', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:`sb_publishable_${'x'.repeat(30)}`, NEXT_PUBLIC_APP_ENV:'production', NEXT_PUBLIC_SITE_URL:'https://visaflow.example.org' };
 const source = { gitSha: 'a'.repeat(40), gitTree: 'b'.repeat(40), sourceSha256: 'c'.repeat(64), dirty: false };

@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 import { VISA_GUIDES } from './visa-guides';
 
 export type SearchEnvironment = Partial<Record<
-  'APP_ENV' | 'PUBLIC_LAUNCH_APPROVED' | 'NEXT_PUBLIC_SITE_URL' | 'NEXT_PUBLIC_DEPLOYMENT_TARGET', string>>;
+  'APP_ENV' | 'PUBLIC_LAUNCH_APPROVED' | 'NEXT_PUBLIC_SITE_URL' | 'NEXT_PUBLIC_DEPLOYMENT_TARGET' | 'SEARCH_DISCOVERY_ENABLED', string>>;
 
 // Imported content, member profiles and private areas are never enumerated here.
 export const PUBLIC_SITEMAP_PATHS = [
@@ -19,6 +19,18 @@ export const PRIVATE_CRAWL_PATHS = [
 // controls Gemini grounding; it does not control inclusion in Google Search.
 // Reviewed against operator documentation on 2026-10-18. robots is not access control.
 export const MODEL_USE_CRAWLERS = ['GPTBot', 'ClaudeBot', 'Google-Extended'] as const;
+
+// Owner-authorized search discovery is separate from opening community signup.
+// It covers editorial pages only, never individual member or imported threads.
+export function discoveryOrigin(env: SearchEnvironment = process.env): string | null {
+  if (env.SEARCH_DISCOVERY_ENABLED !== 'true' || env.APP_ENV !== 'development') return null;
+  return publicSearchOrigin({ ...env, APP_ENV: 'production', PUBLIC_LAUNCH_APPROVED: 'true' });
+}
+
+export function discoveryPath(path: string): boolean {
+  return (PUBLIC_SITEMAP_PATHS as readonly string[]).includes(path)
+    || VISA_GUIDES.some(guide => path === `/guides/${guide.slug}`);
+}
 
 /** Fail closed when the release gate or canonical origin is not configured. */
 export function publicSearchOrigin(env: SearchEnvironment = process.env): string | null {
@@ -42,7 +54,7 @@ export function publicSearchOrigin(env: SearchEnvironment = process.env): string
 }
 
 export function publicSitemap(env: SearchEnvironment = process.env): MetadataRoute.Sitemap {
-  const origin = publicSearchOrigin(env);
+  const origin = publicSearchOrigin(env) ?? discoveryOrigin(env);
   if (!origin) return [];
   // Do not invent lastModified dates from the request or deployment time.
   return [...PUBLIC_SITEMAP_PATHS, ...VISA_GUIDES.map(guide => `/guides/${guide.slug}`)]
@@ -50,7 +62,7 @@ export function publicSitemap(env: SearchEnvironment = process.env): MetadataRou
 }
 
 export function publicRobots(env: SearchEnvironment = process.env): MetadataRoute.Robots {
-  const origin = publicSearchOrigin(env);
+  const origin = publicSearchOrigin(env) ?? discoveryOrigin(env);
   if (!origin) return { rules: { userAgent: '*', disallow: '/' } };
   return {
     rules: [

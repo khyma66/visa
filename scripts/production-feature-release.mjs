@@ -1,5 +1,6 @@
 // Feature updates for the existing visathreads.com early preview. This does not
-// change the formal public-release workflow, launch approval, indexing, or dev.
+// change the formal public-release workflow or launch approval. Owner-authorized
+// editorial search discovery is independent of signup and imported-thread indexing.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -74,6 +75,7 @@ export function featureEnvironment(values, enabled, features = {}) {
     ...Object.fromEntries(publicVariableNames.filter(name => values[name] !== undefined).map(name => [name, values[name]])),
     NEXT_PUBLIC_APP_ENV: 'development', APP_ENV: 'development', CLOUDFLARE_ENV: 'development',
     VISATHREADS_EXISTING_PREVIEW: 'true', PUBLIC_LAUNCH_APPROVED: 'false', IMPORTED_CONTENT_APPROVED: 'false',
+    SEARCH_DISCOVERY_ENABLED: 'true',
     COMMUNITY_SOURCE_MODE: 'snapshot', APIFY_LIVE_FETCH_ENABLED: 'false',
     ASSISTANT_PROJECT_REF: 'cycnichledvqbxevrwnt', ASSISTANT_PROVIDER: releaseProvider(features),
     ASSISTANT_ENABLED: enabled, ASSISTANT_COMMUNITIES_ENABLED: communities, ASSISTANT_CATCHUP_ENABLED: catchup,
@@ -85,6 +87,7 @@ export function verifyFeatureWorker(config, enabled, features = {}) {
   assert.deepEqual(config.routes, hosts.map(pattern => ({ pattern, custom_domain: true })));
   assert.equal(config.vars.APP_ENV, 'development', 'Existing launch mode must remain unchanged.');
   assert.equal(config.vars.PUBLIC_LAUNCH_APPROVED, 'false');
+  assert.equal(config.vars.SEARCH_DISCOVERY_ENABLED, 'true');
   assert.equal(config.vars.IMPORTED_CONTENT_APPROVED, 'false');
   assert.equal(config.vars.APIFY_LIVE_FETCH_ENABLED, 'false');
   assert.equal(config.vars.NEXT_PUBLIC_SITE_URL, LIVE_SITE);
@@ -125,7 +128,8 @@ async function liveState() {
   console.log(JSON.stringify({ operation: 'live-health-check', environment: health.environment, releaseStatus: health.releaseStatus, source: health.build?.gitSha, gitTree: health.build?.gitTree, sourceSha256: health.build?.sourceSha256, configSha256: health.build?.configSha256, siteOrigin: health.build?.siteOrigin, dirty: health.build?.dirty, deploymentId: deployment.id, versions: deployment.versions.map(row => ({ version: row.version_id, percentage: row.percentage })) }));
   verifyExistingLiveProvenance(health, deployment);
   const response = await fetch(LIVE_SITE, { redirect: 'error', signal: AbortSignal.timeout(15_000) });
-  assert.match(response.headers.get('x-robots-tag') ?? '', /noindex/, 'Do not change an already launched site through preview tooling.');
+  assert(/noindex/.test(response.headers.get('x-robots-tag') ?? '')
+    || response.headers.get('x-visathreads-search') === 'editorial', 'Unexpected live search mode.');
   await response.body?.cancel();
   return { deployment, health };
 }

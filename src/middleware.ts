@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { discoveryOrigin, discoveryPath } from './lib/search-visibility';
 
 export function middleware(request: NextRequest) {
   // Canonicalize before a login starts so PKCE state stays on the same origin.
@@ -12,6 +13,9 @@ export function middleware(request: NextRequest) {
   const production = process.env.APP_ENV === 'production';
   const approved = process.env.PUBLIC_LAUNCH_APPROVED === 'true';
   const sensitive = /^\/(login|signup|account|messages|moderation|ask|owner|feedback|assistant|admin)(\/|$)/.test(request.nextUrl.pathname);
+  const discovery = discoveryOrigin() === request.nextUrl.origin
+    && !request.nextUrl.search
+    && (discoveryPath(request.nextUrl.pathname) || ['/robots.txt', '/sitemap.xml'].includes(request.nextUrl.pathname));
   const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
   const localDevelopment = process.env.NODE_ENV === 'development';
   let backendSources = '';
@@ -52,7 +56,8 @@ export function middleware(request: NextRequest) {
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
   response.headers.set('Content-Security-Policy', csp);
   if (request.nextUrl.protocol === 'https:') response.headers.set('Strict-Transport-Security', 'max-age=31536000');
-  if (!production || !approved || sensitive) response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+  if ((!production || !approved || sensitive) && !discovery) response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+  if (discovery) response.headers.set('X-VisaThreads-Search', 'editorial');
   // HTML with per-request nonces cannot be served from a shared page cache.
   // Public JSON feeds and fingerprinted static assets retain their own caching.
   if (!request.nextUrl.pathname.startsWith('/api/')) response.headers.set('Cache-Control', 'private, no-store');
