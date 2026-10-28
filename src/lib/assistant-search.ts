@@ -17,9 +17,14 @@ const termsFor = (text: string) => [...new Set(assistantSearchTerms(assistantCan
 
 /** Only explicit requests for posts take the non-generative search path. */
 export function assistantPostSearchQuery(input: AssistantRequest, now = Date.now()): AssistantPostSearchQuery | null {
+  return assistantSearchIntent(input, now).task === 'lookup' ? assistantPostRetrievalQuery(input, now) : null;
+}
+
+/** Overviews must retrieve the same relevant records as explicit browsing. */
+export function assistantPostRetrievalQuery(input: AssistantRequest, now = Date.now()): AssistantPostSearchQuery | null {
   if (input.mode !== 'ask' || input.scope.kind === 'post') return null;
   const intent = assistantSearchIntent(input, now);
-  if (intent.task !== 'lookup') return null;
+  if (intent.task !== 'lookup' && !intent.overview) return null;
   const terms = termsFor(intent.text).filter(term => !SEARCH_WORDS.has(term)).slice(0, 24);
   if (!terms.length) return null;
   const text = terms.join(' ');

@@ -6,8 +6,8 @@ import type { AssistantCorpus, AssistantCoverageReason, AssistantRequest, Assist
 import type { Answer, CommunityFeed, Question } from './types';
 import { detectTopics } from './tagging';
 import { AssistantError, assistantPreviousQuestions, assistantRetrievalQuestion, assistantSearchTerms } from './assistant-core';
-import { assistantPostSearchQuery, assistantPostSearchScore } from './assistant-search';
-import { assistantCanonicalText, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantSearchIntent, assistantSeenPostIds, assistantSourceMatchesIntent } from './assistant-context';
+import { assistantPostRetrievalQuery, assistantPostSearchQuery, assistantPostSearchScore } from './assistant-search';
+import { assistantCanonicalText, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResultSetFollowUp, assistantSearchIntent, assistantSeenPostIds, assistantSourceMatchesIntent } from './assistant-context';
 
 export const ASSISTANT_SOURCE_LIMIT = 48;
 const ASSISTANT_CONTEXT_THREAD_LIMIT = 8;
@@ -66,7 +66,7 @@ function sourceScorer(input: AssistantRequest, now = Date.now()): (source: Assis
     return value;
   };
   const intent = assistantSearchIntent(input, now);
-  const postSearch = assistantPostSearchQuery(input, now);
+  const postSearch = assistantPostRetrievalQuery(input, now);
   if (postSearch) return memoize(source => assistantPostSearchScore(source, postSearch));
   const words = assistantSearchTerms(assistantCanonicalText(assistantSearchIntent({ ...input, previousQuestions: [] }, now).text)).slice(0, 24);
   const previous = assistantPreviousQuestions(input).join(' ');
@@ -91,7 +91,7 @@ function publicArchiveMatches(input: AssistantRequest, now = Date.now()): Assist
   const snapshot = archive as unknown as CommunityFeed;
   const intent = assistantSearchIntent(input, now);
   const score = sourceScorer(input, now);
-  const postSearch = assistantPostSearchQuery(input, now);
+  const postSearch = assistantPostRetrievalQuery(input, now);
   const matches: Array<{ source: AssistantSource; score: number }> = [];
   const matchedQuestions = new Set<string>();
   const excluded = new Set(assistantSeenPostIds(input));
@@ -134,7 +134,7 @@ function publicArchiveMatches(input: AssistantRequest, now = Date.now()): Assist
 }
 
 function searchText(input: AssistantRequest, now = Date.now()): string {
-  const postSearch = assistantPostSearchQuery(input, now);
+  const postSearch = assistantPostRetrievalQuery(input, now);
   return postSearch ? [postSearch.text,
     ...(postSearch.stamping ? ['stamping dropbox passport consulate administrative processing 221g'] : []),
     ...(postSearch.delay ? ['delay pending waiting stuck'] : []),
@@ -143,7 +143,7 @@ function searchText(input: AssistantRequest, now = Date.now()): string {
 
 async function searchSources(client: SupabaseClient, input: AssistantRequest, now = Date.now()): Promise<AssistantCorpus> {
   const intent = assistantSearchIntent(input, now);
-  const postSearch = assistantPostSearchQuery(input, now);
+  const postSearch = assistantPostRetrievalQuery(input, now);
   const question = searchText(input, now);
   const constrained = input.mode === 'ask' && (intent.locations.length || intent.visas.length || intent.event || intent.order === 'newest');
   const { data, error } = await client.rpc(constrained ? 'assistant_sources_v2' : 'assistant_sources', {
@@ -344,6 +344,25 @@ export async function retrieveAssistantCorpus(client: SupabaseClient, input: Ass
   if (input.mode === 'catchup' && input.scope.kind !== 'community') throw new AssistantError(400, 'Choose a community for catch-up.');
   if (input.scope.kind === 'post') {
     return postCorpus(client, { ...input, scope: input.scope }, { now });
+  }
+  if (assistantResultSetFollowUp(input)) {
+    const references = [...new Map((input.previousPosts ?? []).map(ref => [ref.questionId, ref])).values()];
+    const chosen = references.slice(0, ASSISTANT_CONTEXT_THREAD_LIMIT);
+    const threads = await Promise.all(chosen.map(async reference => {
+      const thread = await postCorpus(client, { ...input, scope: { kind: 'post', id: reference.questionId } }, { reuseRankedMatches: true, now });
+      // Never revive hidden/deleted records from a browser's remembered IDs.
+      return thread.sources.some(source => source.id === reference.sourceId && source.questionId === reference.questionId)
+        ? thread : { sources: [], partial: true } as AssistantCorpus;
+    }));
+    const sources: AssistantSource[] = [];
+    // Share context fairly: one busy thread cannot crowd out all other posts.
+    for (let offset = 0; sources.length < ASSISTANT_SOURCE_LIMIT && threads.some(thread => thread.sources.length > offset); offset++) {
+      for (const thread of threads) if (thread.sources[offset] && sources.length < ASSISTANT_SOURCE_LIMIT) sources.push(thread.sources[offset]);
+    }
+    const coverageReasons = new Set<AssistantCoverageReason>(threads.flatMap(thread => thread.coverageReasons ?? []));
+    if (references.length > chosen.length || threads.reduce((n, thread) => n + thread.sources.length, 0) > sources.length) coverageReasons.add('retrieval-limit');
+    return { sources, partial: threads.some(thread => thread.partial) || coverageReasons.size > 0,
+      ...(coverageReasons.size ? { coverageReasons: [...coverageReasons] } : {}) };
   }
   if (input.mode === 'ask' && assistantSearchIntent(input, now).unsupportedWindow) return { sources: [], partial: false };
   if (input.mode === 'ask' && input.scope.kind === 'public' && assistantMorePosts(input.question ?? '')) {

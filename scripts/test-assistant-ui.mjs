@@ -122,6 +122,28 @@ test('the topic anchor survives more than twenty short follow-ups and resets for
   } finally { h.close(); }
 });
 
+test('bare summary and comparison retain the displayed set through successive turns and clear on New chat', async () => {
+  const h = new Harness();
+  const posts = ['a', 'b'].map(name => ({ questionId: `apify-stem-${name}`, sourceId: `q:apify-stem-${name}`, title: 'STEM OPT', excerpt: 'Untrusted prior text', url: `/questions/apify-stem-${name}`, createdAt: '2026-10-01T10:00:00Z' }));
+  const refs = posts.map(({ questionId, sourceId }) => ({ questionId, sourceId }));
+  h.post = async () => reply(fixture({ kind: 'posts', posts, sources: [], claims: [] }));
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    changeQuestion(h, 'Show recent STEM OPT posts'); await submit(h); await h.settle();
+    choose(h, 'Summarize these posts');
+    assert.equal(nodes(h.tree).find(n => n.type === 'textarea').props.value, 'Summarize these posts');
+    h.post = async () => reply(fixture());
+    for (const prompt of ['summarize', 'compare them', 'Make it shorter']) {
+      changeQuestion(h, prompt); await submit(h); await h.settle();
+      assert.deepEqual(h.calls.at(-1).body.previousPosts, refs);
+      assert.equal(h.calls.at(-1).body.previousQuestions[0], 'Show recent STEM OPT posts');
+      assert.doesNotMatch(JSON.stringify(h.calls.at(-1).body), /Untrusted prior text/);
+    }
+    choose(h, 'New chat'); changeQuestion(h, 'summarize'); await submit(h); await h.settle();
+    assert.equal(h.calls.at(-1).body.previousPosts, undefined);
+  } finally { h.close(); }
+});
+
 test('ordinal follow-ups send displayed post order as IDs only, never source text or assistant claims', async () => {
   const h = new Harness();
   const posts = ['first', 'second'].map(name => ({ questionId: `apify-${name}`, sourceId: `q:apify-${name}`, title: `Post ${name}`, excerpt: 'Sensitive source text stays out of the follow-up request.', url: `/questions/apify-${name}`, createdAt: '2026-10-01T10:00:00Z' }));

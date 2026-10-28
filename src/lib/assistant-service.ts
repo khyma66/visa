@@ -177,7 +177,7 @@ export function createAssistantHandler(deps: AssistantDependencies) {
         return respond(result);
       }
       const corpus = prepareAssistantCorpus(original, input);
-      if (!corpus.sources.length) return respond(emptyAssistantResult(corpus));
+      if (!corpus.sources.length) return respond(emptyAssistantResult(corpus, input));
       const fingerprint = await bounded(() => assistantFingerprint(original));
       // Include identity, full untruncated source contents, scope, prompt version and model.
       // Retrieval happens BEFORE every cache read, so removed/hidden data cannot return from cache.

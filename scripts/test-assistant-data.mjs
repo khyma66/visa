@@ -77,6 +77,23 @@ function client(tables = {}, rpcResult = { data: [], error: null }) {
   };
 }
 
+test('collection continuation bounds reads, checks each source ID, and preserves native denials', async () => {
+  const ids = Array.from({ length: 12 }, (_, n) => `11111111-1111-4111-8111-${String(n).padStart(12, '0')}`);
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'summarize', previousPosts: ids.map(id => ({ questionId: id, sourceId: `q:${id}` })) };
+  const db = client({ question_feed: call => ({ data: call.filters.id === ids[0] ? null : q({ id: call.filters.id }), error: null }), answer_feed: { data: [], error: null } });
+  const result = await retrieveAssistantCorpus(db, input);
+  assert.equal(db.calls.filter(c => c.table === 'question_feed').length, 8);
+  assert.equal(result.sources.length, 7); assert(result.partial); assert(result.coverageReasons.includes('retrieval-limit'));
+  assert(!result.sources.some(s => s.questionId === ids[0]));
+  assert(!db.calls.some(c => c.rpc), 'Bounded continuations do not issue additional global searches');
+  const mismatch = await retrieveAssistantCorpus(client({ question_feed: { data: q(), error: null } }), { ...input, previousPosts: [{ questionId: id, sourceId: 'a:apify-not-in-thread' }] });
+  assert.equal(mismatch.sources.length, 0);
+  for (const [code, status] of [['42501', 403], ['PT429', 429]]) {
+    const denied = client({ question_feed: { data: q(), error: null }, answer_feed: { data: null, error: { code } } });
+    await assert.rejects(retrieveAssistantCorpus(denied, { ...input, previousPosts: [{ questionId: id, sourceId: `q:${id}` }] }), e => e.status === status);
+  }
+});
+
 test('post assistant reads only the selected question and replies through caller-visible views', async () => {
   const db = client({ question_feed: { data: q(), error: null }, answer_feed: { data: [a()], error: null } });
   const result = await retrieveAssistantCorpus(db, { mode: 'ask', scope: { kind: 'post', id }, question: 'How long?' });
@@ -570,10 +587,10 @@ const searchSource = (overrides = {}) => ({ id: 'q:apify-stamping', questionId: 
 test('explicit post requests use search intent; explanation questions and single-post asks do not', () => {
   for (const question of ['give all posts related to stamping delay', 'Can you show me posts about stamping delays?',
     'Can you show me all posts about stamping delay?', 'List discussions about passport delivery', 'posts related to Chennai stamping',
-    'find me posts about stamping delay', 'search for posts about stamping delay', 'look for posts about stamping delay', 'I want posts about stamping delay', 'Find stamping delay threads']) {
+    'find me posts about stamping delay', 'search for posts about stamping delay', 'look for posts about stamping delay', 'Find stamping delay threads']) {
     assert(assistantPostSearchQuery(postSearchRequest(question)), question);
   }
-  for (const question of ['Why is stamping delayed?', 'What do the posts say about stamping delays?', 'Explain this post about stamping',
+  for (const question of ['I want posts about stamping delay', 'Why is stamping delayed?', 'What do the posts say about stamping delays?', 'Explain this post about stamping',
     'Give me an answer about stamping delay', 'show all posts', 'show why posts about stamping delay have conflicting timelines',
     'give an explanation of why posts about stamping delay differ', 'Show me how posts on stamping delays differ', 'List differences between posts about stamping',
     'show a synopsis of posts about stamping delay', 'give overview of posts about stamping delay']) {

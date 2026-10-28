@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
-import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantSearchIntent, assistantStandaloneFollowUp } from './assistant-context';
+import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantResultSetFollowUp, assistantSearchIntent, assistantStandaloneFollowUp, assistantSummaryFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v28-experience-intent';
+export const ASSISTANT_VERSION = 'grounded-chat-v29-conversation-evidence';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -202,7 +202,7 @@ export function prepareAssistantCorpus(corpus: AssistantCorpus, input?: Assistan
     ids.add(source.id);
     return true;
   });
-  const summary = input?.mode === 'summary' || !!(input && assistantPromptSelection(input, corpus).selectedSummary);
+  const summary = input?.mode === 'summary' || !!(input && (assistantPromptSelection(input, corpus).selectedSummary || assistantResultSetFollowUp(input) || assistantSearchIntent(input).overview));
   const preparedCandidates = eligible.map(source => ({ source, body: redactAssistantText(source.body),
     title: redactAssistantText(source.title).slice(0, 240),
     parentContext: source.parentContext ? redactAssistantText(source.parentContext).slice(0, 1000) : undefined }));
@@ -260,13 +260,16 @@ function assistantPromptSelection(input: AssistantRequest, corpus: AssistantCorp
   // A generic request to explain the already selected post is a summary task,
   // not a question whose answer must go beyond the post's stated facts.
   // Do not rewrite qualified questions (why, how long, or additional clauses).
-  const selectedSummary = resolvedReference && /^(?:please\s+)?(?:explain|summari[sz]e) (?:this|that|the selected) (?:post|thread|discussion|result)[.!?]?$/i.test(question.trim());
+  const selectedSummary = resolvedReference && (assistantSummaryFollowUp(question) || /^(?:please\s+)?(?:explain|summari[sz]e) (?:this|that|the selected) (?:post|thread|discussion|result)[.!?]?$/i.test(question.trim()));
   return { referencedPost, resolvedReference, resolvedOrdinal, question, selectedSummary };
 }
 
 /** Shared task/context serialization; reviews need full bodies, never a new span catalog. */
 export function assistantPromptContext(input: AssistantRequest, corpus: AssistantCorpus) {
   const { referencedPost, resolvedReference, resolvedOrdinal, question, selectedSummary } = assistantPromptSelection(input, corpus);
+  const resultSet = assistantResultSetFollowUp(input);
+  const overview = assistantSearchIntent(input).overview;
+  const collectionSummary = (resultSet && assistantSummaryFollowUp(question)) || overview;
   // The common shorthand "H4 EAD stamping experiences" can otherwise be read
   // as a demand for an EAD-stamping event. Share one precise interpretation
   // between generation and independent review without changing retrieval.
@@ -275,12 +278,16 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
   const resolvedQuestion = h4EadStampingExperience
     ? 'Summarize members’ firsthand H-4 visa-stamping experiences. Include EAD-specific details only when those same reports explicitly provide them; otherwise state that the cited stamping reports do not give EAD-specific details.'
     : question;
-  return { task: selectedSummary ? 'summary' : input.mode,
+  return { task: selectedSummary || collectionSummary ? 'summary' : input.mode,
+    ...(resultSet || overview ? { collectionTask: collectionSummary ? 'summary' : 'followup',
+      topic: redactAssistantText(overview ? question : assistantPreviousQuestions(input).join(' ')),
+      responseStyle: /make (?:it|that) (?:shorter|concise)|tl;?dr/i.test(question) ? 'shorter' : 'concise',
+      resolvedDiscussions: [...new Set(corpus.sources.map(source => source.questionId))] } : {}),
     ...(selectedSummary ? { summaryStyle: 'brief' as const } : {}),
     // Equivalent generic Explain/Summarize commands have the same resolved
     // task. Keep the original wording in the UI, not as conflicting model task
     // hints after the server has already selected the discussion.
-    ...(input.mode === 'ask' ? { question: selectedSummary ? 'Summarize the selected discussion.' : redactAssistantText(resolvedQuestion), previousQuestions: resolvedOrdinal || selectedSummary ? [] : assistantPreviousQuestions(input).map(redactAssistantText) } : {}),
+    ...(input.mode === 'ask' ? { question: selectedSummary ? 'Summarize the selected discussion.' : collectionSummary ? 'Summarize the main reports and unresolved questions in these retrieved discussions, with separate citations.' : redactAssistantText(resolvedQuestion), previousQuestions: resolvedOrdinal || selectedSummary ? [] : assistantPreviousQuestions(input).map(redactAssistantText) } : {}),
     ...(resolvedReference ? { resolvedDiscussion: { questionId: referencedPost!.questionId, sourceIds: corpus.sources.map(source => source.id) } } : {}),
     interval: { since: corpus.since, until: corpus.until }, partial: corpus.partial,
     sources: corpus.sources.map(s => ({ id: s.id, questionId: s.questionId, kind: s.kind, speakerRole: s.speakerRole, title: s.title,
@@ -293,7 +300,9 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
   const experienceSynthesis = input.mode === 'ask' && input.scope.kind === 'public'
     && assistantSearchIntent(input).experience && !resolvedReference;
   const context = assistantPromptContext(input, corpus);
-  const taskInstruction = selectedSummary
+  const taskInstruction = context.collectionTask
+    ? `TASK: ${context.collectionTask === 'summary' ? 'Give a concise synthesis of the supplied discussions, not a list of titles or raw excerpts.' : 'Answer the latest follow-up about the supplied discussions; these are the same result set the person is discussing, not a new topic.'} Lead with two or three short, useful observations and cite each supporting report. Aim for 60–100 words unless more detail is requested. Keep each member’s outcome, dates and uncertainty distinct; do not combine people into a fabricated timeline. Questions and plans may be summarized as questions or plans, never as successful outcomes. If only questions are available, explain what members are asking and that the supplied discussions do not establish the answers. A useful summary does not require a success story. Do not claim consensus, prevalence, current rules or exhaustive coverage. Explain differences only when supported; do not manufacture agreement or disagreement.`
+    : selectedSummary
     ? 'TASK: Give a brief summary of the selected discussion, not an exhaustive retelling. Prioritize the substantive outcome or unresolved status, its explicitly stated dates, and material qualifications. Aim for 3–4 short, atomic, attributed claims and about 60–80 words; use an additional claim only for an essential correction, conflict or qualification. Routine background, historical travel and document inventories are optional, not a checklist. Keep every fact attached to its own event, person and document; do not fill in unstated connections. An undated outcome remains undated. Return status answered with cited claims when substantive reports are present.'
     : input.mode === 'summary'
     ? 'TASK: Summarize the supplied discussion. No user question is required for a summary. Use short, atomic, attributed claims and as many of the six available claim slots as needed to preserve material facts and qualifications. Describe substantive reported events and outcomes, useful replies and unresolved points supported by the supplied evidence. Preserve key dates or named days exactly as explicitly stated, and chronology only when the source states it; do not complete missing links between events. An undated outcome remains undated even when nearby sentences describe dated events. Never convert an individual report into a universal timeline or prediction. If substantive reports are present, return status answered with cited claims even though there is no question.'
@@ -309,6 +318,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
     system: [
       'You are the VisaThreads discussion assistant. Answer ONLY from the evidence supplied as data.',
       taskInstruction,
+      ...(context.collectionTask ? ['Stay relevant to the supplied topic when a discussion covers several subjects. For responseStyle shorter, aim for 30–50 words while preserving essential qualifications and citations. Otherwise use the stated concise budget. The topic and previous questions identify the request, not factual evidence.'] : []),
       ...(selectedSummary ? ['For this unqualified selected-discussion summary, keep all claim, disagreement and unanswered text together within 100 words. Lead with the substantive outcome and its stated dates, then material unknowns and explicit personal-only qualifications. Omit routine background or historical details before omitting those essentials. Use short atomic claims within the six-slot allowance; the word budget is not a reason to erase qualifications or connect separate events.'] : []),
       'Lead with the relevant answer in clear, professional language. Describe what the cited members actually reported and keep important dates, corrections and uncertainty. Do not discuss internal search caps, token budgets or import mechanics in claim text; the interface separately explains source coverage. Never claim to have checked every post or to know missing replies. Do not replace a useful supported answer with a generic apology about limited posts.',
       'For a summary of a long or mixed discussion, prioritize the author\'s actual reported outcome and its explicitly stated timing, then the qualifications or procedural details needed to understand that outcome. A summary need not enumerate every interview question or repeat routine advice. Distinguish the author\'s own case from observations about other applicants, hypothetical or example dialogue, recommendations and unanswered reader questions. Preserve tentative wording for uncertain observations. Keep different process statuses and document receipt or delivery separate; do not infer one from another.',
@@ -514,7 +524,10 @@ export function validateAssistantOutput(raw: string, corpus: AssistantCorpus, no
     generatedAt: new Date(now).toISOString(), cached: false, notice: ASSISTANT_NOTICE };
 }
 
-export function emptyAssistantResult(corpus: AssistantCorpus): AssistantResult {
+export function emptyAssistantResult(corpus: AssistantCorpus, input?: AssistantRequest): AssistantResult {
+  if (input && assistantResultSetFollowUp(input)) return { status: 'insufficient', claims: [], disagreements: [], sources: [],
+    unanswered: [input.previousPosts?.length ? 'I couldn’t retrieve those discussions. Try a fresh search before summarizing them.' : 'Which discussions should I summarize? Ask for a topic first, then I can summarize or compare the results.'],
+    coverage: { sourceCount: 0, partial: corpus.partial, reasons: corpus.coverageReasons }, generatedAt: new Date().toISOString(), cached: false, notice: ASSISTANT_NOTICE };
   return { status: 'insufficient', claims: [], disagreements: [], unanswered: [corpus.since && corpus.until ? 'I couldn’t find matching posts or replies published during that time range.' : 'I couldn’t find matching discussions. Try adding a visa type, location, or topic.'], sources: [], coverage: { sourceCount: 0, partial: corpus.partial, reasons: corpus.coverageReasons, since: corpus.since, until: corpus.until }, generatedAt: new Date().toISOString(), cached: false, notice: ASSISTANT_NOTICE };
 }
 

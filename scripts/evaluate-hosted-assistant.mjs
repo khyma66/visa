@@ -34,6 +34,9 @@ cases.push('large-discussion-summary');
 cases.push('numbered-interview-transcript');
 cases.push('heterogeneous-report-summary');
 cases.push('historical-current-document-separation');
+cases.push('stem-post-overview');
+cases.push('stem-followup-summary');
+cases.push('stem-followup-comparison');
 async function cleanup() {
   let state;
   try { state = JSON.parse(await readFile(statePath, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return true; throw error; }
