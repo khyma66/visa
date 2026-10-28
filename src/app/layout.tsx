@@ -53,13 +53,13 @@ export default function RootLayout({
           <CommunityAddonsNavigation />
           <div id="main-content" tabIndex={-1}><PolicyAcceptance>{children}</PolicyAcceptance></div>
           <footer className="site-shell border-t border-slate-200 bg-white py-6 text-xs leading-6 text-slate-500">
-            {process.env.NEXT_PUBLIC_APP_ENV !== 'production' && <p role="note" className="mb-2 font-semibold text-slate-700">Early preview · Not open for general public signup.</p>}
+            <p className="mb-2 font-semibold text-slate-700">U.S. visa questions, shared experiences, and helpful resources.</p>
             <SafetyNotice />
             <nav aria-label="Policies and support" className="mt-2 flex flex-wrap gap-x-4">
               <Link href="/guides" className="underline">U.S. Visa Guides</Link>
               <Link href="/about" className="underline">About VisaThreads</Link>
-              <Link href="/privacy" className="underline">Preview Privacy Notice</Link>
-              <Link href="/terms" className="underline">Community Rules</Link>
+              <Link href="/privacy" className="underline">Privacy Notice</Link>
+              <Link href="/terms" className="underline">Terms and Conditions</Link>
               <Link href="/cookies" className="underline">Cookies and Storage</Link>
               <Link href="/privacy-choices" className="underline">Your Privacy Choices</Link>
               <Link href="/countries" className="underline">U.S. Community</Link>
