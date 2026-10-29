@@ -300,7 +300,9 @@ test('only a fresh unchanged current-live archive may be used by an explicit pre
   try {
     await mkdir(resolve(root, 'src/data'), { recursive: true });
     await mkdir(resolve(root, '.cache/visaflow/live-preview'), { recursive: true });
-    const content = '{"syntheticTestOnly":true}\n';
+    const syntheticQuestions = Array.from({ length: 563 }, (_, index) => ({ id: `apify-test-${index}` }));
+    const syntheticReplies = Array.from({ length: 628 }, (_, index) => ({ id: `apify-reply-${index}`, question_id: 'apify-test-0' }));
+    const content = `${JSON.stringify({ questions: syntheticQuestions, answersByQuestionId: { 'apify-test-0': syntheticReplies }, source: { importedItems: 563, commentCount: 628 } })}\n`;
     await writeFile(resolve(root, 'src/data/api-archive.json'), content);
     const receipt = { siteOrigin: LIVE_SITE, databaseOrigin: LIVE_DATABASE, worker: 'visaflow-dev', health: { environment: 'development', build: { dirty: false, gitSha: 'a'.repeat(40) } }, deploymentId: '11111111-1111-1111-1111-111111111111', questionCount: 563, replyCount: 628, capturedAt: new Date().toISOString(), archiveSha256: sha256(content) };
     const write = object => writeFile(resolve(root, '.cache/visaflow/live-preview/receipt.json'), JSON.stringify(object));
