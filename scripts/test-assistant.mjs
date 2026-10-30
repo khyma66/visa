@@ -26,6 +26,15 @@ test('ordinary answers enforce brevity before review, independent of planner sty
   const draft = { status: 'answered', claims: [{ text: Array(101).fill('word').join(' '), evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
   assert.throws(() => core.validateAssistantOutput(JSON.stringify(draft), corpus, now, input), error => error.code === 'answer_word_limit');
 });
+test('explicit mixed-discussion summaries share the bounded summary contract', () => {
+  const corpus = { sources: [source], partial: false };
+  const request = { mode: 'summary', scope: { kind: 'post', id } };
+  assert.equal(core.assistantPrompt(request, corpus).maxAnswerWords, 150);
+  assert.match(core.assistantPrompt(request, corpus).system, /neutral attribution rather than editorial commentary/);
+  const evidence = [{ sourceId: source.id, quote: source.body }];
+  const draft = { status: 'answered', claims: [{ text: Array(76).fill('word').join(' '), evidence }, { text: Array(75).fill('word').join(' '), evidence }], disagreements: [], unanswered: [] };
+  assert.throws(() => core.validateAssistantOutput(JSON.stringify(draft), corpus, now, request), error => error.code === 'answer_word_limit');
+});
 test('fresh concise overviews bound thread groups and disclose omitted context without dropping selected corrections', () => {
   const parents = [1,2,3,4].map(n => ({ ...source, id: `q:apify-budget-${n}`, questionId: `apify-budget-${n}`, body: `Report ${n}: my appointment was pending.` }));
   const correction = { ...parents[0], id: 'a:late-correction', kind: 'reply', body: 'Correction: the appointment was cancelled, not pending.' };
@@ -301,7 +310,7 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v39-consistent-answer-contract','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v40-filter-and-summary-scope','Semantic change invalidates old cached answers');
 });
 test('summary preparation collapses exact repeated reports but preserves distinct material differences',()=>{
   const repeated='I attended my appointment on Wednesday. My application was approved. My document arrived on Saturday. This is only my own experience, not a standard timeline.';
