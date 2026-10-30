@@ -247,7 +247,7 @@ export default {
         }, 502);
       }
       const result = serviceBody as AssistantResult;
-      const evaluation = evaluateAcceptance(fixture, result);
+      const evaluation = evaluateAcceptance(fixture, result, receivedInputs[0]);
       const directPostSearch = fixture.execution === 'direct-post-search';
       const inference = checkAcceptanceInference(receivedInputs[0], fixture.corpus, result, provider, events, inferenceRounds, directPostSearch);
       const sameInput = (input: AssistantRequest) => input.mode === fixture.input.mode
