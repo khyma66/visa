@@ -20,6 +20,12 @@ const id = '00000000-0000-4000-8000-000000000001';
 const now = Date.parse('2026-10-13T18:00:00Z');
 const source = { id:`q:${id}`, questionId:id, communityId:null, kind:'question', title:'Appointment experience', body:'I attended my appointment on Monday. My passport arrived on Friday.', createdAt:'2026-10-10T00:00:00Z', updatedAt:'2026-10-10T00:00:00Z', url:`/questions/${id}`, provenance:'member' };
 const input = { mode:'ask',scope:{kind:'post',id},question:'What did the member report?' };
+test('ordinary answers enforce brevity before review, independent of planner style', () => {
+  const corpus = { sources: [source], partial: false };
+  assert.equal(core.assistantAnswerWordLimit(input, corpus), 100);
+  const draft = { status: 'answered', claims: [{ text: Array(101).fill('word').join(' '), evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
+  assert.throws(() => core.validateAssistantOutput(JSON.stringify(draft), corpus, now, input), error => error.code === 'answer_word_limit');
+});
 test('fresh concise overviews bound thread groups and disclose omitted context without dropping selected corrections', () => {
   const parents = [1,2,3,4].map(n => ({ ...source, id: `q:apify-budget-${n}`, questionId: `apify-budget-${n}`, body: `Report ${n}: my appointment was pending.` }));
   const correction = { ...parents[0], id: 'a:late-correction', kind: 'reply', body: 'Correction: the appointment was cancelled, not pending.' };
@@ -295,7 +301,7 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v38-focused-evidence-repair','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v39-consistent-answer-contract','Semantic change invalidates old cached answers');
 });
 test('summary preparation collapses exact repeated reports but preserves distinct material differences',()=>{
   const repeated='I attended my appointment on Wednesday. My application was approved. My document arrived on Saturday. This is only my own experience, not a standard timeline.';

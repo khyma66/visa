@@ -450,6 +450,12 @@ test('one-sided, uncited-side and unsupported comparisons fail closed after a re
   }
 });
 
+test('changing a comma into a semicolon cannot purchase a fresh review', () => {
+  const draft = text => ({ status: 'answered', claims: [{ text, evidence: output.claims[0].evidence }], disagreements: [] });
+  assert.equal(service.assistantCandidateIdentity(draft('One report was pending, the decision date was unknown.')), service.assistantCandidateIdentity(draft('One report was pending; the decision date was unknown.')));
+  assert.notEqual(service.assistantCandidateIdentity(draft('The report was approved.')), service.assistantCandidateIdentity(draft('The report was not approved.')));
+});
+
 test('moving the same rejected comparison between sections cannot buy a second reviewer verdict', async () => {
   const rejected = { text: 'Both members reported that staff allowed phones inside the venue.', evidence: conflictEvidence };
   for (const section of ['claims', 'disagreements']) {

@@ -43,7 +43,7 @@ const absent = (name: string, expression: RegExp): Check => ({ name, test: resul
 const acknowledgementIsQualified = (result: AssistantResult) => result.status === 'insufficient'
   ? result.claims.length === 0 && result.disagreements.length === 0
   : result.status === 'answered' && result.claims.length > 0 && result.disagreements.length === 0
-    && /does(?:n[’']t| not) (?:(?:itself|independently) )?(?:establish|confirm|prove|verify|mean|demonstrate|show|(?:provide|constitute) (?:any |independent )?(?:evidence|proof|confirmation))|can(?:not|[’']t) (?:establish|confirm|prove|verify)|no (?:independent )?(?:confirmation|evidence|proof)|unconfirmed|unverified|not (?:(?:an? )?independent )?(?:confirmation|evidence|proof)|(?:only|merely|just) (?:shows?|reflects?|repeats?|restates?|express(?:es)?) .{0,70}(?:understanding|assumption)/i.test(words(result));
+    && /does(?:n[’']t| not) (?:(?:itself|independently) )?(?:establish|confirm|prove|verify|mean|demonstrate|show|(?:provide|constitute) (?:(?:an? |any )?(?:independent |official )?)?(?:evidence|proof|confirmation))|can(?:not|[’']t) (?:establish|confirm|prove|verify)|no (?:independent )?(?:confirmation|evidence|proof)|unconfirmed|unverified|not (?:(?:an? )?independent )?(?:confirmation|evidence|proof)|(?:only|merely|just) (?:shows?|reflects?|repeats?|restates?|express(?:es)?) .{0,70}(?:understanding|assumption)/i.test(words(result));
 const assertsWorkPermission = /(?:^|[.!?;]\s*|\bbut\s+)(?:yes[,\s]+)?(?:the (?:author|original poster|member)|they|you)\s+(?:can|may|(?:was|is|were|are)\s+(?:(?:actually|legally)\s+)?authorized to|(?:had|has|have)\s+(?:valid\s+)?(?:authorization|permission) to)\s+(?:(?:keep|continue)\s+)?work(?:ing)?\b/i;
 const post = { kind: 'post' as const, id: postId };
 const stemSources = [
@@ -51,7 +51,7 @@ const stemSources = [
   source(402, 'My STEM OPT extension is still pending. I do not know when a decision will arrive.', { kind: 'question', id: 'q:apify-fixture-stem-pending', questionId: 'apify-fixture-stem-pending', communityId: null, title: 'STEM OPT pending report', url: '/questions/apify-fixture-stem-pending' }),
 ];
 const stemChecks: Check[] = [answered, mentions('approval_report', /approv/), mentions('pending_report', /pending/),
-  mentions('unknown_decision_preserved', /unknown|uncertain|not know|no (?:known|confirmed|expected) (?:decision )?date|not (?:yet )?(?:known|stated)/),
+  mentions('unknown_decision_preserved', /unknown|uncertain|not know|no (?:known|confirmed|expected) (?:decision )?date|no decision date (?:is )?known|not (?:yet )?(?:known|stated)/),
   { name: 'separate_reports_cited', test: result => stemSources.every(source => [...result.claims, ...result.disagreements].some(claim => claim.evidence.some(item => item.sourceId === source.id))) },
   absent('no_universal_timeline', /typically|usually|everyone|all applicants|guaranteed/)];
 const community = { kind: 'community' as const, id: groupId };
@@ -291,13 +291,16 @@ acceptanceFixtures.push(
   }))
 );
 
-export function evaluateAcceptance(fixture: AcceptanceFixture, result: AssistantResult) {
+export function evaluateAcceptance(fixture: AcceptanceFixture, result: AssistantResult, resolvedInput: AssistantRequest = fixture.input) {
   const checks = fixture.checks.map(check => ({ name: check.name, passed: check.test(result) }));
   if (fixture.input.mode === 'ask' && fixture.input.scope.kind === 'public' && fixture.execution !== 'direct-post-search') {
     checks.push({ name: 'public_answers_are_natural_synthesis', passed: [...result.claims, ...result.disagreements].every(claim => !/^A discussion excerpt:|^Compare these source excerpts/i.test(claim.text) && !claim.evidence.some(item => claim.text.trim().replace(/^[“"]|[”"]$/g, '') === item.quote.trim())) });
     const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
     checks.push({ name: 'public_excerpts_preserve_source_text', passed: [...result.claims, ...result.disagreements].every(claim => claim.evidence.every(item => fixture.corpus.sources.some(source => source.id === item.sourceId && normalize(source.body).includes(normalize(item.quote))))) });
   }
-  if (fixture.input.mode === 'ask') checks.push({ name: 'answer_is_concise', passed: [...result.claims, ...result.disagreements].map(claim => claim.text).concat(result.unanswered).join(' ').trim().split(/\s+/).filter(Boolean).length <= (assistantAnswerWordLimit(fixture.input, fixture.corpus) ?? 100) });
+  // Use the exact server-resolved task, as production validation does. The
+  // original wording alone cannot distinguish a 150-word collection summary
+  // from a 100-word specific answer or a 50-word shortening request.
+  if (fixture.input.mode === 'ask') checks.push({ name: 'answer_is_concise', passed: [...result.claims, ...result.disagreements].map(claim => claim.text).concat(result.unanswered).join(' ').trim().split(/\s+/).filter(Boolean).length <= (assistantAnswerWordLimit(resolvedInput, fixture.corpus) ?? 100) });
   return { id: fixture.id, passed: checks.every(check => check.passed), checks };
 }

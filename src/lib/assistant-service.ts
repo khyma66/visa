@@ -86,7 +86,7 @@ const semanticRepairInstruction = [
 
 /** Formatting/order changes alone must not buy another chance at reviewer approval. */
 export function assistantCandidateIdentity(result: Pick<AssistantResult, 'status' | 'claims' | 'disagreements'>): string {
-  const normalize = (text: string) => text.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLowerCase();
+  const normalize = (text: string) => text.normalize('NFKC').replace(/[,;:]/gu, ' ').replace(/\s+/gu, ' ').trim().toLowerCase();
   const claims = (items: AssistantResult['claims']) => [...new Set(items.map(claim => JSON.stringify({
     text: normalize(claim.text),
     evidence: [...new Set(claim.evidence.map(item => JSON.stringify({ sourceId: item.sourceId, quote: normalize(item.quote) })))].sort(),

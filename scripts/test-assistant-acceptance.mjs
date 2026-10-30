@@ -173,6 +173,28 @@ test('broad issue fixtures exercise planning, focused synthesis, and independent
   }
 });
 
+test('decision uncertainty accepts known-date paraphrases but rejects an omitted or invented outcome', () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'stem-followup-comparison');
+  const check = fixture.checks.find(item => item.name === 'unknown_decision_preserved');
+  const result = text => ({ status: 'answered', claims: [{ text, evidence: [] }], disagreements: [] });
+  for (const text of ['The second member is pending with no decision date known.', 'The second member is pending with no decision date is known.', 'The member does not know when a decision will arrive.']) {
+    assert.equal(check.test(result(text)), true, text);
+  }
+  for (const text of ['The second member is pending.', 'The decision date is known.', 'The decision is expected tomorrow.', 'There was no decision before approval.']) {
+    assert.equal(check.test(result(text)), false, text);
+  }
+});
+
+test('acceptance checks the same bounded length as the server-resolved task', () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'broad-stem-issues');
+  const summary = { ...fixture.input, question: 'Summarize reported issues', turnPlan: { action: 'retrieve', query: 'Summarize reported issues', style: 'summary', focus: null, clarification: null } };
+  const ordinary = { ...summary, turnPlan: { ...summary.turnPlan, style: 'answer' } };
+  for (const [resolved, count, expected] of [[summary, 150, true], [summary, 151, false], [ordinary, 100, true], [ordinary, 101, false], [{ ...summary, transform: 'shorten' }, 51, false]]) {
+    const result = { status: 'insufficient', claims: [], disagreements: [], unanswered: [Array(count).fill('word').join(' ')] };
+    assert.equal(evaluateAcceptance(fixture, result, resolved).checks.find(check => check.name === 'answer_is_concise').passed, expected);
+  }
+});
+
 test('successful evaluation executes exact production model and returns no generated text', async () => {
   let calls = 0;
   const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
@@ -593,6 +615,7 @@ test('thank-you fixture accepts a qualified explanation without accepting affirm
 
 test('captured legitimate hosted paraphrases retain qualifier meaning and Unicode-spaced dates', () => {
   const examples = [
+    { id: 'thank-you-confirmation', text: "The thank-you reply only expresses gratitude and the author's expectation; it does not constitute an official confirmation that they are authorized to keep working." },
     { id: 'thank-you-confirmation', text: "The thank‑you reply only expresses the author's understanding and does not provide any evidence that they were actually authorized to keep working." },
     { id: 'thank-you-confirmation', text: 'The thank‑you reply is only the author’s own statement of understanding and does not itself prove that they were authorized to keep working.' },
     { id: 'thank-you-confirmation', text: "The thank‑you reply is only the author's expression of gratitude and their understanding of the situation; it does not constitute evidence that they were actually authorized to keep working." },
@@ -609,6 +632,7 @@ test('captured legitimate hosted paraphrases retain qualifier meaning and Unicod
   for (const text of [
     'The thank-you reply does constitute evidence that the author was authorized to keep working.',
     'The thank-you reply does provide evidence that the author was authorized to keep working.',
+    'The thank-you reply does constitute an official confirmation that the author was authorized to keep working.',
   ]) {
     const evaluation = evaluateAcceptance(acknowledgement, makeResult(acknowledgement, text));
     assert.equal(evaluation.passed, false, text);
