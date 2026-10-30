@@ -35,6 +35,13 @@ test('planner validates bounded actions, focus, fields, and clarification shape'
   }
   assert.throws(() => api.parseAssistantPlan(JSON.stringify({ ...plan, action: 'clarify', clarification: api.ASSISTANT_CLARIFICATIONS[0] }), input));
 });
+test('routing distinguishes changed selection from missing detail within known references', () => {
+  const prompt = api.assistantPlanPrompt(input);
+  assert.match(prompt.system, /new inclusion\/exclusion criterion, location, date or other filter changes the search and uses retrieve/);
+  assert.match(prompt.system, /analytical question about the unchanged displayed set, choose reuse/);
+  assert.match(prompt.system, /This does not override the changed-filter rule/);
+});
+
 test('planner input redacts identifiers and never sends source bodies or arbitrary roles', () => {
   const prompt = api.assistantPlanPrompt({ ...input, conversation: [{ question: 'mail test@example.com', answer: 'receipt IOE1234567890' }] });
   assert.doesNotMatch(prompt.user, /test@example.com|IOE1234567890/);
