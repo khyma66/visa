@@ -102,12 +102,25 @@ export default {
       if (typeof plannerId === 'string' && plannerId.startsWith('planner:')) {
         const fixture = plannerFixtures.find(item => `planner:${item.id}` === plannerId);
         if (!fixture) return response({ error: 'Invalid fixture' }, 400);
-        const started = Date.now(), usage: AssistantUsage[] = [];
-        const raw = await runAssistantModel(assistantPlanPrompt(fixture.input), { provider,
-          apiKey: env.GROQ_API_KEY, binding: env.ASSISTANT_AI, signal: request.signal, reportUsage: item => usage.push(item) });
-        const plan = parseAssistantPlan(raw, fixture.input);
-        return response({ ...evaluatePlanner(fixture, plan), id: plannerId, model, durationMs: Date.now() - started, usage,
-          syntheticPlan: plan });
+        const started = Date.now(), usage: AssistantUsage[] = [], transport: AssistantTransport[] = [];
+        let rawOutput: string | undefined, providerReason: AssistantProviderFailure | undefined;
+        const prompt = assistantPlanPrompt(fixture.input), validate = prompt.validateOutput;
+        // Diagnostics are confined to fixed compiled synthetic fixtures, never real conversations.
+        prompt.validateOutput = raw => { rawOutput = raw; validate?.(raw); };
+        try {
+          const raw = await runAssistantModel(prompt, { provider,
+            apiKey: env.GROQ_API_KEY, binding: env.ASSISTANT_AI, signal: request.signal, reportUsage: item => usage.push(item),
+            reportTransport: item => transport.push(item), reportFailure: value => { providerReason = value; } });
+          const plan = parseAssistantPlan(raw, fixture.input);
+          return response({ ...evaluatePlanner(fixture, plan), id: plannerId, model, durationMs: Date.now() - started, usage,
+            syntheticPlan: plan });
+        } catch {
+          return response({ id: plannerId, model, passed: false, durationMs: Date.now() - started, usage, transport,
+            checks: [{ name: 'transport_and_schema', passed: false }], syntheticDiagnostic: {
+              source: 'compiled-synthetic-fixture-only', providerReason,
+              ...(rawOutput !== undefined && rawOutput.length <= 4000 ? { rawModelOutput: rawOutput } : {}),
+            } }, 502);
+        }
       }
       if (provider === 'groq' && (body as { id?: unknown }).id === '__transport__') {
         const probes = [];

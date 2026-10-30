@@ -28,6 +28,10 @@ test('planner validates bounded actions, focus, fields, and clarification shape'
   assert.deepEqual(api.parseAssistantPlan(JSON.stringify(plan), input), plan);
   for (const change of [{ action: 'sql' }, { scope: 'all' }, { focus: 1 }, { focus: -1 }, { query: 'x'.repeat(1201) }, { action: 'clarify' }, { clarification: 'invented fact' }]) assert.throws(() => api.parseAssistantPlan(JSON.stringify({ ...plan, ...change }), input));
   assert.throws(() => api.parseAssistantPlan(JSON.stringify(plan), { ...input, previousPosts: [] }));
+  for (const [index, code] of ['topic', 'reference', 'aggregate'].entries()) {
+    assert.equal(api.parseAssistantPlan(JSON.stringify({ ...plan, action: 'clarify', clarification: code }), input).clarification, api.ASSISTANT_CLARIFICATIONS[index]);
+  }
+  assert.throws(() => api.parseAssistantPlan(JSON.stringify({ ...plan, action: 'clarify', clarification: api.ASSISTANT_CLARIFICATIONS[0] }), input));
 });
 test('planner input redacts identifiers and never sends source bodies or arbitrary roles', () => {
   const prompt = api.assistantPlanPrompt({ ...input, conversation: [{ question: 'mail test@example.com', answer: 'receipt IOE1234567890' }] });
@@ -56,7 +60,7 @@ test('focused reuse works without relying on a recognized phrase', () => {
   assert.deepEqual(api.assistantPreviousPost(api.applyAssistantPlan(input, { ...plan, focus: 0, query: 'Describe the outcome in this specific discussion.' })), ref);
 });
 test('clarification performs no source read or factual generation', async () => {
-  const h = harness({ generate: async () => JSON.stringify({ ...plan, action: 'clarify', clarification: api.ASSISTANT_CLARIFICATIONS[0] }) });
+  const h = harness({ generate: async () => JSON.stringify({ ...plan, action: 'clarify', clarification: 'topic' }) });
   const value = await (await h.handler(req())).json(); assert.equal(value.status, 'insufficient'); assert.equal(h.reads.length, 0);
   assert.deepEqual(value.claims, []); assert.match(value.unanswered[0], /Which visa type/);
 });
