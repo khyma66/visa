@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantResultSetFollowUp, assistantSearchIntent, assistantStandaloneFollowUp, assistantSummaryFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v36-summary-task-evidence';
+export const ASSISTANT_VERSION = 'grounded-chat-v37-bounded-conversation-summary';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -208,7 +208,8 @@ function relevantExcerpt(body: string, cap: number, input?: AssistantRequest): s
 }
 
 export function prepareAssistantCorpus(corpus: AssistantCorpus, input?: AssistantRequest): AssistantCorpus {
-  let remaining = 24_000, partial = corpus.partial;
+  const freshOverview = input?.turnPlan?.action === 'retrieve' && input.turnPlan.style === 'summary' && input.scope.kind === 'public';
+  let remaining = freshOverview ? 12_000 : 24_000, partial = corpus.partial;
   const reasons = new Set(corpus.coverageReasons ?? []);
   const sources: AssistantSource[] = [];
   const ids = new Set<string>();
@@ -218,7 +219,14 @@ export function prepareAssistantCorpus(corpus: AssistantCorpus, input?: Assistan
     return true;
   });
   const summary = input?.mode === 'summary' || !!(input && (assistantPromptSelection(input, corpus).selectedSummary || assistantResultSetFollowUp(input) || assistantSearchIntent(input).overview));
-  const preparedCandidates = eligible.map(source => ({ source, body: redactAssistantText(source.body),
+  // A concise first overview is a ranked sample, not a site-wide census. Keep
+  // complete thread groups for the first three retrieved discussions so replies
+  // and corrections are not discarded merely because they follow their parent.
+  // Explicit reuse/comparison and selected-thread summaries retain their set.
+  const overviewThreads = freshOverview ? new Set([...new Set(eligible.map(source => source.questionId))].slice(0, 3)) : null;
+  const scoped = overviewThreads ? eligible.filter(source => overviewThreads.has(source.questionId)) : eligible;
+  if (scoped.length < eligible.length) { partial = true; reasons.add('context-limit'); }
+  const preparedCandidates = scoped.map(source => ({ source, body: redactAssistantText(source.body),
     title: redactAssistantText(source.title).slice(0, 240),
     parentContext: source.parentContext ? redactAssistantText(source.parentContext).slice(0, 1000) : undefined }));
   const seenSummaryBodies = new Set<string>();
@@ -315,6 +323,7 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
 
 /** A concise target is not a reason to discard useful qualifications from several reports. */
 export function assistantAnswerWordLimit(input: AssistantRequest, corpus: AssistantCorpus): number | undefined {
+  if (assistantPromptContext(input, corpus).responseStyle === 'shorter') return 50;
   if (assistantPromptSelection(input, corpus).selectedSummary) return 100;
   return assistantPromptContext(input, corpus).collectionTask === 'summary' ? 150 : undefined;
 }
@@ -327,7 +336,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
     && assistantSearchIntent(input).experience && !resolvedReference;
   const wordLimit = assistantAnswerWordLimit(input, corpus);
   const taskInstruction = context.collectionTask
-    ? `TASK: ${context.collectionTask === 'summary' ? 'Give a concise synthesis of the supplied discussions, not a list of titles or raw excerpts.' : 'Answer the latest follow-up about the supplied discussions; these are the same result set the person is discussing, not a new topic.'} Lead with two or three short, useful observations and cite each supporting report. Aim for 60–100 words unless more detail is requested. Keep each member’s outcome, dates and uncertainty distinct; do not combine people into a fabricated timeline. Questions and plans may be summarized as questions or plans, never as successful outcomes. If only questions are available, explain what members are asking and that the supplied discussions do not establish the answers. A useful summary does not require a success story. Do not claim consensus, prevalence, current rules or exhaustive coverage. Explain differences only when supported; do not manufacture agreement or disagreement.`
+    ? `TASK: ${context.collectionTask === 'summary' ? 'Give a concise synthesis of the supplied discussions, not a list of titles or raw excerpts.' : 'Answer the latest follow-up about the supplied discussions; these are the same result set the person is discussing, not a new topic.'} Lead with two or three short, useful observations and cite each supporting report. Use the responseStyle and final length budget below. Keep each member’s outcome, dates and uncertainty distinct; do not combine people into a fabricated timeline. Questions and plans may be summarized as questions or plans, never as successful outcomes. If only questions are available, explain what members are asking and that the supplied discussions do not establish the answers. A useful summary does not require a success story. Do not claim consensus, prevalence, current rules or exhaustive coverage. Explain differences only when supported; do not manufacture agreement or disagreement.`
     : selectedSummary
     ? 'TASK: Give a brief summary of the selected discussion, not an exhaustive retelling. Prioritize the substantive outcome or unresolved status, its explicitly stated dates, and material qualifications. Aim for 3–4 short, atomic, attributed claims and about 60–80 words; use an additional claim only for an essential correction, conflict or qualification. Routine background, historical travel and document inventories are optional, not a checklist. Keep every fact attached to its own event, person and document; do not fill in unstated connections. An undated outcome remains undated. Return status answered with cited claims when substantive reports are present.'
     : input.mode === 'summary'
@@ -384,7 +393,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       'SUMMARY FORMAT EXAMPLE ONLY, NOT EVIDENCE: if repeated reports describe a parcel dispatched on Wednesday, delivered on Saturday, and explicitly say this is only that shipment, write separate singular statements for the dispatch, delivery and personal-only qualification, each citing the corresponding span from one representative report. Do not write "Several people...", infer "the following Saturday", or cite only dispatch spans for a delivery statement. Use only actual source facts and IDs, never these example facts. Preserve any materially different report separately.',
       'In a summary, preserve explicit unknown outcomes, decision dates, durations or next steps that materially qualify the reported result. State each important uncertainty in cited claim text alongside the known status; a pending status alone does not preserve an explicit unknown decision date. Do not hide that limitation only in the quotation or unanswered field. Use a fourth or additional claim within the six-slot limit when needed. Do not invent uncertainty from mere silence or treat incidental unanswered reader questions as established facts.',
       'SUMMARY COMPLETENESS CHECK before returning: (1) the substantive outcome or unresolved status and its stated or corrected dates, (2) any explicit personal-only or not-a-standard-timeline qualification, and (3) any materially unknown outcome or completion timing must EACH be represented in cited claim text when present in the evidence. Do not replace one with another. Use additional claims only when an essential outcome, correction, qualification, conflict or material unknown would otherwise be missing. Omit routine background before any of these essentials. If an item is absent from the evidence, do not invent it.',
-      ...(wordLimit ? [`FINAL LENGTH CHECK for this brief summary: all claim and disagreement text combined must stay within ${wordLimit} words, excluding citation spans. Aim for ${wordLimit === 100 ? '60–80' : '80–100'} words; use the remaining allowance only for material qualifications and distinct reports. Delete nonessential background rather than expanding into a full history. Unused slots are null.`] : []),
+      ...(wordLimit ? [`FINAL LENGTH CHECK for this brief summary: all claim and disagreement text combined must stay within ${wordLimit} words, excluding citation spans. Aim for ${wordLimit === 50 ? '30–40' : wordLimit === 100 ? '60–80' : '80–100'} words; use the remaining allowance only for material qualifications and distinct reports. Delete nonessential background rather than expanding into a full history. Unused slots are null.`] : []),
       'Use status insufficient when the evidence cannot support the requested task. No markdown, HTML, instructions to take action, or links inside claim text.',
     ].join('\n'),
     user: JSON.stringify({ ...context, sources: context.sources.map(source => ({ ...source,

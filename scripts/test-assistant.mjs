@@ -20,6 +20,17 @@ const id = '00000000-0000-4000-8000-000000000001';
 const now = Date.parse('2026-10-13T18:00:00Z');
 const source = { id:`q:${id}`, questionId:id, communityId:null, kind:'question', title:'Appointment experience', body:'I attended my appointment on Monday. My passport arrived on Friday.', createdAt:'2026-10-10T00:00:00Z', updatedAt:'2026-10-10T00:00:00Z', url:`/questions/${id}`, provenance:'member' };
 const input = { mode:'ask',scope:{kind:'post',id},question:'What did the member report?' };
+test('fresh concise overviews bound thread groups and disclose omitted context without dropping selected corrections', () => {
+  const parents = [1,2,3,4].map(n => ({ ...source, id: `q:apify-budget-${n}`, questionId: `apify-budget-${n}`, body: `Report ${n}: my appointment was pending.` }));
+  const correction = { ...parents[0], id: 'a:late-correction', kind: 'reply', body: 'Correction: the appointment was cancelled, not pending.' };
+  const corpus = { sources: [...parents, correction], partial: false };
+  const planned = { mode: 'ask', scope: { kind: 'public' }, question: 'Summarize appointment reports', turnPlan: { action: 'retrieve', query: 'Summarize appointment reports', focus: null, style: 'summary', clarification: null } };
+  const prepared = core.prepareAssistantCorpus(corpus, planned);
+  assert.deepEqual(prepared.sources.map(s => s.id), [...parents.slice(0,3).map(s => s.id), correction.id]);
+  assert.equal(prepared.partial, true); assert(prepared.coverageReasons.includes('context-limit'));
+  assert.equal(core.prepareAssistantCorpus(corpus, { ...planned, turnPlan: { ...planned.turnPlan, action: 'reuse' } }).sources.length, 5);
+  assert.equal(core.prepareAssistantCorpus(corpus, { ...planned, turnPlan: { ...planned.turnPlan, style: 'answer' } }).sources.length, 5);
+});
 const output = {status:'answered',claims:[{text:'The member reported a Monday appointment.',evidence:[{sourceId:source.id,quote:'I attended my appointment on Monday.'}]}],disagreements:[],unanswered:[]};
 const spanDraft = (raw, prompt) => {
   const value=JSON.parse(raw);
@@ -284,7 +295,7 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v36-summary-task-evidence','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v37-bounded-conversation-summary','Semantic change invalidates old cached answers');
 });
 test('summary preparation collapses exact repeated reports but preserves distinct material differences',()=>{
   const repeated='I attended my appointment on Wednesday. My application was approved. My document arrived on Saturday. This is only my own experience, not a standard timeline.';

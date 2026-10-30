@@ -5,7 +5,15 @@ const history = [{ question: 'Show recent STEM OPT application discussions.', an
 const refs = [1, 2].map(n => ({ questionId: `apify-planner-${n}`, sourceId: `q:apify-planner-${n}` }));
 type Fixture = { id: string; input: AssistantRequest; action: AssistantTurnPlan['action']; required: RegExp[]; excluded?: RegExp[]; focus?: number | null; style?: AssistantTurnPlan['style'] };
 const followup = (question: string): AssistantRequest => ({ mode: 'ask', scope: { kind: 'public' }, question, conversation: history, previousPosts: refs });
+const afterTransforms = (question: string): AssistantRequest => ({ ...followup(question), previousQuestions: ['Summarize the previously displayed STEM OPT discussions.'], conversation: [
+  { question: 'Give recent STEM OPT posts', answer: 'One member asked about travel while an application was pending. Another described an unresolved school-record request.' },
+  { question: 'Can you summarize that in plain English?', answer: 'The discussions concern travel questions and school records. Outcomes were not reported.' },
+  { question: 'Make it shorter', answer: 'The members asked about pending applications and school records.' },
+] });
 export const plannerFixtures: Fixture[] = [
+  { id: 'topic-after-transforms-hfour', input: afterTransforms('Different topic: summarize H4 visa stamping experiences.'), action: 'retrieve', required: [/h[ -]?4/i, /stamp/i], excluded: [/stem|opt|school/i], style: 'summary' },
+  { id: 'topic-after-transforms-visitor', input: afterTransforms('I now want an overview of B2 interviews in Mumbai.'), action: 'retrieve', required: [/b[ -]?2/i, /mumbai/i], excluded: [/stem|opt|school/i], style: 'summary' },
+  { id: 'topic-after-transforms-student', input: afterTransforms('Switch subjects: summarize F1 visa interviews in Delhi.'), action: 'retrieve', required: [/f[ -]?1/i, /delhi/i], excluded: [/stem|opt|school record/i], style: 'summary' },
   { id: 'first-summary', input: { mode: 'ask', scope: { kind: 'public' }, question: 'Summarize recent STEM OPT experiences.', conversation: [] }, action: 'retrieve', required: [/stem\s*opt/i], style: 'summary' },
   { id: 'first-specific', input: { mode: 'ask', scope: { kind: 'public' }, question: 'What documents did members report taking to their H1B interviews in Chennai?', conversation: [] }, action: 'retrieve', required: [/h[ -]?1[ -]?b/i, /chennai/i, /document/i], style: 'answer' },
   { id: 'first-ambiguous', input: { mode: 'ask', scope: { kind: 'public' }, question: 'What happened to that person?', conversation: [] }, action: 'clarify', required: [] },

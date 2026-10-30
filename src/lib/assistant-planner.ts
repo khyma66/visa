@@ -58,10 +58,11 @@ export function assistantPlanPrompt(input: AssistantRequest): AssistantPrompt {
       'Recent means newest available, not an invented date range. Preserve explicit dates verbatim. Comparing periods requires retrieve, not reuse. Never invent omitted context, names, events or source facts.',
       'clarification must be null except for clarify. focus must be null except for reuse. Return query even for clarification, describing the unresolved request.',
     ].join(' '),
-    user: JSON.stringify({ latestRequest: redactAssistantText(input.question ?? ''),
-      contextOnly: input.conversation?.map(turn => ({ question: redactAssistantText(turn.question), answer: redactAssistantText(turn.answer) })),
+    user: JSON.stringify({ contextOnly: input.conversation?.map(turn => ({ question: redactAssistantText(turn.question), answer: redactAssistantText(turn.answer) })),
       previousTopicHints: input.previousQuestions?.map(redactAssistantText),
-      displayedReferences: input.previousPosts ?? [], focusedReference: input.focusedPost ?? null }),
+      displayedReferences: input.previousPosts ?? [], focusedReference: input.focusedPost ?? null,
+      taskPrecedence: 'Interpret the latestRequest below, not an earlier task. History resolves omitted references only. An explicitly named new subject replaces the old topic even when the displayed references belong to that old topic; retrieve new evidence, do not ask the user to select an old discussion.',
+      latestRequest: redactAssistantText(input.question ?? '') }),
     validateOutput: raw => { parseAssistantPlan(raw, input); },
   };
 }

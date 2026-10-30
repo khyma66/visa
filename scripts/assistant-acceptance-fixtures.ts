@@ -138,6 +138,15 @@ const decisionReportingScope = (result: AssistantResult) => result.claims.some(c
     || !/\bpending\b|\bno\s+(?:final\s+)?decision\b.{0,45}\b(?:made|given|issued|reached|received)\b|\bdecision\b.{0,20}\b(?:not|never)\b.{0,20}\b(?:made|given|issued|reached|received)\b/.test(text));
 
 export const acceptanceFixtures: AcceptanceFixture[] = [
+  { id: 'shorter-collection-summary', input: { mode: 'ask', scope: { kind: 'public' }, question: 'Make it shorter', transform: 'shorten', previousQuestions: ['Summarize the application discussions'], previousPosts: [
+    { questionId: 'apify-short-first', sourceId: 'q:apify-short-first' }, { questionId: 'apify-short-second', sourceId: 'q:apify-short-second' },
+  ] }, corpus: { partial: false, sources: [
+    source(701, 'My application remains pending. I do not know when a decision will be made.', { kind: 'question', id: 'q:apify-short-first', questionId: 'apify-short-first', communityId: null, title: 'Pending application' }),
+    source(702, 'Has anyone located a missing card after asking the postal service to investigate?', { kind: 'question', id: 'q:apify-short-second', questionId: 'apify-short-second', communityId: null, title: 'Missing card question' }),
+  ] }, checks: [answered, mentions('pending_report', /pending/), mentions('unknown_timing', /unknown|not know|unclear|no known|not yet known|unspecified|uncertain|undetermined|no decision date|without.*date|date.*not/), mentions('card_question', /card/),
+    { name: 'shorter_output_limit', test: result => words(result).trim().split(/\s+/).length <= 50 },
+    absent('no_invented_instructions', /you (?:can|should|must)/),
+  ] },
   { id: 'question-only-summary', input: { mode: 'summary', scope: { kind: 'post', id: postId } }, corpus: { partial: false, sources: [
     source(601, 'Has anyone received their STEM OPT card after a delivery investigation?', { kind: 'question', id: `q:${postId}`, title: 'Open questions about a missing card' }),
     source(602, 'How can I find out whether the postal investigation is still open?', { title: 'Open questions about a missing card' }),
