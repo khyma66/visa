@@ -377,7 +377,7 @@ test('captured catch-up draft is judged against new interval events without inve
   assert.equal(validateAssistantReview(verdict([{ id: 'claim:0', supported: true }], false), caught).status, 'insufficient', 'Task rejection still fails closed for catch-up');
   const summary = assistantReviewPrompt({ mode: 'summary', scope: { kind: 'post', id: source.questionId } }, corpus, result);
   assert.match(summary.system, /^REVIEW TASK — DISCUSSION SUMMARY:/);
-  assert.match(summary.system.split('\n')[0], /No user question is required/);
+  assert.match(summary.system.split('\n')[0], /No standalone user question/);
   assert.equal('question' in JSON.parse(summary.user), false);
 });
 
