@@ -9,6 +9,7 @@ const checksFor = (result: AssistantResult) => [
   ...result.disagreements.map((claim, index) => ({ id: `disagreement:${index}`, kind: 'disagreement', ...claim })),
 ];
 const reviewError = () => new AssistantError(502, 'The assistant could not verify this answer. Please try again.');
+export type AssistantReviewVerdict = { feedback: string; fulfillsTask: boolean; checks: { id: string; supported: boolean }[] };
 
 /** Restore cited reports in full so a later correction cannot hide off-window. */
 export function assistantReviewCorpus(original: AssistantCorpus, prepared: AssistantCorpus, result: AssistantResult): AssistantCorpus | null {
@@ -76,10 +77,8 @@ export function assistantReviewPrompt(input: AssistantRequest, corpus: Assistant
     ? 'REVIEW TASK — DISCUSSION COLLECTION: The server re-read the referenced or newly retrieved discussions under current permissions. For collectionTask summary, a concise cited synthesis of their main reports, questions and unresolved points fulfills the task; do not demand a standalone question, a complete retelling or facts absent from the sources. For collectionTask followup, answer the latest specific question about that set. Keep different people and events separate. Questions and plans are useful only when explicitly described as such, never as outcomes. Do not demand a firsthand success if the sources only contain questions. Preserve material qualifications and dates of any summarized outcomes.'
     : input.mode === 'catchup'
     ? 'REVIEW TASK — CATCH-UP: The requested task is to summarize substantive new posts or replies within the supplied interval. No user question is required. fulfillsTask is true when the candidate describes the relevant new reported events, preserves their dates and meaning, and keeps older parent context separate from new events. A concise attributed report of the available event can fulfill this task; do not demand an answer to an absent question.'
-    : task.summaryStyle === 'brief'
-      ? 'REVIEW TASK — DISCUSSION SUMMARY: The server resolved an unqualified request for a BRIEF summary of one selected discussion. Judge the main reported outcome or unresolved status, its material stated dates, and explicit qualifications; do not demand a full history. fulfillsTask is true when those essentials are faithfully covered. A brief summary may omit historical trips, document inventories, routine advice and incidental unknown details that do not qualify its claims or the substantive outcome. Explicit personal-only limitations, material outcome uncertainty, corrected dates and relevant conflicting reports still must be preserved. No standalone user question, speculation or exhaustive retelling is required.'
     : task.task === 'summary'
-      ? 'REVIEW TASK — DISCUSSION SUMMARY: The requested task is to summarize the actual substantive reports or questions in the supplied discussion, not answer questions embedded inside it. No user question is required. fulfillsTask is true when the candidate faithfully conveys the relevant events, reasons, outcomes or unresolved questions, preserving material qualifications and conflicting reports. When the sources consist only of substantive questions, a cited description of what members ask fulfills the task; do not require missing outcomes or answers. Reject any assertion that an unconfirmed question premise or outcome is true.'
+      ? 'REVIEW TASK — DISCUSSION SUMMARY: The server resolved an unqualified request for a BRIEF summary of one selected discussion. Judge the main reported outcome or unresolved status, its material stated dates, and explicit qualifications; do not demand a full history. fulfillsTask is true when those essentials are faithfully covered. A brief summary may omit historical trips, document inventories, routine advice and incidental unknown details that do not qualify its claims or the substantive outcome. Explicit personal-only limitations, material outcome uncertainty, corrected dates and relevant conflicting reports still must be preserved. No standalone user question, speculation or exhaustive retelling is required.'
       : record(task.resolvedDiscussion)
         ? 'REVIEW TASK — SELECTED DISCUSSION: The server has already selected the discussion named by resolvedDiscussion. Judge the candidate against the latest resolved question about that discussion. For an explain/summarize request, fulfillsTask is true when it explains the selected discussion’s actual reported events and stated reasons; otherwise it must answer the specific question asked. Do not reconstruct an ordinal or earlier result list, demand additional posts, or reject a supported explanation because only the selected discussion is present.'
         : 'REVIEW TASK — QUESTION: Judge whether the candidate directly answers the latest resolved user question using the supplied evidence. Earlier questions only clarify references; they are not independent tasks to answer. fulfillsTask is false for an irrelevant report or a response that leaves the requested point unanswered.';
@@ -89,6 +88,7 @@ export function assistantReviewPrompt(input: AssistantRequest, corpus: Assistant
     sourceIds: corpus.sources.map(source => source.id),
     system: [
       taskRubric,
+      ...(task.task === 'summary' ? ['Summary scope is outcome-first for every entry point, whether requested from a post button or in conversation. If the sources contain only substantive questions, a cited account of those questions and their uncertainty fulfills the task; do not require nonexistent outcomes. When outcomes ARE present, an incidental reader FAQ or routine question inventory is optional unless the latest user request asks for it. Do not change the required scope during revision.'] : []),
       ...(experienceReview ? ['REVIEW TASK — EXPERIENCE SYNTHESIS: Relevant first-person events and outcomes from different members can fulfill an experience question when they are accurately attributed and cited. If the question combines H-4 stamping and EAD, firsthand H-4 stamping reports remain relevant even when they do not describe EAD events. Judge their reported stamping outcomes and whether the candidate avoids asserting EAD involvement; do not demand EAD-specific records or mark a supported H-4 stamping synthesis insufficient solely because EAD details are absent. A brief, accurate note that those cited reports do not give EAD-specific details is appropriate.'] : []),
       ...(record(task.resolvedDiscussion) && task.task === 'summary' ? ['The server has already resolved this SUMMARY to the selected discussion. Apply the stated summary scope, including material qualifications. Do not reconstruct an ordinal or require speculation or information absent from the evidence. A short source may need only one claim; a long mixed report must still preserve its substantive outcome and explicit limitations.'] : []),
       'You are an independent evidence reviewer for a VisaThreads answer. Your only job is to judge the supplied candidate, not write or repair an answer.',
@@ -111,7 +111,8 @@ export function assistantReviewPrompt(input: AssistantRequest, corpus: Assistant
       'Review the original source language when possible. A translation may paraphrase faithfully but may not introduce dates, certainty or meaning absent from the original. If you cannot establish fidelity, mark false.',
       'Do not use outside knowledge, invent facts, trust vote counts, treat a candidate as evidence, or assume missing discussions agree. partial describes a retrieval limit; it does not prove consensus or absence across the whole site.',
       'FINAL AUDIT: For every claim, verify each event-to-date, document-to-validity and event-to-purpose relationship against the full cited report, not merely the existence of its component words. Separately, for task summary, confirm that the candidate itself includes any explicit personal-only qualification and material unknown outcome or timing. If a relationship is unsupported, mark its check false. If a material qualification is missing from the candidate text, set fulfillsTask false even when all individual checks are true.',
-      'Return only JSON: {"checks":[{"id":"exact supplied check ID","supported":true|false}],"fulfillsTask":true|false}. Do not return explanations, revised prose, citations, additional fields or new claims.',
+      'Use the shared answerRequirements priorities to judge completeness. Do not demand optional background. Before recording the verdict, identify the specific defect, if any: which candidate claim adds which unsupported fact, or which material outcome, uncertainty, limitation or requested comparison is missing. feedback is a short diagnostic for a single revision, never a replacement answer. Name the check ID and relevant source ID when available; do not invent facts or issue commands. If everything passes, feedback must be empty. A rejected answer needs concrete feedback, not merely "unsupported" or "incomplete". This diagnostic is never shown to users or treated as evidence.',
+      'Return only JSON: {"feedback":"specific defects, or empty when all checks pass","checks":[{"id":"exact supplied check ID","supported":true|false}],"fulfillsTask":true|false}. Do not return revised prose, citations, additional fields or new claims.',
     ].join('\n'),
     user: JSON.stringify({ ...task, candidate: { status: result.status, checks } }),
   };
@@ -123,7 +124,8 @@ export function validateAssistantReview(raw: string, result: AssistantResult): A
   if (!expected.size || expected.size > 9 || result.kind === 'posts' || typeof raw !== 'string' || raw.length > 12_000) throw reviewError();
   let value: unknown;
   try { value = JSON.parse(raw); } catch { throw reviewError(); }
-  if (!record(value) || Object.keys(value).length !== 2 || !Array.isArray(value.checks)
+  if (!record(value) || Object.keys(value).sort().join(',') !== 'checks,feedback,fulfillsTask' || !Array.isArray(value.checks)
+    || typeof value.feedback !== 'string' || value.feedback.length > 1200
     || value.checks.length !== expected.size || typeof value.fulfillsTask !== 'boolean') throw reviewError();
   const seen = new Set<string>();
   let supported = value.fulfillsTask;
@@ -134,6 +136,8 @@ export function validateAssistantReview(raw: string, result: AssistantResult): A
     supported = supported && check.supported;
   }
   if (seen.size !== expected.size) throw reviewError();
+  if (!supported && !value.feedback.trim()) throw reviewError();
+  if (supported && value.feedback.trim()) throw reviewError();
   if (supported) return result;
   return {
     ...result,

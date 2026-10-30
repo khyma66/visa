@@ -89,6 +89,20 @@ test('Groq uses the fixed server endpoint, strict source IDs, bounded answer/rev
   assert.notEqual(provider.providerCacheKey('groq'),provider.providerCacheKey('workers-ai'));
   assert.equal(JSON.parse(provider.providerCacheKey('groq').slice(5)).reviewReasoningEffort,'medium');
 });
+test('Groq gives the small routing task a bounded reasoning budget without slowing answer generation', async () => {
+  let body;
+  await provider.runAssistantModel({ system: 'Plan', user: 'Synthetic', outputKind: 'plan', maxAttempts: 1 }, {
+    provider: 'groq', apiKey: 'synthetic-groq-secret', fetcher: async (_url, init) => {
+      body = JSON.parse(init.body);
+      return Response.json({ choices: [{ finish_reason: 'stop', message: { content: '{}' } }] });
+    },
+  });
+  assert.equal(body.reasoning_effort, 'medium');
+  assert.equal(body.max_completion_tokens, 1200);
+  assert.equal(body.include_reasoning, false);
+  assert.equal(JSON.parse(provider.providerCacheKey('groq').slice(5)).plannerReasoningEffort, 'medium');
+});
+
 test('Groq errors fail closed without retries, provider body disclosure or model fallback', async () => {
   for(const [status,reason] of [[302,'provider_error'],[307,'provider_error'],[400,'invalid_request'],[401,'authentication_failed'],[403,'permission_denied'],[429,'rate_limited'],[500,'provider_error']]) {
     let calls=0, observed;
@@ -136,7 +150,7 @@ function harness(overrides={}) {
   const handler=service.createAssistantHandler({availability:()=>({posts:true,communities:true,catchup:true}),model:'test-model',
     authenticate:async()=>({actor:state.actor,corpus:async()=>{state.reads++;return {sources:structuredClone(state.sources),partial:false};},reserve:async()=>{state.reserved++;return true;}}),
     cache:{get:async key=>state.cache.get(key)??null,put:async(key,value)=>{state.cache.set(key,value);}},...overrides,
-    generate:async(prompt,signal)=>{if(prompt.outputKind==='review'){state.reviewed++;return JSON.stringify({fulfillsTask:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))});}return spanDraft(await generate(prompt,signal),prompt);}});
+    generate:async(prompt,signal)=>{if(prompt.outputKind==='review'){state.reviewed++;return JSON.stringify({ feedback: (true) && (prompt.reviewIds.map(id=>({id,supported:true}))).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.',fulfillsTask:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))});}return spanDraft(await generate(prompt,signal),prompt);}});
   return {state,handler};
 }
 test('explicit post search answers from sources without waiting for or charging model generation', async () => {
@@ -304,13 +318,13 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
     assert.match(prompt.system,/check every timing expression, sequence word, duration, venue, role and causal link against its quoted source body/);
     assert.equal(JSON.parse(prompt.user).sources[0].body,adjacent.body,'Prompt hardening must not edit or supplement the evidence');
     if(JSON.parse(prompt.user).task==='summary') {
-      assert.match(prompt.system,/short, atomic, attributed claims/);
-      if(value.mode==='summary') assert.match(prompt.system,/as many of the six available claim slots as needed/);
+      assert.match(prompt.system,/short(?:, atomic,)? attributed claims/);
+      if(value.mode==='summary') assert.match(prompt.system,/additional slots are for essential qualifications/);
       else assert.match(prompt.system,/use an additional claim only for an essential correction, conflict or qualification/);
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v40-filter-and-summary-scope','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v41-actionable-review-contract','Semantic change invalidates old cached answers');
 });
 test('summary preparation collapses exact repeated reports but preserves distinct material differences',()=>{
   const repeated='I attended my appointment on Wednesday. My application was approved. My document arrived on Saturday. This is only my own experience, not a standard timeline.';
@@ -342,9 +356,9 @@ test('summary preparation collapses exact repeated reports but preserves distinc
 });
 test('summary and catch-up are explicit evidence tasks without a missing question to answer',()=>{
   const summary=core.assistantPrompt({mode:'summary',scope:{kind:'post',id}},{sources:[source],partial:false});
-  assert.match(summary.system,/No user question is required for a summary/);
-  assert.match(summary.system,/Preserve key dates or named days/);
-  assert.match(summary.system,/return status answered with cited claims even though there is no question/);
+  assert.match(summary.system,/No user question is required/);
+  assert.match(summary.system,/material corrected dates, explicit uncertainty and personal-only limitations/);
+  assert.match(summary.system,/Return status answered when a substantive report or question can be summarized/);
   const data=JSON.parse(summary.user);assert.equal(data.task,'summary');assert.equal('question' in data,false);assert.equal(data.sources[0].body,source.body);
   const catchup=core.assistantPrompt({mode:'catchup',scope:{kind:'community',id},since:'2026-10-12T00:00:00Z',until:'2026-10-13T00:00:00Z'},{sources:[source],partial:false});
   assert.match(catchup.system,/No user question is required for catch-up/);assert.equal('question' in JSON.parse(catchup.user),false);
