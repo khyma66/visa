@@ -158,7 +158,7 @@ test('local workerd concurrent requests preserve cancellation ownership and tota
     const state={reserved:0,generated:0,reviewed:0,reads:0};
     const deps={availability:()=>({posts:true,communities:true,catchup:true}),model:'synthetic-local',
       authenticate:async(_token,context)=>({actor:'same-synthetic-actor',corpus:async()=>{state.reads++;await assistantDatabaseFetch(context)('https://fixture.invalid/corpus');return {sources:[source],partial:false}},reserve:async()=>{state.reserved++;return true}}),
-      generate:async(prompt,signal)=>{if(prompt.outputKind==='review'){state.reviewed++;return JSON.stringify({fulfillsTask:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))})}state.generated++;await fetch('https://fixture.invalid/model',{signal});return JSON.stringify(answer)}};
+      generate:async(prompt,signal)=>{if(prompt.outputKind==='review'){state.reviewed++;return JSON.stringify({feedback:'',fulfillsTask:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))})}state.generated++;await fetch('https://fixture.invalid/model',{signal});return JSON.stringify(answer)}};
     const normal=createAssistantHandler(deps),deadline=createAssistantHandler({...deps,deadlineMs:40});
     export default {async fetch(request){const url=new URL(request.url);if(url.pathname==='/status')return Response.json(state);
       const controller=new AbortController();const timer=url.searchParams.has('abort')?setTimeout(()=>controller.abort(),100):null;
