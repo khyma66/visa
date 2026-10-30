@@ -59,6 +59,7 @@ test('unrecognized follow-up wording carries bounded two-sided context and ID lo
   try {
     h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
     changeQuestion(h, 'Give STEM OPT experiences'); await submit(h); await h.settle();
+    assert.deepEqual(h.calls.at(-1).body.conversation, [], 'first public question opts into semantic planning');
     changeQuestion(h, 'Give me the gist'); await submit(h); await h.settle();
     const body = h.calls.at(-1).body;
     assert.deepEqual(body.conversation, [{ question: 'Give STEM OPT experiences', answer: 'Members reported document requests.' }]);

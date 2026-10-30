@@ -1,7 +1,7 @@
 import { assistantPrompt, prepareAssistantCorpus, readBoundedJson, validateAssistantOutput, type AssistantValidationCode } from '../src/lib/assistant-core';
 import type { AssistantCorpus, AssistantRequest, AssistantResult } from '../src/lib/assistant-contract';
 import { assistantCandidateIdentity, createAssistantHandler, type AssistantFailureStage } from '../src/lib/assistant-service';
-import { assistantReviewCorpus, validateAssistantReview } from '../src/lib/assistant-review';
+import { assistantReviewCorpus, assistantReviewedSubset, validateAssistantReview } from '../src/lib/assistant-review';
 import { runAssistantModel, providerModel, providerCacheKey, GROQ_ASSISTANT_PROFILE, WORKERS_ASSISTANT_PROFILE, type WorkersAiBinding, type AssistantProviderFailure, type AssistantUsage, type AssistantTransport } from '../src/lib/assistant-provider';
 import { acceptanceFixtures, evaluateAcceptance } from './assistant-acceptance-fixtures';
 import { assistantPlanPrompt, parseAssistantPlan } from '../src/lib/assistant-planner';
@@ -45,10 +45,11 @@ export function checkAcceptanceInference(input: AssistantRequest, corpus: Assist
       if (hasClaims(first)) {
         if (!assistantReviewCorpus(corpus, prepared, first)) checked = insufficient(first);
         else {
-          checked = validateAssistantReview(take('review', false), first);
+          const verdict = take('review', false);
+          checked = validateAssistantReview(verdict, first);
           // Only a complete, well-formed negative verdict permits a new draft.
           if (checked !== first) {
-            const revised = validate(take('answer', true));
+            const revised = assistantReviewedSubset(verdict, first, prepared, input) ?? validate(take('answer', true));
             if (assistantCandidateIdentity(revised) !== assistantCandidateIdentity(first)) {
               checked = revised;
               if (hasClaims(revised)) checked = assistantReviewCorpus(corpus, prepared, revised)

@@ -431,6 +431,22 @@ test('acceptance derives exact inference order from strict verdicts, not permiss
   assert.equal(checkAcceptanceInference(fixture.input, fixture.corpus, result, 'groq', events(rounds), tooManyTransports).budget, false);
 });
 
+test('acceptance requires a second full review of the exact supported summary subset', () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'post-summary');
+  const claims = ['The member received their passport on Friday.', 'Everyone received a passport.'].map(text => ({ text, evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }));
+  const first = { status: 'answered', claims, disagreements: [], unanswered: [] };
+  const prepared = prepareAssistantCorpus(fixture.corpus, fixture.input);
+  const final = validateAssistantOutput(JSON.stringify({ ...first, claims: claims.slice(0, 1) }), prepared, Date.now(), fixture.input);
+  const round = (kind, output, recovery = false) => ({ kind, output: JSON.stringify(output), rawOutputs: [], maxAttempts: recovery ? 1 : 2, semanticRepair: false, transport: [] });
+  const rounds = [round('answer', first), round('review', { checks: [{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: false }], fulfillsTask: false }), round('review', { checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true }, true)];
+  const check = (items, result = final) => checkAcceptanceInference(fixture.input, fixture.corpus, result, 'workers-ai', ['authenticate', 'corpus', 'reserve', ...items.flatMap(item => [item.kind === 'answer' ? 'generate' : 'review', 'runtime-binding']), 'corpus'], items);
+  assert.equal(check(rounds).sequence, true);
+  assert.equal(check(rounds.slice(0, 2)).sequence, false, 'the first per-claim checks do not approve the subset');
+  assert.equal(check([...rounds, rounds[2]]).sequence, false, 'no third reviewer attempt');
+  const rejected = [...rounds.slice(0, 2), round('review', { checks: [{ id: 'claim:0', supported: true }], fulfillsTask: false }, true)];
+  assert.equal(check(rejected).sequence, false, 'factual but incomplete output stays hidden');
+});
+
 test('actual evaluation permits exactly six Groq requests when both initial phases need format repair', async () => {
   const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
   const draft = text => JSON.stringify({ status: 'answered', claims: [{ text, evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] });
@@ -1020,7 +1036,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 34);
+  assert.equal(acceptanceFixtures.length, 35);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);
@@ -1039,7 +1055,7 @@ test('both evaluator manifests and the production verifier match authenticated w
     const declaration = runner.match(/const cases = (\[[^;]+\]);/);
     assert(declaration, 'Expected explicit evaluator manifest');
     const ids = JSON.parse(declaration[1].replaceAll("'", '"'));
-    for (const match of runner.matchAll(/cases\.push\('([a-z-]+)'\);/g)) ids.push(match[1]);
+    for (const match of runner.matchAll(/cases\.(push|unshift)\('([a-z-]+)'\);/g)) ids[match[1]](match[2]);
     assert.equal(new Set(ids).size, ids.length, 'No duplicate cases');
     assert.deepEqual(ids, ready.cases, path);
   }
@@ -1047,7 +1063,7 @@ test('both evaluator manifests and the production verifier match authenticated w
   const required = verifier.match(/const requiredCases = (\[[^;]+\]);/);
   assert(required, 'Expected explicit production acceptance manifest');
   const ids = JSON.parse(required[1].replaceAll("'", '"'));
-  for (const match of verifier.matchAll(/requiredCases\.push\('([a-z-]+)'\);/g)) ids.push(match[1]);
+  for (const match of verifier.matchAll(/requiredCases\.(push|unshift)\('([a-z-]+)'\);/g)) ids[match[1]](match[2]);
   assert.equal(new Set(ids).size, ids.length, 'No duplicate production cases');
   assert.deepEqual(ids, ready.cases, 'production verifier');
 });

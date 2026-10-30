@@ -196,7 +196,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
       body.question = submittedQuestion;
       if (draft.transform) body.transform = draft.transform;
       if (previousQuestions.length) body.previousQuestions = previousQuestions;
-      if (scope.kind === 'public' && completedAsks.length) {
+      if (scope.kind === 'public') {
         body.conversation = completedAsks.slice(-3).map(item => ({ question: item.prompt.slice(0, 1200),
           answer: (item.result?.kind === 'posts' ? `Displayed ${item.result.posts?.length ?? 0} discussions.`
             : [...(item.result?.claims ?? []), ...(item.result?.disagreements ?? [])].map(claim => claim.text).join('\n') || item.result?.unanswered.join('\n') || '').slice(0, 1200) }));

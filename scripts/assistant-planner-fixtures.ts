@@ -3,9 +3,12 @@ import type { AssistantRequest, AssistantTurnPlan } from '../src/lib/assistant-c
 // Fixed before hosted testing. These expectations are never supplied to the model.
 const history = [{ question: 'Show recent STEM OPT application discussions.', answer: 'Displayed two discussions about STEM OPT application processing.' }];
 const refs = [1, 2].map(n => ({ questionId: `apify-planner-${n}`, sourceId: `q:apify-planner-${n}` }));
-type Fixture = { id: string; input: AssistantRequest; action: AssistantTurnPlan['action']; required: RegExp[]; excluded?: RegExp[]; focus?: number | null };
+type Fixture = { id: string; input: AssistantRequest; action: AssistantTurnPlan['action']; required: RegExp[]; excluded?: RegExp[]; focus?: number | null; style?: AssistantTurnPlan['style'] };
 const followup = (question: string): AssistantRequest => ({ mode: 'ask', scope: { kind: 'public' }, question, conversation: history, previousPosts: refs });
 export const plannerFixtures: Fixture[] = [
+  { id: 'first-summary', input: { mode: 'ask', scope: { kind: 'public' }, question: 'Summarize recent STEM OPT experiences.', conversation: [] }, action: 'retrieve', required: [/stem\s*opt/i], style: 'summary' },
+  { id: 'first-specific', input: { mode: 'ask', scope: { kind: 'public' }, question: 'What documents did members report taking to their H1B interviews in Chennai?', conversation: [] }, action: 'retrieve', required: [/h[ -]?1[ -]?b/i, /chennai/i, /document/i], style: 'answer' },
+  { id: 'first-ambiguous', input: { mode: 'ask', scope: { kind: 'public' }, question: 'What happened to that person?', conversation: [] }, action: 'clarify', required: [] },
   { id: 'gist', input: followup('Give me the gist.'), action: 'reuse', required: [/stem\s*opt/i], focus: null },
   { id: 'longest', input: followup('Who had the longest wait among those people?'), action: 'reuse', required: [/wait|longest|processing/i], focus: null },
   { id: 'constraint', input: followup('Only include applicants who used premium processing.'), action: 'retrieve', required: [/stem\s*opt/i, /premium/i] },
@@ -26,6 +29,7 @@ export function evaluatePlanner(fixture: Fixture, plan: AssistantTurnPlan) {
     { name: 'context_retained', passed: fixture.required.every(pattern => pattern.test(plan.query)) },
     { name: 'old_topic_removed', passed: !(fixture.excluded ?? []).some(pattern => pattern.test(plan.query)) },
     { name: 'reference', passed: fixture.focus === undefined || plan.focus === fixture.focus },
+    { name: 'style', passed: fixture.style === undefined || plan.style === fixture.style },
   ];
   return { id: fixture.id, passed: checks.every(check => check.passed), checks };
 }

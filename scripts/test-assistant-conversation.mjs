@@ -15,7 +15,9 @@ function harness(overrides = {}) {
   const events = [], reads = [], prompts = [];
   const deps = { availability: () => ({ posts: true, communities: false, catchup: false }), model: 'test',
     authenticate: async () => { events.push('auth'); return { actor: 'user-a', reserve: async () => { events.push('reserve'); return true; }, corpus: async value => { reads.push(value); return { sources: [source], partial: false }; } }; },
-    generate: async prompt => { prompts.push(prompt); return JSON.stringify(prompt.outputKind === 'plan' ? plan : prompt.outputKind === 'review' ? { fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) } : answer); }, ...overrides };
+    generate: async prompt => JSON.stringify(prompt.outputKind === 'plan' ? plan : prompt.outputKind === 'review' ? { fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) } : answer), ...overrides };
+  const generate = deps.generate;
+  deps.generate = async (...args) => { prompts.push(args[0]); return generate(...args); };
   return { handler: api.createAssistantHandler(deps), events, reads, prompts };
 }
 test('caller cannot inject a trusted plan, original request, roles, or evidence', () => {
@@ -68,10 +70,41 @@ test('invalid planner output fails closed rather than guessing a fresh search', 
   const h = harness({ generate: async () => '{"action":"execute_sql"}' });
   assert.equal((await h.handler(req())).status, 502); assert.equal(h.reads.length, 0);
 });
-test('clear first turn avoids the planner and its extra model call', async () => {
+test('legacy callers without conversation retain their compatible path', async () => {
   const h = harness(); const value = { ...input, conversation: undefined, question: 'What STEM OPT outcome was reported?' };
   assert.equal((await h.handler(req(value))).status, 200);
   assert.deepEqual(h.prompts.map(p => p.outputKind ?? 'answer'), ['answer', 'review']);
+});
+test('modern first turn is semantically planned before retrieval, not keyword-routed', async () => {
+  const h = harness({ generate: async prompt => JSON.stringify(prompt.outputKind === 'plan'
+    ? { ...plan, action: 'retrieve', query: 'STEM OPT application experiences', style: 'summary' }
+    : prompt.outputKind === 'review' ? { fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) } : answer) });
+  const value = await (await h.handler(req({ mode: 'ask', scope: { kind: 'public' }, question: 'Summarize STEM OPT experiences', conversation: [] }))).json();
+  assert.equal(value.status, 'answered');
+  assert.deepEqual(h.prompts.map(p => p.outputKind ?? 'answer'), ['plan', 'answer', 'review']);
+  assert.equal(JSON.parse(h.prompts[1].user).collectionTask, 'summary');
+  assert.equal(h.reads[0].turnPlan.action, 'retrieve');
+  assert.deepEqual(h.events, ['auth', 'reserve']);
+});
+test('summary subset needs an independent completeness review and never gets a third chance', async () => {
+  for (const complete of [true, false]) {
+    let reviews = 0;
+    const h = harness({ generate: async prompt => {
+      if (prompt.outputKind === 'plan') return JSON.stringify(plan);
+      if (prompt.outputKind !== 'review') return JSON.stringify({ ...answer, claims: [...answer.claims, { ...answer.claims[0], text: 'Everyone was approved.' }] });
+      reviews++;
+      if (reviews === 1) return JSON.stringify({ fulfillsTask: false, checks: [{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: false }] });
+      assert.equal(prompt.maxAttempts, 1);
+      const candidate = JSON.parse(prompt.user).candidate;
+      assert.equal(candidate.checks.length, 1);
+      assert.equal(candidate.checks[0].text, answer.claims[0].text);
+      return JSON.stringify({ fulfillsTask: complete, checks: [{ id: 'claim:0', supported: true }] });
+    } });
+    const value = await (await h.handler(req())).json();
+    assert.equal(value.status, complete ? 'answered' : 'insufficient');
+    assert.equal(value.claims.length, complete ? 1 : 0);
+    assert.equal(reviews, 2); assert.equal(h.reads.length, 2);
+  }
 });
 test('explicit UI transform skips planning but never skips source reads, quota or review', async () => {
   const h = harness();

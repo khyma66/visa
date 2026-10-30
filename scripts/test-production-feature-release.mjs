@@ -192,6 +192,7 @@ function acceptanceReceipt() {
   ids.push('stem-post-overview');
   ids.push('stem-followup-summary');
   ids.push('stem-followup-comparison');
+  ids.unshift('mixed-unresolved-discussion-summary');
   const checksFor = id => ['supported', 'application_evidence_reviewed_when_needed', ...(id === 'direct-post-search'
     ? ['application_provider_not_called'] : ['application_provider_call_sequence', 'application_transport_budget'])];
   return { schemaVersion: 1, sourceSha: 'a'.repeat(40), provider: 'workers-ai', model, modelProfile, createdAt: new Date().toISOString(), passed: true, repetitions: 3, features: { posts: true, communities: true, catchup: true }, workerDeleted: true, cases: ids.map(id => ({
@@ -259,9 +260,9 @@ test('production acceptance cannot pass through aggregate-only, incomplete or fa
 });
 
 test('production acceptance requires explicit bounded inference and transport proofs', () => {
-  for (const [caseIndex, name] of [[0, 'application_provider_not_called'], [1, 'application_provider_call_sequence'], [1, 'application_transport_budget']]) {
+  for (const [caseId, name] of [['direct-post-search', 'application_provider_not_called'], ['post-question', 'application_provider_call_sequence'], ['post-question', 'application_transport_budget']]) {
     const receipt = acceptanceReceipt();
-    const row = receipt.cases[caseIndex];
+    const row = receipt.cases.find(item => item.id === caseId);
     row.samples[0].checks = row.samples[0].checks.filter(check => check.name !== name);
     row.checks = row.samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed })));
     assert.throws(() => verifyAssistantAcceptance(receipt, receipt.sourceSha), /bounded inference sequence and transport budget/);

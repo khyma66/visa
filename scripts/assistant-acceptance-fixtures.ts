@@ -137,6 +137,14 @@ const decisionReportingScope = (result: AssistantResult) => result.claims.some(c
     || !/\bpending\b|\bno\s+(?:final\s+)?decision\b.{0,45}\b(?:made|given|issued|reached|received)\b|\bdecision\b.{0,20}\b(?:not|never)\b.{0,20}\b(?:made|given|issued|reached|received)\b/.test(text));
 
 export const acceptanceFixtures: AcceptanceFixture[] = [
+  { id: 'mixed-unresolved-discussion-summary', input: { mode: 'ask', scope: { kind: 'public' }, question: 'Give recent STEM OPT posts' }, corpus: { partial: false, sources: [
+    source(501, 'My STEM OPT extension was approved, but I have not received the card. Tracking says delivered. I asked the postal service to investigate. I have not reported a resolution.', { kind: 'question', id: 'q:apify-mixed-card', questionId: 'apify-mixed-card', communityId: null, title: 'STEM OPT card delivery problem', url: '/questions/apify-mixed-card' }),
+    source(502, 'My STEM OPT extension received a request for evidence after my H1B petition was approved. The request mentions my school record. I asked my school for help. I do not yet know the result.', { kind: 'question', id: 'q:apify-mixed-school', questionId: 'apify-mixed-school', communityId: null, title: 'STEM OPT request and school record', url: '/questions/apify-mixed-school' }),
+    source(503, 'I lost my job while on OPT. My employer said they planned to withdraw the H1B petition. I do not know whether they filed the withdrawal. I am asking about my options, not reporting a new approval.', { kind: 'question', id: 'q:apify-mixed-job', questionId: 'apify-mixed-job', communityId: null, title: 'Job loss and an uncertain withdrawal', url: '/questions/apify-mixed-job' }),
+  ] }, checks: [answered, mentions('delivery_report', /card|deliver/), mentions('school_request', /school|evidence|rfe/),
+    mentions('uncertainty_preserved', /unknown|not (?:yet )?know|unresolved|no (?:reported|known) (?:resolution|result)|not (?:yet )?(?:reported|resolved)/),
+    { name: 'multiple_distinct_reports', test: result => new Set(result.claims.flatMap(claim => claim.evidence.map(item => item.sourceId))).size >= 2 },
+    absent('no_legal_permission_or_invented_success', /you (?:can|may|should|must)|everyone|guarantee|successfully resolved/) ] },
   { id: 'direct-post-search', execution: 'direct-post-search', input: { mode: 'ask', scope: { kind: 'public' }, question: 'give all posts related to stamping delay' }, corpus: stampingSearchCorpus, checks: [
     { name: 'returns_post_search_results', test: result => result.kind === 'posts' && result.status === 'answered' },
     { name: 'matching_posts_deduplicated', test: result => result.posts?.length === 2 && stampingPostIds.every(id => result.posts?.some(post => post.questionId === id)) },

@@ -16,7 +16,7 @@ dependencies['./assistant-context'] = await compile('assistant-context');
 dependencies['./assistant-core'] = await compile('assistant-core');
 dependencies['./assistant-planner'] = await compile('assistant-planner');
 const { AssistantError, assistantPrompt } = await import(dependencies['./assistant-core']);
-const { assistantReviewCorpus, assistantReviewPrompt, validateAssistantReview } = await import(await compile('assistant-review'));
+const { assistantReviewCorpus, assistantReviewPrompt, assistantReviewedSubset, validateAssistantReview } = await import(await compile('assistant-review'));
 const provider = await import(await compile('assistant-provider'));
 const source = {
   id: 'q:apify-example', kind: 'question', questionId: 'apify-example', communityId: null,
@@ -32,6 +32,22 @@ const result = {
 };
 const verdict = (checks = [{ id: 'claim:0', supported: true }], fulfillsTask = true) => JSON.stringify({ checks, fulfillsTask });
 const fails = raw => assert.throws(() => validateAssistantReview(raw, result), error => error instanceof AssistantError && error.status === 502);
+
+test('subset repair is summary-only, removes whole rejected claims, and cannot use malformed verdicts', () => {
+  const summary = { mode: 'summary', scope: { kind: 'post', id: source.questionId } };
+  const mixed = { ...result, claims: [claim, { ...claim, text: 'Everyone is approved.' }] };
+  const raw = verdict([{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: false }], false);
+  const subset = assistantReviewedSubset(raw, mixed, corpus, summary);
+  assert.equal(subset.claims.length, 1); assert.equal(subset.claims[0].text, claim.text);
+  assert.equal(subset.claims[0].evidence[0].sourceId, source.id);
+  assert.equal(subset.claims[0].evidence[0].quote, source.body, 'normal validation retains complete source context');
+  assert.deepEqual(subset.unanswered, []);
+  assert.equal(assistantReviewedSubset(raw, mixed, corpus, input), null, 'specific questions require the complete requested answer');
+  assert.throws(() => assistantReviewedSubset(verdict([], false), mixed, corpus, summary));
+  assert.equal(assistantReviewedSubset(verdict([{ id: 'claim:0', supported: true }], false), result, corpus, summary), null, 'do not rerun review on an identical candidate');
+  assert.equal(assistantReviewedSubset(verdict([{ id: 'claim:0', supported: false }], false), result, corpus, summary), null);
+  assert.equal(mixed.claims.length, 2);
+});
 
 test('experience reviewer treats sourced H-4 stamping reports as relevant even without EAD details', () => {
   const request = { mode: 'ask', scope: { kind: 'public' }, question: 'give h4 ead stamping experiences' };
