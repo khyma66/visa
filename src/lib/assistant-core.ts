@@ -1,14 +1,14 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantResultSetFollowUp, assistantSearchIntent, assistantStandaloneFollowUp, assistantSummaryFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v30-contextual-turns';
+export const ASSISTANT_VERSION = 'grounded-chat-v31-bounded-summaries';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 export type AssistantValidationCode = 'output_json' | 'output_schema' | 'claim_limit' | 'claim_text'
   | 'citation_missing' | 'citation_schema' | 'citation_length' | 'citation_source' | 'citation_quote'
-  | 'conflict_sources' | 'unanswered_limit' | 'answered_without_claims';
+  | 'conflict_sources' | 'unanswered_limit' | 'answered_without_claims' | 'answer_word_limit';
 export class AssistantError extends Error {
   constructor(public status: number, message: string, public retryAfter?: number, public code?: AssistantValidationCode) { super(message); }
 }
@@ -332,6 +332,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       : 'TASK: Answer the latest user question directly using only the supplied evidence. Previous questions only clarify references in the latest question; do not answer an older question or summarize unrelated topics. Start with the answer, using 1–3 short, plain-language claims by default, each usually one sentence. Include extra claims only when the question asks for detail or conflicting reports require them. Do not repeat the question, describe your search, or add a long introduction. If the evidence cannot answer the question, return status insufficient.';
   return {
     sourceIds: corpus.sources.map(source => source.id),
+    ...(selectedSummary ? { maxAnswerWords: 100 } : {}),
     // Internal catalog, never model-written or accepted from the request.
     evidenceSpans,
     system: [
@@ -526,6 +527,8 @@ export function validateAssistantOutput(raw: string, corpus: AssistantCorpus, no
   let claims = parseClaims(value.claims, 6), disagreements = parseClaims(value.disagreements, 3, true);
   if (value.unanswered.length > 4 || value.unanswered.some(t => typeof t !== 'string' || t.length > 400)) return invalid('unanswered_limit');
   if (value.status === 'answered' && !claims.length && !disagreements.length) return invalid('answered_without_claims');
+  if (input && assistantPromptSelection(input, corpus).selectedSummary
+    && [...claims, ...disagreements].map(claim => claim.text).concat(value.unanswered).join(' ').trim().split(/\s+/).filter(Boolean).length > 100) return invalid('answer_word_limit');
   let status = value.status as AssistantResult['status'];
   const policyQuestion = input?.mode === 'ask' && needsAuthoritativePolicyAnswer(input);
   if (input) {

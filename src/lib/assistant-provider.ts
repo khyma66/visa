@@ -9,6 +9,8 @@ export type AssistantPrompt = { system: string; user: string; sourceIds?: string
   validateOutput?(raw: string): void;
   /** Server-only cap; recovery cannot multiply transport/schema retries. */
   maxAttempts?: 1 | 2;
+  /** Application-selected brief-summary budget, never an extra retry allowance. */
+  maxAnswerWords?: number;
 };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
 export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'invalid_key_format' | 'network_error' | 'unsupported_redirect' | 'illegal_invocation' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'permission_denied' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
@@ -228,6 +230,8 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       const citationRepair = Object.hasOwn(prompt, 'evidenceSpans') && !review
         ? 'Use fixed slot objects, never arrays: claims has exactly slot1–slot6, disagreements slot1–slot3, unanswered slot1–slot4, and each evidence object slot1–slot4. Include every required slot key; set every unused slot to null. Every non-null evidence slot contains only a spanId selected from the supplied evidence catalog. Do not output quote or sourceId fields, invent IDs, or repeat a spanId within one evidence object. Insufficient requires all claim and disagreement slots to be null.'
         : 'Every quote is one continuous verbatim body excerpt of 12–400 characters, never joined with ellipses. Copy only actual source IDs and exact text from the supplied source bodies.';
+      const lengthRepair = prompt.maxAnswerWords === 100
+        ? ' All claim, disagreement and unanswered text together must be at most 100 words. Omit optional background first; retain essential outcomes, stated dates, uncertainty and personal-only qualifications. Do not truncate claims or their evidence.' : '';
       for (let attempt = 0; attempt < maximumAttempts; attempt++) {
       signal.throwIfAborted();
       reason = 'network_error';
@@ -237,7 +241,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         method: 'POST', redirect: 'manual', signal,
         headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: selected,
-          messages: [{ role: 'system', content: prompt.system + (attempt ? `\nFORMAT REPAIR: The previous attempt failed format or exact-citation validation. Return a concise object matching every required field. At most 6 claims, 3 disagreements, 4 unanswered items; each claim has 1–4 evidence entries, each disagreement 2–4. ${citationRepair} Each text is at most 700 characters. Review checks, if requested, include every supplied check ID exactly once. Do not add facts or change the requested task.` : '') }, { role: 'user', content: prompt.user }],
+          messages: [{ role: 'system', content: prompt.system + (attempt ? `\nFORMAT REPAIR: The previous attempt failed format or exact-citation validation. Return a concise object matching every required field. At most 6 claims, 3 disagreements, 4 unanswered items; each claim has 1–4 evidence entries, each disagreement 2–4. ${citationRepair} Each text is at most 700 characters. Review checks, if requested, include every supplied check ID exactly once. Do not add facts or change the requested task.${lengthRepair}` : '') }, { role: 'user', content: prompt.user }],
           response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } },
           reasoning_effort: review ? models.groq.reviewReasoningEffort : models.groq.reasoningEffort, include_reasoning: false,
           max_completion_tokens: prompt.outputKind === 'plan' ? 1200 : review ? models.groq.reviewMaxTokens : models.groq.answerMaxTokens,
@@ -296,7 +300,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         const repairable = error instanceof AssistantError && error.code && [
           'output_json', 'output_schema', 'claim_limit', 'claim_text', 'citation_schema',
           'citation_missing', 'citation_length', 'citation_source', 'citation_quote',
-          'conflict_sources', 'unanswered_limit', 'answered_without_claims',
+          'conflict_sources', 'unanswered_limit', 'answered_without_claims', 'answer_word_limit',
         ].includes(error.code);
         if (repairable && !review && attempt + 1 < maximumAttempts && !signal.aborted) continue;
         throw error;
