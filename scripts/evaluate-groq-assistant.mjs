@@ -28,6 +28,7 @@ cases.push('historical-current-document-separation');
 cases.push('stem-post-overview');
 cases.push('stem-followup-summary');
 cases.push('stem-followup-comparison');
+cases.unshift('mixed-unresolved-discussion-summary');
 const release = process.argv.includes('--release');
 assert(!(smoke && release), 'Smoke results cannot authorize a release');
 const selected = smoke ? ['post-question'] : [...cases, ...PLANNER_CASE_IDS];

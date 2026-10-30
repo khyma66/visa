@@ -38,6 +38,7 @@ cases.push('historical-current-document-separation');
 cases.push('stem-post-overview');
 cases.push('stem-followup-summary');
 cases.push('stem-followup-comparison');
+cases.unshift('mixed-unresolved-discussion-summary');
 async function cleanup() {
   let state;
   try { state = JSON.parse(await readFile(statePath, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return true; throw error; }

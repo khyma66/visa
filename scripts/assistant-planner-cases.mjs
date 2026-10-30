@@ -1,1 +1,1 @@
-export const PLANNER_CASE_IDS = ['gist', 'longest', 'constraint', 'negation', 'translation', 'new-topic', 'period-comparison', 'unknown-reference', 'aggregate', 'ordinal', 'location-correction', 'clarification-answer'].map(id => `planner:${id}`);
+export const PLANNER_CASE_IDS = ['first-summary', 'first-specific', 'first-ambiguous', 'gist', 'longest', 'constraint', 'negation', 'translation', 'new-topic', 'period-comparison', 'unknown-reference', 'aggregate', 'ordinal', 'location-correction', 'clarification-answer'].map(id => `planner:${id}`);

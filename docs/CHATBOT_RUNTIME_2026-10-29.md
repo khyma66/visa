@@ -6,7 +6,7 @@ Keep Cloudflare Workers, the existing React interface, Supabase authorization an
 
 1. The browser sends the latest question, at most three recent question and answer pairs, and bounded source ID references. Previous text is untrusted context, never evidence.
 2. The server validates the request, authenticates the user, checks request limits and reserves model quota before any planning call.
-3. For public follow-ups, one constrained model call selects fresh retrieval, re-reading earlier source references, or a fixed clarification prompt. The client cannot supply a trusted plan or change the access scope.
+3. For public chat questions, one constrained model call selects fresh retrieval, re-reading earlier source references, or a fixed clarification prompt. The client cannot supply a trusted plan or change the access scope.
 4. Independent native-content and imported-reply searches start concurrently. Selected threads are expanded under the caller's existing permissions. Reuse bypasses global search but still rereads the selected content.
 5. Generation selects server-defined evidence spans. A separate reviewer checks the claims, followed by a fresh source/access fingerprint check. Existing bounded repair, request deadline and cancellation remain in force.
 6. Live progress events reflect actual stages. Only the finalized result is released. Interrupted, oversized, malformed and duplicate-completion streams fail closed. Older JSON clients continue to work.
@@ -16,7 +16,9 @@ Keep Cloudflare Workers, the existing React interface, Supabase authorization an
 
 The new transport streams progress, not raw model tokens. Immigration experience summaries can contain consequential unsupported claims; displaying a draft and retracting it later would not preserve the existing review-before-publication policy. There is no artificial typing delay after acceptance. First progress, first answer text, and completion latency must be measured separately.
 
-The planner adds one inference for free-text conversational turns. Explicit Summarize and Make it shorter UI actions skip that call, while still rereading sources and reviewing the answer. First standalone turns retain their existing path. There is no autonomous search loop, new model fallback, or extra retry budget for the planner. One request reservation covers planning and answering; the existing total deadline still applies.
+The planner adds one inference for free-text chat turns, including the first question from the modern UI. Legacy API callers that omit conversation context retain their compatible path. Explicit Summarize and Make it shorter UI actions skip planning, while still rereading sources and reviewing the answer. There is no autonomous search loop, new model fallback, or extra retry budget for the planner. One request reservation covers planning and answering; the existing total deadline still applies.
+
+For a rejected summary, the bounded repair may remove whole unsupported claims and independently review the remaining candidate against the full original evidence and task. It never publishes a partially checked draft. Missing qualifications or conflicting positions still require abstention. This uses one fewer inference than regenerating a full answer; it does not increase the retry budget. Specific questions retain the existing full-answer repair path.
 
 ## Verification and release
 

@@ -2,7 +2,7 @@ import type { AssistantAvailability, AssistantCorpus, AssistantRequest, Assistan
 import { ASSISTANT_VERSION, AssistantError, assistantAvailability, assistantFingerprint, assistantPrompt, emptyAssistantResult, parseAssistantRequest, prepareAssistantCorpus, readBoundedJson, requireAssistantMode, validateAssistantOutput, type AssistantValidationCode } from './assistant-core';
 import type { AssistantPrompt } from './assistant-provider';
 import { assistantPostSearchQuery, buildAssistantPostSearchResult } from './assistant-search';
-import { assistantReviewCorpus, assistantReviewPrompt, validateAssistantReview } from './assistant-review';
+import { assistantReviewCorpus, assistantReviewPrompt, assistantReviewedSubset, validateAssistantReview } from './assistant-review';
 import { applyAssistantPlan, assistantPlanPrompt, parseAssistantPlan } from './assistant-planner';
 
 type ReviewedCacheEntry = { result: AssistantResult; digest: string };
@@ -177,14 +177,14 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       transition('authentication');
       const session = await bounded(() => deps.authenticate(token, context));
       let reserved = false;
-      if (input.mode === 'ask' && input.scope.kind === 'public' && input.conversation?.length) {
+      if (input.mode === 'ask' && input.scope.kind === 'public' && input.conversation !== undefined) {
         input = { ...input, previousPosts: input.previousPosts ?? input.conversationReferences };
         if (input.transform && input.previousPosts?.length) {
           // An explicit UI transformation needs no semantic routing call. Source
           // reads, evidence review, quota and cache permission checks still run.
           const selected = input.transform === 'shorten' && input.focusedPost
             ? input.previousPosts.findIndex(ref => ref.questionId === input.focusedPost!.questionId && ref.sourceId === input.focusedPost!.sourceId) : -1;
-          input = applyAssistantPlan(input, { action: 'reuse', query: (input.previousQuestions?.[0] ?? input.conversation!.at(-1)!.question).slice(0, 1200),
+          input = applyAssistantPlan(input, { action: 'reuse', query: (input.previousQuestions?.[0] ?? input.conversation?.at(-1)?.question ?? input.question!).slice(0, 1200),
             focus: selected >= 0 ? selected : null, style: 'summary', clarification: null });
           resolvedQuestion = input.turnPlan!.query;
         } else {
@@ -284,7 +284,8 @@ export function createAssistantHandler(deps: AssistantDependencies) {
           supported: verdict.checks.filter(check => check.supported).length,
           rejected: verdict.checks.filter(check => !check.supported).length, total: verdict.checks.length });
         } catch { /* Observability must never change acceptance or the response. */ }
-        return { result, rejected: result.status === 'insufficient' };
+        return { result, rejected: result.status === 'insufficient',
+          repairCandidate: !recovery && result.status === 'insufficient' ? assistantReviewedSubset(review, candidate, corpus, input) : null };
       };
       let result = await generateCandidate();
       if (result.claims.length || result.disagreements.length) {
@@ -292,12 +293,14 @@ export function createAssistantHandler(deps: AssistantDependencies) {
         const checked = await reviewCandidate(result);
         result = checked.result;
         if (checked.rejected) {
-          // One regeneration only after a valid negative semantic verdict.
-          // Reuse ORIGINAL evidence, never the rejected draft or review text.
+          // One repair only after a valid negative semantic verdict. For a
+          // summary, first try the strictly supported whole-claim subset and
+          // independently review its completeness against ORIGINAL evidence.
+          // Otherwise regenerate from original evidence, never reviewer prose.
           // Each recovery inference has one transport attempt: maximum 6
           // requests including the initial answer/review format repairs,
           // plus at most one contextual planning request on conversational turns.
-          const replacement = await generateCandidate(true);
+          const replacement = checked.repairCandidate ?? await generateCandidate(true);
           if (!replacement.claims.length && !replacement.disagreements.length) result = replacement;
           else if (assistantCandidateIdentity(replacement) !== assistantCandidateIdentity(rejectedCandidate)) {
             result = (await reviewCandidate(replacement, true)).result;

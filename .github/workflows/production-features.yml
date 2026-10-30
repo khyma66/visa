@@ -1,4 +1,5 @@
 name: Release current VisaThreads AI features
+# Plan initial chat turns and independently re-review supported whole-claim summary repairs.
 # Enforce the existing brief-summary word contract within the bounded format-repair budget.
 # Verify streaming auth denials through the deployed application router, not only the bare Worker.
 # Recheck short clarification codes and inherited conversational constraints.
