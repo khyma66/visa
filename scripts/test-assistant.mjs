@@ -89,6 +89,20 @@ test('Groq uses the fixed server endpoint, strict source IDs, bounded answer/rev
   assert.notEqual(provider.providerCacheKey('groq'),provider.providerCacheKey('workers-ai'));
   assert.equal(JSON.parse(provider.providerCacheKey('groq').slice(5)).reviewReasoningEffort,'medium');
 });
+test('Groq gives the small routing task a bounded reasoning budget without slowing answer generation', async () => {
+  let body;
+  await provider.runAssistantModel({ system: 'Plan', user: 'Synthetic', outputKind: 'plan', maxAttempts: 1 }, {
+    provider: 'groq', apiKey: 'synthetic-groq-secret', fetcher: async (_url, init) => {
+      body = JSON.parse(init.body);
+      return Response.json({ choices: [{ finish_reason: 'stop', message: { content: '{}' } }] });
+    },
+  });
+  assert.equal(body.reasoning_effort, 'medium');
+  assert.equal(body.max_completion_tokens, 1200);
+  assert.equal(body.include_reasoning, false);
+  assert.equal(JSON.parse(provider.providerCacheKey('groq').slice(5)).plannerReasoningEffort, 'medium');
+});
+
 test('Groq errors fail closed without retries, provider body disclosure or model fallback', async () => {
   for(const [status,reason] of [[302,'provider_error'],[307,'provider_error'],[400,'invalid_request'],[401,'authentication_failed'],[403,'permission_denied'],[429,'rate_limited'],[500,'provider_error']]) {
     let calls=0, observed;

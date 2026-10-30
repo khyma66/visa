@@ -248,7 +248,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
         body: JSON.stringify({ model: selected,
           messages: [{ role: 'system', content: prompt.system + (attempt ? `\nFORMAT REPAIR: The previous attempt failed format or exact-citation validation. Return a concise object matching every required field. At most 6 claims, 3 disagreements, 4 unanswered items; each claim has 1–4 evidence entries, each disagreement 2–4. ${citationRepair} Each text is at most 700 characters. Review checks, if requested, include every supplied check ID exactly once. Do not add facts or change the requested task.${lengthRepair}` : '') }, { role: 'user', content: prompt.user }],
           response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } },
-          reasoning_effort: review ? models.groq.reviewReasoningEffort : models.groq.reasoningEffort, include_reasoning: false,
+          reasoning_effort: prompt.outputKind === 'plan' ? models.groq.plannerReasoningEffort : review ? models.groq.reviewReasoningEffort : models.groq.reasoningEffort, include_reasoning: false,
           max_completion_tokens: prompt.outputKind === 'plan' ? 1200 : review ? models.groq.reviewMaxTokens : models.groq.answerMaxTokens,
           temperature: 0, seed: 39173,
         }),
