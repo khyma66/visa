@@ -13,9 +13,27 @@ const data = moduleUrl(compile(await read('assistant-data')).replace("import arc
   .replace("'./tagging'", JSON.stringify(tagging)).replace("'./assistant-core'", JSON.stringify(core)).replace("'./assistant-search'", JSON.stringify(search)).replace("'./assistant-context'", JSON.stringify(context)));
 const { assistantSearchIntent, assistantSourceMatchesIntent, assistantRefersToEarlierTurn, assistantPreviousPost, assistantDisplayedPosts, assistantResultSetFollowUp } = await import(context);
 const { assistantPrompt } = await import(core);
-const { assistantPostSearchQuery, buildAssistantPostSearchResult } = await import(search);
+const { assistantPostSearchQuery, assistantPostRetrievalQuery, buildAssistantPostSearchResult } = await import(search);
 const { retrieveAssistantCorpus } = await import(data);
 const now = Date.parse('2026-10-17T12:00:00Z');
+
+test('semantic summary paraphrases use ranked retrieval, not exact matches for conversational words', async () => {
+  archive([
+    q('apify-correct', 'My H4 visa stamping in Chennai was approved.', undefined, 'Personal report'),
+    q('apify-wrong-city', 'My H4 visa stamping in Delhi was approved.'),
+    q('apify-wrong-visa', 'My H1B visa stamping in Chennai was approved.'),
+    q('apify-license', 'My H4 visa stamps expired. I renewed my driving licence in Chennai.'),
+  ]);
+  for (const query of ['Synthesize what contributors encountered during H4 visa stamping in Chennai.', 'Describe the reported H4 visa stamping experiences in Chennai.', 'Summarize the main questions and outcomes concerning H4 visa stamping experiences in Chennai.']) {
+    const input = { ...ask(query), turnPlan: { action: 'retrieve', query, focus: null, style: 'summary', clarification: null } };
+    assert.equal(assistantPostRetrievalQuery(input, now), null);
+    assert.equal(assistantPostSearchQuery(input, now), null);
+    const result = await retrieveAssistantCorpus(client(), input, now);
+    assert(result.sources.some(source => source.questionId === 'apify-correct'), query);
+    assert(!result.sources.some(source => ['apify-wrong-city', 'apify-wrong-visa'].includes(source.questionId)), 'explicit filters remain mandatory');
+  }
+  assert(assistantPostRetrievalQuery(ask('Find H4 visa stamping posts in Chennai'), now), 'explicit browsing retains its strict search contract');
+});
 const ask = question => ({ mode: 'ask', scope: { kind: 'public' }, question });
 const q = (id, body, date = '2026-10-16T12:00:00Z', title = 'Member interview report') => ({ id, body, title, created_at: date, updated_at: date, status: 'open', community_id: null });
 const source = row => ({ id: `q:${row.id}`, questionId: row.id, kind: 'question', title: row.title, body: row.body, createdAt: row.created_at, updatedAt: row.updated_at, communityId: null, provenance: 'archive', url: `/questions/${row.id}` });

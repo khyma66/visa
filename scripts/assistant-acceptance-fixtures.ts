@@ -138,6 +138,13 @@ const decisionReportingScope = (result: AssistantResult) => result.claims.some(c
     || !/\bpending\b|\bno\s+(?:final\s+)?decision\b.{0,45}\b(?:made|given|issued|reached|received)\b|\bdecision\b.{0,20}\b(?:not|never)\b.{0,20}\b(?:made|given|issued|reached|received)\b/.test(text));
 
 export const acceptanceFixtures: AcceptanceFixture[] = [
+  { id: 'question-only-summary', input: { mode: 'summary', scope: { kind: 'post', id: postId } }, corpus: { partial: false, sources: [
+    source(601, 'Has anyone received their STEM OPT card after a delivery investigation?', { kind: 'question', id: `q:${postId}`, title: 'Open questions about a missing card' }),
+    source(602, 'How can I find out whether the postal investigation is still open?', { title: 'Open questions about a missing card' }),
+  ] }, checks: [answered, mentions('questions_attributed', /ask|question|wonder|seek/), mentions('card_question', /card/), mentions('investigation_question', /investigation/),
+    absent('no_invented_outcome_or_instructions', /\byou (?:can|may|must|should)\b|\b(?:member|author|poster) (?:received|got|obtained)\b|\binvestigation (?:is|was) (?:closed|resolved)\b/),
+    { name: 'question_punctuation_preserved', test: result => result.claims.every(claim => claim.evidence.every(item => item.quote.endsWith('?'))) },
+  ] },
   { id: 'mixed-unresolved-discussion-summary', input: { mode: 'ask', scope: { kind: 'public' }, question: 'Give recent STEM OPT posts' }, corpus: { partial: false, sources: [
     source(501, 'My STEM OPT extension was approved, but I have not received the card. Tracking says delivered. I asked the postal service to investigate. I have not reported a resolution.', { kind: 'question', id: 'q:apify-mixed-card', questionId: 'apify-mixed-card', communityId: null, title: 'STEM OPT card delivery problem', url: '/questions/apify-mixed-card' }),
     source(502, 'My STEM OPT extension received a request for evidence after my H1B petition was approved. The request mentions my school record. I asked my school for help. I do not yet know the result.', { kind: 'question', id: 'q:apify-mixed-school', questionId: 'apify-mixed-school', communityId: null, title: 'STEM OPT request and school record', url: '/questions/apify-mixed-school' }),

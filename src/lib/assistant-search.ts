@@ -23,6 +23,11 @@ export function assistantPostSearchQuery(input: AssistantRequest, now = Date.now
 /** Overviews must retrieve the same relevant records as explicit browsing. */
 export function assistantPostRetrievalQuery(input: AssistantRequest, now = Date.now()): AssistantPostSearchQuery | null {
   if (input.mode !== 'ask' || input.scope.kind === 'post') return null;
+  // A semantic plan is an interpretation of the task, not a literal list of
+  // words that must all occur in a post. Use ranked retrieval with the same
+  // authorization and explicit topic/location/date filters. Keep strict
+  // matching for legacy explicit browsing, where it was deliberately chosen.
+  if (input.turnPlan) return null;
   const intent = assistantSearchIntent(input, now);
   if (intent.task !== 'lookup' && !intent.overview) return null;
   const terms = termsFor(intent.text).filter(term => !SEARCH_WORDS.has(term)).slice(0, 24);
