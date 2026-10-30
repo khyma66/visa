@@ -115,6 +115,17 @@ test('summaries can cite complete questions without stripping punctuation or tre
   const summary = { mode: 'summary', scope: { kind: 'post', id: source.questionId } };
   const p = assistantPrompt(summary, corpus);
   assert.equal(p.evidenceSpans.length, 1); assert.equal(p.evidenceSpans[0].quote, source.body);
+  assert.match(p.system, /object of this task is the discussion/);
+  assert.match(assistantOutputSchema(p).properties.status.description, /source questions count as answered/);
+  for (const input of [
+    { mode: 'ask', scope: { kind: 'public' }, question: 'Summarize the open issues', turnPlan: { action: 'retrieve', query: 'Summarize the open issues', focus: null, style: 'summary', clarification: null } },
+    { mode: 'ask', scope: { kind: 'public' }, question: 'Summarize that post', previousPosts: [{ questionId: source.questionId, sourceId: source.id }], turnPlan: { action: 'reuse', query: 'Summarize the selected discussion', focus: 0, style: 'summary', clarification: null } },
+  ]) {
+    const prompt = assistantPrompt(input, corpus);
+    assert.match(prompt.system, /object of this task is the discussion/);
+    assert.equal(prompt.evidenceSpans[0].quote, source.body);
+    assert.match(assistantOutputSchema(prompt).properties.status.description, /source questions count as answered/);
+  }
   const draft = { status: 'answered', claims: [{ text: 'The author asks whether anyone received a STEM OPT card after a delivery investigation.', evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
   assert.equal(validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), summary).claims[0].evidence[0].quote, source.body);
   const direct = { mode: 'ask', scope: summary.scope, question: 'Did the author receive their card?' };
