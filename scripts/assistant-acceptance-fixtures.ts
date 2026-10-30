@@ -133,7 +133,7 @@ const noRenewalHistoricalTrip = (result: AssistantResult) => historicalClauses(r
   )));
 const unsharedDecision = (text: string) => /\bnot\s+(?:yet\s+)?(?:said|say|state[ds]?|specified|specify|shared|share|reported|report|disclosed|disclose|mentioned|mention|indicated|indicate)\b.{0,35}\bwhether\b.{0,35}\bdecision\b|\b(?:unclear|unknown|unstated|unreported|unspecified)\b.{0,35}\bwhether\b.{0,35}\bdecision\b|\bwhether\b.{0,35}\bdecision\b.{0,35}\b(?:unknown|unstated|unreported|unspecified|not (?:stated|reported|shared|disclosed))\b/i.test(text);
 const decisionReportingScope = (result: AssistantResult) => result.claims.some(claim => unsharedDecision(claim.text)
-    || /\breported\s+no\s+(?:final\s+)?decision\b|\bno\s+(?:final\s+)?decision\b.{0,35}\breported\b|\b(?:did|does|has|had)\s+not\s+(?:report|reported|mention|mentioned)\b.{0,30}\bdecision\b|\bdecision\b.{0,20}\bunreported\b|\bunreported\s+decision\b/i.test(claim.text))
+    || /\breported\s+no\s+(?:final\s+)?decision\b|\bno\s+(?:final\s+)?decision\b.{0,35}\b(?:reported|disclosed|shared)\b|\b(?:did|does|has|had)\s+not\s+(?:report|reported|mention|mentioned)\b.{0,30}\bdecision\b|\bdecision\b.{0,20}\bunreported\b|\bunreported\s+decision\b/i.test(claim.text))
   && historicalClauses(result).every(text => explicitlyUnestablished(text) || unsharedDecision(text)
     || !/\bpending\b|\bno\s+(?:final\s+)?decision\b.{0,45}\b(?:made|given|issued|reached|received)\b|\bdecision\b.{0,20}\b(?:not|never)\b.{0,20}\b(?:made|given|issued|reached|received)\b/.test(text));
 
