@@ -2,7 +2,7 @@ import type { AssistantAvailability, AssistantCorpus, AssistantRequest, Assistan
 import { ASSISTANT_VERSION, AssistantError, assistantAvailability, assistantFingerprint, assistantPrompt, emptyAssistantResult, parseAssistantRequest, prepareAssistantCorpus, readBoundedJson, requireAssistantMode, validateAssistantOutput, type AssistantValidationCode } from './assistant-core';
 import type { AssistantPrompt } from './assistant-provider';
 import { assistantPostSearchQuery, buildAssistantPostSearchResult } from './assistant-search';
-import { assistantReviewCorpus, assistantReviewPrompt, assistantReviewedSubset, validateAssistantReview } from './assistant-review';
+import { assistantReviewCorpus, assistantReviewPrompt, validateAssistantReview } from './assistant-review';
 import { applyAssistantPlan, assistantPlanPrompt, parseAssistantPlan } from './assistant-planner';
 
 type ReviewedCacheEntry = { result: AssistantResult; digest: string };
@@ -284,8 +284,7 @@ export function createAssistantHandler(deps: AssistantDependencies) {
           supported: verdict.checks.filter(check => check.supported).length,
           rejected: verdict.checks.filter(check => !check.supported).length, total: verdict.checks.length });
         } catch { /* Observability must never change acceptance or the response. */ }
-        return { result, rejected: result.status === 'insufficient',
-          repairCandidate: !recovery && result.status === 'insufficient' ? assistantReviewedSubset(review, candidate, corpus, input) : null };
+        return { result, rejected: result.status === 'insufficient' };
       };
       let result = await generateCandidate();
       if (result.claims.length || result.disagreements.length) {
@@ -293,14 +292,13 @@ export function createAssistantHandler(deps: AssistantDependencies) {
         const checked = await reviewCandidate(result);
         result = checked.result;
         if (checked.rejected) {
-          // One repair only after a valid negative semantic verdict. For a
-          // summary, first try the strictly supported whole-claim subset and
-          // independently review its completeness against ORIGINAL evidence.
-          // Otherwise regenerate from original evidence, never reviewer prose.
+          // Regenerate the WHOLE answer after a valid negative verdict. Deleting
+          // rejected claims can silently delete an essential qualification.
+          // Use original evidence, never the rejected draft or reviewer prose.
           // Each recovery inference has one transport attempt: maximum 6
           // requests including the initial answer/review format repairs,
           // plus at most one contextual planning request on conversational turns.
-          const replacement = checked.repairCandidate ?? await generateCandidate(true);
+          const replacement = await generateCandidate(true);
           if (!replacement.claims.length && !replacement.disagreements.length) result = replacement;
           else if (assistantCandidateIdentity(replacement) !== assistantCandidateIdentity(rejectedCandidate)) {
             result = (await reviewCandidate(replacement, true)).result;

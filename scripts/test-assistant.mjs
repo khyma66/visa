@@ -153,7 +153,7 @@ test('resolved ordinal prompts describe the selected discussion without asking t
   assert.match(prompt.system,/TASK: Give a brief summary of the selected discussion, not an exhaustive retelling/);
   assert.match(prompt.system,/about 60–80 words/);
   assert.match(prompt.system,/FINAL LENGTH CHECK.*within 100 words/);
-  assert.match(prompt.system,/Do not repeat an unresolved point in unanswered when a cited claim already explains it/);
+  assert.match(prompt.system,/All unanswered slots must be null for summaries/);
   assert.match(prompt.system,/"the author has not said whether a decision was made" does not establish "no decision was made or given"/);
   assert.match(prompt.system,/an explicit report that no decision was made supports that attributed event/);
   assert.match(prompt.system,/do not invent the underlying state or when it applied/);
@@ -284,7 +284,7 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v32-reviewed-summary-repair','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v33-summary-task-contract','Semantic change invalidates old cached answers');
 });
 test('summary preparation collapses exact repeated reports but preserves distinct material differences',()=>{
   const repeated='I attended my appointment on Wednesday. My application was approved. My document arrived on Saturday. This is only my own experience, not a standard timeline.';

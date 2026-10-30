@@ -1,5 +1,5 @@
 import type { AssistantCorpus, AssistantRequest, AssistantResult } from './assistant-contract';
-import { AssistantError, assistantPromptContext, redactAssistantText, validateAssistantOutput } from './assistant-core';
+import { AssistantError, assistantPromptContext, redactAssistantText } from './assistant-core';
 import { assistantSearchIntent } from './assistant-context';
 import type { AssistantPrompt } from './assistant-provider';
 
@@ -140,24 +140,4 @@ export function validateAssistantReview(raw: string, result: AssistantResult): A
     claims: [], disagreements: [], sources: [],
     unanswered: ['I couldn’t find enough reliable detail in these discussions to answer that accurately. Try a more specific question or ask about a particular post.'],
   };
-}
-
-/** A repair candidate, NEVER an approved answer. A fresh full-task review is mandatory. */
-export function assistantReviewedSubset(raw: string, result: AssistantResult, corpus: AssistantCorpus, input: AssistantRequest): AssistantResult | null {
-  // Validate the complete verdict first. Missing/duplicate IDs cannot authorize repair.
-  if (validateAssistantReview(raw, result) === result) return null;
-  const task = assistantPromptContext(input, corpus);
-  if (task.task !== 'summary' && task.collectionTask !== 'summary') return null;
-  const verdict = JSON.parse(raw) as { checks: { id: string; supported: boolean }[] };
-  const supported = new Set(verdict.checks.filter(check => check.supported).map(check => check.id));
-  if (!supported.size || supported.size === verdict.checks.length) return null;
-  // Remove WHOLE claims only, preserving every word and citation of the others.
-  // A second review must establish that this did not omit material qualifications
-  // or a conflicting position. Never publish a subset just because it is factual.
-  const candidate = validateAssistantOutput(JSON.stringify({ status: 'answered',
-    claims: result.claims.filter((_, index) => supported.has(`claim:${index}`)),
-    disagreements: result.disagreements.filter((_, index) => supported.has(`disagreement:${index}`)),
-    unanswered: [],
-  }), corpus, Date.now(), input);
-  return candidate.status === 'answered' ? candidate : null;
 }
