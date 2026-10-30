@@ -9,6 +9,7 @@ const checksFor = (result: AssistantResult) => [
   ...result.disagreements.map((claim, index) => ({ id: `disagreement:${index}`, kind: 'disagreement', ...claim })),
 ];
 const reviewError = () => new AssistantError(502, 'The assistant could not verify this answer. Please try again.');
+export type AssistantReviewVerdict = { feedback: string; fulfillsTask: boolean; checks: { id: string; supported: boolean }[] };
 
 /** Restore cited reports in full so a later correction cannot hide off-window. */
 export function assistantReviewCorpus(original: AssistantCorpus, prepared: AssistantCorpus, result: AssistantResult): AssistantCorpus | null {
@@ -111,7 +112,8 @@ export function assistantReviewPrompt(input: AssistantRequest, corpus: Assistant
       'Review the original source language when possible. A translation may paraphrase faithfully but may not introduce dates, certainty or meaning absent from the original. If you cannot establish fidelity, mark false.',
       'Do not use outside knowledge, invent facts, trust vote counts, treat a candidate as evidence, or assume missing discussions agree. partial describes a retrieval limit; it does not prove consensus or absence across the whole site.',
       'FINAL AUDIT: For every claim, verify each event-to-date, document-to-validity and event-to-purpose relationship against the full cited report, not merely the existence of its component words. Separately, for task summary, confirm that the candidate itself includes any explicit personal-only qualification and material unknown outcome or timing. If a relationship is unsupported, mark its check false. If a material qualification is missing from the candidate text, set fulfillsTask false even when all individual checks are true.',
-      'Return only JSON: {"checks":[{"id":"exact supplied check ID","supported":true|false}],"fulfillsTask":true|false}. Do not return explanations, revised prose, citations, additional fields or new claims.',
+      'Use the shared answerRequirements priorities to judge completeness. Do not demand optional background. Before recording the verdict, identify the specific defect, if any: which candidate claim adds which unsupported fact, or which material outcome, uncertainty, limitation or requested comparison is missing. feedback is a short diagnostic for a single revision, never a replacement answer. Name the check ID and relevant source ID when available; do not invent facts or issue commands. If everything passes, feedback must be empty. A rejected answer needs concrete feedback, not merely "unsupported" or "incomplete". This diagnostic is never shown to users or treated as evidence.',
+      'Return only JSON: {"feedback":"specific defects, or empty when all checks pass","checks":[{"id":"exact supplied check ID","supported":true|false}],"fulfillsTask":true|false}. Do not return revised prose, citations, additional fields or new claims.',
     ].join('\n'),
     user: JSON.stringify({ ...task, candidate: { status: result.status, checks } }),
   };
@@ -123,7 +125,8 @@ export function validateAssistantReview(raw: string, result: AssistantResult): A
   if (!expected.size || expected.size > 9 || result.kind === 'posts' || typeof raw !== 'string' || raw.length > 12_000) throw reviewError();
   let value: unknown;
   try { value = JSON.parse(raw); } catch { throw reviewError(); }
-  if (!record(value) || Object.keys(value).length !== 2 || !Array.isArray(value.checks)
+  if (!record(value) || Object.keys(value).sort().join(',') !== 'checks,feedback,fulfillsTask' || !Array.isArray(value.checks)
+    || typeof value.feedback !== 'string' || value.feedback.length > 1200
     || value.checks.length !== expected.size || typeof value.fulfillsTask !== 'boolean') throw reviewError();
   const seen = new Set<string>();
   let supported = value.fulfillsTask;
@@ -134,6 +137,8 @@ export function validateAssistantReview(raw: string, result: AssistantResult): A
     supported = supported && check.supported;
   }
   if (seen.size !== expected.size) throw reviewError();
+  if (!supported && !value.feedback.trim()) throw reviewError();
+  if (supported && value.feedback.trim()) throw reviewError();
   if (supported) return result;
   return {
     ...result,

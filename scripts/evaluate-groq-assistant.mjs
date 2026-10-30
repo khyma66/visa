@@ -35,7 +35,11 @@ cases.unshift('broad-appointment-issues');
 cases.unshift('broad-stem-issues');
 const release = process.argv.includes('--release');
 assert(!(smoke && release), 'Smoke results cannot authorize a release');
-const selected = smoke ? ['post-question'] : [...cases, ...PLANNER_CASE_IDS];
+const caseOption = process.argv.find(arg => arg.startsWith('--cases='));
+const targeted = caseOption?.slice('--cases='.length).split(',');
+assert(!targeted || (!release && !smoke && targeted.length > 0 && new Set(targeted).size === targeted.length
+  && targeted.every(id => [...cases, ...PLANNER_CASE_IDS].includes(id))), 'Targeted diagnostics require known unique cases and cannot authorize a release');
+const selected = targeted ?? (smoke ? ['post-question'] : [...cases, ...PLANNER_CASE_IDS]);
 const repetitions = smoke ? 1 : 3;
 const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
 const status = spawnSync('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: root, encoding: 'utf8' });
@@ -50,7 +54,7 @@ const alias = `groq-${randomBytes(6).toString('hex')}`;
 const expires = Date.now() + 15 * 60_000;
 const configPath = join(temporary, 'wrangler.json');
 const secretsPath = join(temporary, 'secrets.json');
-const receiptPath = join(cache, release ? 'assistant-acceptance.json' : smoke ? 'groq-smoke.json' : 'groq-acceptance.json');
+const receiptPath = join(cache, release ? 'assistant-acceptance.json' : targeted ? 'groq-targeted.json' : smoke ? 'groq-smoke.json' : 'groq-acceptance.json');
 const receipt = { schemaVersion: 1, provider: 'groq', model: models.groq.answer, modelProfile: models.groq, sourceSha, createdAt: new Date().toISOString(), expiresAt: new Date(expires).toISOString(), repetitions, passed: false, cases: [], evaluationWorker: worker, previewRoutingRestored: false, activeDeploymentsUnchanged: false };
 async function api(path, options = {}) {
   const response = await fetch(`${apiRoot}${path}`, { ...options, headers: { Authorization: `Bearer ${token}`, ...options.headers }, redirect: 'error', signal: AbortSignal.timeout(20_000) });
@@ -160,7 +164,7 @@ finally {
     }
   } catch (error) { failure = error; receipt.passed = false; }
   await rm(temporary, { recursive: true, force: true });
-  receipt.features = { posts: receipt.passed && !smoke, communities: receipt.passed && !smoke, catchup: receipt.passed && !smoke };
+  receipt.features = { posts: receipt.passed && !smoke && !targeted, communities: receipt.passed && !smoke && !targeted, catchup: receipt.passed && !smoke && !targeted };
   receipt.cases = receipt.cases.map(row => ({ ...row, model: models.groq.answer, checks: row.samples.flatMap((sample, index) => (sample.checks ?? []).map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed }))) }));
   receipt.plannerCases = receipt.cases.filter(row => PLANNER_CASE_IDS.includes(row.id));
   receipt.cases = receipt.cases.filter(row => !PLANNER_CASE_IDS.includes(row.id));

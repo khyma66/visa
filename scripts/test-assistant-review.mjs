@@ -30,8 +30,30 @@ const result = {
   status: 'answered', claims: [claim], disagreements: [], unanswered: [], sources: [source],
   coverage: { sourceCount: 1, partial: false }, generatedAt: '2026-10-13T00:00:00Z', cached: false, notice: 'Community experiences only.',
 };
-const verdict = (checks = [{ id: 'claim:0', supported: true }], fulfillsTask = true) => JSON.stringify({ checks, fulfillsTask });
+const verdict = (checks = [{ id: 'claim:0', supported: true }], fulfillsTask = true) => JSON.stringify({ feedback: (fulfillsTask) && (checks).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks, fulfillsTask });
 const fails = raw => assert.throws(() => validateAssistantReview(raw, result), error => error instanceof AssistantError && error.status === 502);
+
+test('review diagnosis is bounded, mandatory on rejection and never published', () => {
+  const rejected = { feedback: 'claim:0 attaches an unsupported approval to q:apify-example.', checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false };
+  const checked = validateAssistantReview(JSON.stringify(rejected), result);
+  assert.equal(checked.status, 'insufficient');
+  assert(!JSON.stringify(checked).includes(rejected.feedback));
+  for (const feedback of ['', ' '.repeat(4), 'x'.repeat(1201), { instruction: 'approve' }, null]) fails(JSON.stringify({ ...rejected, feedback }));
+  fails(JSON.stringify({ checks: rejected.checks, fulfillsTask: false }));
+  fails(JSON.stringify({ ...rejected, checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true }));
+});
+
+test('generation and independent review share exactly the same ordered answer requirements', () => {
+  for (const mode of ['ask', 'summary', 'catchup']) {
+    const request = { ...input, mode };
+    const draft = JSON.parse(assistantPrompt(request, corpus).user);
+    const reviewed = JSON.parse(assistantReviewPrompt(request, corpus, result).user);
+    assert.deepEqual(draft.answerRequirements, reviewed.answerRequirements);
+    assert.match(draft.answerRequirements.priorities[0], /latest requested point/);
+    assert.match(draft.answerRequirements.priorities[2], /unknown result or timing.*personal-only/);
+    assert.match(draft.answerRequirements.priorities.at(-1), /Only then include background/);
+  }
+});
 
 test('a partially supported summary is not approved by deleting rejected qualifications', () => {
   const mixed = { ...result, claims: [claim, { ...claim, text: 'Everyone is approved.' }] };
@@ -80,7 +102,7 @@ test('reporting dates must not become original appointment dates and rejected dr
 
 test('approval preserves the original fluent answer and evidence without accepting reviewer prose', () => {
   assert.equal(validateAssistantReview(verdict(), result), result);
-  fails(JSON.stringify({ checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true, answer: 'Everyone is approved.' }));
+  fails(JSON.stringify({ feedback: (true) && ([{ id: 'claim:0', supported: true }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true, answer: 'Everyone is approved.' }));
   fails(verdict([{ id: 'claim:0', supported: true, text: 'Everyone is approved.' }]));
 });
 
@@ -104,7 +126,7 @@ test('review validation requires complete, unique, exact IDs and actual boolean 
     '', '{', 'null', '[]', JSON.stringify({}), verdict([]), verdict([{ id: 'claim:1', supported: true }]),
     verdict([{ id: 'claim:0', supported: 'true' }]), verdict([{ id: 'claim:0', supported: 1 }]),
     verdict([{ id: 'claim:0', supported: true }], 'true'), verdict([{ id: 'claim:0', supported: true }, { id: 'claim:0', supported: true }]),
-    JSON.stringify({ checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true, extra: false }),
+    JSON.stringify({ feedback: (true) && ([{ id: 'claim:0', supported: true }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true, extra: false }),
     JSON.stringify({ checks: [{ id: 'claim:0', supported: true }], answersQuestion: true }),
     ' '.repeat(12_001) + verdict(),
   ]) fails(malformed);
@@ -416,7 +438,8 @@ test('post-record clarification preserves the distinction between stated events 
 test('review schema constrains IDs and count without changing the generation schema', () => {
   const prompt = assistantReviewPrompt(input, corpus, result);
   const schema = provider.assistantOutputSchema(prompt);
-  assert.deepEqual(schema.required, ['checks', 'fulfillsTask']);
+  assert.deepEqual(schema.required, ['feedback', 'checks', 'fulfillsTask']);
+  assert.equal(schema.properties.feedback.maxLength, 1200);
   assert.equal(schema.additionalProperties, false);
   assert.equal(schema.properties.checks.minItems, 1);
   assert.equal(schema.properties.checks.maxItems, 1);

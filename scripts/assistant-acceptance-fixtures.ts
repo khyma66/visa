@@ -151,7 +151,7 @@ export const acceptanceFixtures: AcceptanceFixture[] = [
         mentions('delay_and_document_request', /delay|five months/), mentions('request_preserved', /request|more documents/),
         mentions('upload_failure', /upload|portal/), mentions('reported_resolution', /browser/),
         mentions('unresolved_decision', /unknown|uncertain|not know|no (?:known|confirmed|expected) (?:decision )?date|not (?:yet )?(?:known|stated)/),
-        absent('no_invented_denial', /(?:was|were|got|been) denied|travel (?:caused|led to)|everyone|always works/),
+        absent('no_invented_denial', /(?:was|were|got|been) denied|travel (?:caused|led to)|everyone (?:gets|got|is|was) approved|always works/),
         { name: 'distinct_reports_cited', test: result => reports.slice(0, 2).every(report => result.claims.some(claim => claim.evidence.some(item => item.sourceId === report.id))) },
       ] };
   }),

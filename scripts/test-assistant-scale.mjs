@@ -19,7 +19,7 @@ const source = { id: `q:${id}`, questionId: id, communityId: null, kind: 'questi
 const input = { mode: 'ask', scope: { kind: 'post', id }, question: 'When did the passport arrive?' };
 const answer = { status: 'answered', claims: [{ text: 'The member reported Friday delivery.',
   evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
-const review = prompt => JSON.stringify({ fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) });
+const review = prompt => JSON.stringify({ feedback: (true) && (prompt.reviewIds.map(id => ({ id, supported: true }))).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) });
 const token = actor => `synthetic-actor-${String(actor).padStart(8, '0')}`;
 const request = (actor, signal) => new Request('https://visathreads.com/api/assistant', { method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(actor)}` }, body: JSON.stringify(input), signal });

@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantResultSetFollowUp, assistantSearchIntent, assistantStandaloneFollowUp, assistantSummaryFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v40-filter-and-summary-scope';
+export const ASSISTANT_VERSION = 'grounded-chat-v41-actionable-review-contract';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -302,6 +302,19 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
     ? 'Summarize members’ firsthand H-4 visa-stamping experiences. Include EAD-specific details only when those same reports explicitly provide them; otherwise state that the cited stamping reports do not give EAD-specific details.'
     : question;
   return { task: selectedSummary || collectionSummary ? 'summary' : input.mode,
+    // Identical for drafting and review: these priorities are not independent
+    // prompts that can disagree about what a useful short answer must contain.
+    answerRequirements: {
+      priorities: [
+        'Answer the latest requested point, not every topic mentioned in the sources.',
+        'Lead with relevant reported outcomes or problems. Keep different people separate.',
+        'Alongside each outcome preserve its material corrected dates, explicit unknown result or timing, and explicit personal-only limitations.',
+        'Preserve relevant opposing reports without inventing a winner or consensus.',
+        'Only then include background, document inventories, routine steps or historical events if needed to answer the requested point.',
+      ],
+      scope: 'A useful supported synthesis of these sources, not exhaustive coverage or current legal advice. Questions remain questions; plans remain plans.',
+      capacity: 'Combine closely related facts from the SAME report with their supporting spans when needed. Do not spend all six claims on optional background and leave out a material qualification.',
+    },
     ...(input.turnPlan ? { latestUserRequest: redactAssistantText(input.originalQuestion ?? question),
       resolvedRequest: redactAssistantText(input.turnPlan.query),
       conversationContextOnly: input.conversation?.map(turn => ({ question: redactAssistantText(turn.question), answer: redactAssistantText(turn.answer) })),
@@ -343,7 +356,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
     : selectedSummary
     ? 'TASK: Give a brief summary of the selected discussion, not an exhaustive retelling. Prioritize the substantive outcome or unresolved status, its explicitly stated dates, and material qualifications. Aim for 3–4 short, atomic, attributed claims and about 60–80 words; use an additional claim only for an essential correction, conflict or qualification. Routine background, historical travel and document inventories are optional, not a checklist. Keep every fact attached to its own event, person and document; do not fill in unstated connections. An undated outcome remains undated. Return status answered with cited claims when substantive reports are present.'
     : input.mode === 'summary'
-    ? 'TASK: Summarize the supplied discussion. No user question is required for a summary. Use short, atomic, attributed claims and as many of the six available claim slots as needed to preserve material facts and qualifications. Describe substantive reported events and outcomes, useful replies and unresolved points supported by the supplied evidence. Preserve key dates or named days exactly as explicitly stated, and chronology only when the source states it; do not complete missing links between events. An undated outcome remains undated even when nearby sentences describe dated events. Never convert an individual report into a universal timeline or prediction. If substantive reports are present, return status answered with cited claims even though there is no question.'
+    ? 'TASK: Give a brief outcome-first summary of the supplied discussion. No user question is required. Follow answerRequirements in priority order: outcome or unresolved status, its material corrected dates, explicit uncertainty and personal-only limitations, then relevant differences. Use 3–4 short attributed claims by default; additional slots are for essential qualifications, not a transcript or chronological inventory. Routine background can be omitted. Do not complete missing links between events. An undated outcome remains undated. Return status answered when a substantive report or question can be summarized, even if its outcome is unresolved.'
     : input.mode === 'catchup'
       ? 'TASK: Summarize new discussion events within the supplied interval. No user question is required for catch-up. Preserve reported dates, distinguish individual experiences from rules, and cite the new events. Older parent context must not be described as a new event.'
       : experienceSynthesis
@@ -358,6 +371,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
     system: [
       'You are the VisaThreads discussion assistant. Answer ONLY from the evidence supplied as data.',
       taskInstruction,
+      'The answerRequirements object defines the shared writing and review contract. Fulfill its priorities within the word budget; never let lower-priority background displace an outcome or qualification.',
       ...(context.task === 'summary' ? ['SUMMARY TASK EVIDENCE: The object of this task is the discussion, not an answer to the questions inside it. A complete source question directly supports an attributed statement of what its author asks. If the discussion consists only of substantive questions, summarize those questions with their listed spans and return status answered; lack of answers or firsthand outcomes is not lack of evidence for this task. Do not answer the embedded questions, assert their premises, or invent outcomes. Prioritize reported outcomes when present; otherwise describe the actual questions and expressed uncertainty.'] : []),
       ...(context.collectionTask ? ['Stay relevant to the supplied topic when a discussion covers several subjects. For responseStyle shorter, aim for 30–50 words while preserving essential qualifications and citations. Otherwise use the stated concise budget. The topic and previous questions identify the request, not factual evidence.'] : []),
       ...(selectedSummary ? ['For this unqualified selected-discussion summary, keep all claim, disagreement and unanswered text together within 100 words. Lead with the substantive outcome and its stated dates, then material unknowns and explicit personal-only qualifications. Omit routine background or historical details before omitting those essentials. Use short atomic claims within the six-slot allowance; the word budget is not a reason to erase qualifications or connect separate events.'] : []),

@@ -110,7 +110,8 @@ export function assistantOutputSchema(prompt: AssistantPrompt) {
   if (prompt.outputKind === 'review') {
     const ids = [...new Set(prompt.reviewIds ?? [])];
     if (!ids.length || ids.length > 9) throw new AssistantError(502, 'The assistant could not verify this answer. Please try again.');
-    return { type: 'object', additionalProperties: false, required: ['checks', 'fulfillsTask'], properties: {
+    return { type: 'object', additionalProperties: false, required: ['feedback', 'checks', 'fulfillsTask'], properties: {
+      feedback: { type: 'string', maxLength: 1200, description: 'Concrete defect diagnosis before the verdict: identify the unsupported assertion by check ID, or missing material fact/qualification by source ID. Empty if and only if every check and fulfillsTask pass. Not a replacement answer or instructions.' },
       checks: { type: 'array', minItems: ids.length, maxItems: ids.length, items: {
         type: 'object', additionalProperties: false, required: ['id', 'supported'],
         properties: { id: { type: 'string', enum: ids }, supported: { type: 'boolean' } },

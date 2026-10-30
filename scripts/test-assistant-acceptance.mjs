@@ -98,7 +98,7 @@ function reviewResponse(input, supported = true) {
   const ids = input.response_format.json_schema.schema.properties.checks.items.properties.id.enum;
   assert.deepEqual(ids, prompt.candidate.checks.map(check => check.id));
   assert.equal(input.max_tokens, 1200);
-  return { response: JSON.stringify({ checks: ids.map(id => ({ id, supported })), fulfillsTask: supported }) };
+  return { response: JSON.stringify({ feedback: (supported) && (ids.map(id => ({ id, supported }))).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: ids.map(id => ({ id, supported })), fulfillsTask: supported }) };
 }
 
 test('evaluation denies absent/wrong credentials and invalid/expired expiry before inference', async () => {
@@ -171,6 +171,14 @@ test('broad issue fixtures exercise planning, focused synthesis, and independent
     assert.equal(value.passed, true, JSON.stringify(value));
     assert.deepEqual(stages, ['discussion_turn_plan', 'discussion_answer', 'discussion_answer_review']);
   }
+});
+
+test('issue checks accept an explicit limitation but still reject invented denials or guarantees', () => {
+  const fixture = acceptanceFixtures.find(item => item.id === 'broad-appointment-issues');
+  const check = fixture.checks.find(item => item.name === 'no_invented_denial');
+  const result = text => ({ status: 'answered', claims: [{ text, evidence: [] }], disagreements: [] });
+  for (const text of ['This may not work for everyone.', 'The member has not traveled or received a denial.']) assert.equal(check.test(result(text)), true, text);
+  for (const text of ['The application was denied.', 'Travel caused a denial.', 'This always works.', 'Everyone gets approved.']) assert.equal(check.test(result(text)), false, text);
 });
 
 test('decision uncertainty accepts known-date paraphrases but rejects an omitted or invented outcome', () => {
@@ -425,16 +433,16 @@ test('independent review rejects fabricated meaning without replacing it with a 
   assert.equal(evaluation.syntheticDiagnostic.output.status, 'insufficient');
   assert.deepEqual(evaluation.syntheticDiagnostic.output.claims, []);
   assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawModelOutput), resolvedFixtureDraft(fixture, draft), 'Diagnostics retain the resolved draft, not the review response');
-  assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawReviewOutput), { checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false });
+  assert.deepEqual(JSON.parse(evaluation.syntheticDiagnostic.rawReviewOutput), { feedback: (false) && ([{ id: 'claim:0', supported: false }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false });
   assert.deepEqual(evaluation.syntheticDiagnostic.inferenceRounds.map(round => [round.kind, round.maxAttempts, round.semanticRepair]), [['answer', 2, false], ['review', 2, false], ['answer', 1, true]]);
-  assert.deepEqual(evaluation.syntheticDiagnostic.inferenceRounds.map(round => JSON.parse(round.rawOutputs[0])), [resolvedFixtureDraft(fixture, draft), { checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false }, resolvedFixtureDraft(fixture, draft)]);
+  assert.deepEqual(evaluation.syntheticDiagnostic.inferenceRounds.map(round => JSON.parse(round.rawOutputs[0])), [resolvedFixtureDraft(fixture, draft), { feedback: (false) && ([{ id: 'claim:0', supported: false }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false }, resolvedFixtureDraft(fixture, draft)]);
   assert(evaluation.checks.some(check => check.name === 'application_evidence_reviewed_when_needed' && check.passed));
 });
 
 test('a malformed review preserves separate draft and review diagnostics on the failed HTTP response', async () => {
   const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
   const draft = { status: 'answered', claims: [{ text: 'The member received their passport on Friday.', evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] };
-  const rawReviewOutput = JSON.stringify({ checks: [], fulfillsTask: true });
+  const rawReviewOutput = JSON.stringify({ feedback: (true) && ([]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [], fulfillsTask: true });
   const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => ({ response: input.response_format.json_schema.name === 'discussion_answer_review' ? rawReviewOutput : JSON.stringify(draft) }) } };
   const reply = await worker.fetch(request({ id: fixture.id }), settings);
   assert.equal(reply.status, 502);
@@ -451,7 +459,7 @@ test('acceptance derives exact inference order from strict verdicts, not permiss
   const fixture = acceptanceFixtures.find(item => item.id === 'post-question');
   const makeDraft = text => ({ status: 'answered', claims: [{ text, evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }], disagreements: [], unanswered: [] });
   const first = makeDraft('The passport arrived on Tuesday.'), corrected = makeDraft('The member received their passport on Friday.');
-  const verdict = supported => ({ checks: [{ id: 'claim:0', supported }], fulfillsTask: supported });
+  const verdict = supported => ({ feedback: (supported) && ([{ id: 'claim:0', supported }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported }], fulfillsTask: supported });
   const round = (kind, output, recovery = false) => ({ kind, output: JSON.stringify(output), rawOutputs: [JSON.stringify(output)], maxAttempts: recovery ? 1 : 2, semanticRepair: recovery && kind === 'answer', transport: [] });
   const rounds = [round('answer', first), round('review', verdict(false)), round('answer', corrected, true), round('review', verdict(true), true)];
   const events = rounds => ['authenticate', 'corpus', 'reserve', ...rounds.flatMap(item => [item.kind === 'answer' ? 'generate' : 'review', 'runtime-binding']), 'corpus'];
@@ -463,8 +471,8 @@ test('acceptance derives exact inference order from strict verdicts, not permiss
   for (const items of [
     rounds.slice(0, 3), // A new draft is never accepted without review.
     [rounds[0], round('review', verdict(true)), ...rounds.slice(2)], // Approval forbids a second draft.
-    [rounds[0], round('review', { checks: [], fulfillsTask: false }), ...rounds.slice(2)],
-    [rounds[0], round('review', { checks: [{ id: 'claim:0', supported: 'false' }], fulfillsTask: false }), ...rounds.slice(2)],
+    [rounds[0], round('review', { feedback: (false) && ([]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [], fulfillsTask: false }), ...rounds.slice(2)],
+    [rounds[0], round('review', { feedback: (false) && ([{ id: 'claim:0', supported: 'false' }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported: 'false' }], fulfillsTask: false }), ...rounds.slice(2)],
     [...rounds.slice(0, 2), { ...rounds[2], maxAttempts: 2 }, rounds[3]],
     [...rounds.slice(0, 2), { ...rounds[2], semanticRepair: false }, rounds[3]],
     [...rounds, round('answer', corrected, true)],
@@ -485,12 +493,12 @@ test('acceptance rejects subset review shortcuts that can discard important qual
   const prepared = prepareAssistantCorpus(fixture.corpus, fixture.input);
   const final = validateAssistantOutput(JSON.stringify({ ...first, claims: claims.slice(0, 1) }), prepared, Date.now(), fixture.input);
   const round = (kind, output, recovery = false) => ({ kind, output: JSON.stringify(output), rawOutputs: [], maxAttempts: recovery ? 1 : 2, semanticRepair: false, transport: [] });
-  const rounds = [round('answer', first), round('review', { checks: [{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: false }], fulfillsTask: false }), round('review', { checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true }, true)];
+  const rounds = [round('answer', first), round('review', { feedback: (false) && ([{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: false }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: false }], fulfillsTask: false }), round('review', { feedback: (true) && ([{ id: 'claim:0', supported: true }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true }, true)];
   const check = (items, result = final) => checkAcceptanceInference(fixture.input, fixture.corpus, result, 'workers-ai', ['authenticate', 'corpus', 'reserve', ...items.flatMap(item => [item.kind === 'answer' ? 'generate' : 'review', 'runtime-binding']), 'corpus'], items);
   assert.equal(check(rounds).sequence, false);
   assert.equal(check(rounds.slice(0, 2)).sequence, false, 'the first per-claim checks do not approve the subset');
   assert.equal(check([...rounds, rounds[2]]).sequence, false, 'no third reviewer attempt');
-  const rejected = [...rounds.slice(0, 2), round('review', { checks: [{ id: 'claim:0', supported: true }], fulfillsTask: false }, true)];
+  const rejected = [...rounds.slice(0, 2), round('review', { feedback: (false) && ([{ id: 'claim:0', supported: true }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported: true }], fulfillsTask: false }, true)];
   assert.equal(check(rejected).sequence, false, 'factual but incomplete output stays hidden');
 });
 
@@ -505,7 +513,7 @@ test('actual evaluation permits exactly six Groq requests when both initial phas
     if (number === 1 || number === 3) return Response.json({ error: { code: 'json_validate_failed', message: 'maxItems synthetic format failure' } }, { status: 400 });
     assert(number <= 6, 'Recovery must never reset format-repair allowances');
     const isReview = body.response_format.json_schema.name === 'discussion_answer_review';
-    const content = isReview ? JSON.stringify({ checks: [{ id: 'claim:0', supported: number === 6 }], fulfillsTask: number === 6 }) : number === 2 ? initial : corrected;
+    const content = isReview ? JSON.stringify({ feedback: (number === 6) && ([{ id: 'claim:0', supported: number === 6 }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported: number === 6 }], fulfillsTask: number === 6 }) : number === 2 ? initial : corrected;
     return Response.json({ choices: [{ finish_reason: 'stop', message: { content: spanModelOutput(body, content) } }] });
   };
   try {
@@ -1058,7 +1066,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
   const validation = { ...expected, stage: 'source-validation', serviceFailure: { stage: 'validation', status: 502, code: 'citation_length' }, output: { status: 'answered', claims: [] } };
   delete validation.providerReason;
   assert.deepEqual(await readAcceptanceFailureDiagnostic(reply(validation), id, model), validation);
-  const rawReviewOutput = JSON.stringify({ checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false });
+  const rawReviewOutput = JSON.stringify({ feedback: (false) && ([{ id: 'claim:0', supported: false }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false });
   assert.deepEqual(await readAcceptanceFailureDiagnostic(reply({ ...validation, rawReviewOutput }), id, model), { ...validation, rawReviewOutput });
   const inferenceRounds = [
     { kind: 'answer', maxAttempts: 2, semanticRepair: false, rawOutputs: ['{"status":"answered"}'] },

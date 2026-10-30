@@ -19,7 +19,7 @@ const id = '00000000-0000-4000-8000-000000000001';
 const source = { id: `q:${id}`, questionId: id, communityId: null, kind: 'question', title: 'Appointment', body: 'My passport arrived on Friday.', createdAt: '2026-10-10T00:00:00Z', updatedAt: '2026-10-10T00:00:00Z', url: `/questions/${id}`, provenance: 'member' };
 const input = { mode: 'ask', scope: { kind: 'post', id }, question: 'When did the passport arrive?' };
 const output = { status: 'answered', claims: [{ text: 'The member reported Friday delivery.', evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
-const review = prompt => JSON.stringify({ fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) });
+const review = prompt => JSON.stringify({ feedback: (true) && (prompt.reviewIds.map(id => ({ id, supported: true }))).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) });
 const request = (signal, body = input) => new Request('https://visathreads.com/api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${'synthetic-token'.repeat(3)}`, 'X-VisaThreads-Request-Id': 'caller-controlled' }, body: JSON.stringify(body), signal });
 const deferred = () => { let resolve; const promise = new Promise(yes => { resolve = yes; }); return { promise, resolve }; };
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -225,7 +225,7 @@ test('database transport preserves an existing abort signal as well as the reque
 
 const rejectedOutput = { ...output, claims: [{ ...output.claims[0], text: 'Rejected-draft sentinel: the passport arrived on Friday at an unstated venue.' }] };
 const correctedOutput = { ...output, claims: [{ ...output.claims[0], text: 'The member said their passport arrived on Friday.' }] };
-const negativeReview = prompt => JSON.stringify({ fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: false })) });
+const negativeReview = prompt => JSON.stringify({ feedback: (true) && (prompt.reviewIds.map(id => ({ id, supported: false }))).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: false })) });
 
 const repeatedSummary = service.acceptanceFixtures.find(fixture => fixture.id === 'large-discussion-summary');
 const repeatedSource = repeatedSummary.corpus.sources[0];
@@ -361,7 +361,7 @@ const conflictInput = { mode: 'ask', scope: { kind: 'public' }, question: 'What 
 const conflictEvidence = conflictSources.map(item => ({ sourceId: item.id, quote: item.body }));
 const conflictComparison = { text: 'Members gave opposite reports: one said staff allowed phones inside the venue, while another said staff did not allow phones inside the venue.', evidence: conflictEvidence };
 const comparisonAnswer = (section, comparison = conflictComparison) => ({ status: 'answered', claims: [], disagreements: [], unanswered: [], [section]: [comparison] });
-const taskIncompleteReview = prompt => JSON.stringify({ fulfillsTask: false, checks: prompt.reviewIds.map(id => ({ id, supported: true })) });
+const taskIncompleteReview = prompt => JSON.stringify({ feedback: (false) && (prompt.reviewIds.map(id => ({ id, supported: true }))).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', fulfillsTask: false, checks: prompt.reviewIds.map(id => ({ id, supported: true })) });
 function withConflictSources(h) {
   h.session.corpus = async () => { h.state.reads++; return { sources: conflictSources, partial: false }; };
   return h;
@@ -504,7 +504,7 @@ test('one semantic recovery uses original evidence and a fixed prompt, then inde
     const h = harness({ generate: async (prompt, signal) => {
       prompts.push(prompt); signals.push(signal);
       if (prompts.length === 1) return JSON.stringify(rejectedOutput);
-      if (prompts.length === 2) return rejection === 'unsupported' ? negativeReview(prompt) : JSON.stringify({ fulfillsTask: false, checks: prompt.reviewIds.map(id => ({ id, supported: true })) });
+      if (prompts.length === 2) return rejection === 'unsupported' ? negativeReview(prompt) : JSON.stringify({ feedback: (false) && (prompt.reviewIds.map(id => ({ id, supported: true }))).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', fulfillsTask: false, checks: prompt.reviewIds.map(id => ({ id, supported: true })) });
       if (prompts.length === 3) return JSON.stringify(correctedOutput);
       return review(prompt);
     } });
@@ -760,7 +760,7 @@ test('actual Workers runtime isolates cancelled callers, enforces a total deadli
     const state={reserved:0,generated:0,reads:0};
     const dependencies={availability:()=>({posts:true,communities:true,catchup:true}),model:'local',
       authenticate:async(_token,context)=>({actor:'same-user',corpus:async()=>{state.reads++;await assistantDatabaseFetch(context)('https://fixture.invalid/corpus');return {sources:[source],partial:false}},reserve:async()=>{state.reserved++;return true}}),
-      generate:async(prompt,signal)=>{if(prompt.outputKind==='review')return JSON.stringify({fulfillsTask:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))});state.generated++;await fetch('https://fixture.invalid/model',{signal});return JSON.stringify(answer)}};
+      generate:async(prompt,signal)=>{if(prompt.outputKind==='review')return JSON.stringify({feedback:'',fulfillsTask:true,checks:prompt.reviewIds.map(id=>({id,supported:true}))});state.generated++;await fetch('https://fixture.invalid/model',{signal});return JSON.stringify(answer)}};
     const normal=createAssistantHandler(dependencies),deadline=createAssistantHandler({...dependencies,deadlineMs:40});
     export default {async fetch(request){const url=new URL(request.url);
       if(url.pathname==='/status')return Response.json(state);

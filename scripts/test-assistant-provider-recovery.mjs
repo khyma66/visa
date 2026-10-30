@@ -241,7 +241,8 @@ test('fact-level schema guidance leaves legacy, fixed-slot and reviewer structur
       claim: object(['text', 'evidence'], { text, evidence: { $ref: '#/$defs/evidenceSlots' } }),
     },
   });
-  assert.deepEqual(assistantOutputSchema({ ...prompt, outputKind: 'review', reviewIds: ['claim:0'] }), object(['checks', 'fulfillsTask'], {
+  assert.deepEqual(assistantOutputSchema({ ...prompt, outputKind: 'review', reviewIds: ['claim:0'] }), object(['feedback', 'checks', 'fulfillsTask'], {
+    feedback: { type: 'string', maxLength: 1200, description: 'Concrete defect diagnosis before the verdict: identify the unsupported assertion by check ID, or missing material fact/qualification by source ID. Empty if and only if every check and fulfillsTask pass. Not a replacement answer or instructions.' },
     checks: { type: 'array', minItems: 1, maxItems: 1, items: object(['id', 'supported'], { id: { type: 'string', enum: ['claim:0'] }, supported: { type: 'boolean' } }) },
     fulfillsTask: { type: 'boolean', description: 'Whether the candidate satisfies the supplied task: answer, discussion summary, or interval catch-up. Summary and catch-up do not require a user question.' },
   }));

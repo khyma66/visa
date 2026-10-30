@@ -15,7 +15,7 @@ function harness(overrides = {}) {
   const events = [], reads = [], prompts = [];
   const deps = { availability: () => ({ posts: true, communities: false, catchup: false }), model: 'test',
     authenticate: async () => { events.push('auth'); return { actor: 'user-a', reserve: async () => { events.push('reserve'); return true; }, corpus: async value => { reads.push(value); return { sources: [source], partial: false }; } }; },
-    generate: async prompt => JSON.stringify(prompt.outputKind === 'plan' ? plan : prompt.outputKind === 'review' ? { fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) } : answer), ...overrides };
+    generate: async prompt => JSON.stringify(prompt.outputKind === 'plan' ? plan : prompt.outputKind === 'review' ? { feedback: (true) && (prompt.reviewIds.map(id => ({ id, supported: true }))).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) } : answer), ...overrides };
   const generate = deps.generate;
   deps.generate = async (...args) => { prompts.push(args[0]); return generate(...args); };
   return { handler: api.createAssistantHandler(deps), events, reads, prompts };
@@ -39,7 +39,8 @@ test('routing distinguishes changed selection from missing detail within known r
   const prompt = api.assistantPlanPrompt(input);
   assert.match(prompt.system, /new inclusion\/exclusion criterion, location, date or other filter changes the search and uses retrieve/);
   assert.match(prompt.system, /analytical question about the unchanged displayed set, choose reuse/);
-  assert.match(prompt.system, /This does not override the changed-filter rule/);
+  assert(prompt.system.indexOf('1. UNSUPPORTED ANALYTICS') < prompt.system.indexOf('3. NEW SELECTION'));
+  assert.match(prompt.system, /Always use clarify with aggregate, even if the request also introduces a date or other filter/);
 });
 
 test('planner input redacts identifiers and never sends source bodies or arbitrary roles', () => {
@@ -91,7 +92,7 @@ test('legacy callers without conversation retain their compatible path', async (
 test('modern first turn is semantically planned before retrieval, not keyword-routed', async () => {
   const h = harness({ generate: async prompt => JSON.stringify(prompt.outputKind === 'plan'
     ? { ...plan, action: 'retrieve', query: 'STEM OPT application experiences', style: 'summary' }
-    : prompt.outputKind === 'review' ? { fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) } : answer) });
+    : prompt.outputKind === 'review' ? { feedback: (true) && (prompt.reviewIds.map(id => ({ id, supported: true }))).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) } : answer) });
   const value = await (await h.handler(req({ mode: 'ask', scope: { kind: 'public' }, question: 'Summarize STEM OPT experiences', conversation: [] }))).json();
   assert.equal(value.status, 'answered');
   assert.deepEqual(h.prompts.map(p => p.outputKind ?? 'answer'), ['plan', 'answer', 'review']);
@@ -109,6 +110,7 @@ test('summary repair regenerates the whole answer and reviews it, without a thir
         if (generations === 2) {
           const feedback = JSON.parse(prompt.user).rejectedDraftContextOnly;
           assert.equal(feedback.fulfillsTask, false);
+          assert.equal(feedback.diagnosis, 'claim:1 generalizes one approval to everyone; only the member in q:apify-test is supported.');
           assert.deepEqual(feedback.statements.map(item => [item.id, item.supported]), [['claim:0', true], ['claim:1', false]]);
           assert.equal(feedback.statements[1].text, 'Everyone was approved.');
           assert.match(feedback.instruction, /NEVER evidence/);
@@ -117,16 +119,17 @@ test('summary repair regenerates the whole answer and reviews it, without a thir
         return JSON.stringify(generations === 1 ? { ...answer, claims: [...answer.claims, { ...answer.claims[0], text: 'Everyone was approved.' }] } : answer);
       }
       reviews++;
-      if (reviews === 1) return JSON.stringify({ fulfillsTask: false, checks: [{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: false }] });
+      if (reviews === 1) return JSON.stringify({ feedback: 'claim:1 generalizes one approval to everyone; only the member in q:apify-test is supported.', fulfillsTask: false, checks: [{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: false }] });
       assert.equal(prompt.maxAttempts, 1);
       const candidate = JSON.parse(prompt.user).candidate;
       assert.equal(candidate.checks.length, 1);
       assert.equal(candidate.checks[0].text, answer.claims[0].text);
-      return JSON.stringify({ fulfillsTask: complete, checks: [{ id: 'claim:0', supported: true }] });
+      return JSON.stringify({ feedback: (complete) && ([{ id: 'claim:0', supported: true }]).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', fulfillsTask: complete, checks: [{ id: 'claim:0', supported: true }] });
     } });
     const value = await (await h.handler(req())).json();
     assert.equal(value.status, complete ? 'answered' : 'insufficient');
     assert.equal(value.claims.length, complete ? 1 : 0);
+    assert(!JSON.stringify(value).includes('claim:1 generalizes'));
     assert.equal(reviews, 2); assert.equal(generations, 2); assert.equal(h.reads.length, 2);
   }
 });
@@ -150,7 +153,7 @@ test('stream returns progress before completion, publishes only reviewed answer,
   let release; const gate = new Promise(resolve => { release = resolve; });
   const h = harness({ generate: async prompt => {
     if (prompt.outputKind === 'plan') return JSON.stringify(plan);
-    if (prompt.outputKind === 'review') { await gate; return JSON.stringify({ fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) }); }
+    if (prompt.outputKind === 'review') { await gate; return JSON.stringify({ feedback: (true) && (prompt.reviewIds.map(id => ({ id, supported: true }))).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: true })) }); }
     return JSON.stringify(answer);
   } });
   const response = api.streamAssistantResponse(req(), h.handler), labels = [];
