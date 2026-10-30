@@ -109,6 +109,19 @@ test('summary contracts keep unresolved reports cited and enforce concise collec
   assert.throws(() => validateAssistantOutput(JSON.stringify({ ...draft, claims: [{ ...draft.claims[0], text: Array(151).fill('w').join(' ') }] }), corpus, Date.now(), input), error => error.code === 'answer_word_limit');
 });
 
+test('summaries can cite complete questions without stripping punctuation or treating premises as evidence', () => {
+  const source = { id: 'q:apify-question-only', questionId: 'apify-question-only', kind: 'question', communityId: null, title: 'Open question', body: 'Has anyone received their STEM OPT card after a delivery investigation?', createdAt: '2026-10-01T00:00:00Z', url: '/questions/apify-question-only' };
+  const corpus = { sources: [source], partial: false };
+  const summary = { mode: 'summary', scope: { kind: 'post', id: source.questionId } };
+  const p = assistantPrompt(summary, corpus);
+  assert.equal(p.evidenceSpans.length, 1); assert.equal(p.evidenceSpans[0].quote, source.body);
+  const draft = { status: 'answered', claims: [{ text: 'The author asks whether anyone received a STEM OPT card after a delivery investigation.', evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
+  assert.equal(validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), summary).claims[0].evidence[0].quote, source.body);
+  const direct = { mode: 'ask', scope: summary.scope, question: 'Did the author receive their card?' };
+  assert.equal(assistantPrompt(direct, corpus).evidenceSpans.length, 0, 'the question alone is not evidence of receiving a card');
+  assert.equal(validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), direct).status, 'insufficient');
+});
+
 test('server-only single-attempt cap disables both HTTP format and local citation repair', async () => {
   for (const outputKind of [undefined, 'review']) {
     let calls = 0;

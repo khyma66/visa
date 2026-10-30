@@ -41,6 +41,17 @@ test('a partially supported summary is not approved by deleting rejected qualifi
   assert.equal(mixed.claims.length, 2);
 });
 
+test('a question quotation never approves a summary claiming its uncertain premise happened', () => {
+  const question = { ...source, body: 'Has anyone received their card after a delivery investigation?' };
+  const wrong = { ...result, claims: [{ text: 'The member received their card after a delivery investigation.', evidence: [{ sourceId: question.id, quote: question.body }] }] };
+  const request = { mode: 'summary', scope: { kind: 'post', id: question.questionId } };
+  const prompt = assistantReviewPrompt(request, { sources: [question], partial: false }, wrong);
+  assert.match(prompt.system, /interrogative, hypothetical or uncertain statements still cannot prove their premises/);
+  assert.equal(JSON.parse(prompt.user).sources[0].body, question.body);
+  const rejected = validateAssistantReview(verdict([{ id: 'claim:0', supported: false }], false), wrong);
+  assert.equal(rejected.status, 'insufficient'); assert.deepEqual(rejected.claims, []);
+});
+
 test('experience reviewer treats sourced H-4 stamping reports as relevant even without EAD details', () => {
   const request = { mode: 'ask', scope: { kind: 'public' }, question: 'give h4 ead stamping experiences' };
   const generation = assistantPrompt(request, corpus);

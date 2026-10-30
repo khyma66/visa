@@ -320,11 +320,11 @@ export function assistantAnswerWordLimit(input: AssistantRequest, corpus: Assist
 }
 
 export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus, original: AssistantCorpus = corpus) {
-  const evidenceSpans = assistantEvidenceSpans(corpus, original);
+  const context = assistantPromptContext(input, corpus);
+  const evidenceSpans = assistantEvidenceSpans(corpus, original, context.task === 'summary');
   const { resolvedReference, selectedSummary } = assistantPromptSelection(input, corpus);
   const experienceSynthesis = input.mode === 'ask' && input.scope.kind === 'public'
     && assistantSearchIntent(input).experience && !resolvedReference;
-  const context = assistantPromptContext(input, corpus);
   const wordLimit = assistantAnswerWordLimit(input, corpus);
   const taskInstruction = context.collectionTask
     ? `TASK: ${context.collectionTask === 'summary' ? 'Give a concise synthesis of the supplied discussions, not a list of titles or raw excerpts.' : 'Answer the latest follow-up about the supplied discussions; these are the same result set the person is discussing, not a new topic.'} Lead with two or three short, useful observations and cite each supporting report. Aim for 60–100 words unless more detail is requested. Keep each member’s outcome, dates and uncertainty distinct; do not combine people into a fabricated timeline. Questions and plans may be summarized as questions or plans, never as successful outcomes. If only questions are available, explain what members are asking and that the supplied discussions do not establish the answers. A useful summary does not require a success story. Do not claim consensus, prevalence, current rules or exhaustive coverage. Explain differences only when supported; do not manufacture agreement or disagreement.`
@@ -399,7 +399,7 @@ const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
  * Expand selections to whole sentences so an omitted "not", conditional or
  * question mark cannot reverse the quoted source's meaning.
  */
-function completeSourceExcerpt(source: AssistantSource, selected: string, knownBoundaries?: number[]): string | null {
+function completeSourceExcerpt(source: AssistantSource, selected: string, knownBoundaries?: number[], allowQuestions = false): string | null {
   const quote = normalize(selected);
   const matches = new Set<string>();
   for (const raw of [source.body]) {
@@ -418,11 +418,11 @@ function completeSourceExcerpt(source: AssistantSource, selected: string, knownB
       // Preserve the whole short report when possible, including corrections
       // and caveats in adjacent sentences. An instruction tail is never copied.
       const shortReport = text.slice(0, instruction?.index ?? text.length).trim();
-      if (shortReport.length <= 400 && offset + quote.length <= shortReport.length && !/[?]$/.test(shortReport)) {
+      if (shortReport.length <= 400 && offset + quote.length <= shortReport.length && (allowQuestions || !/[?]$/.test(shortReport))) {
         start = 0; end = shortReport.length;
       }
       const excerpt = text.slice(start, end).trim();
-      if (!excerpt || excerpt.length > 400 || /[?]$/.test(excerpt) || (instruction && end > instruction.index)) continue;
+      if (!excerpt || excerpt.length > 400 || (!allowQuestions && /[?]$/.test(excerpt)) || (instruction && end > instruction.index)) continue;
       // A selected quote must not span title/body or omit context because the
       // same short phrase occurs in two different source sentences.
       matches.add(excerpt);
@@ -432,7 +432,7 @@ function completeSourceExcerpt(source: AssistantSource, selected: string, knownB
 }
 
 /** Server-owned quotations; never treat a truncated window edge as a sentence. */
-export function assistantEvidenceSpans(prepared: AssistantCorpus, original: AssistantCorpus = prepared): AssistantEvidenceSpan[] {
+export function assistantEvidenceSpans(prepared: AssistantCorpus, original: AssistantCorpus = prepared, allowQuestions = false): AssistantEvidenceSpan[] {
   const groups: { sourceId: string; quotes: string[] }[] = [];
   for (const source of prepared.sources) {
     if (prepared.sources.filter(item => item.id === source.id).length !== 1) continue;
@@ -454,10 +454,10 @@ export function assistantEvidenceSpans(prepared: AssistantCorpus, original: Assi
       // full original, then require final prepared-source grounding to be a
       // fixed point of that full-source check. A short clipped window must not
       // expand a safe sentence into an incomplete neighboring fragment.
-      const quote = completeSourceExcerpt(full, sentence, fullBoundaries);
-      const grounded = quote && completeSourceExcerpt({ ...source, body: window }, quote, windowBoundaries);
+      const quote = completeSourceExcerpt(full, sentence, fullBoundaries, allowQuestions);
+      const grounded = quote && completeSourceExcerpt({ ...source, body: window }, quote, windowBoundaries, allowQuestions);
       if (grounded && grounded.length >= 12 && grounded.length <= 400 && window.includes(grounded)
-        && completeSourceExcerpt(full, grounded, fullBoundaries) === grounded) quotes.add(grounded);
+        && completeSourceExcerpt(full, grounded, fullBoundaries, allowQuestions) === grounded) quotes.add(grounded);
     }
     if (quotes.size) groups.push({ sourceId: source.id, quotes: [...quotes] });
   }
@@ -492,12 +492,12 @@ function needsAuthoritativePolicyAnswer(input: AssistantRequest): boolean {
   return /\b(?:current|latest|official|legal)\b.{0,60}\b(?:rules?|polic(?:y|ies)|eligib(?:le|ility)|requirements?|law)\b|\b(?:am i|are we|do i|will i|can i|would i)\b.{0,60}\b(?:eligib(?:le|ility)|qualify|guarantee(?:d)?|be approved|approval)\b|\b(?:guarantee(?:d)?|promise)\b.{0,40}\b(?:my|me|our|everyone|all applicants)\b|\b(?:what|which)\b.{0,35}\b(?:legal eligibility|eligibility rules?)\b/i.test(question);
 }
 
-function groundAssistantAnswer(claims: AssistantClaim[], disagreements: AssistantClaim[], corpus: AssistantCorpus): { claims: AssistantClaim[]; disagreements: AssistantClaim[] } {
+function groundAssistantAnswer(claims: AssistantClaim[], disagreements: AssistantClaim[], corpus: AssistantCorpus, allowQuestions = false): { claims: AssistantClaim[]; disagreements: AssistantClaim[] } {
   const byId = new Map(corpus.sources.map(source => [source.id, source]));
   let rejected = false;
   const ground = (claim: AssistantClaim): AssistantClaim => ({ ...claim, evidence: claim.evidence.flatMap(evidence => {
     const source = byId.get(evidence.sourceId);
-    const quote = source && completeSourceExcerpt(source, evidence.quote);
+    const quote = source && completeSourceExcerpt(source, evidence.quote, undefined, allowQuestions);
     if (!quote) { rejected = true; return []; }
     return [{ sourceId: evidence.sourceId, quote: redactAssistantText(quote) }];
   }) });
@@ -543,7 +543,7 @@ export function validateAssistantOutput(raw: string, corpus: AssistantCorpus, no
   let status = value.status as AssistantResult['status'];
   const policyQuestion = input?.mode === 'ask' && needsAuthoritativePolicyAnswer(input);
   if (input) {
-    ({ claims, disagreements } = groundAssistantAnswer(claims, disagreements, corpus));
+    ({ claims, disagreements } = groundAssistantAnswer(claims, disagreements, corpus, summaryContext?.task === 'summary'));
     if (status === 'insufficient' || policyQuestion || (!claims.length && !disagreements.length)) { status = 'insufficient'; claims = []; disagreements = []; }
   }
   const usedIds = new Set([...claims, ...disagreements].flatMap(c => c.evidence.map(e => e.sourceId)));
