@@ -1,7 +1,8 @@
 import { AssistantError, readBoundedJson, type AssistantEvidenceSpan, type AssistantValidationCode } from './assistant-core';
 import models from './assistant-models.json';
+import { ASSISTANT_PLAN_SCHEMA } from './assistant-planner';
 
-export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review'; reviewIds?: string[];
+export type AssistantPrompt = { system: string; user: string; sourceIds?: string[]; outputKind?: 'review' | 'plan'; reviewIds?: string[];
   /** Server-selected exact excerpts. An absent catalog alone permits legacy prompts. */
   evidenceSpans?: AssistantEvidenceSpan[];
   /** In-process validation only; never serialized or supplied by the caller. */
@@ -16,7 +17,7 @@ export const WORKERS_ASSISTANT_PROFILE = JSON.stringify(models);
 export const GROQ_ASSISTANT_MODEL = models.groq.answer;
 export const GROQ_ASSISTANT_PROFILE = JSON.stringify(models.groq);
 export type AssistantTransport = { status: number; attempt?: number; errorCode?: 'json_validate_failed' | 'json_generation_failed' | 'context_length_exceeded' | 'other'; constraint?: 'maxItems' | 'minItems' | 'maxLength' | 'minLength' | 'enum' | 'required' | 'other'; tokenLimit?: number; remainingTokens?: number; retryAfterSeconds?: number; denial?: 'model-org' | 'model-project' | 'permission' | 'other'; responseFormat?: 'json' | 'html' | 'other' };
-export type AssistantUsage = { model: string; stage: 'answer' | 'review'; inputTokens?: number; outputTokens?: number; durationMs: number };
+export type AssistantUsage = { model: string; stage: 'answer' | 'review' | 'plan'; inputTokens?: number; outputTokens?: number; durationMs: number };
 export const OPENAI_ASSISTANT_MODEL = 'gpt-6-luna';
 const evidence = { type: 'object', additionalProperties: false, required: ['sourceId', 'quote'], description: 'An exact source-body passage supporting the specific event, outcome or qualification stated, not merely identifying a report that contains other facts.', properties: { sourceId: { type: 'string', minLength: 1 }, quote: { type: 'string', minLength: 12, maxLength: 400 } } };
 const claim = { type: 'object', additionalProperties: false, required: ['text', 'evidence'], description: 'Choose supporting passages before composing one short, attributed statement. Every stated event, outcome, date and material qualification must be covered by its evidence; a passage about an opening event does not cover later outcomes.', properties: { text: { type: 'string', minLength: 1, maxLength: 700 }, evidence: { type: 'array', minItems: 1, maxItems: 4, description: 'Use exact passages covering every stated fact and qualification from each report being compared. If a compound or multi-report statement needs more than four passages, split it into atomic claims or narrow its attribution to one supported report when repeated content permits; never drop necessary citations or material qualifications to fit. Preserve every relevant side of a required comparison.', items: evidence } } };
@@ -101,6 +102,7 @@ export function resolveAssistantEvidence(raw: string, prompt: AssistantPrompt): 
 
 /** Constrain citations to the server-selected corpus before generation. */
 export function assistantOutputSchema(prompt: AssistantPrompt) {
+  if (prompt.outputKind === 'plan') return ASSISTANT_PLAN_SCHEMA;
   if (prompt.outputKind === 'review') {
     const ids = [...new Set(prompt.reviewIds ?? [])];
     if (!ids.length || ids.length > 9) throw new AssistantError(502, 'The assistant could not verify this answer. Please try again.');
@@ -164,7 +166,7 @@ export function workersAssistantRequest(prompt: AssistantPrompt) {
   const messages = [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }];
   return { model, input: {
     messages, response_format,
-    max_tokens: review ? models.reviewMaxTokens : models.answerMaxTokens,
+    max_tokens: prompt.outputKind === 'plan' ? 1200 : review ? models.reviewMaxTokens : models.answerMaxTokens,
     reasoning_effort: 'low', store: false,
     temperature: 0, seed: 39173,
   } };
@@ -201,7 +203,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
           const payload = value as { response?: unknown; choices?: { finish_reason?: string; message?: { content?: unknown } }[]; usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
           const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000 ? value : undefined;
           // Numbers and fixed labels only: no questions, evidence, identities or model reasoning.
-          try { options.reportUsage?.({ model: request.model, stage: review ? 'review' : 'answer', inputTokens: count(payload.usage?.prompt_tokens), outputTokens: count(payload.usage?.completion_tokens), durationMs: Date.now() - started }); } catch { /* metrics cannot change the answer */ }
+          try { options.reportUsage?.({ model: request.model, stage: prompt.outputKind ?? 'answer', inputTokens: count(payload.usage?.prompt_tokens), outputTokens: count(payload.usage?.completion_tokens), durationMs: Date.now() - started }); } catch { /* metrics cannot change the answer */ }
           const first = payload.choices?.[0];
           if (first && first.finish_reason !== 'stop') fail('incomplete_output');
           const content = first?.message?.content ?? payload.response;
@@ -238,7 +240,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
           messages: [{ role: 'system', content: prompt.system + (attempt ? `\nFORMAT REPAIR: The previous attempt failed format or exact-citation validation. Return a concise object matching every required field. At most 6 claims, 3 disagreements, 4 unanswered items; each claim has 1–4 evidence entries, each disagreement 2–4. ${citationRepair} Each text is at most 700 characters. Review checks, if requested, include every supplied check ID exactly once. Do not add facts or change the requested task.` : '') }, { role: 'user', content: prompt.user }],
           response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } },
           reasoning_effort: review ? models.groq.reviewReasoningEffort : models.groq.reasoningEffort, include_reasoning: false,
-          max_completion_tokens: review ? models.groq.reviewMaxTokens : models.groq.answerMaxTokens,
+          max_completion_tokens: prompt.outputKind === 'plan' ? 1200 : review ? models.groq.reviewMaxTokens : models.groq.answerMaxTokens,
           temperature: 0, seed: 39173,
         }),
       });
@@ -279,7 +281,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       }
       const data = await readBoundedJson(response, 100_000) as { choices?: { finish_reason?: string; message?: { content?: unknown } }[]; usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
       const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000 ? value : undefined;
-      try { options.reportUsage?.({ model: selected, stage: review ? 'review' : 'answer', inputTokens: count(data.usage?.prompt_tokens), outputTokens: count(data.usage?.completion_tokens), durationMs: Date.now() - started }); } catch { /* optional metrics */ }
+      try { options.reportUsage?.({ model: selected, stage: prompt.outputKind ?? 'answer', inputTokens: count(data.usage?.prompt_tokens), outputTokens: count(data.usage?.completion_tokens), durationMs: Date.now() - started }); } catch { /* optional metrics */ }
       const first = data.choices?.[0];
       if (first?.finish_reason !== 'stop') return fail('incomplete_output');
       const content = first.message?.content;

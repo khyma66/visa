@@ -14,6 +14,7 @@ async function compile(name) {
 }
 dependencies['./assistant-context'] = await compile('assistant-context');
 dependencies['./assistant-core'] = await compile('assistant-core');
+dependencies['./assistant-planner'] = await compile('assistant-planner');
 dependencies['./assistant-provider'] = await compile('assistant-provider');
 dependencies['./assistant-search'] = await compile('assistant-search');
 dependencies['./assistant-review'] = await compile('assistant-review');

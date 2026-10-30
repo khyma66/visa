@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import build from '@visa/build-provenance';
+import { streamAssistantResponse } from '@/lib/assistant-stream';
 import { retrieveAssistantCorpus } from '@/lib/assistant-data';
 import { runAssistantModel, providerCacheKey, type WorkersAiBinding } from '@/lib/assistant-provider';
 import { assistantResponse, assistantProductionRequest, configuredAvailability, createAssistantHandler, cloudflareAssistantCache,
@@ -40,6 +41,7 @@ const handle = createAssistantHandler({
   availability,
   reportFailure: event => console.warn('assistant_request_failed', event),
   reportTiming: event => console.info('assistant_request_completed', event),
+  reportStage: event => console.info('assistant_stage_completed', event),
   reportReview: event => console.info('assistant_review_completed', event),
   // The provider is read again during inference; deployments set immutable environment values.
   get model() { try { return providerCacheKey(process.env.ASSISTANT_PROVIDER); } catch { return 'disabled'; } },
@@ -91,5 +93,6 @@ const handle = createAssistantHandler({
 });
 
 export async function POST(request: Request) {
+  if (request.headers.get('Accept') === 'application/x-ndjson') return identifyBuild(streamAssistantResponse(request, handle));
   return identifyBuild(await handle(request));
 }

@@ -16,6 +16,7 @@ async function compile(name) {
 }
 dependencies['./assistant-context'] = await compile('assistant-context');
 dependencies['./assistant-core'] = await compile('assistant-core');
+dependencies['./assistant-planner'] = await compile('assistant-planner');
 const core = await import(dependencies['./assistant-core']);
 dependencies['./assistant-provider'] = await compile('assistant-provider');
 const provider = await import(dependencies['./assistant-provider']);
@@ -54,6 +55,7 @@ test('deployed assistant responses identify their compiled build without trustin
     '@/lib/assistant-data': moduleUrl('export function retrieveAssistantCorpus() { throw Error("Retrieval must not run"); }'),
     '@/lib/assistant-provider': dependencies['./assistant-provider'],
     '@/lib/assistant-service': serviceModule,
+    '@/lib/assistant-stream': await compile('assistant-stream'),
   };
   const code = ts.transpileModule(await readFile(new URL('../src/app/api/assistant/route.ts', import.meta.url), 'utf8'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },

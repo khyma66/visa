@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { PLANNER_CASE_IDS } from './assistant-planner-cases.mjs';
 import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
 import { test } from 'node:test';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
@@ -197,7 +198,8 @@ function acceptanceReceipt() {
     id, model, passed: true,
     samples: Array.from({ length: 3 }, () => ({ id, model, passed: true, checks: checksFor(id).map(name => ({ name, passed: true })) })),
     checks: Array.from({ length: 3 }, (_, index) => checksFor(id).map(name => ({ name: `sample_${index + 1}_${name}`, passed: true }))).flat(),
-  })) };
+  })), plannerCases: PLANNER_CASE_IDS.map(id => ({ id, model, passed: true,
+    samples: Array.from({ length: 3 }, () => ({ id, model, passed: true, checks: ['action', 'context_retained', 'old_topic_removed', 'reference'].map(name => ({ name, passed: true })) })) })) };
 }
 
 test('production activation requires fresh exact-source hosted acceptance for every enabled feature', () => {
@@ -217,7 +219,7 @@ test('Groq release retains exact-model gates, stored-secret isolation and evalua
   receipt.provider = 'groq'; receipt.model = modelProfile.groq.answer; receipt.modelProfile = modelProfile.groq;
   receipt.evaluationWorker = 'visaflow'; receipt.previewRoutingRestored = true; receipt.activeDeploymentsUnchanged = true;
   delete receipt.workerDeleted;
-  for (const row of receipt.cases) { row.model = receipt.model; for (const sample of row.samples) sample.model = receipt.model; }
+  for (const row of [...receipt.cases, ...receipt.plannerCases]) { row.model = receipt.model; for (const sample of row.samples) sample.model = receipt.model; }
   verifyAssistantAcceptance(receipt, receipt.sourceSha, features);
   for (const change of [{ previewRoutingRestored: false }, { activeDeploymentsUnchanged: false }, { evaluationWorker: 'visaflow-dev' }, { modelProfile: { ...modelProfile.groq, review: 'untested' } }, { provider: 'workers-ai' }, { repetitions: 1 }, { passed: false }]) {
     assert.throws(() => verifyAssistantAcceptance({ ...receipt, ...change }, receipt.sourceSha, features));
@@ -227,6 +229,9 @@ test('Groq release retains exact-model gates, stored-secret isolation and evalua
 
 test('production acceptance cannot pass through aggregate-only, incomplete or failing samples', () => {
   const mutations = [
+    receipt => { delete receipt.plannerCases; },
+    receipt => { receipt.plannerCases.pop(); },
+    receipt => { receipt.plannerCases[0].samples[0].checks[0].passed = false; },
     receipt => { receipt.modelProfile = { ...receipt.modelProfile, review: 'untested-reviewer' }; },
     receipt => { delete receipt.modelProfile; },
     receipt => { delete receipt.repetitions; },

@@ -14,6 +14,7 @@ async function compile(name) {
 }
 dependencies['./assistant-context'] = await compile('assistant-context');
 dependencies['./assistant-core'] = await compile('assistant-core');
+dependencies['./assistant-planner'] = await compile('assistant-planner');
 const { AssistantError, assistantPrompt } = await import(dependencies['./assistant-core']);
 const { assistantReviewCorpus, assistantReviewPrompt, validateAssistantReview } = await import(await compile('assistant-review'));
 const provider = await import(await compile('assistant-provider'));

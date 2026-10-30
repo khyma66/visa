@@ -7,6 +7,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { waitForAcceptanceReady } from './assistant-acceptance-readiness.mjs';
+import { PLANNER_CASE_IDS } from './assistant-planner-cases.mjs';
 import { readAcceptanceFailureDiagnostic } from './assistant-acceptance-diagnostics.mjs';
 import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
 
@@ -81,7 +82,7 @@ try {
   const baseUrl = `https://${name}.${subdomain.subdomain}.workers.dev/evaluate`;
   await waitForAcceptanceReady(baseUrl, secret, sourceSha, cases);
   console.log('PASS authenticated Worker readiness and unauthenticated denial');
-  for (const id of cases) {
+  for (const id of [...cases, ...PLANNER_CASE_IDS]) {
     // Establish the exact authenticated route once per fixture; all three
     // independent samples use that same proven URL. Repeating four propagation
     // probes before every sample wastes most of the expiring fixture window.
@@ -111,7 +112,9 @@ try {
     }));
     receipt.cases.push({ id, model: receipt.model, passed: samples.length === repetitions && samples.every(sample => sample.passed === true), checks: samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed }))), samples });
   }
-  receipt.passed = receipt.cases.length === cases.length && receipt.cases.every(item => item.passed === true && item.checks.every(check => check.passed === true));
+  receipt.passed = receipt.cases.length === cases.length + PLANNER_CASE_IDS.length && receipt.cases.every(item => item.passed === true && item.checks.every(check => check.passed === true));
+  receipt.plannerCases = receipt.cases.filter(row => PLANNER_CASE_IDS.includes(row.id));
+  receipt.cases = receipt.cases.filter(row => !PLANNER_CASE_IDS.includes(row.id));
   if (!receipt.passed) failure = Error('Hosted AI acceptance failed; production AI must remain disabled');
 } catch (error) { failure = error; }
 finally {

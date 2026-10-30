@@ -3,10 +3,11 @@ import { ASSISTANT_VERSION, AssistantError, assistantAvailability, assistantFing
 import type { AssistantPrompt } from './assistant-provider';
 import { assistantPostSearchQuery, buildAssistantPostSearchResult } from './assistant-search';
 import { assistantReviewCorpus, assistantReviewPrompt, validateAssistantReview } from './assistant-review';
+import { applyAssistantPlan, assistantPlanPrompt, parseAssistantPlan } from './assistant-planner';
 
 type ReviewedCacheEntry = { result: AssistantResult; digest: string };
 export type AssistantCache = { get(key: string): Promise<ReviewedCacheEntry | null>; put(key: string, value: ReviewedCacheEntry): Promise<void> };
-export type AssistantFailureStage = 'request' | 'authentication' | 'retrieval' | 'quota' | 'generation' | 'validation' | 'review' | 'revalidation';
+export type AssistantFailureStage = 'request' | 'authentication' | 'planning' | 'retrieval' | 'quota' | 'generation' | 'validation' | 'review' | 'revalidation';
 export type AssistantFailureCategory = 'invalid_request' | 'authentication' | 'permission' | 'rate_limit' | 'quota'
   | 'source_changed' | 'source_verification' | 'timeout' | 'cancelled' | 'unavailable';
 type AssistantQuotaReason = 'user_daily_limit' | 'global_daily_limit' | 'user_minute_limit';
@@ -68,6 +69,7 @@ export type AssistantDependencies = {
   reportFailure?(event: { stage: AssistantFailureStage; status: number; code?: AssistantValidationCode;
     category: AssistantFailureCategory; requestId: string; durationMs: number }): void;
   reportTiming?(event: { stage: AssistantFailureStage; status: number; requestId: string; durationMs: number }): void;
+  reportStage?(event: { stage: AssistantFailureStage; requestId: string; durationMs: number }): void;
   /** Validated verdict counts only; never candidate text, sources or reviewer prose. */
   reportReview?(event: { requestId: string; recovery: boolean; fulfillsTask: boolean; supported: number; rejected: number; total: number }): void;
 };
@@ -108,7 +110,7 @@ export function createAssistantHandler(deps: AssistantDependencies) {
   // A pending operation belongs to exactly one request. Sharing its promise
   // also shares the owner's cancellation/lifetime. Durable quota still limits
   // concurrent requests; only completed, verified data may cross requests.
-  return async function handle(request: Request): Promise<Response> {
+  return async function handle(request: Request, onProgress?: (stage: AssistantFailureStage) => void): Promise<Response> {
     const started = Date.now(), requestId = crypto.randomUUID();
     const controller = new AbortController();
     const cancel = () => controller.abort(new AssistantRequestError(499, 'cancelled'));
@@ -122,6 +124,14 @@ export function createAssistantHandler(deps: AssistantDependencies) {
     // and final source verification, even when a request crosses midnight.
     const signal = controller.signal, context = { signal, requestId, startedAt: started };
     let stage: AssistantFailureStage = 'request';
+    let resolvedQuestion: string | undefined;
+    let stageStarted = started;
+    const transition = (next: AssistantFailureStage) => {
+      const now = Date.now();
+      try { deps.reportStage?.({ stage, requestId, durationMs: Math.max(0, now - stageStarted) }); } catch { /* Metrics are optional. */ }
+      stage = next; stageStarted = now;
+      try { onProgress?.(next); } catch { /* UI progress cannot change authorization or acceptance. */ }
+    };
     // Race each boundary, not just fetch: SDK/cache implementations may ignore
     // abort. A late completion must never continue into quota/model/cache work.
     const bounded = async <T>(work: () => Promise<T>): Promise<T> => {
@@ -142,9 +152,11 @@ export function createAssistantHandler(deps: AssistantDependencies) {
     };
     const respond = (value: unknown, status = 200, retryAfter?: number) => {
       const durationMs = Math.max(0, Math.min(86_400_000, Date.now() - started));
-      const response = assistantResponse(value, status, retryAfter);
+      const response = assistantResponse(resolvedQuestion && status === 200 && value && typeof value === 'object'
+        ? { ...value, resolvedQuestion } : value, status, retryAfter);
       response.headers.set('X-VisaThreads-Request-Id', requestId);
       response.headers.set('Server-Timing', `assistant;dur=${durationMs}`);
+      try { deps.reportStage?.({ stage, requestId, durationMs: Math.max(0, Date.now() - stageStarted) }); } catch { /* Optional metrics. */ }
       try { deps.reportTiming?.({ stage, status, requestId, durationMs }); } catch { /* Optional, fixed metadata only. */ }
       return response;
     };
@@ -157,11 +169,24 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type') ?? '')) throw new AssistantError(415, 'Send a JSON request.');
       const token = request.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9._-]{20,8192})$/)?.[1];
       if (!token) throw new AssistantError(401, 'Log in to use the assistant.');
-      const input = parseAssistantRequest(await bounded(() => readBoundedJson(request, 12_000)), started);
+      let input = parseAssistantRequest(await bounded(() => readBoundedJson(request, 24_000)), started);
       requireAssistantMode(input, deps.availability());
-      stage = 'authentication';
+      transition('authentication');
       const session = await bounded(() => deps.authenticate(token, context));
-      stage = 'retrieval';
+      let reserved = false;
+      if (input.mode === 'ask' && input.scope.kind === 'public' && input.conversation?.length) {
+        input = { ...input, previousPosts: input.previousPosts ?? input.conversationReferences };
+        transition('quota');
+        if (!await bounded(() => session.reserve(signal))) throw new AssistantRequestError(429, 'quota');
+        reserved = true;
+        transition('planning');
+        const rawPlan = await bounded(() => deps.generate(assistantPlanPrompt(input), signal, context));
+        const plan = parseAssistantPlan(rawPlan, input);
+        if (plan.action === 'clarify') return respond({ ...emptyAssistantResult({ sources: [], partial: false }), unanswered: [plan.clarification!] });
+        input = applyAssistantPlan(input, plan);
+        resolvedQuestion = plan.query;
+      }
+      transition('retrieval');
       const original = await bounded(() => session.corpus(input, signal));
       if (assistantPostSearchQuery(input, started)) {
         // Finding existing posts does not require text generation or model quota.
@@ -169,7 +194,7 @@ export function createAssistantHandler(deps: AssistantDependencies) {
         const fingerprint = await bounded(() => assistantFingerprint(original));
         const result = buildAssistantPostSearchResult(input, original, started);
         signal.throwIfAborted();
-        stage = 'revalidation';
+        transition('revalidation');
         if (await bounded(async () => assistantFingerprint(await bounded(() => session.corpus(input, signal)))) !== fingerprint) {
           throw new AssistantError(409, 'The discussion changed while answering. Please ask again.');
         }
@@ -183,7 +208,7 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       // Retrieval happens BEFORE every cache read, so removed/hidden data cannot return from cache.
       const key = await bounded(() => assistantFingerprint({ actor: session.actor, input, fingerprint, version: ASSISTANT_VERSION, model: deps.model }));
       const revalidate = async () => {
-        stage = 'revalidation';
+        transition('revalidation');
         const current = await bounded(() => session.corpus(input, signal));
         if (await bounded(() => assistantFingerprint(current)) !== fingerprint) throw new AssistantError(409, 'The discussion changed while answering. Please ask again.');
       };
@@ -213,20 +238,20 @@ export function createAssistantHandler(deps: AssistantDependencies) {
         return respond({ ...empty, coverage: { ...empty.coverage, sourceCount: corpus.sources.length },
           unanswered: ['I couldn’t find enough complete, verifiable details in these discussions to answer accurately. Try a more specific question or a different post.'] });
       }
-      stage = 'quota';
-      if (!await bounded(() => session.reserve(signal))) throw new AssistantRequestError(429, 'quota');
+      transition('quota');
+      if (!reserved && !await bounded(() => session.reserve(signal))) throw new AssistantRequestError(429, 'quota');
       const generateCandidate = async (recovery = false) => {
-        stage = 'generation';
+        transition('generation');
         const raw = await bounded(() => deps.generate({ ...originalPrompt,
           ...(recovery ? { system: `${originalPrompt.system}\n${semanticRepairInstruction}`, maxAttempts: 1 as const } : {}),
           validateOutput: (candidate: string) => { validateAssistantOutput(candidate, corpus, Date.now(), input); },
         }, signal, context));
-        stage = 'validation';
+        transition('validation');
         return validateAssistantOutput(raw, corpus, Date.now(), input);
       };
       const reviewCandidate = async (candidate: AssistantResult, recovery = false) => {
         signal.throwIfAborted();
-        stage = 'review';
+        transition('review');
         const reviewCorpus = assistantReviewCorpus(original, corpus, candidate);
         if (!reviewCorpus) {
           return { result: { ...candidate, status: 'insufficient' as const, claims: [], disagreements: [], sources: [],
@@ -253,7 +278,8 @@ export function createAssistantHandler(deps: AssistantDependencies) {
           // One regeneration only after a valid negative semantic verdict.
           // Reuse ORIGINAL evidence, never the rejected draft or review text.
           // Each recovery inference has one transport attempt: maximum 6
-          // requests including the initial answer/review format repairs.
+          // requests including the initial answer/review format repairs,
+          // plus at most one contextual planning request on conversational turns.
           const replacement = await generateCandidate(true);
           if (!replacement.claims.length && !replacement.disagreements.length) result = replacement;
           else if (assistantCandidateIdentity(replacement) !== assistantCandidateIdentity(rejectedCandidate)) {
@@ -275,7 +301,7 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       const status = error instanceof AssistantError ? error.status : 503;
       const category: AssistantFailureCategory = error instanceof AssistantRequestError ? error.category
         : status === 401 ? 'authentication' : status === 403 ? 'permission' : status === 409 ? 'source_changed'
-        : status === 429 ? (stage === 'quota' ? 'quota' : 'rate_limit') : status === 502 ? 'source_verification'
+        : status === 429 ? ((stage as AssistantFailureStage) === 'quota' ? 'quota' : 'rate_limit') : status === 502 ? 'source_verification'
         : status >= 400 && status < 500 ? 'invalid_request' : 'unavailable';
       const durationMs = Math.max(0, Math.min(86_400_000, Date.now() - started));
       if (status >= 500) {

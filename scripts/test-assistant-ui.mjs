@@ -53,6 +53,37 @@ class Harness {
   async settle() { for (let round = 0; round < 15; round++) { for (const effect of this.effects.splice(0)) effect(); await new Promise(resolve => setTimeout(resolve, 1)); if (!this.dirty && !this.effects.length) return; this.render(); } assert.fail('Assistant did not settle'); }
   close() { for (const slot of this.slots) slot?.cleanup?.(); globalThis.fetch = this.oldFetch; delete globalThis.__assistantHarness; delete globalThis.window; }
 }
+
+test('unrecognized follow-up wording carries bounded two-sided context and ID locators', async () => {
+  const h = new Harness();
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    changeQuestion(h, 'Give STEM OPT experiences'); await submit(h); await h.settle();
+    changeQuestion(h, 'Give me the gist'); await submit(h); await h.settle();
+    const body = h.calls.at(-1).body;
+    assert.deepEqual(body.conversation, [{ question: 'Give STEM OPT experiences', answer: 'Members reported document requests.' }]);
+    assert.deepEqual(body.conversationReferences, [{ questionId: 'post-a', sourceId: 'reply-a' }]);
+    assert.equal(body.turnPlan, undefined); assert.equal(body.sources, undefined);
+    assert.equal(h.calls.at(-1).headers.Accept, 'application/x-ndjson');
+  } finally { h.close(); }
+});
+
+test('live progress renders safely and only a complete validated result finishes the turn', async () => {
+  const h = new Harness(); let controller;
+  h.post = async () => new Response(new ReadableStream({ start(value) { controller = value; } }), { headers: { 'Content-Type': 'application/x-ndjson' } });
+  const send = value => controller.enqueue(new TextEncoder().encode(JSON.stringify(value) + '\n'));
+  try {
+    h.render({ scope: { kind: 'public' }, defaultOpen: true }); await h.settle();
+    changeQuestion(h, 'What happened?'); const pending = submit(h); await h.settle();
+    send({ type: 'progress', stage: 'retrieval' }); await h.settle(); assert.match(textOf(h.tree), /Finding relevant discussions/);
+    assert.doesNotMatch(textOf(h.tree), /Members reported document requests/);
+    send({ type: 'complete', status: 200, value: fixture({ resolvedQuestion: 'STEM OPT reported outcomes' }), retryAfter: null }); controller.close();
+    await pending; await h.settle(); assert.match(textOf(h.tree), /Members reported document requests/);
+    h.post = async () => reply(fixture());
+    changeQuestion(h, 'And then?'); await submit(h); await h.settle();
+    assert.deepEqual(h.calls.at(-1).body.previousQuestions, ['STEM OPT reported outcomes']);
+  } finally { h.close(); }
+});
 function nodes(node) { if (Array.isArray(node)) return node.flatMap(nodes); if (!node || typeof node !== 'object') return []; if (typeof node.type === 'function') return nodes(node.type(node.props)); return [node, ...nodes(node.props?.children)]; }
 function textOf(node) { if (Array.isArray(node)) return node.map(textOf).join(' '); if (node == null || typeof node === 'boolean') return ''; if (typeof node !== 'object') return String(node); return textOf(typeof node.type === 'function' ? node.type(node.props) : node.props?.children); }
 function visibleTextOf(node) { if (Array.isArray(node)) return node.map(visibleTextOf).join(' '); if (node == null || typeof node === 'boolean') return ''; if (typeof node !== 'object') return String(node); if (typeof node.type === 'function') return visibleTextOf(node.type(node.props)); if (node.type === 'details' && !node.props.open) return visibleTextOf(nodes(node.props.children).find(child => child.type === 'summary')); return visibleTextOf(node.props?.children); }
@@ -395,7 +426,7 @@ test('stop cancels the active request, restores the draft, and rejects duplicate
   try {
     h.render(); await h.settle(); changeQuestion(h, 'Old question'); const first = submit(h); void submit(h); await h.settle();
     assert.equal(h.calls.filter(call => call.method === 'POST').length, 1);
-    assert.match(textOf(h.tree), /Thinking/);
+    assert.match(textOf(h.tree), /Connecting/);
     assert(!nodes(h.tree).find(node => node.type === 'textarea').props.disabled);
     assert.equal(button(h, 'Send new message').props.disabled, true);
     const active = h.calls.at(-1); choose(h, 'Stop response'); assert.equal(active.signal.aborted, true);

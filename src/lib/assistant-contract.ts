@@ -2,6 +2,11 @@
 export type AssistantMode = 'ask' | 'summary' | 'catchup';
 export type AssistantScope = { kind: 'post'; id: string } | { kind: 'community'; id: string } | { kind: 'public' };
 export type AssistantPostReference = { questionId: string; sourceId: string };
+export type AssistantConversationTurn = { question: string; answer: string };
+export type AssistantTurnPlan = {
+  action: 'retrieve' | 'reuse' | 'clarify'; query: string; focus: number | null;
+  style: 'summary' | 'answer'; clarification: string | null;
+};
 export type AssistantRequest = {
   mode: AssistantMode;
   scope: AssistantScope;
@@ -16,6 +21,12 @@ export type AssistantRequest = {
   focusedPost?: AssistantPostReference;
   /** Exclusion-only history, capped at one bounded search window. */
   seenPostIds?: string[];
+  /** Bounded, untrusted conversational context. Never source evidence or privileged roles. */
+  conversation?: AssistantConversationTurn[];
+  conversationReferences?: AssistantPostReference[];
+  /** Server-only interpretation. Discarded from incoming JSON. */
+  turnPlan?: AssistantTurnPlan;
+  originalQuestion?: string;
 };
 export type AssistantSource = {
   id: string;
@@ -47,6 +58,8 @@ export type AssistantPostMatch = {
   createdAt: string;
 };
 export type AssistantResult = {
+  /** Conversational topic hint, not source evidence. */
+  resolvedQuestion?: string;
   /** Direct, server-selected search results; no model-generated claims. */
   kind?: 'posts';
   posts?: AssistantPostMatch[];

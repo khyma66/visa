@@ -51,6 +51,10 @@ function lookupRequest(question: string): boolean {
 
 /** One deterministic interpretation, shared by all retrieval sources. */
 export function assistantSearchIntent(input: AssistantRequest, now = Date.now()): AssistantSearchIntent {
+  if (input.turnPlan) {
+    const intent = assistantSearchIntent({ mode: input.mode, scope: input.scope, question: input.turnPlan.query }, now);
+    return { ...intent, task: 'answer', overview: input.turnPlan.style === 'summary' };
+  }
   const current = (input.question ?? '').trim();
   // Conversational requests get a synthesis; explicit browsing stays cheap
   // and non-generative. Both use the same strict topic retrieval below.
@@ -128,6 +132,7 @@ export function assistantPluralReference(question: string): boolean {
 
 /** The IDs remain locators only; retrieval rechecks visibility and content. */
 export function assistantResultSetFollowUp(input: AssistantRequest): boolean {
+  if (input.turnPlan) return input.turnPlan.action === 'reuse' && input.turnPlan.focus === null;
   const question = input.question ?? '';
   const current = topicEntities(question), prior = topicEntities(assistantBoundedHistory(input.previousQuestions ?? []).join(' '));
   if (current.locations.length && !current.locations.some(value => prior.locations.includes(value))
@@ -185,6 +190,8 @@ export function assistantBoundedHistory(previous: string[]): string[] {
 }
 
 export function assistantPreviousPost(input: AssistantRequest): AssistantPostReference | null {
+  if (input.turnPlan) return input.turnPlan.action === 'reuse' && input.turnPlan.focus !== null
+    ? input.previousPosts?.[input.turnPlan.focus] ?? null : null;
   const question = input.question ?? '';
   if (!assistantRefersToEarlierTurn(question) || assistantMorePosts(question)) return null;
   const ordinal = assistantPostOrdinal(question);

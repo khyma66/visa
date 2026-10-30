@@ -11,6 +11,7 @@ import { buildProvenance, sourceProvenance } from './build-provenance.mjs';
 import { recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 import { pinnedChatbotRecovery, verifyRecoveryFiles } from './pinned-chatbot-recovery.mjs';
 import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
+import { PLANNER_CASE_IDS } from './assistant-planner-cases.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const privateDirectory = resolve(root, '.cache/visaflow/live-preview');
@@ -280,6 +281,18 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
   assert.equal(receipt.features?.posts, true);
   for (const feature of ['communities', 'catchup']) if (features[feature] === 'true') assert.equal(receipt.features?.[feature], true, `${feature} needs hosted model acceptance.`);
   assert.equal(receipt.repetitions, 3, 'Hosted acceptance requires three independent samples per case.');
+  assert(Array.isArray(receipt.plannerCases) && receipt.plannerCases.length === PLANNER_CASE_IDS.length
+    && PLANNER_CASE_IDS.every(id => receipt.plannerCases.some(row => row.id === id)), 'Every contextual planning case must be tested.');
+  for (const row of receipt.plannerCases) {
+    assert.equal(row.model, receipt.model); assert.equal(row.passed, true);
+    assert.equal(row.samples?.length, 3);
+    for (const sample of row.samples) {
+      assert.equal(sample.id, row.id); assert.equal(sample.model, receipt.model); assert.equal(sample.passed, true);
+      for (const name of ['action', 'context_retained', 'old_topic_removed', 'reference']) {
+        assert(sample.checks?.some(check => check.name === name && check.passed === true), 'Contextual planning semantics must pass.');
+      }
+    }
+  }
   const requiredCases = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context', 'thank-you-confirmation', 'public-multiple-thread-synthesis'];
   requiredCases.push('hfour-ead-stamping-experience-synthesis');
   requiredCases.push('large-discussion-summary');

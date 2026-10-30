@@ -6,7 +6,7 @@ import { ArrowUp, ChevronDown, Clock3, Sparkles, Square } from 'lucide-react';
 import { getSupabase } from '@/lib/supabase/client';
 import type { AssistantAvailability, AssistantClaim, AssistantMode, AssistantPostReference, AssistantRequest, AssistantResult, AssistantScope, AssistantSource } from '@/lib/assistant-contract';
 import { assistantBoundedHistory, assistantDisplayedPosts, assistantMorePosts, assistantPreviousPost, assistantRefersToEarlierTurn } from '@/lib/assistant-context';
-import { assistantFailureMessage, parseAssistantFailure, parseAssistantResult, readAssistantJson, safeAssistantHref } from '@/lib/assistant-client';
+import { assistantFailureMessage, parseAssistantFailure, parseAssistantResult, readAssistantJson, readAssistantResponse, safeAssistantHref } from '@/lib/assistant-client';
 import { useAuth } from './AuthProvider';
 
 type Props = { scope: AssistantScope; title?: string; defaultOpen?: boolean };
@@ -114,6 +114,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('Connecting…');
   const [availability, setAvailability] = useState<AssistantAvailability>(disabledAvailability);
   const [checking, setChecking] = useState(true);
   const [settingsError, setSettingsError] = useState(false);
@@ -194,6 +195,14 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
     if (mode === 'ask') {
       body.question = submittedQuestion;
       if (previousQuestions.length) body.previousQuestions = previousQuestions;
+      if (scope.kind === 'public' && completedAsks.length) {
+        body.conversation = completedAsks.slice(-3).map(item => ({ question: item.prompt.slice(0, 1200),
+          answer: (item.result?.kind === 'posts' ? `Displayed ${item.result.posts?.length ?? 0} discussions.`
+            : [...(item.result?.claims ?? []), ...(item.result?.disagreements ?? [])].map(claim => claim.text).join('\n') || item.result?.unanswered.join('\n') || '').slice(0, 1200) }));
+        const previous = completedAsks.at(-1);
+        body.conversationReferences = previous?.result?.kind === 'posts' ? assistantDisplayedPosts(previous.result)
+          : previous?.referencePosts ?? assistantDisplayedPosts(previous?.result);
+      }
       if (scope.kind === 'public' && assistantRefersToEarlierTurn(submittedQuestion)) {
         const previous = completedAsks.at(-1);
         // Numbered search results remain the reference list through summaries
@@ -209,10 +218,11 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
         if (assistantMorePosts(submittedQuestion) && turn.seenPostIds.length) body.seenPostIds = turn.seenPostIds;
       }
     }
+    if (body.previousPosts) delete body.conversationReferences;
     if (mode === 'catchup') body.since = period === 'last' && checkpoint ? checkpoint : new Date(Date.now() - (period === 'last' ? 24 : periodHours[period]) * 3600000).toISOString();
     setConversation({ identity: actor, turns: [...turns.filter((item) => item.id !== turnId).map((item) => item.state === 'pending' ? { ...item, state: 'cancelled' as const } : item), turn].slice(-20) });
     if (mode === 'ask') setDraft({ identity: actor, text: '' });
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setProgress('Connecting…');
     const fail = (message: string) => {
       if (!isCurrent()) return;
       setConversation((current) => current.identity === actor ? { ...current, turns: current.turns.map((item) => item.id === turnId ? { ...item, state: 'failed' } : item) } : current);
@@ -228,7 +238,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
       const { data, error: sessionError } = await getSupabase().auth.getSession();
       if (!isCurrent()) return;
       if (sessionError || !data.session?.access_token || data.session.user.id !== user?.id) { fail('Your session has expired. Sign in again.'); return; }
-      const response = await fetch('/api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` }, body: JSON.stringify(body), signal: controller.signal, cache: 'no-store' });
+      const response = await fetch('/api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson', Authorization: `Bearer ${data.session.access_token}` }, body: JSON.stringify(body), signal: controller.signal, cache: 'no-store' });
       if (!isCurrent()) return;
       if (!response.ok) {
         // A proxy may return HTML or malformed JSON. Status remains a safe
@@ -237,10 +247,16 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
         fail(assistantFailureMessage(parseAssistantFailure(response.status, failure, response.headers?.get('retry-after') ?? null)));
         return;
       }
-      const value = parseAssistantResult(await readAssistantJson(response));
+      const streamed = await readAssistantResponse(response, label => { if (isCurrent()) setProgress(label); });
+      if (!isCurrent()) return;
+      if (streamed.status < 200 || streamed.status >= 300) {
+        fail(assistantFailureMessage(parseAssistantFailure(streamed.status, streamed.value, streamed.retryAfter))); return;
+      }
+      const value = parseAssistantResult(streamed.value);
       if (!isCurrent()) return;
       if (!value) { fail('The answer was incomplete. Your question is saved; try again.'); return; }
-      setConversation((current) => current.identity === actor ? { ...current, turns: current.turns.map((item) => item.id === turnId ? { ...item, state: 'complete', result: value } : item) } : current);
+      setConversation((current) => current.identity === actor ? { ...current, turns: current.turns.map((item) => item.id === turnId ? { ...item, state: 'complete', result: value,
+        ...(value.resolvedQuestion ? { history: [value.resolvedQuestion], referencePosts: assistantDisplayedPosts(value), focusedPost: undefined } : {}) } : item) } : current);
       // A partial digest cannot mark a whole interval as read.
       if (mode === 'catchup' && scope.kind === 'community' && value.status === 'answered' && !value.coverage.partial && value.coverage.until && Number.isFinite(Date.parse(value.coverage.until)) && Date.parse(value.coverage.until) <= Date.now() && (!checkpoint || Date.parse(value.coverage.until) > Date.parse(checkpoint))) {
         const until = new Date(value.coverage.until).toISOString();
@@ -271,7 +287,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
           {turns.map((turn) => <div key={turn.id} className="space-y-3">
             <div className="ml-auto w-fit max-w-[90%] rounded-2xl rounded-br-sm bg-teal-700 px-4 py-2.5 text-base leading-relaxed text-white" aria-label="Your message"><p className="whitespace-pre-wrap break-words">{turn.prompt}</p></div>
             <div className="flex gap-2.5" aria-label="AI message"><span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-teal-50 text-teal-700"><Sparkles size={13} aria-hidden="true" /></span><div className="min-w-0 flex-1 pt-0.5">
-              {turn.state === 'pending' ? <p role="status" className="flex items-center gap-2 text-sm text-slate-500"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-500 motion-reduce:animate-none" aria-hidden="true" />Thinking…</p> : turn.result ? <Result result={turn.result} catchup={turn.mode === 'catchup'} /> : <p className="text-xs text-slate-500">{turn.state === 'cancelled' ? 'Stopped.' : 'No answer received.'}</p>}
+              {turn.state === 'pending' ? <p role="status" className="flex items-center gap-2 text-sm text-slate-500"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-500 motion-reduce:animate-none" aria-hidden="true" />{progress}</p> : turn.result ? <Result result={turn.result} catchup={turn.mode === 'catchup'} /> : <p className="text-xs text-slate-500">{turn.state === 'cancelled' ? 'Stopped.' : 'No answer received.'}</p>}
             </div></div>
           </div>)}
           {scope.kind === 'public' && !busy && turns.at(-1)?.state === 'complete' && assistantDisplayedPosts(turns.at(-1)?.result).length > 0 && <div className="flex flex-wrap gap-2 pl-8" role="group" aria-label="Continue this conversation">

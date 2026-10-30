@@ -369,7 +369,7 @@ export async function retrieveAssistantCorpus(client: SupabaseClient, input: Ass
     if (!assistantPreviousQuestions(input).length) return { sources: [], partial: false };
     if (assistantSeenPostIds(input).length >= ASSISTANT_SOURCE_LIMIT) return { sources: [], partial: true };
   }
-  if (input.mode === 'ask' && input.scope.kind === 'public' && assistantRefersToEarlierTurn(input.question ?? '')
+  if (input.mode === 'ask' && input.scope.kind === 'public' && (input.turnPlan?.action === 'reuse' || assistantRefersToEarlierTurn(input.question ?? ''))
     && !assistantMorePosts(input.question ?? '') && (assistantPostOrdinal(input.question ?? '') !== null || assistantPreviousPost(input))) {
     const reference = assistantPreviousPost(input);
     if (!reference) return { sources: [], partial: false };
@@ -386,10 +386,14 @@ export async function retrieveAssistantCorpus(client: SupabaseClient, input: Ass
     if (error) throw new Error('Assistant sources are temporarily unavailable.');
     if (!data) return { sources: [], partial: false, since: input.since, until: input.until };
   }
-  const corpus = await searchSources(client, input, now);
+  // Independent caller-scoped search branches share the same request deadline.
+  // Starting together removes a serial database round trip, without sharing data across users.
+  const [corpus, importedReplies] = await Promise.all([
+    searchSources(client, input, now),
+    input.scope.kind === 'public' ? importedReplyMatches(client, input, now) : Promise.resolve({ sources: [], partial: false } as AssistantCorpus),
+  ]);
   if (input.scope.kind === 'public') {
     const historical = publicArchiveMatches(input, now);
-    const importedReplies = await importedReplyMatches(client, input, now);
     const score = sourceScorer(input, now);
     const intent = assistantSearchIntent(input, now);
     const combined = [...corpus.sources, ...historical.sources, ...importedReplies.sources]
