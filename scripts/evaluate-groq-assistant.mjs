@@ -31,6 +31,8 @@ cases.push('stem-followup-comparison');
 cases.unshift('mixed-unresolved-discussion-summary');
 cases.unshift('question-only-summary');
 cases.unshift('shorter-collection-summary');
+cases.unshift('broad-appointment-issues');
+cases.unshift('broad-stem-issues');
 const release = process.argv.includes('--release');
 assert(!(smoke && release), 'Smoke results cannot authorize a release');
 const selected = smoke ? ['post-question'] : [...cases, ...PLANNER_CASE_IDS];

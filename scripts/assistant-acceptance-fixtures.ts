@@ -138,6 +138,23 @@ const decisionReportingScope = (result: AssistantResult) => result.claims.some(c
     || !/\bpending\b|\bno\s+(?:final\s+)?decision\b.{0,45}\b(?:made|given|issued|reached|received)\b|\bdecision\b.{0,20}\b(?:not|never)\b.{0,20}\b(?:made|given|issued|reached|received)\b/.test(text));
 
 export const acceptanceFixtures: AcceptanceFixture[] = [
+  ...(['STEM OPT', 'appointment scheduling'] as const).map((topic, index): AcceptanceFixture => {
+    const discussion = (id: number, body: string) => source(id, body, { kind: 'question', id: `q:apify-issues-${id}`, questionId: `apify-issues-${id}`, communityId: null, title: `${topic} report`, url: `/questions/apify-issues-${id}` });
+    const reports = [
+      discussion(700 + index * 10, `My ${topic} application was delayed for five months. I then received a request for more documents. I sent the documents, but I do not know when a decision will arrive.`),
+      discussion(701 + index * 10, `I could not upload my ${topic} documents because the portal showed an error. I tried a different browser and the upload worked. This describes only my experience, not a guaranteed fix.`),
+      discussion(702 + index * 10, `Will my ${topic} application be denied if I travel? I have not traveled or received a denial. I am asking because I am worried.`),
+    ];
+    return { id: index ? 'broad-appointment-issues' : 'broad-stem-issues',
+      input: { mode: 'ask', scope: { kind: 'public' }, question: `${topic.toLowerCase()} - give issues what people faced`, conversation: [] },
+      corpus: { sources: reports, partial: false }, checks: [answered,
+        mentions('delay_and_document_request', /delay|five months/), mentions('request_preserved', /request|more documents/),
+        mentions('upload_failure', /upload|portal/), mentions('reported_resolution', /browser/),
+        mentions('unresolved_decision', /unknown|uncertain|not know|no (?:known|confirmed|expected) (?:decision )?date|not (?:yet )?(?:known|stated)/),
+        absent('no_invented_denial', /(?:was|were|got|been) denied|travel (?:caused|led to)|everyone|always works/),
+        { name: 'distinct_reports_cited', test: result => reports.slice(0, 2).every(report => result.claims.some(claim => claim.evidence.some(item => item.sourceId === report.id))) },
+      ] };
+  }),
   { id: 'shorter-collection-summary', input: { mode: 'ask', scope: { kind: 'public' }, question: 'Make it shorter', transform: 'shorten', previousQuestions: ['Summarize the application discussions'], previousPosts: [
     { questionId: 'apify-short-first', sourceId: 'q:apify-short-first' }, { questionId: 'apify-short-second', sourceId: 'q:apify-short-second' },
   ] }, corpus: { partial: false, sources: [

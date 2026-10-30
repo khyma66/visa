@@ -37,7 +37,7 @@ const { assistantPrompt, prepareAssistantCorpus, validateAssistantOutput } = awa
 // No production adapter or verifier accepts quote text as a fallback. A bad
 // synthetic quote deliberately becomes an unknown ID and must fail closed.
 function spanModelOutput(input, raw) {
-  if (input.response_format.json_schema.name === 'discussion_answer_review') return raw;
+  if (['discussion_answer_review', 'discussion_turn_plan'].includes(input.response_format.json_schema.name)) return raw;
   const schema = input.response_format.json_schema.schema;
   assert.equal(schema.properties.claims.type, 'object', 'Generation must structurally bound output using fixed slots');
   assert.deepEqual(schema.properties.claims.required, Array.from({ length: 6 }, (_, index) => `slot${index + 1}`));
@@ -145,6 +145,31 @@ test('readiness retries only propagation and fails closed on a platform page or 
 test('evaluation only accepts fixed fixture IDs and rejects caller-supplied prompts', async () => {
   for (const body of [{ id: 'unknown' }, { id: 'post-question', prompt: 'attacker prompt' }, { id: 'x'.repeat(200) }, null]) {
     assert.equal((await worker.fetch(request(body), env())).status, body?.id?.length > 128 ? 502 : 400);
+  }
+});
+
+test('broad issue fixtures exercise planning, focused synthesis, and independent review together', async () => {
+  for (const id of ['broad-stem-issues', 'broad-appointment-issues']) {
+    const fixture = acceptanceFixtures.find(item => item.id === id), stages = [];
+    const topic = id === 'broad-stem-issues' ? 'STEM OPT' : 'appointment scheduling';
+    const settings = { ...env(), ASSISTANT_AI: { run: async (_model, input) => {
+      const stage = input.response_format.json_schema.name;
+      stages.push(stage);
+      if (stage === 'discussion_turn_plan') return { response: JSON.stringify({ action: 'retrieve', query: `Summarize issues people reported with ${topic}.`, style: 'summary', focus: null, clarification: null }) };
+      const review = reviewResponse(input); if (review) return review;
+      const context = JSON.parse(input.messages.find(message => message.role === 'user').content);
+      assert.match(context.question, /Summarize issues/);
+      const [first, second] = fixture.corpus.sources;
+      const spans = source => context.sources.find(item => item.id === source.id).spans.map(span => ({ spanId: span.id }));
+      return { response: JSON.stringify({ status: 'answered', disagreements: [], unanswered: [], claims: [
+        { text: 'One member described a five-month delay and a request for more documents; the decision timing remained unknown.', evidence: spans(first) },
+        { text: 'Another member reported an upload error resolved by switching browsers, only their experience and not a guaranteed fix.', evidence: spans(second) },
+      ] }) };
+    } } };
+    const response = await worker.fetch(request({ id }), settings), value = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(value));
+    assert.equal(value.passed, true, JSON.stringify(value));
+    assert.deepEqual(stages, ['discussion_turn_plan', 'discussion_answer', 'discussion_answer_review']);
   }
 });
 
@@ -1040,7 +1065,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 37);
+  assert.equal(acceptanceFixtures.length, 39);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);

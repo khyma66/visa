@@ -8,6 +8,7 @@ import type { AssistantAvailability, AssistantClaim, AssistantMode, AssistantPos
 import { assistantBoundedHistory, assistantDisplayedPosts, assistantMorePosts, assistantPreviousPost, assistantRefersToEarlierTurn } from '@/lib/assistant-context';
 import { assistantFailureMessage, parseAssistantFailure, parseAssistantResult, readAssistantJson, readAssistantResponse, safeAssistantHref } from '@/lib/assistant-client';
 import { useAuth } from './AuthProvider';
+import { assistantChatExport } from '@/lib/assistant-export';
 
 type Props = { scope: AssistantScope; title?: string; defaultOpen?: boolean };
 type Period = 'hour' | 'six-hours' | 'day' | 'week' | 'last';
@@ -79,7 +80,7 @@ function Result({ result, catchup }: { result: AssistantResult; catchup: boolean
     <Claims claims={result.claims} sources={result.sources} />
     {!!result.disagreements.length && <div className="mt-3 border-l-2 border-amber-300 pl-3"><p className="mb-2 text-xs font-semibold text-amber-900">Related perspectives</p><Claims claims={result.disagreements} sources={result.sources} /></div>}
     {result.status !== 'insufficient' && !!result.unanswered.length && <details className="mt-3 text-xs text-slate-500"><summary className="cursor-pointer">Still unclear</summary><ul className="mt-2 list-disc space-y-1 pl-4 leading-5">{result.unanswered.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
-    {limitation && <p className="mt-3 text-xs leading-5 text-amber-800">{limitation}</p>}
+    {result.status !== 'insufficient' && limitation && <p className="mt-3 text-xs leading-5 text-amber-800">{limitation}</p>}
     {(citedSources.length > 0 || result.coverage.partial) && <details className="mt-3 text-xs text-slate-500">
       <summary className="cursor-pointer font-medium">{citedSources.length ? `Sources · ${citedSources.length}` : 'About this answer'}</summary>
       <div className="mt-3 space-y-3 leading-5">{citedSources.map(({ source, index, href, quotes }) => <div key={source.id} className="border-l-2 border-teal-100 pl-3">
@@ -268,6 +269,15 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
     finally { clearTimeout(timeout); if (isCurrent()) { request.current = null; requestPrompt.current = null; setBusy(false); } }
   }
 
+  function downloadChat() {
+    if (!user || authLoading || identityRef.current !== identity || !turns.length) return;
+    const url = URL.createObjectURL(new Blob([assistantChatExport(turns)], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = 'visathreads-chat.txt';
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   if (!productionSite) return null;
   return <section className="my-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="VisaThreads assistant">
     <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex w-full items-center gap-3 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700">
@@ -281,6 +291,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
           {(scope.kind === 'post' || canCatchup) && <button type="button" aria-pressed={mode === 'ask'} onClick={() => { cancel(); setMode('ask'); }} className={`${controlClass} ${mode === 'ask' ? 'border-teal-300 bg-teal-50 text-teal-800' : ''}`}>Ask</button>}
           {scope.kind === 'post' && <button type="button" aria-pressed={mode === 'summary'} onClick={() => { cancel(); setMode('summary'); }} className={`${controlClass} ${mode === 'summary' ? 'border-teal-300 bg-teal-50 text-teal-800' : ''}`}>Summarize</button>}
           {canCatchup && <button type="button" aria-pressed={mode === 'catchup'} onClick={() => { cancel(); setMode('catchup'); }} className={`${controlClass} ${mode === 'catchup' ? 'border-teal-300 bg-teal-50 text-teal-800' : ''}`}><Clock3 size={12} className="mr-1 inline" aria-hidden="true" />Catch me up</button>}
+          {!!turns.length && <button type="button" onClick={downloadChat} title="Save this chat as a text file on your device" className={controlClass}>Download chat</button>}
           {!!turns.length && <button type="button" onClick={() => { cancel(); setConversation({ identity, turns: [] }); setDraft({ identity, text: '' }); setMode('ask'); }} className="ml-auto text-xs font-medium text-slate-500 hover:text-slate-800">New chat</button>}
         </div>
         <div role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions text" className="max-h-[60vh] min-h-40 space-y-5 overflow-y-auto px-4 py-5 sm:px-5">

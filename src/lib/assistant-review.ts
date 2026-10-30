@@ -138,6 +138,6 @@ export function validateAssistantReview(raw: string, result: AssistantResult): A
     ...result,
     status: 'insufficient',
     claims: [], disagreements: [], sources: [],
-    unanswered: ['I couldn’t find enough reliable detail in these discussions to answer that accurately. Try a more specific question or ask about a particular post.'],
+    unanswered: ['I found discussions, but couldn’t verify a reliable summary of them. Please try again or open a discussion to inspect its details.'],
   };
 }
