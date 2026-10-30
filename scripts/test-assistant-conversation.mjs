@@ -69,6 +69,13 @@ test('clear first turn avoids the planner and its extra model call', async () =>
   assert.equal((await h.handler(req(value))).status, 200);
   assert.deepEqual(h.prompts.map(p => p.outputKind ?? 'answer'), ['answer', 'review']);
 });
+test('explicit UI transform skips planning but never skips source reads, quota or review', async () => {
+  const h = harness();
+  assert.equal((await h.handler(req({ ...input, transform: 'shorten' }))).status, 200);
+  assert.deepEqual(h.prompts.map(p => p.outputKind ?? 'answer'), ['answer', 'review']);
+  assert.equal(h.reads.length, 2); assert.deepEqual(h.events, ['auth', 'reserve']);
+  assert.match(h.prompts[0].user, /"responseStyle":"shorter"/);
+});
 test('stream returns progress before completion, publishes only reviewed answer, and is private', async () => {
   let release; const gate = new Promise(resolve => { release = resolve; });
   const h = harness({ generate: async prompt => {

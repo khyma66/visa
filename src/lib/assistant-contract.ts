@@ -24,6 +24,8 @@ export type AssistantRequest = {
   /** Bounded, untrusted conversational context. Never source evidence or privileged roles. */
   conversation?: AssistantConversationTurn[];
   conversationReferences?: AssistantPostReference[];
+  /** Explicit UI command, never inferred from a phrase list or used for authorization. */
+  transform?: 'summarize' | 'shorten';
   /** Server-only interpretation. Discarded from incoming JSON. */
   turnPlan?: AssistantTurnPlan;
   originalQuestion?: string;
@@ -60,6 +62,8 @@ export type AssistantPostMatch = {
 export type AssistantResult = {
   /** Conversational topic hint, not source evidence. */
   resolvedQuestion?: string;
+  resolvedReferences?: AssistantPostReference[];
+  resolvedFocus?: AssistantPostReference;
   /** Direct, server-selected search results; no model-generated claims. */
   kind?: 'posts';
   posts?: AssistantPostMatch[];

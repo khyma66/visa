@@ -125,6 +125,8 @@ export function createAssistantHandler(deps: AssistantDependencies) {
     const signal = controller.signal, context = { signal, requestId, startedAt: started };
     let stage: AssistantFailureStage = 'request';
     let resolvedQuestion: string | undefined;
+    let retainedReferences: AssistantRequest['previousPosts'];
+    let retainedFocus: AssistantRequest['focusedPost'];
     let stageStarted = started;
     const transition = (next: AssistantFailureStage) => {
       const now = Date.now();
@@ -153,7 +155,8 @@ export function createAssistantHandler(deps: AssistantDependencies) {
     const respond = (value: unknown, status = 200, retryAfter?: number) => {
       const durationMs = Math.max(0, Math.min(86_400_000, Date.now() - started));
       const response = assistantResponse(resolvedQuestion && status === 200 && value && typeof value === 'object'
-        ? { ...value, resolvedQuestion } : value, status, retryAfter);
+        ? { ...value, resolvedQuestion, ...(retainedReferences ? { resolvedReferences: retainedReferences } : {}),
+          ...(retainedFocus ? { resolvedFocus: retainedFocus } : {}) } : value, status, retryAfter);
       response.headers.set('X-VisaThreads-Request-Id', requestId);
       response.headers.set('Server-Timing', `assistant;dur=${durationMs}`);
       try { deps.reportStage?.({ stage, requestId, durationMs: Math.max(0, Date.now() - stageStarted) }); } catch { /* Optional metrics. */ }
@@ -176,15 +179,29 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       let reserved = false;
       if (input.mode === 'ask' && input.scope.kind === 'public' && input.conversation?.length) {
         input = { ...input, previousPosts: input.previousPosts ?? input.conversationReferences };
-        transition('quota');
-        if (!await bounded(() => session.reserve(signal))) throw new AssistantRequestError(429, 'quota');
-        reserved = true;
-        transition('planning');
-        const rawPlan = await bounded(() => deps.generate(assistantPlanPrompt(input), signal, context));
-        const plan = parseAssistantPlan(rawPlan, input);
-        if (plan.action === 'clarify') return respond({ ...emptyAssistantResult({ sources: [], partial: false }), unanswered: [plan.clarification!] });
-        input = applyAssistantPlan(input, plan);
-        resolvedQuestion = plan.query;
+        if (input.transform && input.previousPosts?.length) {
+          // An explicit UI transformation needs no semantic routing call. Source
+          // reads, evidence review, quota and cache permission checks still run.
+          const selected = input.transform === 'shorten' && input.focusedPost
+            ? input.previousPosts.findIndex(ref => ref.questionId === input.focusedPost!.questionId && ref.sourceId === input.focusedPost!.sourceId) : -1;
+          input = applyAssistantPlan(input, { action: 'reuse', query: (input.previousQuestions?.[0] ?? input.conversation!.at(-1)!.question).slice(0, 1200),
+            focus: selected >= 0 ? selected : null, style: 'summary', clarification: null });
+          resolvedQuestion = input.turnPlan!.query;
+        } else {
+          transition('quota');
+          if (!await bounded(() => session.reserve(signal))) throw new AssistantRequestError(429, 'quota');
+          reserved = true;
+          transition('planning');
+          const rawPlan = await bounded(() => deps.generate(assistantPlanPrompt(input), signal, context));
+          const plan = parseAssistantPlan(rawPlan, input);
+          if (plan.action === 'clarify') return respond({ ...emptyAssistantResult({ sources: [], partial: false }), unanswered: [plan.clarification!] });
+          input = applyAssistantPlan(input, plan);
+          resolvedQuestion = plan.query;
+        }
+        if (input.turnPlan?.action === 'reuse') {
+          retainedReferences = input.previousPosts;
+          retainedFocus = input.turnPlan.focus !== null ? input.previousPosts?.[input.turnPlan.focus] : undefined;
+        }
       }
       transition('retrieval');
       const original = await bounded(() => session.corpus(input, signal));

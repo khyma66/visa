@@ -16,7 +16,7 @@ Keep Cloudflare Workers, the existing React interface, Supabase authorization an
 
 The new transport streams progress, not raw model tokens. Immigration experience summaries can contain consequential unsupported claims; displaying a draft and retracting it later would not preserve the existing review-before-publication policy. There is no artificial typing delay after acceptance. First progress, first answer text, and completion latency must be measured separately.
 
-The planner adds one inference for conversational turns. First standalone turns retain their existing path. There is no autonomous search loop, new model fallback, or extra retry budget for the planner. One request reservation covers planning and answering; the existing total deadline still applies.
+The planner adds one inference for free-text conversational turns. Explicit Summarize and Make it shorter UI actions skip that call, while still rereading sources and reviewing the answer. First standalone turns retain their existing path. There is no autonomous search loop, new model fallback, or extra retry budget for the planner. One request reservation covers planning and answering; the existing total deadline still applies.
 
 ## Verification and release
 

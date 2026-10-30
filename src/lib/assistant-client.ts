@@ -4,6 +4,7 @@ import type { AssistantClaim, AssistantCoverageReason, AssistantPostMatch, Assis
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const text = (value: unknown, maximum: number, minimum = 1): value is string => typeof value === 'string' && value.length >= minimum && value.length <= maximum;
 const id = (value: unknown): value is string => text(value, 200) && /^[A-Za-z0-9_:-]+$/.test(value);
+const reference = (value: unknown): value is { questionId: string; sourceId: string } => object(value) && id(value.questionId) && id(value.sourceId);
 const date = (value: unknown): value is string => text(value, 40) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 const integer = (value: unknown, maximum: number): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= maximum;
 const list = (value: unknown, maximum: number): value is unknown[] => Array.isArray(value) && value.length <= maximum;
@@ -52,7 +53,9 @@ export function parseAssistantResult(value: unknown): AssistantResult | null {
     || (value.kind !== undefined && value.kind !== 'posts') || !list(value.sources, 48) || !list(value.unanswered, 4)
     || value.unanswered.some(item => !text(item, 400)) || !date(value.generatedAt) || typeof value.cached !== 'boolean' || !text(value.notice, 1000)
     || !object(value.coverage) || !integer(value.coverage.sourceCount, 48) || typeof value.coverage.partial !== 'boolean'
-    || (value.resolvedQuestion !== undefined && !text(value.resolvedQuestion, 1200, 3))) return null;
+    || (value.resolvedQuestion !== undefined && !text(value.resolvedQuestion, 1200, 3))
+    || (value.resolvedReferences !== undefined && (!list(value.resolvedReferences, 48) || !value.resolvedReferences.every(reference)))
+    || (value.resolvedFocus !== undefined && !reference(value.resolvedFocus))) return null;
   const rawSources = value.sources.map(source);
   if (rawSources.some(item => item === null)) return null;
   const sources = rawSources as AssistantSource[];
@@ -79,6 +82,8 @@ export function parseAssistantResult(value: unknown): AssistantResult | null {
   } else if (value.posts !== undefined || value.postsIntro !== undefined || (value.status === 'answered' && !parsedClaims.length && !disagreements.length)) return null;
   return {
     ...(typeof value.resolvedQuestion === 'string' ? { resolvedQuestion: value.resolvedQuestion } : {}),
+    ...(Array.isArray(value.resolvedReferences) ? { resolvedReferences: value.resolvedReferences.map(item => ({ questionId: item.questionId as string, sourceId: item.sourceId as string })) } : {}),
+    ...(reference(value.resolvedFocus) ? { resolvedFocus: { questionId: value.resolvedFocus.questionId, sourceId: value.resolvedFocus.sourceId } } : {}),
     ...(value.kind === 'posts' ? { kind: 'posts' as const, posts, ...(value.postsIntro !== undefined ? { postsIntro: value.postsIntro as string } : {}) } : {}), status: value.status as AssistantResult['status'],
     // A malformed insufficient result must never display unsupported claims.
     claims: value.status === 'insufficient' ? [] : parsedClaims, disagreements: value.status === 'insufficient' ? [] : disagreements,

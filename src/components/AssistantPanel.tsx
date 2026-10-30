@@ -109,7 +109,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   const [mode, setMode] = useState<AssistantMode>('ask');
   const [period, setPeriod] = useState<Period>('day');
-  const [draft, setDraft] = useState({ identity, text: '' });
+  const [draft, setDraft] = useState<{ identity: string; text: string; transform?: AssistantRequest['transform'] }>({ identity, text: '' });
   const [conversation, setConversation] = useState<{ identity: string; turns: Turn[] }>({ identity, turns: [] });
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -194,6 +194,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
     const body: AssistantRequest = { scope, mode };
     if (mode === 'ask') {
       body.question = submittedQuestion;
+      if (draft.transform) body.transform = draft.transform;
       if (previousQuestions.length) body.previousQuestions = previousQuestions;
       if (scope.kind === 'public' && completedAsks.length) {
         body.conversation = completedAsks.slice(-3).map(item => ({ question: item.prompt.slice(0, 1200),
@@ -256,7 +257,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
       if (!isCurrent()) return;
       if (!value) { fail('The answer was incomplete. Your question is saved; try again.'); return; }
       setConversation((current) => current.identity === actor ? { ...current, turns: current.turns.map((item) => item.id === turnId ? { ...item, state: 'complete', result: value,
-        ...(value.resolvedQuestion ? { history: [value.resolvedQuestion], referencePosts: assistantDisplayedPosts(value), focusedPost: undefined } : {}) } : item) } : current);
+        ...(value.resolvedQuestion ? { history: [value.resolvedQuestion], referencePosts: value.resolvedReferences ?? assistantDisplayedPosts(value), focusedPost: value.resolvedFocus } : {}) } : item) } : current);
       // A partial digest cannot mark a whole interval as read.
       if (mode === 'catchup' && scope.kind === 'community' && value.status === 'answered' && !value.coverage.partial && value.coverage.until && Number.isFinite(Date.parse(value.coverage.until)) && Date.parse(value.coverage.until) <= Date.now() && (!checkpoint || Date.parse(value.coverage.until) > Date.parse(checkpoint))) {
         const until = new Date(value.coverage.until).toISOString();
@@ -291,7 +292,7 @@ export function AssistantPanel({ scope, title, defaultOpen = false }: Props) {
             </div></div>
           </div>)}
           {scope.kind === 'public' && !busy && turns.at(-1)?.state === 'complete' && assistantDisplayedPosts(turns.at(-1)?.result).length > 0 && <div className="flex flex-wrap gap-2 pl-8" role="group" aria-label="Continue this conversation">
-            {(turns.at(-1)?.result?.kind === 'posts' ? ['Summarize these posts', 'Compare them'] : ['Make it shorter', 'What outcomes did they report?']).map(prompt => <button key={prompt} type="button" className={`${controlClass} hover:border-teal-400 hover:text-teal-800`} onClick={() => { setMode('ask'); setDraft({ identity, text: prompt }); setError(''); }}>{prompt}</button>)}
+            {(turns.at(-1)?.result?.kind === 'posts' ? ['Summarize these posts', 'Compare them'] : ['Make it shorter', 'What outcomes did they report?']).map(prompt => <button key={prompt} type="button" className={`${controlClass} hover:border-teal-400 hover:text-teal-800`} onClick={() => { setMode('ask'); setDraft({ identity, text: prompt, transform: prompt === 'Summarize these posts' ? 'summarize' : prompt === 'Make it shorter' ? 'shorten' : undefined }); setError(''); }}>{prompt}</button>)}
           </div>}
           <div ref={endOfChat} />
         </div>

@@ -160,7 +160,7 @@ export function providerCacheKey(provider: string | undefined): string {
 export function workersAssistantRequest(prompt: AssistantPrompt) {
   const review = prompt.outputKind === 'review';
   const schema = assistantOutputSchema(prompt);
-  const schemaName = review ? 'discussion_answer_review' : 'discussion_answer';
+  const schemaName = prompt.outputKind === 'plan' ? 'discussion_turn_plan' : review ? 'discussion_answer_review' : 'discussion_answer';
   const model = review ? models.review : models.answer;
   const response_format = { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } };
   const messages = [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }];
@@ -182,7 +182,7 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
   const model = providerModel(options.provider);
   const schema = assistantOutputSchema(prompt);
   const review = prompt.outputKind === 'review';
-  const schemaName = review ? 'discussion_answer_review' : 'discussion_answer';
+  const schemaName = prompt.outputKind === 'plan' ? 'discussion_turn_plan' : review ? 'discussion_answer_review' : 'discussion_answer';
   const timeout = AbortSignal.timeout(25_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   const unavailable = () => new AssistantError(503, 'The assistant is temporarily unavailable. Please try again shortly.');
