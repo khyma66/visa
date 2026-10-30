@@ -94,7 +94,7 @@ test('any unsupported statement or unanswered question rejects the whole respons
     assert.deepEqual(rejected.claims, []);
     assert.deepEqual(rejected.disagreements, []);
     assert.deepEqual(rejected.sources, []);
-    assert.match(rejected.unanswered[0], /couldn’t find enough reliable detail/);
+    assert.match(rejected.unanswered[0], /found discussions, but couldn’t verify/);
     assert.equal(mixed.claims.length, 2, 'Input must not be mutated');
   }
 });

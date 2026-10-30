@@ -305,6 +305,8 @@ export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
   requiredCases.unshift('mixed-unresolved-discussion-summary');
   requiredCases.unshift('question-only-summary');
   requiredCases.unshift('shorter-collection-summary');
+  requiredCases.unshift('broad-appointment-issues');
+  requiredCases.unshift('broad-stem-issues');
   assert(Array.isArray(receipt.cases) && receipt.cases.length === requiredCases.length && requiredCases.every(id => receipt.cases.some(row => row.id === id)), 'Every required hosted case must occur exactly once.');
   for (const row of receipt.cases) {
     assert.equal(row.model, receipt.model);

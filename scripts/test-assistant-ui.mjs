@@ -11,9 +11,11 @@ const dataUrl = (text) => `data:text/javascript;base64,${Buffer.from(text).toStr
 const source = await readFile(new URL('../src/components/AssistantPanel.tsx', import.meta.url), 'utf8');
 const context = dataUrl(ts.transpileModule(await readFile(new URL('../src/lib/assistant-context.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText);
 const client = dataUrl(ts.transpileModule(await readFile(new URL('../src/lib/assistant-client.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText);
+const chatExport = dataUrl(ts.transpileModule(await readFile(new URL('../src/lib/assistant-export.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText.replace("'./assistant-client'", JSON.stringify(client)));
 const dependencies = {
   '@/lib/assistant-context': context,
   '@/lib/assistant-client': client,
+  '@/lib/assistant-export': chatExport,
   react: dataUrl(['useState', 'useRef', 'useEffect'].map(name => `export function ${name}(...args){return globalThis.__assistantHarness.${name}(...args);}`).join('\n')),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'),
   'next/navigation': dataUrl('export function usePathname(){return globalThis.__assistantHarness.pathname;}'),
@@ -92,6 +94,32 @@ function button(h, label) { const value = nodes(h.tree).find(node => node.type =
 function changeQuestion(h, value) { nodes(h.tree).find(node => node.type === 'textarea').props.onChange({ target: { value } }); h.render(); }
 function choose(h, label) { button(h, label).props.onClick(); h.render(); }
 function submit(h) { const promise = nodes(h.tree).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} }); h.render(); return promise; }
+
+test('chat export includes visible answers and safe citations, not hidden bodies or auth data', async () => {
+  const { assistantChatExport } = await import(chatExport);
+  const result = fixture();
+  result.sources[0].body = 'Hidden source body that is not displayed in the answer';
+  result.sources.push({ ...result.sources[0], id: 'uncited', title: 'Uncited hidden title', url: 'https://attacker.example/' });
+  const exported = assistantChatExport([{ prompt: 'My question', state: 'complete', result, accessToken: 'secret-token' },
+    { prompt: 'Unfinished followup', state: 'pending', result }]);
+  assert.match(exported, /My question/);
+  assert.match(exported, /Members reported document requests/);
+  assert.match(exported, /https:\/\/visathreads.com\/questions\//);
+  assert.match(exported, /Response in progress/);
+  assert.doesNotMatch(exported, /Hidden source body|Uncited hidden title|attacker.example|secret-token/);
+});
+
+test('download action appears only for the current signed-in conversation', async () => {
+  const h = new Harness();
+  try {
+    h.render(); await h.settle();
+    assert.doesNotMatch(textOf(h.tree), /Download chat/);
+    changeQuestion(h, 'What happened?'); await submit(h); await h.settle();
+    assert(button(h, 'Download chat'));
+    h.auth.user = { id: 'user-b' }; h.render(); await h.settle();
+    assert.doesNotMatch(textOf(h.tree), /Download chat|What happened\?/);
+  } finally { h.close(); }
+});
 
 test('dev has no assistant UI or requests even when availability reports enabled', async () => {
   const h = new Harness();

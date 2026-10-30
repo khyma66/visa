@@ -315,8 +315,10 @@ test('representative-summary recovery reuses the complete original corpus and in
     } }));
     const result = await (await h.handler(request(undefined, repeatedSummary.input))).json();
     assert.equal(result.status, 'answered'); assert.deepEqual(result.claims, representativeSummary.claims);
-    assert.equal(prompts[2].user, prompts[0].user);
-    assert(!prompts[2].user.includes(initial.claims[0].text));
+    const { rejectedDraftContextOnly, ...originalEvidence } = JSON.parse(prompts[2].user);
+    assert.deepEqual(originalEvidence, JSON.parse(prompts[0].user));
+    assert.equal(rejectedDraftContextOnly.statements[0].text, initial.claims[0].text);
+    assert.equal(rejectedDraftContextOnly.statements[0].supported, false);
     assert.deepEqual(JSON.parse(prompts[0].user).sources.map(item => item.id), [repeatedSource.id], 'Original duplicated records remain in the database corpus but enter summary generation once');
     assert.deepEqual(prompts.map(prompt => prompt.maxAttempts), [undefined, undefined, 1, 1]);
     assert(signals.every(signal => signal === signals[0]));
@@ -413,8 +415,10 @@ test('semantic recovery can publish a complete comparison alone only after a fre
     assert.deepEqual(prompts.map(prompt => prompt.outputKind ?? 'answer'), ['answer', 'review', 'answer', 'review']);
     assert.deepEqual(prompts.map(prompt => prompt.maxAttempts), [undefined, undefined, 1, 1]);
     assert(signals.every(signal => signal === signals[0]));
-    assert.equal(prompts[2].user, prompts[0].user, 'Recovery uses only the original evidence');
-    assert.doesNotMatch(prompts[2].user, /One member reported that staff allowed phones/);
+    const { rejectedDraftContextOnly, ...originalEvidence } = JSON.parse(prompts[2].user);
+    assert.deepEqual(originalEvidence, JSON.parse(prompts[0].user), 'Recovery retains the complete original evidence');
+    assert.equal(rejectedDraftContextOnly.fulfillsTask, false);
+    assert.equal(rejectedDraftContextOnly.statements[0].text, initial.claims[0].text);
     assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2); assert.equal(h.state.writes, 1);
     assert.deepEqual([...h.state.cache.values()][0].result[section], [conflictComparison]);
   }
@@ -502,8 +506,12 @@ test('one semantic recovery uses original evidence and a fixed prompt, then inde
     assert.equal(response.status, 200); assert.equal(result.status, 'answered'); assert.equal(result.claims[0].text, correctedOutput.claims[0].text);
     assert.deepEqual(prompts.map(prompt => prompt.outputKind ?? 'answer'), ['answer', 'review', 'answer', 'review']);
     assert.deepEqual(prompts.map(prompt => prompt.maxAttempts), [undefined, undefined, 1, 1]);
-    assert.match(prompts[2].system, /SEMANTIC REPAIR:/); assert.equal(prompts[2].user, prompts[0].user);
-    assert.doesNotMatch(JSON.stringify({ system: prompts[2].system, user: prompts[2].user }), /Rejected-draft sentinel/);
+    assert.match(prompts[2].system, /SEMANTIC REPAIR:/);
+    const { rejectedDraftContextOnly, ...originalEvidence } = JSON.parse(prompts[2].user);
+    assert.deepEqual(originalEvidence, JSON.parse(prompts[0].user));
+    assert.doesNotMatch(prompts[2].system, /Rejected-draft sentinel/);
+    assert.equal(rejectedDraftContextOnly.statements[0].supported, rejection !== 'unsupported');
+    assert.equal(rejectedDraftContextOnly.fulfillsTask, rejection !== 'task');
     assert.equal(h.state.reserved, 1); assert.equal(h.state.reads, 2); assert.equal(h.state.writes, 1);
     assert(signals.every(signal => signal === signals[0]));
     assert.doesNotMatch(JSON.stringify([...h.state.cache.values()]), /Rejected-draft sentinel/);

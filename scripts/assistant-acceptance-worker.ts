@@ -10,7 +10,7 @@ import { plannerFixtures, evaluatePlanner } from './assistant-planner-fixtures';
 type Env = { ASSISTANT_AI?: WorkersAiBinding; GROQ_API_KEY?: string; ACCEPTANCE_PROVIDER?: string; ACCEPTANCE_SECRET?: string; ACCEPTANCE_EXPIRES?: string; ACCEPTANCE_SOURCE_SHA?: string };
 const response = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'X-Assistant-Acceptance': 'v1' } });
 type InferenceRound = {
-  kind: 'answer' | 'review'; maxAttempts: number; semanticRepair: boolean;
+  kind: 'answer' | 'review' | 'plan'; maxAttempts: number; semanticRepair: boolean;
   rawOutputs: string[]; output?: string; transport: AssistantTransport[];
 };
 
@@ -24,8 +24,13 @@ export function checkAcceptanceInference(input: AssistantRequest, corpus: Assist
   const noSafeEvidence = !direct && assistantPrompt(input, prepared, corpus).evidenceSpans.length === 0;
   let sequence = false;
   try {
-    const expected = ['authenticate', 'corpus'];
+    const planned = !!input.turnPlan && rounds[0]?.kind === 'plan';
+    const expected = planned ? ['authenticate', 'reserve', 'plan', 'runtime-binding', 'corpus'] : ['authenticate', 'corpus'];
     let cursor = 0;
+    if (planned) {
+      if (rounds[0].maxAttempts !== 1 || rounds[0].transport.length > 1) throw Error('Unbounded planning');
+      cursor++;
+    }
     const take = (kind: InferenceRound['kind'], recovery: boolean) => {
       const round = rounds[cursor++];
       if (!round || round.kind !== kind || round.maxAttempts !== (recovery ? 1 : 2)
@@ -36,7 +41,7 @@ export function checkAcceptanceInference(input: AssistantRequest, corpus: Assist
     if (noSafeEvidence) {
       if (result.status !== 'insufficient' || result.claims.length || result.disagreements.length || result.sources.length) throw Error('Uncitable source cannot support a draft');
     } else if (!direct) {
-      expected.push('reserve');
+      if (!planned) expected.push('reserve');
       const validate = (raw: string) => validateAssistantOutput(raw, prepared, Date.now(), input);
       const hasClaims = (draft: AssistantResult) => draft.claims.length + draft.disagreements.length > 0;
       const insufficient = (draft: AssistantResult): AssistantResult => ({ ...draft, status: 'insufficient', claims: [], disagreements: [], sources: [] });
@@ -64,7 +69,8 @@ export function checkAcceptanceInference(input: AssistantRequest, corpus: Assist
     expected.push('corpus');
     sequence = cursor === rounds.length && JSON.stringify(events) === JSON.stringify(expected);
   } catch { /* A malformed or missing verdict cannot authorize another inference. */ }
-  const budget = rounds.length <= 4 && counts.transportCalls <= 6 && rounds.every(round => {
+  const plans = rounds.filter(round => round.kind === 'plan').length;
+  const budget = plans <= 1 && rounds.length <= 4 + plans && counts.transportCalls <= 6 + plans && rounds.every(round => {
     if (provider !== 'groq') return round.transport.length === 0;
     return round.transport.length >= 1 && round.transport.length <= round.maxAttempts
       && round.transport.every((item, index) => item.attempt === index + 1)
@@ -177,11 +183,11 @@ export default {
           };
         },
         generate: async (prompt, signal) => {
-          const review = prompt.outputKind === 'review';
-          const round: InferenceRound = { kind: review ? 'review' : 'answer', maxAttempts: prompt.maxAttempts ?? 2,
+          const review = prompt.outputKind === 'review', planning = prompt.outputKind === 'plan';
+          const round: InferenceRound = { kind: planning ? 'plan' : review ? 'review' : 'answer', maxAttempts: prompt.maxAttempts ?? 2,
             semanticRepair: prompt.system.includes('SEMANTIC REPAIR:'), rawOutputs: [], transport: [] };
           inferenceRounds.push(round);
-          events.push(review ? 'review' : 'generate');
+          events.push(planning ? 'plan' : review ? 'review' : 'generate');
           // Match the production route's runtime binding lookup. Directly
           // injecting the fetch environment would miss loader/binding errors.
           let binding: WorkersAiBinding | undefined;
@@ -246,7 +252,9 @@ export default {
       const inference = checkAcceptanceInference(receivedInputs[0], fixture.corpus, result, provider, events, inferenceRounds, directPostSearch);
       const sameInput = (input: AssistantRequest) => input.mode === fixture.input.mode
         && JSON.stringify(input.scope) === JSON.stringify(fixture.input.scope)
-        && input.question === fixture.input.question
+        && (fixture.input.conversation !== undefined
+          ? input.originalQuestion === fixture.input.question && !!input.turnPlan && input.question === input.turnPlan.query
+          : input.question === fixture.input.question)
         && JSON.stringify(input.previousQuestions) === JSON.stringify(fixture.input.previousQuestions)
         && JSON.stringify(input.previousPosts) === JSON.stringify(fixture.input.previousPosts)
         && (input.since ? Date.parse(input.since) : undefined) === (fixture.input.since ? Date.parse(fixture.input.since) : undefined)

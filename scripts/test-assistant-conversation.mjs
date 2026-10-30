@@ -99,6 +99,14 @@ test('summary repair regenerates the whole answer and reviews it, without a thir
       if (prompt.outputKind === 'plan') return JSON.stringify(plan);
       if (prompt.outputKind !== 'review') {
         generations++;
+        if (generations === 2) {
+          const feedback = JSON.parse(prompt.user).rejectedDraftContextOnly;
+          assert.equal(feedback.fulfillsTask, false);
+          assert.deepEqual(feedback.statements.map(item => [item.id, item.supported]), [['claim:0', true], ['claim:1', false]]);
+          assert.equal(feedback.statements[1].text, 'Everyone was approved.');
+          assert.match(feedback.instruction, /NEVER evidence/);
+          assert.equal(prompt.maxAttempts, 1);
+        }
         return JSON.stringify(generations === 1 ? { ...answer, claims: [...answer.claims, { ...answer.claims[0], text: 'Everyone was approved.' }] } : answer);
       }
       reviews++;
@@ -113,6 +121,15 @@ test('summary repair regenerates the whole answer and reviews it, without a thir
     assert.equal(value.status, complete ? 'answered' : 'insufficient');
     assert.equal(value.claims.length, complete ? 1 : 0);
     assert.equal(reviews, 2); assert.equal(generations, 2); assert.equal(h.reads.length, 2);
+  }
+});
+test('semantic summary retains the requested focus for generation and review', () => {
+  for (const question of ['stem opt - give issues what people faced', 'What setbacks did people describe with appointments?', 'Summarize what members tried to resolve delivery problems']) {
+    const resolved = api.applyAssistantPlan({ mode: 'ask', scope: { kind: 'public' }, question }, { ...plan, action: 'retrieve', query: question });
+    const context = api.assistantPromptContext(resolved, { sources: [source], partial: false });
+    assert.equal(context.question, question);
+    assert.equal(context.latestUserRequest, question);
+    assert.equal(context.collectionTask, 'summary');
   }
 });
 test('explicit UI transform skips planning but never skips source reads, quota or review', async () => {

@@ -17,7 +17,7 @@ export const ASSISTANT_PLAN_SCHEMA = {
     action: { type: 'string', enum: ['retrieve', 'reuse', 'clarify'] },
     query: { type: 'string', minLength: 3, maxLength: 1200, description: 'Required nonempty self-contained task for EVERY action, including reuse and clarify. Describe the unresolved request for clarify; describe the requested operation and known topic for reuse. Never return an empty string.' },
     focus: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
-    style: { type: 'string', enum: ['summary', 'answer'] },
+    style: { type: 'string', enum: ['summary', 'answer'], description: 'summary for a synthesis/overview of reported experiences, concerns or issues, or a requested summary transformation. answer for a narrowly specified fact or comparison. Must agree with the operation in query.' },
     clarification: { anyOf: [{ type: 'string', enum: clarificationKeys }, { type: 'null' }] },
   },
 };

@@ -2,6 +2,15 @@
 
 Keep Cloudflare Workers, the existing React interface, Supabase authorization and Groq. The immediate problem is conversation interpretation and request orchestration, not the absence of another model vendor. This change implements a bounded conversational layer and live request progress without removing evidence checks.
 
+## Verified status — October 30
+
+- **Live production source:** `1bfee33f8818301299e0cd6ed2b92cfb1567306c`, released by run `41076298039` after 153/153 hosted samples passed. Same source synced to development; development AI remains disabled. Production smoke preserved 944 questions, 1,061 replies and verified 73 assets.
+- **Live user-session observations:** STEM OPT overview and a natural-language summary follow-up returned cited answers in 11.818 and 11.723 seconds. The shorten action returned in 8.150 seconds but was not shorter. A topic switch unnecessarily clarified; a separate broad H4 summary failed its word budget in 16.411 seconds. These are individual tests, not concurrency or percentile measurements.
+- **Latest implementation, not deployed:** source `a63b6add08ea4d8ccaff84cf2b262ef3f5c4eac6` adds bounded overview context, a 50-word shorten limit and latest-turn ordering. Local chatbot tests: 335 passed. Hosted run `41083425417` passed 162/165; the gate prevented deployment and dev sync. Shortening passed. One topic-switch sample chose retrieval correctly but the wrong output style; one transcript summary omitted an explicit personal-experience limitation despite its reviewer approving it; one comparison did not pass the unknown-decision-language check. Failures remain retained in artifact `12991051695`; no identical-run retry was used to obtain a passing result.
+- **Not complete:** this is not a zero-lag, fully launch-qualified ChatGPT equivalent. Saved cross-device history, hybrid retrieval, reliable evidence retention after unsuccessful answers, real-load p50/p95 and the remaining quality failures are open. Draft answer tokens are not streamed before review. No new provider account or credential is required for the implemented foundation.
+
+The next quality work should evaluate materially different prompt/review designs against the entire retained failure set, rather than append a rule for each visa question. In particular, an independent inference with the same model is fallible and may share the generator's mistakes; it is not proof that a response is factually verified. A stronger or different reviewer must be benchmarked with the same evidence and latency/cost budgets before changing production.
+
 ## Request workflow
 
 1. The browser sends the latest question, at most three recent question and answer pairs, and bounded source ID references. Previous text is untrusted context, never evidence.

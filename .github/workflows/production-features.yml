@@ -1,4 +1,5 @@
 name: Release current VisaThreads AI features
+# Gate focused issue synthesis through the real planner and verified repair; add explicit chat export.
 # Align question-summary evidence and bounded comparison routing after retained acceptance failures.
 # Enforce nonempty planner tasks in the provider schema and preserve clarification precedence.
 # Bound concise overview context and enforce shortening after signed-in live tests.
