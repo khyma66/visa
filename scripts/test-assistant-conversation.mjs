@@ -39,9 +39,11 @@ test('planner input redacts identifiers and never sends source bodies or arbitra
   const prompt = api.assistantPlanPrompt({ ...input, conversation: [{ question: 'mail test@example.com', answer: 'receipt IOE1234567890' }] });
   assert.doesNotMatch(prompt.user, /test@example.com|IOE1234567890/);
   assert.match(prompt.system, /untrusted/); assert.equal(prompt.maxAttempts, 1);
-  assert.match(prompt.system, /comparison, ranking or calculation among the already displayed/);
-  assert.match(prompt.system, /Reuse rereads their full permitted source content/);
-  assert.match(prompt.system, /never copy them into query/);
+  assert.match(prompt.system, /comparison among the displayed reports/);
+  assert.match(prompt.system, /Reuse rereads the full permitted source content/);
+  assert.match(prompt.system, /does not permit exhaustive website-wide analytics/);
+  assert.equal(api.ASSISTANT_PLAN_SCHEMA.properties.query.minLength, 3);
+  assert.equal(api.ASSISTANT_PLAN_SCHEMA.properties.query.maxLength, 1200);
   assert.deepEqual(api.assistantOutputSchema(prompt), api.ASSISTANT_PLAN_SCHEMA);
 });
 test('one authenticated reservation covers planning and answer; sources are reread for reuse', async () => {

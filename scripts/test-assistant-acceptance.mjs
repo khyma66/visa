@@ -864,6 +864,8 @@ test('historical and current documents retain their own events, dates and person
     'The author reported that no decision had been given at the interview.',
     'The poster indicated that no decision was made.',
     'The application remained pending.',
+    'The poster disclosed that no decision had been made.',
+    'No decision was made and this was disclosed by the poster.',
   ]) {
     const changed = structuredClone(currentOnly);
     changed.claims[1].text = `At the interview they were asked for a new photograph; ${text}`;
@@ -881,6 +883,8 @@ test('historical and current documents retain their own events, dates and person
     'It is unclear whether a decision was made.',
     'The author reported no decision on the application.',
     'No decision on the application was reported.',
+    'The poster notes that no decision on the application has been disclosed.',
+    'No decision on the application has been shared.',
     'The author did not report a decision.',
     'The decision remains unreported.',
     'No decision was reported; a pending status is not established.',
