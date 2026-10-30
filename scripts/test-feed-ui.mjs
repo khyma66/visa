@@ -13,6 +13,7 @@ const source = await readFile(new URL('../src/components/CommunityHome.tsx', imp
 const icons = source.match(/import\s*\{([^}]+)\}\s*from\s*'lucide-react'/)[1].split(',').map((name) => name.trim());
 const presentationSource = ts.transpileModule(await readFile(new URL('../src/lib/post-presentation.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const dependencies = {
+  './AdvertisementSlot': dataUrl('export const AdvertisementSlot=()=>null,FeedAdvertisementSlot=()=>null;'),
   '@/lib/post-presentation': dataUrl(presentationSource),
   react: hooks,
   'react/jsx-runtime': jsx,
