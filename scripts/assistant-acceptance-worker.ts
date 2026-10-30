@@ -4,6 +4,8 @@ import { assistantCandidateIdentity, createAssistantHandler, type AssistantFailu
 import { assistantReviewCorpus, validateAssistantReview } from '../src/lib/assistant-review';
 import { runAssistantModel, providerModel, providerCacheKey, GROQ_ASSISTANT_PROFILE, WORKERS_ASSISTANT_PROFILE, type WorkersAiBinding, type AssistantProviderFailure, type AssistantUsage, type AssistantTransport } from '../src/lib/assistant-provider';
 import { acceptanceFixtures, evaluateAcceptance } from './assistant-acceptance-fixtures';
+import { assistantPlanPrompt, parseAssistantPlan } from '../src/lib/assistant-planner';
+import { plannerFixtures, evaluatePlanner } from './assistant-planner-fixtures';
 
 type Env = { ASSISTANT_AI?: WorkersAiBinding; GROQ_API_KEY?: string; ACCEPTANCE_PROVIDER?: string; ACCEPTANCE_SECRET?: string; ACCEPTANCE_EXPIRES?: string; ACCEPTANCE_SOURCE_SHA?: string };
 const response = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'X-Assistant-Acceptance': 'v1' } });
@@ -96,6 +98,17 @@ export default {
       // Probe the exact inference method/path without invoking the model. A
       // separate /ready route cannot establish /evaluate route propagation.
       if ((body as { id?: unknown }).id === '__ready__') return response({ ready: true, protocol: 'visathreads-assistant-acceptance-v1', sourceSha: env.ACCEPTANCE_SOURCE_SHA, model, modelProfile: profile, cases: acceptanceFixtures.map(fixture => fixture.id) });
+      const plannerId = (body as { id?: unknown }).id;
+      if (typeof plannerId === 'string' && plannerId.startsWith('planner:')) {
+        const fixture = plannerFixtures.find(item => `planner:${item.id}` === plannerId);
+        if (!fixture) return response({ error: 'Invalid fixture' }, 400);
+        const started = Date.now(), usage: AssistantUsage[] = [];
+        const raw = await runAssistantModel(assistantPlanPrompt(fixture.input), { provider,
+          apiKey: env.GROQ_API_KEY, binding: env.ASSISTANT_AI, signal: request.signal, reportUsage: item => usage.push(item) });
+        const plan = parseAssistantPlan(raw, fixture.input);
+        return response({ ...evaluatePlanner(fixture, plan), id: plannerId, model, durationMs: Date.now() - started, usage,
+          syntheticPlan: plan });
+      }
       if (provider === 'groq' && (body as { id?: unknown }).id === '__transport__') {
         const probes = [];
         // Fixed public connectivity probes: no credentials, prompts or account

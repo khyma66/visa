@@ -4,6 +4,7 @@ import type { AssistantClaim, AssistantCoverageReason, AssistantPostMatch, Assis
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const text = (value: unknown, maximum: number, minimum = 1): value is string => typeof value === 'string' && value.length >= minimum && value.length <= maximum;
 const id = (value: unknown): value is string => text(value, 200) && /^[A-Za-z0-9_:-]+$/.test(value);
+const reference = (value: unknown): value is { questionId: string; sourceId: string } => object(value) && id(value.questionId) && id(value.sourceId);
 const date = (value: unknown): value is string => text(value, 40) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 const integer = (value: unknown, maximum: number): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= maximum;
 const list = (value: unknown, maximum: number): value is unknown[] => Array.isArray(value) && value.length <= maximum;
@@ -51,7 +52,10 @@ export function parseAssistantResult(value: unknown): AssistantResult | null {
   if (!object(value) || (value.status !== 'answered' && value.status !== 'insufficient')
     || (value.kind !== undefined && value.kind !== 'posts') || !list(value.sources, 48) || !list(value.unanswered, 4)
     || value.unanswered.some(item => !text(item, 400)) || !date(value.generatedAt) || typeof value.cached !== 'boolean' || !text(value.notice, 1000)
-    || !object(value.coverage) || !integer(value.coverage.sourceCount, 48) || typeof value.coverage.partial !== 'boolean') return null;
+    || !object(value.coverage) || !integer(value.coverage.sourceCount, 48) || typeof value.coverage.partial !== 'boolean'
+    || (value.resolvedQuestion !== undefined && !text(value.resolvedQuestion, 1200, 3))
+    || (value.resolvedReferences !== undefined && (!list(value.resolvedReferences, 48) || !value.resolvedReferences.every(reference)))
+    || (value.resolvedFocus !== undefined && !reference(value.resolvedFocus))) return null;
   const rawSources = value.sources.map(source);
   if (rawSources.some(item => item === null)) return null;
   const sources = rawSources as AssistantSource[];
@@ -77,6 +81,9 @@ export function parseAssistantResult(value: unknown): AssistantResult | null {
     }
   } else if (value.posts !== undefined || value.postsIntro !== undefined || (value.status === 'answered' && !parsedClaims.length && !disagreements.length)) return null;
   return {
+    ...(typeof value.resolvedQuestion === 'string' ? { resolvedQuestion: value.resolvedQuestion } : {}),
+    ...(Array.isArray(value.resolvedReferences) ? { resolvedReferences: value.resolvedReferences.map(item => ({ questionId: item.questionId as string, sourceId: item.sourceId as string })) } : {}),
+    ...(reference(value.resolvedFocus) ? { resolvedFocus: { questionId: value.resolvedFocus.questionId, sourceId: value.resolvedFocus.sourceId } } : {}),
     ...(value.kind === 'posts' ? { kind: 'posts' as const, posts, ...(value.postsIntro !== undefined ? { postsIntro: value.postsIntro as string } : {}) } : {}), status: value.status as AssistantResult['status'],
     // A malformed insufficient result must never display unsupported claims.
     claims: value.status === 'insufficient' ? [] : parsedClaims, disagreements: value.status === 'insufficient' ? [] : disagreements,
@@ -154,5 +161,49 @@ export async function readAssistantJson(response: Response): Promise<unknown> {
       content += decoder.decode(value, { stream: true });
     }
     return JSON.parse(content + decoder.decode());
+  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+}
+
+export const assistantProgressLabels: Record<string, string> = {
+  request: 'Connecting…', authentication: 'Checking access…', quota: 'Preparing…',
+  planning: 'Understanding your follow-up…', retrieval: 'Finding relevant discussions…',
+  generation: 'Writing a source-backed answer…', validation: 'Checking citations…',
+  review: 'Checking the answer against sources…', revalidation: 'Confirming sources are still available…',
+};
+
+/** Bounded framing, UTF-8 boundaries, and explicit completion prevent a dropped stream becoming a successful answer. */
+export async function readAssistantResponse(response: Response, progress: (label: string) => void): Promise<{ status: number; value: unknown; retryAfter: string | null }> {
+  if (!response.headers?.get('content-type')?.startsWith('application/x-ndjson')) {
+    return { status: response.status, value: await readAssistantJson(response), retryAfter: response.headers?.get('retry-after') ?? null };
+  }
+  if (!response.body) throw new Error('Missing assistant stream');
+  const reader = response.body.getReader(), decoder = new TextDecoder('utf-8', { fatal: true });
+  let pending = '', bytes = 0, frames = 0;
+  let completed: { status: number; value: unknown; retryAfter: string | null } | undefined;
+  const frame = (line: string) => {
+    if (!line.trim()) return;
+    if (++frames > 64 || completed) throw new Error('Invalid assistant stream lifecycle');
+    const event: unknown = JSON.parse(line);
+    if (!object(event)) throw new Error('Invalid assistant stream');
+    if (event.type === 'progress' && typeof event.stage === 'string' && Object.hasOwn(assistantProgressLabels, event.stage)) {
+      progress(assistantProgressLabels[event.stage]);
+    } else if (event.type === 'complete' && Number.isInteger(event.status) && Number(event.status) >= 200 && Number(event.status) <= 599) {
+      completed = { status: Number(event.status), value: event.value, retryAfter: typeof event.retryAfter === 'string' && /^\d{1,5}$/.test(event.retryAfter) ? event.retryAfter : null };
+    } else throw new Error('Unknown assistant event');
+  };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > 256000) throw new Error('Assistant response exceeds limit');
+      pending += decoder.decode(value, { stream: true });
+      let newline: number;
+      while ((newline = pending.indexOf('\n')) >= 0) { frame(pending.slice(0, newline)); pending = pending.slice(newline + 1); }
+    }
+    pending += decoder.decode();
+    if (pending.trim()) frame(pending);
+    if (!completed) throw new Error('Interrupted assistant stream');
+    return completed;
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }

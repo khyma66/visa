@@ -9,6 +9,7 @@ async function compile(name) {
 }
 dependencies['./assistant-context'] = await compile('assistant-context');
 dependencies['./assistant-core'] = await compile('assistant-core');
+dependencies['./assistant-planner'] = await compile('assistant-planner');
 const core = await import(dependencies['./assistant-core']);
 dependencies['./assistant-provider'] = await compile('assistant-provider');
 const provider = await import(dependencies['./assistant-provider']);
@@ -283,7 +284,7 @@ test('summary prompts require atomic explicit facts without inferred timing, chr
       assert.match(prompt.system,/An undated outcome remains undated/);
     }
   }
-  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v29-conversation-evidence','Semantic change invalidates old cached answers');
+  assert.equal(core.ASSISTANT_VERSION,'grounded-chat-v30-contextual-turns','Semantic change invalidates old cached answers');
 });
 test('summary preparation collapses exact repeated reports but preserves distinct material differences',()=>{
   const repeated='I attended my appointment on Wednesday. My application was approved. My document arrived on Saturday. This is only my own experience, not a standard timeline.';
@@ -386,7 +387,7 @@ test('authentication, origin, content type, body budget and disabled rollout fai
   assert.equal((await handler(request(input,{Authorization:''}))).status,401);
   assert.equal((await handler(request(input,{Origin:'https://attacker.test'}))).status,403);
   assert.equal((await handler(request(input,{'Content-Type':'text/plain'}))).status,415);
-  assert.equal((await handler(request({...input,garbage:'x'.repeat(13000)}))).status,413);
+  assert.equal((await handler(request({...input,garbage:'x'.repeat(24001)}))).status,413);
   assert.equal((await harness({availability:()=>({posts:false})}).handler(request())).status,503);
   assert.equal(state.generated,0);
 });

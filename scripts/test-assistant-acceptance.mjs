@@ -22,11 +22,14 @@ async function compile(path) {
 }
 dependencies['./assistant-context'] = await compile('src/lib/assistant-context');
 dependencies['./assistant-core'] = dependencies['../src/lib/assistant-core'] = await compile('src/lib/assistant-core');
+dependencies['./assistant-planner'] = await compile('src/lib/assistant-planner');
 dependencies['./assistant-search'] = await compile('src/lib/assistant-search');
 dependencies['./assistant-review'] = dependencies['../src/lib/assistant-review'] = await compile('src/lib/assistant-review');
 dependencies['../src/lib/assistant-provider'] = await compile('src/lib/assistant-provider');
 dependencies['../src/lib/assistant-service'] = await compile('src/lib/assistant-service');
 dependencies['./assistant-acceptance-fixtures'] = await compile('scripts/assistant-acceptance-fixtures');
+dependencies['../src/lib/assistant-planner'] = dependencies['./assistant-planner'];
+dependencies['./assistant-planner-fixtures'] = await compile('scripts/assistant-planner-fixtures');
 const { acceptanceFixtures, evaluateAcceptance } = await import(dependencies['./assistant-acceptance-fixtures']);
 const { default: compiledWorker, checkAcceptanceInference } = await import(await compile('scripts/assistant-acceptance-worker'));
 const { assistantPrompt, prepareAssistantCorpus, validateAssistantOutput } = await import(dependencies['./assistant-core']);

@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import models from '../src/lib/assistant-models.json' with { type: 'json' };
 import { waitForAcceptanceReady } from './assistant-acceptance-readiness.mjs';
 import { safeReleaseDiagnostic } from './safe-release-diagnostic.mjs';
+import { PLANNER_CASE_IDS } from './assistant-planner-cases.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const account = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -29,7 +30,7 @@ cases.push('stem-followup-summary');
 cases.push('stem-followup-comparison');
 const release = process.argv.includes('--release');
 assert(!(smoke && release), 'Smoke results cannot authorize a release');
-const selected = smoke ? ['post-question'] : cases;
+const selected = smoke ? ['post-question'] : [...cases, ...PLANNER_CASE_IDS];
 const repetitions = smoke ? 1 : 3;
 const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
 const status = spawnSync('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: root, encoding: 'utf8' });
@@ -156,6 +157,8 @@ finally {
   await rm(temporary, { recursive: true, force: true });
   receipt.features = { posts: receipt.passed && !smoke, communities: receipt.passed && !smoke, catchup: receipt.passed && !smoke };
   receipt.cases = receipt.cases.map(row => ({ ...row, model: models.groq.answer, checks: row.samples.flatMap((sample, index) => (sample.checks ?? []).map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed }))) }));
+  receipt.plannerCases = receipt.cases.filter(row => PLANNER_CASE_IDS.includes(row.id));
+  receipt.cases = receipt.cases.filter(row => !PLANNER_CASE_IDS.includes(row.id));
   await writeFile(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
 }
 if (failure) { console.error(failure.message); process.exitCode = 1; }

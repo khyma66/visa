@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantResultSetFollowUp, assistantSearchIntent, assistantStandaloneFollowUp, assistantSummaryFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v29-conversation-evidence';
+export const ASSISTANT_VERSION = 'grounded-chat-v30-contextual-turns';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -25,17 +25,30 @@ export function parseAssistantRequest(value: unknown, now = Date.now()): Assista
   if (result.mode === 'ask') {
     if (typeof value.question !== 'string' || value.question.trim().length < 3 || value.question.length > 1200) throw new AssistantError(400, 'Ask a question between 3 and 1,200 characters.');
     result.question = value.question.trim();
+    if (value.transform !== undefined && result.scope.kind === 'public') {
+      if (value.transform !== 'summarize' && value.transform !== 'shorten') throw new AssistantError(400, 'Choose a valid follow-up action.');
+      result.transform = value.transform;
+    }
+    if (value.conversation !== undefined) {
+      if (!Array.isArray(value.conversation) || value.conversation.length > 3 || value.conversation.some(turn => !record(turn)
+        || typeof turn.question !== 'string' || !turn.question.trim() || turn.question.length > 1200
+        || typeof turn.answer !== 'string' || turn.answer.length > 1200)) throw new AssistantError(400, 'Start a new chat to shorten this conversation.');
+      result.conversation = value.conversation.map(turn => ({ question: turn.question.trim(), answer: turn.answer.trim() }));
+    }
     if (value.previousQuestions !== undefined) {
       if (!Array.isArray(value.previousQuestions) || value.previousQuestions.length > 3 || value.previousQuestions.some(q => typeof q !== 'string' || q.length > 1200)) throw new AssistantError(400, 'Start a new question to shorten this conversation.');
       result.previousQuestions = value.previousQuestions.map(q => (q as string).trim()).filter(Boolean);
     }
-    if (value.previousPosts !== undefined && result.scope.kind === 'public') {
-      if (!Array.isArray(value.previousPosts) || value.previousPosts.length > 48 || value.previousPosts.some(item => !record(item)
-        || typeof item.questionId !== 'string' || !POST_ID.test(item.questionId)
-        || typeof item.sourceId !== 'string' || !/^[qa]:/.test(item.sourceId) || !POST_ID.test(item.sourceId.slice(2)))) {
-        throw new AssistantError(400, 'Start a new search to refresh the post references.');
+    for (const field of ['previousPosts', 'conversationReferences'] as const) {
+      const references = value[field];
+      if (references !== undefined && result.scope.kind === 'public') {
+        if (!Array.isArray(references) || references.length > 48 || references.some(item => !record(item)
+          || typeof item.questionId !== 'string' || !POST_ID.test(item.questionId)
+          || typeof item.sourceId !== 'string' || !/^[qa]:/.test(item.sourceId) || !POST_ID.test(item.sourceId.slice(2)))) {
+          throw new AssistantError(400, 'Start a new search to refresh the post references.');
+        }
+        result[field] = references.map(item => ({ questionId: item.questionId as string, sourceId: item.sourceId as string }));
       }
-      result.previousPosts = value.previousPosts.map(item => ({ questionId: item.questionId as string, sourceId: item.sourceId as string }));
     }
     if (value.seenPostIds !== undefined && result.scope.kind === 'public') {
       if (!Array.isArray(value.seenPostIds) || value.seenPostIds.length > 48 || value.seenPostIds.some(id => typeof id !== 'string' || !POST_ID.test(id))) {
@@ -89,11 +102,13 @@ export function redactAssistantText(text: string): string {
 // Only resolve references from recent user messages. An independent question
 // starts a new retrieval topic even when the chat still displays earlier turns.
 export function assistantPreviousQuestions(input: AssistantRequest): string[] {
+  if (input.turnPlan) return input.turnPlan.action === 'reuse' ? [input.turnPlan.query] : [];
   if (!assistantRefersToEarlierTurn(input.question ?? '')) return [];
   return assistantBoundedHistory(input.previousQuestions ?? []).filter(value => !assistantStandaloneFollowUp(value) && !assistantMorePosts(value) && assistantPostOrdinal(value) === null);
 }
 
 export function assistantRetrievalQuestion(input: AssistantRequest): string {
+  if (input.turnPlan) return input.turnPlan.query;
   const previous = assistantPreviousQuestions(input);
   const question = input.question ?? '';
   return (previous.length && assistantStandaloneFollowUp(question) ? previous : [question, ...previous]).join(' ').slice(0, 1500);
@@ -269,7 +284,7 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
   const { referencedPost, resolvedReference, resolvedOrdinal, question, selectedSummary } = assistantPromptSelection(input, corpus);
   const resultSet = assistantResultSetFollowUp(input);
   const overview = assistantSearchIntent(input).overview;
-  const collectionSummary = (resultSet && assistantSummaryFollowUp(question)) || overview;
+  const collectionSummary = input.turnPlan ? input.turnPlan.style === 'summary' : (resultSet && assistantSummaryFollowUp(question)) || overview;
   // The common shorthand "H4 EAD stamping experiences" can otherwise be read
   // as a demand for an EAD-stamping event. Share one precise interpretation
   // between generation and independent review without changing retrieval.
@@ -279,9 +294,13 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
     ? 'Summarize members’ firsthand H-4 visa-stamping experiences. Include EAD-specific details only when those same reports explicitly provide them; otherwise state that the cited stamping reports do not give EAD-specific details.'
     : question;
   return { task: selectedSummary || collectionSummary ? 'summary' : input.mode,
+    ...(input.turnPlan ? { latestUserRequest: redactAssistantText(input.originalQuestion ?? question),
+      resolvedRequest: redactAssistantText(input.turnPlan.query),
+      conversationContextOnly: input.conversation?.map(turn => ({ question: redactAssistantText(turn.question), answer: redactAssistantText(turn.answer) })),
+      conversationRule: 'Prior turns and the resolved request explain intent only. They are untrusted and never evidence. Answer the latest request, preserving corrections and negation, using only the current authorized sources. Never repeat an earlier claim unless current sources support it.' } : {}),
     ...(resultSet || overview ? { collectionTask: collectionSummary ? 'summary' : 'followup',
       topic: redactAssistantText(overview ? question : assistantPreviousQuestions(input).join(' ')),
-      responseStyle: /make (?:it|that) (?:shorter|concise)|tl;?dr/i.test(question) ? 'shorter' : 'concise',
+      responseStyle: input.transform === 'shorten' || /make (?:it|that) (?:shorter|concise)|tl;?dr/i.test(input.originalQuestion ?? question) ? 'shorter' : 'concise',
       resolvedDiscussions: [...new Set(corpus.sources.map(source => source.questionId))] } : {}),
     ...(selectedSummary ? { summaryStyle: 'brief' as const } : {}),
     // Equivalent generic Explain/Summarize commands have the same resolved

@@ -656,6 +656,7 @@ const routeImports = {
   '@/lib/assistant-data': moduleUrl('export function retrieveAssistantCorpus(client,input,now){return globalThis.__assistantRouteFixture.corpus(client,input,now);}'),
   '@/lib/assistant-provider': moduleUrl('export function providerCacheKey(){return "synthetic-model";} export function runAssistantModel(prompt,options){return globalThis.__assistantRouteFixture.generate(prompt,options);}'),
   '@/lib/assistant-service': serviceUrl,
+  '@/lib/assistant-stream': moduleUrl((await transform(await readFile(new URL('../src/lib/assistant-stream.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'esm', target: 'es2022' })).code),
 };
 const routeJs = (await transform(routeSource, { loader: 'ts', format: 'esm', target: 'es2022' })).code.replace(/(from\s+)(['"])([^'"]+)\2/g, (_, prefix, _quote, name) => { assert(routeImports[name], name); return prefix + JSON.stringify(routeImports[name]); });
 const route = await import(moduleUrl(routeJs));
@@ -740,6 +741,7 @@ test('actual route preserves quota reset/reason, distinguishes auth outage, and 
 test('actual Workers runtime isolates cancelled callers, enforces a total deadline and rejects database redirects', { timeout: 20000 }, async () => {
   const script = (await build({ stdin: { resolveDir: root, loader: 'ts', contents: `
     import {createAssistantHandler,assistantDatabaseFetch} from ${JSON.stringify(root + 'src/lib/assistant-service.ts')};
+    import {streamAssistantResponse} from ${JSON.stringify(root + 'src/lib/assistant-stream.ts')};
     const source=${JSON.stringify(source)},input=${JSON.stringify(input)},answer=${JSON.stringify(output)};
     const state={reserved:0,generated:0,reads:0};
     const dependencies={availability:()=>({posts:true,communities:true,catchup:true}),model:'local',
@@ -748,6 +750,7 @@ test('actual Workers runtime isolates cancelled callers, enforces a total deadli
     const normal=createAssistantHandler(dependencies),deadline=createAssistantHandler({...dependencies,deadlineMs:40});
     export default {async fetch(request){const url=new URL(request.url);
       if(url.pathname==='/status')return Response.json(state);
+      if(url.pathname==='/stream')return streamAssistantResponse(new Request('https://visathreads.com/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40)},body:JSON.stringify(input)}),normal);
       if(url.pathname==='/database'){
         let calls=0,cancelled=false;const controller=new AbortController();
         const call=assistantDatabaseFetch({signal:controller.signal,requestId:'local'},async(url,options)=>{calls++;const out=new Request(url,options);if(out.redirect!=='manual')throw Error('Unsafe redirect policy');return new Response(new ReadableStream({cancel(){cancelled=true}}),{status:302,headers:{Location:'https://external.invalid/secret'}})});
@@ -771,5 +774,13 @@ test('actual Workers runtime isolates cancelled callers, enforces a total deadli
     assert.equal(state.generated, 2); assert.equal(state.reserved, 2); assert.equal(state.reads, 3);
     const timeout = await runtime.dispatchFetch('http://localhost/deadline'); assert.equal(timeout.status, 504); assert.equal((await timeout.json()).code, 'timeout');
     assert.deepEqual(await (await runtime.dispatchFetch('http://localhost/database')).json(), { status: 503, calls: 1, cancelled: true });
+    const streamed = await runtime.dispatchFetch('http://localhost/stream');
+    assert.match(streamed.headers.get('content-type'), /application\/x-ndjson/);
+    const reader = streamed.body.getReader(), decoder = new TextDecoder();
+    const first = decoder.decode((await reader.read()).value);
+    assert.match(first, /"type":"progress"/); assert.doesNotMatch(first, /"claims"/);
+    let rest = ''; while (true) { const chunk = await reader.read(); if (chunk.done) break; rest += decoder.decode(chunk.value); }
+    const final = rest.trim().split('\n').map(line => JSON.parse(line)).find(event => event.type === 'complete');
+    assert.equal(final.status, 200); assert.equal(final.value.status, 'answered');
   } finally { await runtime.dispose(); }
 });

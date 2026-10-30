@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 const imports = { './assistant-models.json': `data:text/javascript;base64,${Buffer.from('export default ' + await readFile(new URL('../src/lib/assistant-models.json', import.meta.url), 'utf8')).toString('base64')}` };
-for (const name of ['assistant-context', 'assistant-core', 'assistant-provider']) {
+for (const name of ['assistant-context', 'assistant-core', 'assistant-planner', 'assistant-provider']) {
   const code = ts.transpileModule(await readFile(new URL(`../src/lib/${name}.ts`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
   imports['./' + name] = `data:text/javascript;base64,${Buffer.from(code.replace(/(from\s+)(['"])([^'"]+)\2/g, (_, prefix, _quote, dependency) => { assert(imports[dependency], dependency); return prefix + JSON.stringify(imports[dependency]); })).toString('base64')}`;
 }
