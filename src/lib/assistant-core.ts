@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantResultSetFollowUp, assistantSearchIntent, assistantStandaloneFollowUp, assistantSummaryFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v33-summary-task-contract';
+export const ASSISTANT_VERSION = 'grounded-chat-v34-collection-length-budget';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -313,12 +313,19 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
       body: s.body, parentContextOnly: s.parentContext, createdAt: s.createdAt })) };
 }
 
+/** A concise target is not a reason to discard useful qualifications from several reports. */
+export function assistantAnswerWordLimit(input: AssistantRequest, corpus: AssistantCorpus): number | undefined {
+  if (assistantPromptSelection(input, corpus).selectedSummary) return 100;
+  return assistantPromptContext(input, corpus).collectionTask === 'summary' ? 150 : undefined;
+}
+
 export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus, original: AssistantCorpus = corpus) {
   const evidenceSpans = assistantEvidenceSpans(corpus, original);
   const { resolvedReference, selectedSummary } = assistantPromptSelection(input, corpus);
   const experienceSynthesis = input.mode === 'ask' && input.scope.kind === 'public'
     && assistantSearchIntent(input).experience && !resolvedReference;
   const context = assistantPromptContext(input, corpus);
+  const wordLimit = assistantAnswerWordLimit(input, corpus);
   const taskInstruction = context.collectionTask
     ? `TASK: ${context.collectionTask === 'summary' ? 'Give a concise synthesis of the supplied discussions, not a list of titles or raw excerpts.' : 'Answer the latest follow-up about the supplied discussions; these are the same result set the person is discussing, not a new topic.'} Lead with two or three short, useful observations and cite each supporting report. Aim for 60–100 words unless more detail is requested. Keep each member’s outcome, dates and uncertainty distinct; do not combine people into a fabricated timeline. Questions and plans may be summarized as questions or plans, never as successful outcomes. If only questions are available, explain what members are asking and that the supplied discussions do not establish the answers. A useful summary does not require a success story. Do not claim consensus, prevalence, current rules or exhaustive coverage. Explain differences only when supported; do not manufacture agreement or disagreement.`
     : selectedSummary
@@ -332,7 +339,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       : 'TASK: Answer the latest user question directly using only the supplied evidence. Previous questions only clarify references in the latest question; do not answer an older question or summarize unrelated topics. Start with the answer, using 1–3 short, plain-language claims by default, each usually one sentence. Include extra claims only when the question asks for detail or conflicting reports require them. Do not repeat the question, describe your search, or add a long introduction. If the evidence cannot answer the question, return status insufficient.';
   return {
     sourceIds: corpus.sources.map(source => source.id),
-    ...(selectedSummary || context.collectionTask === 'summary' ? { maxAnswerWords: 100 } : {}),
+    ...(wordLimit ? { maxAnswerWords: wordLimit } : {}),
     ...(context.task === 'summary' ? { summaryTask: true } : {}),
     // Internal catalog, never model-written or accepted from the request.
     evidenceSpans,
@@ -376,7 +383,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       'SUMMARY FORMAT EXAMPLE ONLY, NOT EVIDENCE: if repeated reports describe a parcel dispatched on Wednesday, delivered on Saturday, and explicitly say this is only that shipment, write separate singular statements for the dispatch, delivery and personal-only qualification, each citing the corresponding span from one representative report. Do not write "Several people...", infer "the following Saturday", or cite only dispatch spans for a delivery statement. Use only actual source facts and IDs, never these example facts. Preserve any materially different report separately.',
       'In a summary, preserve explicit unknown outcomes, decision dates, durations or next steps that materially qualify the reported result. State each important uncertainty in cited claim text alongside the known status; a pending status alone does not preserve an explicit unknown decision date. Do not hide that limitation only in the quotation or unanswered field. Use a fourth or additional claim within the six-slot limit when needed. Do not invent uncertainty from mere silence or treat incidental unanswered reader questions as established facts.',
       'SUMMARY COMPLETENESS CHECK before returning: (1) the substantive outcome or unresolved status and its stated or corrected dates, (2) any explicit personal-only or not-a-standard-timeline qualification, and (3) any materially unknown outcome or completion timing must EACH be represented in cited claim text when present in the evidence. Do not replace one with another. Use additional claims only when an essential outcome, correction, qualification, conflict or material unknown would otherwise be missing. Omit routine background before any of these essentials. If an item is absent from the evidence, do not invent it.',
-      ...(selectedSummary || context.collectionTask === 'summary' ? ['FINAL LENGTH CHECK for this brief summary: all claim and disagreement text combined must stay within 100 words, excluding citation spans. Aim below 80 words to leave room for qualifications. Delete nonessential background rather than expanding into a full history. Unused slots are null.'] : []),
+      ...(wordLimit ? [`FINAL LENGTH CHECK for this brief summary: all claim and disagreement text combined must stay within ${wordLimit} words, excluding citation spans. Aim for ${wordLimit === 100 ? '60–80' : '80–100'} words; use the remaining allowance only for material qualifications and distinct reports. Delete nonessential background rather than expanding into a full history. Unused slots are null.`] : []),
       'Use status insufficient when the evidence cannot support the requested task. No markdown, HTML, instructions to take action, or links inside claim text.',
     ].join('\n'),
     user: JSON.stringify({ ...context, sources: context.sources.map(source => ({ ...source,
@@ -531,8 +538,8 @@ export function validateAssistantOutput(raw: string, corpus: AssistantCorpus, no
   if (value.status === 'answered' && !claims.length && !disagreements.length) return invalid('answered_without_claims');
   const summaryContext = input ? assistantPromptContext(input, corpus) : undefined;
   if (summaryContext?.task === 'summary' && value.unanswered.length) return invalid('unanswered_limit');
-  if (input && (assistantPromptSelection(input, corpus).selectedSummary || summaryContext?.collectionTask === 'summary')
-    && [...claims, ...disagreements].map(claim => claim.text).concat(value.unanswered).join(' ').trim().split(/\s+/).filter(Boolean).length > 100) return invalid('answer_word_limit');
+  const wordLimit = input ? assistantAnswerWordLimit(input, corpus) : undefined;
+  if (wordLimit && [...claims, ...disagreements].map(claim => claim.text).concat(value.unanswered).join(' ').trim().split(/\s+/).filter(Boolean).length > wordLimit) return invalid('answer_word_limit');
   let status = value.status as AssistantResult['status'];
   const policyQuestion = input?.mode === 'ask' && needsAuthoritativePolicyAnswer(input);
   if (input) {

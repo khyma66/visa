@@ -1,5 +1,6 @@
 // Synthetic acceptance corpus only. No production records, identities or credentials.
 import type { AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource } from '../src/lib/assistant-contract';
+import { assistantAnswerWordLimit } from '../src/lib/assistant-core';
 
 const postId = '00000000-0000-4000-8000-000000000001';
 const groupId = '00000000-0000-4000-8000-000000000099';
@@ -264,6 +265,6 @@ export function evaluateAcceptance(fixture: AcceptanceFixture, result: Assistant
     const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
     checks.push({ name: 'public_excerpts_preserve_source_text', passed: [...result.claims, ...result.disagreements].every(claim => claim.evidence.every(item => fixture.corpus.sources.some(source => source.id === item.sourceId && normalize(source.body).includes(normalize(item.quote))))) });
   }
-  if (fixture.input.mode === 'ask') checks.push({ name: 'answer_is_concise', passed: [...result.claims, ...result.disagreements].map(claim => claim.text).concat(result.unanswered).join(' ').trim().split(/\s+/).filter(Boolean).length <= 100 });
+  if (fixture.input.mode === 'ask') checks.push({ name: 'answer_is_concise', passed: [...result.claims, ...result.disagreements].map(claim => claim.text).concat(result.unanswered).join(' ').trim().split(/\s+/).filter(Boolean).length <= (assistantAnswerWordLimit(fixture.input, fixture.corpus) ?? 100) });
   return { id: fixture.id, passed: checks.every(check => check.passed), checks };
 }

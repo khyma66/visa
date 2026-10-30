@@ -98,14 +98,15 @@ test('summary contracts keep unresolved reports cited and enforce concise collec
   const corpus = { sources: [source], partial: false };
   const input = { mode: 'ask', scope: { kind: 'public' }, question: 'Give recent STEM OPT posts' };
   const p = assistantPrompt(input, corpus);
-  assert.equal(p.summaryTask, true); assert.equal(p.maxAnswerWords, 100);
+  assert.equal(p.summaryTask, true); assert.equal(p.maxAnswerWords, 150);
   assert.match(p.system, /does not require the reported situations to be resolved/);
   const schema = assistantOutputSchema(p);
   assert(Object.values(schema.properties.unanswered.properties).every(slot => slot.type === 'null'));
   const draft = { status: 'answered', claims: [{ text: 'One member reported a missing card and an unknown investigation outcome.', evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
   assert.equal(validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), input).status, 'answered');
   assert.throws(() => validateAssistantOutput(JSON.stringify({ ...draft, unanswered: ['The card was not delivered.'] }), corpus, Date.now(), input), error => error.code === 'unanswered_limit');
-  assert.throws(() => validateAssistantOutput(JSON.stringify({ ...draft, claims: [{ ...draft.claims[0], text: Array(101).fill('word').join(' ') }] }), corpus, Date.now(), input), error => error.code === 'answer_word_limit');
+  assert.equal(validateAssistantOutput(JSON.stringify({ ...draft, claims: [{ ...draft.claims[0], text: Array(150).fill('w').join(' ') }] }), corpus, Date.now(), input).status, 'answered');
+  assert.throws(() => validateAssistantOutput(JSON.stringify({ ...draft, claims: [{ ...draft.claims[0], text: Array(151).fill('w').join(' ') }] }), corpus, Date.now(), input), error => error.code === 'answer_word_limit');
 });
 
 test('server-only single-attempt cap disables both HTTP format and local citation repair', async () => {
