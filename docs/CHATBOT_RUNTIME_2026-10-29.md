@@ -18,7 +18,7 @@ The new transport streams progress, not raw model tokens. Immigration experience
 
 The planner adds one inference for free-text chat turns, including the first question from the modern UI. Legacy API callers that omit conversation context retain their compatible path. Explicit Summarize and Make it shorter UI actions skip planning, while still rereading sources and reviewing the answer. There is no autonomous search loop, new model fallback, or extra retry budget for the planner. One request reservation covers planning and answering; the existing total deadline still applies.
 
-Rejected answers retain the bounded whole-answer regeneration and independent review path. A proposed supported-claim subset shortcut was blocked by hosted acceptance: deleting a rejected claim could delete an essential qualification even when a second reviewer approved the subset. That shortcut was removed, not deployed. Summary-task output instead requires unresolved reports in cited claims, not an uncited unanswered field, and collection summaries enforce the existing 100-word brief-output budget using the same bounded format repair.
+Rejected answers retain the bounded whole-answer regeneration and independent review path. A proposed supported-claim subset shortcut was blocked by hosted acceptance: deleting a rejected claim could delete an essential qualification even when a second reviewer approved the subset. That shortcut was removed, not deployed. Summary-task output instead requires unresolved reports in cited claims, not an uncited unanswered field. Brief selected-discussion summaries retain a 100-word cap. Multi-discussion summaries target 80–100 words with a hard 150-word cap, leaving room for distinct reports and qualifications without truncation or additional retry allowances.
 
 ## Verification and release
 
@@ -31,6 +31,8 @@ Signed-in production testing exposed insufficient answers despite relevant sourc
 The guarded workflow must pass before production deployment and then sync the same source to development. Development AI remains disabled under the existing environment-isolation policy. No database schema, source content, domain configuration or secrets are changed by this release.
 
 ## Remaining architecture work
+
+The next blocked run, 40994077694, passed 148/150 samples; the two remaining failures were solely collection summaries exceeding the newly imposed 100-word application cap after format repair. The model supplied cited summaries, not hidden unanswered prose. The collection-only 150-word ceiling addresses that general UX/latency mistake; factual entailment, qualifications, source checks and the single-discussion ceiling remain unchanged. Failed samples are retained rather than rerun until lucky.
 
 - **Owned persistent conversations:** history is currently bounded browser context, not a server-owned conversation database. Cross-device history, refresh restoration, durable idempotent turns and per-conversation concurrency are not implemented here. Add owner-scoped tables, a server-only assistant-write path, retention/deletion controls and two-user isolation tests before enabling these features.
 - **Hybrid retrieval:** existing full-text search remains. Add versioned embeddings with permission-aware Postgres retrieval, edit/delete invalidation and a benchmark against current keyword results. Do not add another vector database without a measured need.
