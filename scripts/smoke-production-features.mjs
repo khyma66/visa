@@ -35,6 +35,20 @@ await verifyStableRollout({ expected, previous: receipt.health,
       const response = await probe.request(check, '/api/assistant', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: question }, { status, denial: true, marked: true });
       assert.match(response.headers.get('cache-control') ?? '', /private, no-store/);
       await response.body?.cancel();
+      const streamed = await probe.request(`stream-${check}`, '/api/assistant', { method: 'POST',
+        headers: { 'content-type': 'application/json', Accept: 'application/x-ndjson', ...headers }, body: question }, { status: 200, marked: true });
+      assert.match(streamed.headers.get('content-type') ?? '', /^application\/x-ndjson/);
+      assert.match(streamed.headers.get('cache-control') ?? '', /private, no-store/);
+      const text = await streamed.text();
+      assert(text.length < 8000, 'Streaming denial exceeds the bounded envelope.');
+      const frames = text.trim().split('\n').map(line => JSON.parse(line));
+      assert(frames.length >= 2 && frames.length <= 16, 'Streaming denial must include progress and a finalized result.');
+      assert(frames.slice(0, -1).every(frame => frame.type === 'progress' && ['request', 'authentication'].includes(frame.stage)), 'Denied request entered factual processing.');
+      const final = frames.at(-1);
+      assert.equal(final.type, 'complete');
+      assert.equal(final.status, status, 'Streaming authentication denial differs from JSON.');
+      assert.equal(final.value.code, status === 403 ? 'permission' : 'authentication');
+      assert(!final.value.claims && !final.value.sources, 'A denied stream must not contain evidence.');
     }
     await smokeSite(LIVE_SITE, expected, { fetchImpl: probe.siteFetch, skipHealthWait: true });
     await verifyPlaybookPages(probe, feed, true);
