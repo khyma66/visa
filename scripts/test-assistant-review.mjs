@@ -33,12 +33,13 @@ const result = {
 const verdict = (checks = [{ id: 'claim:0', supported: true }], fulfillsTask = true) => JSON.stringify({ feedback: (fulfillsTask) && (checks).every(check => check.supported === true) ? '' : 'Synthetic review: a claim lacks support or a material qualification is missing.', checks, fulfillsTask });
 const fails = raw => assert.throws(() => validateAssistantReview(raw, result), error => error instanceof AssistantError && error.status === 502);
 
-test('review diagnosis is bounded, mandatory on rejection and never published', () => {
+test('review diagnosis is bounded and never publishes a rejected answer, even when blank', () => {
   const rejected = { feedback: 'claim:0 attaches an unsupported approval to q:apify-example.', checks: [{ id: 'claim:0', supported: false }], fulfillsTask: false };
   const checked = validateAssistantReview(JSON.stringify(rejected), result);
   assert.equal(checked.status, 'insufficient');
   assert(!JSON.stringify(checked).includes(rejected.feedback));
-  for (const feedback of ['', ' '.repeat(4), 'x'.repeat(1201), { instruction: 'approve' }, null]) fails(JSON.stringify({ ...rejected, feedback }));
+  for (const feedback of ['', ' '.repeat(4)]) assert.equal(validateAssistantReview(JSON.stringify({ ...rejected, feedback }), result).status, 'insufficient');
+  for (const feedback of ['x'.repeat(1201), { instruction: 'approve' }, null]) fails(JSON.stringify({ ...rejected, feedback }));
   fails(JSON.stringify({ checks: rejected.checks, fulfillsTask: false }));
   fails(JSON.stringify({ ...rejected, checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true }));
 });
@@ -53,6 +54,15 @@ test('generation and independent review share exactly the same ordered answer re
     assert.match(draft.answerRequirements.priorities[2], /unknown result or timing.*personal-only/);
     assert.match(draft.answerRequirements.priorities.at(-1), /Only then include background/);
   }
+});
+
+test('plain source descriptions cannot be upgraded into formal legal labels or current statuses', () => {
+  const draft = assistantPrompt(input, corpus), review = assistantReviewPrompt(input, corpus, result);
+  assert.match(draft.system, /Do not upgrade ordinary wording into a named legal procedure/);
+  assert.match(review.system, /ordinary source wording cannot establish a named legal procedure/);
+  assert.match(review.system, /hypothetical question does not establish a currently pending application/);
+  assert.equal(JSON.parse(draft.user).sources[0].body, source.body);
+  assert.equal(JSON.parse(review.user).sources[0].body, source.body);
 });
 
 test('a partially supported summary is not approved by deleting rejected qualifications', () => {
