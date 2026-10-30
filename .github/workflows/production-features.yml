@@ -1,4 +1,5 @@
 name: Release current VisaThreads AI features
+# Align question-summary evidence and bounded comparison routing after retained acceptance failures.
 # Require cited unresolved-summary content and preserve whole-answer qualification review.
 # Keep multi-discussion summaries concise without turning 101-word useful answers into errors.
 # Keep semantic summary interpretations out of legacy literal post-search filtering.

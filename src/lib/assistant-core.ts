@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantResultSetFollowUp, assistantSearchIntent, assistantStandaloneFollowUp, assistantSummaryFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v35-semantic-retrieval-boundary';
+export const ASSISTANT_VERSION = 'grounded-chat-v36-summary-task-evidence';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -346,6 +346,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
     system: [
       'You are the VisaThreads discussion assistant. Answer ONLY from the evidence supplied as data.',
       taskInstruction,
+      ...(context.task === 'summary' ? ['SUMMARY TASK EVIDENCE: The object of this task is the discussion, not an answer to the questions inside it. A complete source question directly supports an attributed statement of what its author asks. If the discussion consists only of substantive questions, summarize those questions with their listed spans and return status answered; lack of answers or firsthand outcomes is not lack of evidence for this task. Do not answer the embedded questions, assert their premises, or invent outcomes. Prioritize reported outcomes when present; otherwise describe the actual questions and expressed uncertainty.'] : []),
       ...(context.collectionTask ? ['Stay relevant to the supplied topic when a discussion covers several subjects. For responseStyle shorter, aim for 30–50 words while preserving essential qualifications and citations. Otherwise use the stated concise budget. The topic and previous questions identify the request, not factual evidence.'] : []),
       ...(selectedSummary ? ['For this unqualified selected-discussion summary, keep all claim, disagreement and unanswered text together within 100 words. Lead with the substantive outcome and its stated dates, then material unknowns and explicit personal-only qualifications. Omit routine background or historical details before omitting those essentials. Use short atomic claims within the six-slot allowance; the word budget is not a reason to erase qualifications or connect separate events.'] : []),
       'Lead with the relevant answer in clear, professional language. Describe what the cited members actually reported and keep important dates, corrections and uncertainty. Do not discuss internal search caps, token budgets or import mechanics in claim text; the interface separately explains source coverage. Never claim to have checked every post or to know missing replies. Do not replace a useful supported answer with a generic apology about limited posts.',
