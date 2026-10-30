@@ -133,6 +133,15 @@ test('summaries can cite complete questions without stripping punctuation or tre
   assert.equal(validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), direct).status, 'insufficient');
 });
 
+test('shorter collection transforms enforce their own output budget instead of adding details', () => {
+  const source = { id: 'q:apify-shorter', questionId: 'apify-shorter', kind: 'question', communityId: null, title: 'Open question', body: 'I am asking about a pending application and have not reported an outcome.', createdAt: '2026-10-01T00:00:00Z', url: '/questions/apify-shorter' };
+  const corpus = { sources: [source], partial: false };
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'Summarize these discussions', originalQuestion: 'Make it shorter', transform: 'shorten', previousPosts: [{ questionId: source.questionId, sourceId: source.id }], turnPlan: { action: 'reuse', query: 'Summarize these discussions', focus: null, style: 'summary', clarification: null } };
+  assert.equal(assistantPrompt(input, corpus).maxAnswerWords, 50);
+  const draft = { status: 'answered', claims: [{ text: Array(51).fill('word').join(' '), evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
+  assert.throws(() => validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), input), error => error.code === 'answer_word_limit');
+});
+
 test('server-only single-attempt cap disables both HTTP format and local citation repair', async () => {
   for (const outputKind of [undefined, 'review']) {
     let calls = 0;

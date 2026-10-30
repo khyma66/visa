@@ -44,6 +44,7 @@ test('planner input redacts identifiers and never sends source bodies or arbitra
   assert.match(prompt.system, /does not permit exhaustive website-wide analytics/);
   assert.equal(api.ASSISTANT_PLAN_SCHEMA.properties.query.minLength, 3);
   assert.equal(api.ASSISTANT_PLAN_SCHEMA.properties.query.maxLength, 1200);
+  assert.equal(Object.keys(JSON.parse(prompt.user)).at(-1), 'latestRequest');
   assert.deepEqual(api.assistantOutputSchema(prompt), api.ASSISTANT_PLAN_SCHEMA);
 });
 test('one authenticated reservation covers planning and answer; sources are reread for reuse', async () => {
