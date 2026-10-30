@@ -1,6 +1,7 @@
 name: Release current VisaThreads AI features
 # Require cited unresolved-summary content and preserve whole-answer qualification review.
 # Keep multi-discussion summaries concise without turning 101-word useful answers into errors.
+# Keep semantic summary interpretations out of legacy literal post-search filtering.
 # Enforce the existing brief-summary word contract within the bounded format-repair budget.
 # Verify streaming auth denials through the deployed application router, not only the bare Worker.
 # Recheck short clarification codes and inherited conversational constraints.

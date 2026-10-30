@@ -32,6 +32,10 @@ The guarded workflow must pass before production deployment and then sync the sa
 
 ## Remaining architecture work
 
+Live testing after d0470b2 still found a 13.0-second insufficient STEM OPT summary and empty H4/H1B searches. Inspection identified a routing mismatch: semantic summary plans set overview=true, which activated literal all-term browsing filters. The correction keeps semantic plans on ranked retrieval while preserving authorization and explicit topic/location/date filters. End-to-end retrieval tests now cover paraphrased tasks with words absent from the actual posts; fixed-corpus generation tests alone missed this boundary.
+
+An unsuccessful answer currently does not retain the retrieved source set for the next turn. Fixing this requires distinguishing remembered evidence from actually displayed/numbered results, so a later ordinal cannot select an invisible list. That conversation-state work remains open; blindly returning all retrieved IDs as displayed references is not an acceptable shortcut.
+
 The next blocked run, 40994077694, passed 148/150 samples; the two remaining failures were solely collection summaries exceeding the newly imposed 100-word application cap after format repair. The model supplied cited summaries, not hidden unanswered prose. The collection-only 150-word ceiling addresses that general UX/latency mistake; factual entailment, qualifications, source checks and the single-discussion ceiling remain unchanged. Failed samples are retained rather than rerun until lucky.
 
 - **Owned persistent conversations:** history is currently bounded browser context, not a server-owned conversation database. Cross-device history, refresh restoration, durable idempotent turns and per-conversation concurrency are not implemented here. Add owner-scoped tables, a server-only assistant-write path, retention/deletion controls and two-user isolation tests before enabling these features.
