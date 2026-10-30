@@ -1,4 +1,5 @@
 name: Release current VisaThreads AI features
+# Verify streaming auth denials through the deployed application router, not only the bare Worker.
 # Recheck short clarification codes and inherited conversational constraints.
 # Require contextual planner acceptance before releasing live progress and generalized follow-ups.
 # Publish professional public-facing copy without changing policy receipts or launch permissions.
@@ -78,6 +79,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Build candidate preserving current launch state and existing content
         run: node scripts/production-feature-release.mjs build
+      - name: Exercise streamed responses through the fully built application router
+        run: node scripts/smoke-assistant-built-stream.mjs
       - name: Require model acceptance and unchanged live baseline
         run: node scripts/production-feature-release.mjs deploy-check
         env:

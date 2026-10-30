@@ -6,7 +6,11 @@ type Handler = (request: Request, progress?: (stage: AssistantFailureStage) => v
 export function streamAssistantResponse(request: Request, handle: Handler): Response {
   const cancelled = new AbortController();
   const signal = AbortSignal.any([request.signal, cancelled.signal]);
-  const forwarded = new Request(request, { signal });
+  // Vinext supplies a tracked Request proxy. Workerd's Request(input) native
+  // brand check treats that proxy as a URL string ("[object Request]"). Copy
+  // only the fields the handler needs; keep its body stream and cancellation.
+  const forwarded = new Request(request.url, { method: request.method, headers: request.headers,
+    body: request.body, signal, duplex: 'half' } as RequestInit);
   const encoder = new TextEncoder();
   let closed = false;
   const body = new ReadableStream<Uint8Array>({

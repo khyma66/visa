@@ -750,7 +750,12 @@ test('actual Workers runtime isolates cancelled callers, enforces a total deadli
     const normal=createAssistantHandler(dependencies),deadline=createAssistantHandler({...dependencies,deadlineMs:40});
     export default {async fetch(request){const url=new URL(request.url);
       if(url.pathname==='/status')return Response.json(state);
-      if(url.pathname==='/stream')return streamAssistantResponse(new Request('https://visathreads.com/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40)},body:JSON.stringify(input)}),normal);
+      if(url.pathname==='/stream'){
+        const native=new Request('https://visathreads.com/api/assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+ 'a'.repeat(40)},body:JSON.stringify(input)});
+        // The production router supplies a tracked proxy, not a native-branded Request.
+        const tracked=new Proxy(native,{get(target,key){const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value}});
+        return streamAssistantResponse(tracked,normal);
+      }
       if(url.pathname==='/database'){
         let calls=0,cancelled=false;const controller=new AbortController();
         const call=assistantDatabaseFetch({signal:controller.signal,requestId:'local'},async(url,options)=>{calls++;const out=new Request(url,options);if(out.redirect!=='manual')throw Error('Unsafe redirect policy');return new Response(new ReadableStream({cancel(){cancelled=true}}),{status:302,headers:{Location:'https://external.invalid/secret'}})});
