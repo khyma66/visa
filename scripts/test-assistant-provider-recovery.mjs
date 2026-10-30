@@ -8,7 +8,7 @@ for (const name of ['assistant-context', 'assistant-core', 'assistant-planner', 
   imports['./' + name] = `data:text/javascript;base64,${Buffer.from(code.replace(/(from\s+)(['"])([^'"]+)\2/g, (_, prefix, _quote, dependency) => { assert(imports[dependency], dependency); return prefix + JSON.stringify(imports[dependency]); })).toString('base64')}`;
 }
 const {runAssistantModel, assistantOutputSchema, resolveAssistantEvidence} = await import(imports['./assistant-provider']);
-const {AssistantError, validateAssistantOutput} = await import(imports['./assistant-core']);
+const {AssistantError, validateAssistantOutput, assistantPrompt} = await import(imports['./assistant-core']);
 const prompt = {system:'Only source-supported claims.',user:'Synthetic evidence only.',sourceIds:['q:synthetic']};
 const output = JSON.stringify({status:'insufficient',claims:[],disagreements:[],unanswered:[]});
 const success = () => Response.json({choices:[{finish_reason:'stop',message:{content:output}}]});
@@ -62,6 +62,34 @@ test('semantic insufficiency and unknown validation errors are never automatical
   for(const validateOutput of [()=>{},()=>{throw new Error('unknown private failure');}]){
     let calls=0;await runAssistantModel({...prompt,validateOutput},{provider:'groq',apiKey:'synthetic-private-key',fetcher:async()=>{calls++;return success();}}).catch(()=>{});
     assert.equal(calls,1);
+  }
+});
+
+test('brief selected summaries enforce their word budget without truncating facts or quotes', () => {
+  const source = { id: 'q:apify-budget', questionId: 'apify-budget', communityId: null, kind: 'question', title: 'Report', body: 'My application was approved on Friday.', createdAt: '2026-10-01T00:00:00Z', url: '/questions/apify-budget' };
+  const corpus = { sources: [source], partial: false };
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'Explain the first post.', previousPosts: [{ questionId: source.questionId, sourceId: source.id }] };
+  const draft = { status: 'answered', claims: [{ text: Array(101).fill('word').join(' '), evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
+  assert.equal(assistantPrompt(input, corpus).maxAnswerWords, 100);
+  assert.throws(() => validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), input), error => error.code === 'answer_word_limit');
+  draft.claims[0].text = Array(100).fill('word').join(' ');
+  assert.equal(validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), input).claims[0].text, draft.claims[0].text);
+  draft.claims[0].text = Array(101).fill('word').join(' ');
+  assert.doesNotThrow(() => validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), { mode: 'summary', scope: { kind: 'post', id: source.questionId } }));
+});
+
+test('brief-summary length repair shares the existing retry cap and never replays rejected text', async () => {
+  for (const alwaysTooLong of [false, true]) {
+    const calls = []; let validations = 0;
+    const checked = { ...prompt, maxAnswerWords: 100, validateOutput() {
+      if (++validations === 1 || alwaysTooLong) throw new AssistantError(502, 'rejected private draft', undefined, 'answer_word_limit');
+    } };
+    const pending = runAssistantModel(checked, { provider: 'groq', apiKey: 'synthetic-private-key', fetcher: async (_url, init) => { calls.push(init); return success(); } });
+    if (alwaysTooLong) await assert.rejects(pending, error => error.code === 'answer_word_limit');
+    else assert.equal(await pending, output);
+    assert.equal(calls.length, 2); assert.equal(calls[0].signal, calls[1].signal);
+    assert.match(JSON.parse(calls[1].body).messages[0].content, /at most 100 words/);
+    assert.doesNotMatch(calls[1].body, /rejected private draft/);
   }
 });
 
