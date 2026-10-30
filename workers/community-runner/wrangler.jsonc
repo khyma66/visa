@@ -1,0 +1,24 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "visaflow-community-runner-dev",
+  "main": "index.ts",
+  "compatibility_date": "2026-10-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {"enabled": true, "head_sampling_rate": 1},
+  "triggers": {"crons": ["0 */2 * * *"]},
+  "d1_databases": [{"binding":"DB","database_name":"visaflow-community-runner-dev","database_id":"00000000-0000-0000-0000-000000000000"}],
+  "ai": {"binding":"AI"},
+  "secrets": {"required":["RUNNER_ACTORS","SUPABASE_PUBLIC_KEY"]},
+  "vars": {
+    "RUNNER_ENABLED": "false",
+    "SUPABASE_URL": "https://ppdwysmeistjxzjpmxyk.supabase.co",
+    "CONTENT_MODE": "fixtures",
+    "CAMPAIGN_ID": "",
+    "CAMPAIGN_START": "",
+    "CAMPAIGN_END": "",
+    "FREE_TIER_VERIFIED_AT": "",
+    "OUTBOUND_HOOKS_DISABLED": "false"
+  }
+}

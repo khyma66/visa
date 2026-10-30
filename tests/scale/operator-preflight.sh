@@ -50,4 +50,8 @@ for migration in \
 done
 "$cli" start --workdir "$workdir" -x studio,postgres-meta,mailpit,imgproxy,storage-api,edge-runtime,logflare,vector,supavisor >/dev/null
 trap '"$cli" stop --workdir "$workdir" >/dev/null' EXIT
-node tests/scale/local-protocol-smoke.mjs "$cohort"
+if [[ "${VISAFLOW_LOCAL_RUNNER_PROTOCOL:-0}" == 1 ]]; then
+  node workers/community-runner/local-protocol.mjs
+else
+  node tests/scale/local-protocol-smoke.mjs "$cohort"
+fi
