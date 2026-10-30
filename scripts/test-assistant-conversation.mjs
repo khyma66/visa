@@ -86,12 +86,15 @@ test('modern first turn is semantically planned before retrieval, not keyword-ro
   assert.equal(h.reads[0].turnPlan.action, 'retrieve');
   assert.deepEqual(h.events, ['auth', 'reserve']);
 });
-test('summary subset needs an independent completeness review and never gets a third chance', async () => {
+test('summary repair regenerates the whole answer and reviews it, without a third chance', async () => {
   for (const complete of [true, false]) {
-    let reviews = 0;
+    let reviews = 0, generations = 0;
     const h = harness({ generate: async prompt => {
       if (prompt.outputKind === 'plan') return JSON.stringify(plan);
-      if (prompt.outputKind !== 'review') return JSON.stringify({ ...answer, claims: [...answer.claims, { ...answer.claims[0], text: 'Everyone was approved.' }] });
+      if (prompt.outputKind !== 'review') {
+        generations++;
+        return JSON.stringify(generations === 1 ? { ...answer, claims: [...answer.claims, { ...answer.claims[0], text: 'Everyone was approved.' }] } : answer);
+      }
       reviews++;
       if (reviews === 1) return JSON.stringify({ fulfillsTask: false, checks: [{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: false }] });
       assert.equal(prompt.maxAttempts, 1);
@@ -103,7 +106,7 @@ test('summary subset needs an independent completeness review and never gets a t
     const value = await (await h.handler(req())).json();
     assert.equal(value.status, complete ? 'answered' : 'insufficient');
     assert.equal(value.claims.length, complete ? 1 : 0);
-    assert.equal(reviews, 2); assert.equal(h.reads.length, 2);
+    assert.equal(reviews, 2); assert.equal(generations, 2); assert.equal(h.reads.length, 2);
   }
 });
 test('explicit UI transform skips planning but never skips source reads, quota or review', async () => {

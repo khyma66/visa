@@ -431,7 +431,7 @@ test('acceptance derives exact inference order from strict verdicts, not permiss
   assert.equal(checkAcceptanceInference(fixture.input, fixture.corpus, result, 'groq', events(rounds), tooManyTransports).budget, false);
 });
 
-test('acceptance requires a second full review of the exact supported summary subset', () => {
+test('acceptance rejects subset review shortcuts that can discard important qualifications', () => {
   const fixture = acceptanceFixtures.find(item => item.id === 'post-summary');
   const claims = ['The member received their passport on Friday.', 'Everyone received a passport.'].map(text => ({ text, evidence: [{ sourceId: fixture.corpus.sources[0].id, quote: 'My passport arrived on Friday.' }] }));
   const first = { status: 'answered', claims, disagreements: [], unanswered: [] };
@@ -440,7 +440,7 @@ test('acceptance requires a second full review of the exact supported summary su
   const round = (kind, output, recovery = false) => ({ kind, output: JSON.stringify(output), rawOutputs: [], maxAttempts: recovery ? 1 : 2, semanticRepair: false, transport: [] });
   const rounds = [round('answer', first), round('review', { checks: [{ id: 'claim:0', supported: true }, { id: 'claim:1', supported: false }], fulfillsTask: false }), round('review', { checks: [{ id: 'claim:0', supported: true }], fulfillsTask: true }, true)];
   const check = (items, result = final) => checkAcceptanceInference(fixture.input, fixture.corpus, result, 'workers-ai', ['authenticate', 'corpus', 'reserve', ...items.flatMap(item => [item.kind === 'answer' ? 'generate' : 'review', 'runtime-binding']), 'corpus'], items);
-  assert.equal(check(rounds).sequence, true);
+  assert.equal(check(rounds).sequence, false);
   assert.equal(check(rounds.slice(0, 2)).sequence, false, 'the first per-claim checks do not approve the subset');
   assert.equal(check([...rounds, rounds[2]]).sequence, false, 'no third reviewer attempt');
   const rejected = [...rounds.slice(0, 2), round('review', { checks: [{ id: 'claim:0', supported: true }], fulfillsTask: false }, true)];

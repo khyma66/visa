@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantResultSetFollowUp, assistantSearchIntent, assistantStandaloneFollowUp, assistantSummaryFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v32-reviewed-summary-repair';
+export const ASSISTANT_VERSION = 'grounded-chat-v33-summary-task-contract';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -332,7 +332,8 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       : 'TASK: Answer the latest user question directly using only the supplied evidence. Previous questions only clarify references in the latest question; do not answer an older question or summarize unrelated topics. Start with the answer, using 1–3 short, plain-language claims by default, each usually one sentence. Include extra claims only when the question asks for detail or conflicting reports require them. Do not repeat the question, describe your search, or add a long introduction. If the evidence cannot answer the question, return status insufficient.';
   return {
     sourceIds: corpus.sources.map(source => source.id),
-    ...(selectedSummary ? { maxAnswerWords: 100 } : {}),
+    ...(selectedSummary || context.collectionTask === 'summary' ? { maxAnswerWords: 100 } : {}),
+    ...(context.task === 'summary' ? { summaryTask: true } : {}),
     // Internal catalog, never model-written or accepted from the request.
     evidenceSpans,
     system: [
@@ -361,6 +362,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       'Do not infer a venue or role from the type of event or from ordinary setting words. A report of waiting "outside" or "in a queue" does not identify an embassy, consulate, office or any other building. Preserve the source\'s actual place and role wording; omit an unstated venue or specialized role.',
       'Before returning each claim, check every timing expression, sequence word, duration, venue, role and causal link against its quoted source body. Remove any unsupported addition while retaining the useful explicitly reported fact. Prefer a short atomic attributed statement over a fluent but inferred timeline.',
       'Every factual sentence belongs in claims or disagreements and MUST cite supporting span IDs from the supplied sources[].spans catalog. Each evidence entry must contain ONLY {"spanId":"the supplied span ID"}. Never write quote or sourceId fields, invent span IDs, or change a span. A source body provides context, but only its listed spans are citable. No unsupported introductory paragraph.',
+      ...(context.task === 'summary' ? ['SUMMARY OUTPUT CONTRACT: Answering a summary request does not require the reported situations to be resolved. A faithful cited account of unresolved reports and questions is status answered. Put those reports, questions and their material uncertainties in claims, not unanswered. All unanswered slots must be null for summaries. Use insufficient only when no relevant substantive summary can be supported. Never turn an unresolved outcome into a success, permission or denial.'] : []),
       'Never quote parentContextOnly as evidence: it only explains what a reply refers to. To cite the parent’s facts, select a span belonging to the separate parent question source. A title is context only, never a citable span.',
       'If evidence is absent, irrelevant or conflicting, say so. Do not answer from memory. Preserve dates and uncertainty.',
       'When relevant reports differ on the same issue, preserve both attributed positions in a concise comparison with spans from at least two different sources. Prefer disagreements for this comparison; a fully supported comparison in claims is also valid. Do not duplicate the same reports across both sections merely to fill slots. Do not choose a winner, infer a current rule, or claim identical circumstances without evidence.',
@@ -374,7 +376,7 @@ export function assistantPrompt(input: AssistantRequest, corpus: AssistantCorpus
       'SUMMARY FORMAT EXAMPLE ONLY, NOT EVIDENCE: if repeated reports describe a parcel dispatched on Wednesday, delivered on Saturday, and explicitly say this is only that shipment, write separate singular statements for the dispatch, delivery and personal-only qualification, each citing the corresponding span from one representative report. Do not write "Several people...", infer "the following Saturday", or cite only dispatch spans for a delivery statement. Use only actual source facts and IDs, never these example facts. Preserve any materially different report separately.',
       'In a summary, preserve explicit unknown outcomes, decision dates, durations or next steps that materially qualify the reported result. State each important uncertainty in cited claim text alongside the known status; a pending status alone does not preserve an explicit unknown decision date. Do not hide that limitation only in the quotation or unanswered field. Use a fourth or additional claim within the six-slot limit when needed. Do not invent uncertainty from mere silence or treat incidental unanswered reader questions as established facts.',
       'SUMMARY COMPLETENESS CHECK before returning: (1) the substantive outcome or unresolved status and its stated or corrected dates, (2) any explicit personal-only or not-a-standard-timeline qualification, and (3) any materially unknown outcome or completion timing must EACH be represented in cited claim text when present in the evidence. Do not replace one with another. Use additional claims only when an essential outcome, correction, qualification, conflict or material unknown would otherwise be missing. Omit routine background before any of these essentials. If an item is absent from the evidence, do not invent it.',
-      ...(selectedSummary ? ['FINAL LENGTH CHECK for this brief summary: all claim, disagreement and unanswered text combined must stay within 100 words, excluding citation spans. Aim below 80 words to leave room for qualifications. Delete nonessential background rather than expanding into a full history. Do not repeat an unresolved point in unanswered when a cited claim already explains it. Unused slots are null.'] : []),
+      ...(selectedSummary || context.collectionTask === 'summary' ? ['FINAL LENGTH CHECK for this brief summary: all claim and disagreement text combined must stay within 100 words, excluding citation spans. Aim below 80 words to leave room for qualifications. Delete nonessential background rather than expanding into a full history. Unused slots are null.'] : []),
       'Use status insufficient when the evidence cannot support the requested task. No markdown, HTML, instructions to take action, or links inside claim text.',
     ].join('\n'),
     user: JSON.stringify({ ...context, sources: context.sources.map(source => ({ ...source,
@@ -527,7 +529,9 @@ export function validateAssistantOutput(raw: string, corpus: AssistantCorpus, no
   let claims = parseClaims(value.claims, 6), disagreements = parseClaims(value.disagreements, 3, true);
   if (value.unanswered.length > 4 || value.unanswered.some(t => typeof t !== 'string' || t.length > 400)) return invalid('unanswered_limit');
   if (value.status === 'answered' && !claims.length && !disagreements.length) return invalid('answered_without_claims');
-  if (input && assistantPromptSelection(input, corpus).selectedSummary
+  const summaryContext = input ? assistantPromptContext(input, corpus) : undefined;
+  if (summaryContext?.task === 'summary' && value.unanswered.length) return invalid('unanswered_limit');
+  if (input && (assistantPromptSelection(input, corpus).selectedSummary || summaryContext?.collectionTask === 'summary')
     && [...claims, ...disagreements].map(claim => claim.text).concat(value.unanswered).join(' ').trim().split(/\s+/).filter(Boolean).length > 100) return invalid('answer_word_limit');
   let status = value.status as AssistantResult['status'];
   const policyQuestion = input?.mode === 'ask' && needsAuthoritativePolicyAnswer(input);

@@ -93,6 +93,21 @@ test('brief-summary length repair shares the existing retry cap and never replay
   }
 });
 
+test('summary contracts keep unresolved reports cited and enforce concise collection output', () => {
+  const source = { id: 'q:apify-unresolved', questionId: 'apify-unresolved', communityId: null, kind: 'question', title: 'Delivery issue', body: 'My card was not delivered. I do not know the outcome of the postal investigation.', createdAt: '2026-10-01T00:00:00Z', url: '/questions/apify-unresolved' };
+  const corpus = { sources: [source], partial: false };
+  const input = { mode: 'ask', scope: { kind: 'public' }, question: 'Give recent STEM OPT posts' };
+  const p = assistantPrompt(input, corpus);
+  assert.equal(p.summaryTask, true); assert.equal(p.maxAnswerWords, 100);
+  assert.match(p.system, /does not require the reported situations to be resolved/);
+  const schema = assistantOutputSchema(p);
+  assert(Object.values(schema.properties.unanswered.properties).every(slot => slot.type === 'null'));
+  const draft = { status: 'answered', claims: [{ text: 'One member reported a missing card and an unknown investigation outcome.', evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
+  assert.equal(validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), input).status, 'answered');
+  assert.throws(() => validateAssistantOutput(JSON.stringify({ ...draft, unanswered: ['The card was not delivered.'] }), corpus, Date.now(), input), error => error.code === 'unanswered_limit');
+  assert.throws(() => validateAssistantOutput(JSON.stringify({ ...draft, claims: [{ ...draft.claims[0], text: Array(101).fill('word').join(' ') }] }), corpus, Date.now(), input), error => error.code === 'answer_word_limit');
+});
+
 test('server-only single-attempt cap disables both HTTP format and local citation repair', async () => {
   for (const outputKind of [undefined, 'review']) {
     let calls = 0;

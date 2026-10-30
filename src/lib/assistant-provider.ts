@@ -11,6 +11,8 @@ export type AssistantPrompt = { system: string; user: string; sourceIds?: string
   maxAttempts?: 1 | 2;
   /** Application-selected brief-summary budget, never an extra retry allowance. */
   maxAnswerWords?: number;
+  /** Summaries place unresolved reports in cited claims, never uncited prose. */
+  summaryTask?: boolean;
 };
 export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>): Promise<unknown> };
 export type AssistantProviderFailure = 'missing_binding' | 'missing_key' | 'invalid_key_format' | 'network_error' | 'unsupported_redirect' | 'illegal_invocation' | 'timeout' | 'cancelled' | 'provider_error' | 'rate_limited' | 'authentication_failed' | 'permission_denied' | 'invalid_request' | 'incomplete_output' | 'empty_output' | 'oversized_output';
@@ -132,7 +134,9 @@ export function assistantOutputSchema(prompt: AssistantPrompt) {
         status: { type: 'string', enum: ['answered', 'insufficient'], description: 'Answered requires at least one cited claim or comparison across claims and disagreements. Insufficient requires all claim and disagreement slots to be null.' },
         disagreements: slotSchema(3, { $ref: '#/$defs/claim' }, 'Prefer this section for relevant conflicting reports, preserving both attributed positions with evidence from at least two different sources. A supported comparison can answer without duplicating its reports in claims. Every unused slot must be null.'),
         claims: slotSchema(6, { $ref: '#/$defs/claim' }, 'Use as many of these six slots as needed for essential attributed facts AND material qualifications. When material content repeats, summarize one cited report with singular wording, not several members or a frequency claim. Preserve distinct material facts, corrections, qualifications and conflicts from other reports. Never omit an explicit personal-only limitation or important unknown outcome merely to shorten a summary. Prefer disagreements for conflicting comparisons, but a supported comparison may appear here if it preserves both attributed positions and citations from at least two different sources. Do not repeat reports already conveyed in a comparison. Every unused slot must be null.'),
-        unanswered: slotSchema(4, { type: 'string', maxLength: 400 }, 'Questions not resolved by the evidence. Every unused slot must be null.'),
+        unanswered: prompt.summaryTask
+          ? { type: 'object', additionalProperties: false, required: ['slot1', 'slot2', 'slot3', 'slot4'], properties: Object.fromEntries([1, 2, 3, 4].map(n => [`slot${n}`, { type: 'null' }])), description: 'For a summary, unresolved reports belong in cited claims. All four slots must be null.' }
+          : slotSchema(4, { type: 'string', maxLength: 400 }, 'Questions not resolved by the evidence. Every unused slot must be null.'),
       },
     };
   }
@@ -230,8 +234,8 @@ export async function runAssistantModel(prompt: AssistantPrompt, options: {
       const citationRepair = Object.hasOwn(prompt, 'evidenceSpans') && !review
         ? 'Use fixed slot objects, never arrays: claims has exactly slot1–slot6, disagreements slot1–slot3, unanswered slot1–slot4, and each evidence object slot1–slot4. Include every required slot key; set every unused slot to null. Every non-null evidence slot contains only a spanId selected from the supplied evidence catalog. Do not output quote or sourceId fields, invent IDs, or repeat a spanId within one evidence object. Insufficient requires all claim and disagreement slots to be null.'
         : 'Every quote is one continuous verbatim body excerpt of 12–400 characters, never joined with ellipses. Copy only actual source IDs and exact text from the supplied source bodies.';
-      const lengthRepair = prompt.maxAnswerWords === 100
-        ? ' All claim, disagreement and unanswered text together must be at most 100 words. Omit optional background first; retain essential outcomes, stated dates, uncertainty and personal-only qualifications. Do not truncate claims or their evidence.' : '';
+      const lengthRepair = (prompt.summaryTask ? ' For a summary, all unanswered slots must be null. Summarize unresolved reports as cited claims; a supported account of an unresolved situation is an answered summary.' : '') + (prompt.maxAnswerWords === 100
+        ? ' All claim, disagreement and unanswered text together must be at most 100 words. Omit optional background first; retain essential outcomes, stated dates, uncertainty and personal-only qualifications. Do not truncate claims or their evidence.' : '');
       for (let attempt = 0; attempt < maximumAttempts; attempt++) {
       signal.throwIfAborted();
       reason = 'network_error';
