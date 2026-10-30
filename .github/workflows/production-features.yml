@@ -1,4 +1,5 @@
 name: Release current VisaThreads AI features
+# Keep complete negative verdicts recoverable without diagnostic prose; reject unsupported formal labels.
 # Require actionable bounded review feedback and shared answer priorities; preserve the full hosted safety gate.
 # Give changed filters routing precedence and bound mixed-report summaries with evidence-first repair.
 # Align runtime brevity and unresolved-outcome contracts; retain negative acceptance examples.

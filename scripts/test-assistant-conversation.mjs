@@ -133,6 +133,30 @@ test('summary repair regenerates the whole answer and reviews it, without a thir
     assert.equal(reviews, 2); assert.equal(generations, 2); assert.equal(h.reads.length, 2);
   }
 });
+test('a complete negative review without prose gets one revision, not publication or an error', async () => {
+  let generations = 0, reviews = 0;
+  const h = harness({ generate: async prompt => {
+    if (prompt.outputKind === 'plan') return JSON.stringify(plan);
+    if (prompt.outputKind === 'review') {
+      reviews++;
+      return JSON.stringify({ feedback: '', fulfillsTask: true, checks: prompt.reviewIds.map(id => ({ id, supported: reviews > 1 })) });
+    }
+    generations++;
+    if (generations === 1) return JSON.stringify({ ...answer, claims: [{ ...answer.claims[0], text: 'Everyone was approved.' }] });
+    const diagnosis = JSON.parse(JSON.parse(prompt.user).rejectedDraftContextOnly.diagnosis);
+    assert.deepEqual(diagnosis.unsupportedStatementIds, ['claim:0']);
+    assert.equal(diagnosis.taskIncomplete, false);
+    assert.equal(prompt.maxAttempts, 1);
+    return JSON.stringify(answer);
+  } });
+  const response = await h.handler(req()), value = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(value.status, 'answered');
+  assert.equal(generations, 2); assert.equal(reviews, 2);
+  assert(!JSON.stringify(value).includes('Everyone'));
+  assert(!JSON.stringify(value).includes('unsupportedStatementIds'));
+});
+
 test('semantic summary retains the requested focus for generation and review', () => {
   for (const question of ['stem opt - give issues what people faced', 'What setbacks did people describe with appointments?', 'Summarize what members tried to resolve delivery problems']) {
     const resolved = api.applyAssistantPlan({ mode: 'ask', scope: { kind: 'public' }, question }, { ...plan, action: 'retrieve', query: question });
