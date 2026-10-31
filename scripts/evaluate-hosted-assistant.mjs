@@ -43,6 +43,9 @@ cases.unshift('question-only-summary');
 cases.unshift('shorter-collection-summary');
 cases.unshift('broad-appointment-issues');
 cases.unshift('broad-stem-issues');
+cases.unshift('attribution-shorter');
+cases.unshift('attribution-summary');
+cases.unshift('attribution-initial');
 async function cleanup() {
   let state;
   try { state = JSON.parse(await readFile(statePath, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return true; throw error; }

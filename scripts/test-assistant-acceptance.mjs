@@ -42,6 +42,21 @@ test('opt-in synthetic provider diagnostics redact credentials and exclude gener
   assert.equal(syntheticProviderDiagnostic(null, secret), undefined);
 });
 const { assistantPrompt, prepareAssistantCorpus, validateAssistantOutput } = await import(dependencies['./assistant-core']);
+test('attribution regression fixtures reject invented gender and unrelated expansion at every stage', () => {
+  for (const stage of ['initial', 'summary', 'shorter']) {
+    const fixture = acceptanceFixtures.find(item => item.id === `attribution-${stage}`);
+    assert(fixture);
+    const result = { status: 'answered', claims: [
+      { text: 'A member reports their sibling is awaiting a decision.', evidence: [{ sourceId: fixture.corpus.sources[0].id }] },
+      { text: 'Another member reports job loss and uncertainty about whether or when their employer submitted a withdrawal.', evidence: [{ sourceId: fixture.corpus.sources[1].id }] },
+    ], disagreements: [], unanswered: [] };
+    assert(fixture.checks.every(check => check.test(result)), stage);
+    for (const text of ['She is waiting for her decision.', 'He lost his job.', 'The museum may be open during the holiday.']) {
+      assert(fixture.checks.some(check => !check.test({ ...result, claims: [...result.claims, { text, evidence: [] }] })), text);
+    }
+    if (stage === 'shorter') assert(fixture.checks.some(check => !check.test({ ...result, claims: [...result.claims, { text: 'word '.repeat(51), evidence: [] }] })));
+  }
+});
 // Adapt fixed synthetic answer mocks to the actual internal provider contract.
 // No production adapter or verifier accepts quote text as a fallback. A bad
 // synthetic quote deliberately becomes an unknown ID and must fail closed.
@@ -1113,7 +1128,7 @@ test('runner retains fixed service/provider diagnostics without arbitrary error 
 
 test('all intended usecases have semantic expectations and runner cannot silently skip a fixture', async () => {
   const runner = await readFile(new URL('./evaluate-hosted-assistant.mjs', import.meta.url), 'utf8');
-  assert.equal(acceptanceFixtures.length, 39);
+  assert.equal(acceptanceFixtures.length, 42);
   for (const fixture of acceptanceFixtures) {
     assert(runner.includes(`'${fixture.id}'`));
     assert(fixture.checks.length >= 2);

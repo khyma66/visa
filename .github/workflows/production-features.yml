@@ -1,4 +1,5 @@
 name: Release current VisaThreads AI features
+# Preserve third-party attribution and compress follow-ups without expanding their scope.
 # Separate focused-fact completeness from synthesis; keep factual support and full-source review mandatory.
 # Keep complete negative verdicts recoverable without diagnostic prose; reject unsupported formal labels.
 # Require actionable bounded review feedback and shared answer priorities; preserve the full hosted safety gate.
