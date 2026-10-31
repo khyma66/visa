@@ -9,7 +9,7 @@ type ReviewedCacheEntry = { result: AssistantResult; digest: string };
 export type AssistantCache = { get(key: string): Promise<ReviewedCacheEntry | null>; put(key: string, value: ReviewedCacheEntry): Promise<void> };
 export type AssistantFailureStage = 'request' | 'authentication' | 'planning' | 'retrieval' | 'quota' | 'generation' | 'validation' | 'review' | 'revalidation';
 export type AssistantFailureCategory = 'invalid_request' | 'authentication' | 'permission' | 'rate_limit' | 'quota'
-  | 'source_changed' | 'source_verification' | 'timeout' | 'cancelled' | 'unavailable';
+  | 'source_changed' | 'source_verification' | 'answer_length' | 'timeout' | 'cancelled' | 'unavailable';
 type AssistantQuotaReason = 'user_daily_limit' | 'global_daily_limit' | 'user_minute_limit';
 export type AssistantOperationContext = { signal: AbortSignal; requestId: string; startedAt: number };
 export const ASSISTANT_REQUEST_BUDGET_MS = 45_000;
@@ -19,6 +19,7 @@ const failureMessages: Record<AssistantFailureCategory, string> = {
   quota: 'The assistant usage limit has been reached. Please try again after it resets.',
   source_changed: 'The discussion changed while answering. Please ask again.',
   source_verification: 'The assistant could not verify this answer. Please try again.',
+  answer_length: 'The assistant could not finish a concise answer. Please try again.',
   timeout: 'The assistant took too long. Please try again.', cancelled: 'This assistant request was cancelled.',
   unavailable: 'The assistant is temporarily unavailable. Please try again shortly.',
 };
@@ -334,6 +335,7 @@ export function createAssistantHandler(deps: AssistantDependencies) {
       const error = signal.aborted ? signal.reason : failure;
       const status = error instanceof AssistantError ? error.status : 503;
       const category: AssistantFailureCategory = error instanceof AssistantRequestError ? error.category
+        : error instanceof AssistantError && error.code === 'answer_word_limit' ? 'answer_length'
         : status === 401 ? 'authentication' : status === 403 ? 'permission' : status === 409 ? 'source_changed'
         : status === 429 ? ((stage as AssistantFailureStage) === 'quota' ? 'quota' : 'rate_limit') : status === 502 ? 'source_verification'
         : status >= 400 && status < 500 ? 'invalid_request' : 'unavailable';

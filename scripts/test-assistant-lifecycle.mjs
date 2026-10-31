@@ -51,6 +51,17 @@ test('one request owns every stage signal and performs exactly one final fresh a
   assert.notEqual(cached.headers.get('x-visathreads-request-id'), response.headers.get('x-visathreads-request-id'));
 });
 
+test('a length failure is not mislabeled as a source-verification failure', async () => {
+  const h = harness({ generate: async () => { throw new service.AssistantError(502, 'private rejected draft', undefined, 'answer_word_limit'); } });
+  const response = await h.handler(request());
+  assert.equal(response.status, 502);
+  const body = await response.json();
+  assert.equal(body.code, 'answer_length');
+  assert.match(body.error, /concise answer/);
+  assert(!JSON.stringify(body).includes('private rejected draft'));
+  assert.equal(h.state.writes, 0);
+});
+
 test('identical concurrent callers do not share cancellation, reservations or pending generation', async () => {
   const waits = [], signals = [];
   const h = harness({ generate: async (prompt, signal) => { if (prompt.outputKind === 'review') return review(prompt); const item = deferred(); waits.push(item); signals.push(signal); return item.promise; } });

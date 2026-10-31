@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantResultSetFollowUp, assistantSearchIntent, assistantStandaloneFollowUp, assistantSummaryFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v43-focused-answer-scope';
+export const ASSISTANT_VERSION = 'grounded-chat-v44-attribution-and-compression';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -294,6 +294,7 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
   const overview = assistantSearchIntent(input).overview;
   const collectionSummary = input.turnPlan ? input.turnPlan.style === 'summary' : (resultSet && assistantSummaryFollowUp(question)) || overview;
   const synthesis = selectedSummary || collectionSummary || input.mode === 'summary' || input.mode === 'catchup';
+  const shortening = input.transform === 'shorten' || /make (?:it|that) (?:shorter|concise)|tl;?dr/i.test(input.originalQuestion ?? question);
   // The common shorthand "H4 EAD stamping experiences" can otherwise be read
   // as a demand for an EAD-stamping event. Share one precise interpretation
   // between generation and independent review without changing retrieval.
@@ -307,6 +308,8 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
     // prompts that can disagree about what a useful short answer must contain.
     answerRequirements: {
       kind: synthesis ? 'synthesis' : 'focused-answer',
+      attribution: 'Preserve who actually experienced each event. The writer, a relative, a friend and a commenter are different people. If a writer describes a spouse or sibling, say the post describes the writer’s spouse or sibling; neither claim the writer experienced it nor claim the relative personally wrote the report. Do not infer gender from names, another person in the post, or previous answers; use the member, the person, or they unless the source explicitly establishes the subject. Prior assistant wording is never evidence.',
+      ...(shortening ? { compression: 'This is a shortened overview, not a full-summary checklist. Keep the main requested problems or outcomes and their material uncertainty. There is no minimum length or required sentence count. Combine facts from the same report; omit secondary plans, background and incidental dates rather than adding more sentences. A date is essential only when omitting it changes the meaning of a retained claim. Do not introduce a new topic from the source or repeat a mistake from the earlier answer. Preserve attribution and qualifications for every retained fact. The application separately enforces the 50-word maximum; reviewing style or counting words is not a factual-review task.' } : {}),
       priorities: [
         'Answer the latest requested point, not every topic mentioned in the sources.',
         synthesis ? 'Lead with relevant reported outcomes or problems. Keep different people separate.' : 'Give the requested fact or comparison directly, attributed to the relevant report.',

@@ -95,11 +95,11 @@ export function parseAssistantResult(value: unknown): AssistantResult | null {
   };
 }
 
-export type AssistantFailureCode = 'invalid_request' | 'authentication' | 'permission' | 'rate_limit' | 'quota' | 'source_changed' | 'source_verification' | 'timeout' | 'cancelled' | 'unavailable';
+export type AssistantFailureCode = 'invalid_request' | 'authentication' | 'permission' | 'rate_limit' | 'quota' | 'source_changed' | 'source_verification' | 'answer_length' | 'timeout' | 'cancelled' | 'unavailable';
 export type AssistantClientFailure = { code: AssistantFailureCode; requestId?: string; retryAfterSeconds?: number; resetAt?: string };
 const failureStatuses: Record<AssistantFailureCode, number[]> = {
   invalid_request: [400, 405, 413, 415, 422], authentication: [401], permission: [403], rate_limit: [429], quota: [429],
-  source_changed: [409], source_verification: [502], timeout: [504], cancelled: [499], unavailable: [500, 502, 503],
+  source_changed: [409], source_verification: [502], answer_length: [502], timeout: [504], cancelled: [499], unavailable: [500, 502, 503],
 };
 
 export function parseAssistantFailure(status: number, value: unknown, retryAfter: string | null = null, now = Date.now()): AssistantClientFailure {
@@ -128,6 +128,7 @@ export function assistantFailureMessage(failure: AssistantClientFailure): string
     quota: 'You’ve reached the assistant usage limit.',
     source_changed: 'This discussion changed. Try again for the latest answer.',
     source_verification: 'I couldn’t verify the sources for that answer. Try again.',
+    answer_length: 'I couldn’t finish a concise answer. Your question is saved; try again.',
     timeout: 'That took too long. Your question is saved; try again.',
     cancelled: 'The response was stopped. You can retry or ask another question.',
     unavailable: 'The assistant is temporarily unavailable. Your question is saved.',

@@ -66,6 +66,21 @@ test('plain source descriptions cannot be upgraded into formal legal labels or c
   assert.equal(JSON.parse(review.user).sources[0].body, source.body);
 });
 
+test('generation and review preserve third-party subjects and scoped compression', () => {
+  const request = { ...input, question: 'Make it shorter', originalQuestion: 'Make it shorter', transform: 'shorten', previousPosts: [{ questionId: source.questionId, sourceId: source.id }], turnPlan: { action: 'reuse', query: 'Summarize the application issues', focus: null, style: 'summary', clarification: null } };
+  const draft = assistantPrompt(request, corpus), review = assistantReviewPrompt(request, corpus, result);
+  const writing = JSON.parse(draft.user).answerRequirements, checking = JSON.parse(review.user).answerRequirements;
+  assert.deepEqual(writing, checking);
+  assert.match(writing.attribution, /Do not infer gender/);
+  assert.match(writing.attribution, /writer, a relative, a friend and a commenter are different people/);
+  assert.match(writing.compression, /no minimum length or required sentence count/);
+  assert.match(review.system, /candidate checks contain the actual answer text/);
+  assert.match(writing.compression, /date is essential only when omitting it changes/);
+  assert.match(review.system, /transfers an event between people or invents the subject/);
+  assert.equal(draft.maxAnswerWords, 50);
+  assert.equal(JSON.parse(assistantPrompt(input, corpus).user).answerRequirements.compression, undefined);
+});
+
 test('focused questions keep a narrow completion contract while still reviewing the entire source', () => {
   for (const question of ['On which day did this member receive their passport?', 'Which documents did the member mention?', 'What was the stated reason for the delay?']) {
     const prompt = assistantReviewPrompt({ ...input, question }, corpus, result);
