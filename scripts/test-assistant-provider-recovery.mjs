@@ -79,16 +79,17 @@ test('brief selected summaries enforce their word budget without truncating fact
 });
 
 test('brief-summary length repair shares the existing retry cap and never replays rejected text', async () => {
-  for (const alwaysTooLong of [false, true]) {
+  for (const maxAnswerWords of [50, 100, 150]) for (const alwaysTooLong of [false, true]) {
     const calls = []; let validations = 0;
-    const checked = { ...prompt, maxAnswerWords: 100, validateOutput() {
+    const checked = { ...prompt, maxAnswerWords, validateOutput() {
       if (++validations === 1 || alwaysTooLong) throw new AssistantError(502, 'rejected private draft', undefined, 'answer_word_limit');
     } };
     const pending = runAssistantModel(checked, { provider: 'groq', apiKey: 'synthetic-private-key', fetcher: async (_url, init) => { calls.push(init); return success(); } });
     if (alwaysTooLong) await assert.rejects(pending, error => error.code === 'answer_word_limit');
     else assert.equal(await pending, output);
     assert.equal(calls.length, 2); assert.equal(calls[0].signal, calls[1].signal);
-    assert.match(JSON.parse(calls[1].body).messages[0].content, /at most 100 words/);
+    assert.match(JSON.parse(calls[1].body).messages[0].content, new RegExp(`at most ${maxAnswerWords} words`));
+    if (maxAnswerWords === 50) assert.match(JSON.parse(calls[1].body).messages[0].content, /two compact sentences totaling 35–45 words/);
     assert.doesNotMatch(calls[1].body, /rejected private draft/);
   }
 });
