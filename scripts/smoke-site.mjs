@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 
-export const smokeRoutes = ['/account', '/cookies', '/privacy-choices', '/countries', '/us', '/experiences', '/experiences/new', '/', '/login', '/signup', '/account/recovery', '/account/update-password', '/messages', '/moderation', '/community-safety', '/privacy', '/terms', '/contact', '/tags', '/explore', '/my-communities', '/communities/new', '/news', '/api/health'];
+export const smokeRoutes = ['/account', '/cookies', '/privacy-choices', '/countries', '/us', '/experiences', '/experiences/new', '/', '/login', '/signup', '/account/recovery', '/account/update-password', '/messages', '/moderation', '/community-safety', '/privacy', '/terms', '/contact', '/security', '/tags', '/explore', '/my-communities', '/communities/new', '/news', '/api/health'];
 
 export function assertHealthProvenance(health, expected) {
   assert.match(expected?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Expected manifest must identify an exact Git commit');

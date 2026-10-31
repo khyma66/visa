@@ -64,6 +64,7 @@ export default function RootLayout({
               <Link href="/privacy-choices" className="underline">Your Privacy Choices</Link>
               <Link href="/countries" className="underline">U.S. Community</Link>
               <Link href="/contact" className="underline">Reporting and Privacy Requests</Link>
+              <Link href="/security" className="underline">Security</Link>
             </nav>
           </footer>
           </div>

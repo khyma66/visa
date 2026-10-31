@@ -86,6 +86,11 @@ test('sitemap entries are existing public static destinations, not individual me
   }
 });
 
+test('security guidance is a public editorial destination', () => {
+  assert(PUBLIC_SITEMAP_PATHS.includes('/security'));
+  assert.equal(publicSitemap(approved).some(({ url }) => url === 'https://visathreads.com/security'), true);
+});
+
 test('metadata routes use request-time environment gates, including after a prior approved request', async () => {
   const routes = {};
   for (const name of ['robots', 'sitemap']) {
