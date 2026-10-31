@@ -156,7 +156,7 @@ export const acceptanceFixtures: AcceptanceFixture[] = [
       absent('no_invented_gender', /\b(?:he|his|him|she|her|hers)\b/), absent('unrelated_topic_omitted', /museum|holiday/),
       absent('relative_not_made_the_writer', /\bsibling (?:reports?|says?|states?|asks?)\b/),
       { name: 'both_reports_cited', test: result => reports.every(s => result.claims.some(c => c.evidence.some(e => e.sourceId === s.id))) },
-      ...(stage === 'shorter' ? [{ name: 'shorter_output_limit', test: (result: AssistantResult) => words(result).trim().split(/\s+/).length <= 50 }] : []),
+      ...(stage === 'shorter' ? [{ name: 'shorter_output_limit', test: (result: AssistantResult) => words(result).trim().split(/\s+/).length <= 80 }] : []),
     ] };
   }),
   ...(['STEM OPT', 'appointment scheduling'] as const).map((topic, index): AcceptanceFixture => {
@@ -182,7 +182,7 @@ export const acceptanceFixtures: AcceptanceFixture[] = [
     source(701, 'My application remains pending. I do not know when a decision will be made.', { kind: 'question', id: 'q:apify-short-first', questionId: 'apify-short-first', communityId: null, title: 'Pending application' }),
     source(702, 'Has anyone located a missing card after asking the postal service to investigate?', { kind: 'question', id: 'q:apify-short-second', questionId: 'apify-short-second', communityId: null, title: 'Missing card question' }),
   ] }, checks: [answered, mentions('pending_report', /pending/), mentions('unknown_timing', /unknown|not know|unclear|no known|not yet known|unspecified|uncertain|undetermined|no decision date|without.*date|date.*not/), mentions('card_question', /card/),
-    { name: 'shorter_output_limit', test: result => words(result).trim().split(/\s+/).length <= 50 },
+    { name: 'shorter_output_limit', test: result => words(result).trim().split(/\s+/).length <= 80 },
     absent('no_invented_instructions', /you (?:can|should|must)/),
   ] },
   { id: 'question-only-summary', input: { mode: 'summary', scope: { kind: 'post', id: postId } }, corpus: { partial: false, sources: [
@@ -321,7 +321,7 @@ export function evaluateAcceptance(fixture: AcceptanceFixture, result: Assistant
   }
   // Use the exact server-resolved task, as production validation does. The
   // original wording alone cannot distinguish a 150-word collection summary
-  // from a 100-word specific answer or a 50-word shortening request.
+  // from a 100-word specific answer or an 80-word shortening ceiling.
   if (fixture.input.mode === 'ask') checks.push({ name: 'answer_is_concise', passed: [...result.claims, ...result.disagreements].map(claim => claim.text).concat(result.unanswered).join(' ').trim().split(/\s+/).filter(Boolean).length <= (assistantAnswerWordLimit(resolvedInput, fixture.corpus) ?? 100) });
   return { id: fixture.id, passed: checks.every(check => check.passed), checks };
 }

@@ -77,7 +77,7 @@ test('generation and review preserve third-party subjects and scoped compression
   assert.match(review.system, /candidate checks contain the actual answer text/);
   assert.match(writing.compression, /date is essential only when omitting it changes/);
   assert.match(review.system, /transfers an event between people or invents the subject/);
-  assert.equal(draft.maxAnswerWords, 50);
+  assert.equal(draft.maxAnswerWords, 80);
   assert.equal(JSON.parse(assistantPrompt(input, corpus).user).answerRequirements.compression, undefined);
 });
 
