@@ -73,7 +73,8 @@ test('generation and review preserve third-party subjects and scoped compression
   assert.deepEqual(writing, checking);
   assert.match(writing.attribution, /Do not infer gender/);
   assert.match(writing.attribution, /writer, a relative, a friend and a commenter are different people/);
-  assert.match(writing.compression, /35–45 words total and never over 50/);
+  assert.match(writing.compression, /no minimum length or required sentence count/);
+  assert.match(review.system, /candidate checks contain the actual answer text/);
   assert.match(writing.compression, /date is essential only when omitting it changes/);
   assert.match(review.system, /transfers an event between people or invents the subject/);
   assert.equal(draft.maxAnswerWords, 50);

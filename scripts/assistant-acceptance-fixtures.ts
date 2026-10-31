@@ -144,16 +144,17 @@ export const acceptanceFixtures: AcceptanceFixture[] = [
       source(802, 'I lost my job on August 7. My employer said they plan to withdraw my application after my final day. I do not know whether or when they submitted the withdrawal. I am considering a training course while looking for another job.', { kind: 'question', id: 'q:apify-job-withdrawal', questionId: 'apify-job-withdrawal', communityId: null, title: 'Job loss and application uncertainty', url: '/questions/apify-job-withdrawal' }),
     ];
     return { id: `attribution-${stage}`, input: { mode: 'ask', scope: { kind: 'public' },
-      question: stage === 'initial' ? 'Give the application issues people faced' : stage === 'summary' ? 'Summarize these issues in plain English' : 'Make it shorter',
+      question: stage === 'initial' ? 'Give the application and employment issues people faced' : stage === 'summary' ? 'Summarize these issues in plain English' : 'Make it shorter',
       ...(stage === 'shorter' ? { transform: 'shorten' as const } : {}),
-      ...(stage !== 'initial' ? { previousQuestions: ['Give the application issues people faced'], previousPosts: reports.map(s => ({ questionId: s.questionId, sourceId: s.id })),
+      ...(stage !== 'initial' ? { previousQuestions: ['Give the application and employment issues people faced'], previousPosts: reports.map(s => ({ questionId: s.questionId, sourceId: s.id })),
         // Deliberately incorrect prior prose must not become factual evidence.
-        conversation: [{ question: 'Give the application issues people faced', answer: 'One poster says her application is pending. Another says his employer withdrew his application after he lost his job.' }] } : {}),
+        conversation: [{ question: 'Give the application and employment issues people faced', answer: 'One poster says her application is pending. Another says his employer withdrew his application after he lost his job.' }] } : {}),
     }, corpus: { sources: reports, partial: false }, checks: [answered,
       mentions('relative_kept_distinct', /sibling/), mentions('pending_decision', /pending|waiting|await/),
       mentions('job_loss', /lost.{0,15}job|job loss|laid off|layoff/), mentions('withdrawal_topic', /withdraw/),
       mentions('withdrawal_uncertainty', /unknown|uncertain|not know|unconfirmed|unclear|not confirmed|no confirmation/),
       absent('no_invented_gender', /\b(?:he|his|him|she|her|hers)\b/), absent('unrelated_topic_omitted', /museum|holiday/),
+      absent('relative_not_made_the_writer', /\bsibling (?:reports?|says?|states?|asks?)\b/),
       { name: 'both_reports_cited', test: result => reports.every(s => result.claims.some(c => c.evidence.some(e => e.sourceId === s.id))) },
       ...(stage === 'shorter' ? [{ name: 'shorter_output_limit', test: (result: AssistantResult) => words(result).trim().split(/\s+/).length <= 50 }] : []),
     ] };
