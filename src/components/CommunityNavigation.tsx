@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { BookOpen, Compass, Home, MessageCircle, Newspaper, NotebookPen, Plus, ShieldCheck, Sparkles, Tags, TrendingUp, Users } from 'lucide-react';
+import { BookOpen, Compass, Home, MessageCircle, Newspaper, NotebookPen, Plus, ShieldCheck, Tags, TrendingUp, Users } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 
 export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
@@ -14,8 +14,6 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
   const sections = [
     ...(mobile ? [{ name: 'Create & Ask', links: [
       { href: askHref, label: 'Ask a Question', icon: Plus },
-      ...(process.env.NEXT_PUBLIC_SITE_URL === 'https://visathreads.com'
-        ? [{ href: '/assistant', label: 'Ask VisaThreads', icon: Sparkles }] : []),
     ] }] : []),
     { name: 'Discover', links: [
       { href: '/', label: 'Home', icon: Home, active: pathname === '/' && !popular },

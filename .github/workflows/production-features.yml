@@ -1,50 +1,5 @@
-name: Release current VisaThreads AI features
-# Accept equivalent unconfirmed-withdrawal wording in tests; reject confirmed-event counterexamples.
-# Target 30–50-word shortening with bounded room for qualifications; retain factual and attribution checks.
-# Preserve third-party attribution and compress follow-ups without expanding their scope.
-# Separate focused-fact completeness from synthesis; keep factual support and full-source review mandatory.
-# Release resilient saved news editions and the redesigned visa news desk.
-# Keep complete negative verdicts recoverable without diagnostic prose; reject unsupported formal labels.
-# Require actionable bounded review feedback and shared answer priorities; preserve the full hosted safety gate.
-# Give changed filters routing precedence and bound mixed-report summaries with evidence-first repair.
-# Align runtime brevity and unresolved-outcome contracts; retain negative acceptance examples.
-# Gate focused issue synthesis through the real planner and verified repair; add explicit chat export.
-# Align question-summary evidence and bounded comparison routing after retained acceptance failures.
-# Enforce nonempty planner tasks in the provider schema and preserve clarification precedence.
-# Bound concise overview context and enforce shortening after signed-in live tests.
-# Require cited unresolved-summary content and preserve whole-answer qualification review.
-# Keep multi-discussion summaries concise without turning 101-word useful answers into errors.
-# Keep semantic summary interpretations out of legacy literal post-search filtering.
-# Enforce the existing brief-summary word contract within the bounded format-repair budget.
-# Verify streaming auth denials through the deployed application router, not only the bare Worker.
-# Recheck short clarification codes and inherited conversational constraints.
-# Require contextual planner acceptance before releasing live progress and generalized follow-ups.
-# Publish professional public-facing copy without changing policy receipts or launch permissions.
-# Verify summary-first retrieval and same-source-set conversational follow-ups.
-# Owner-authorized Google discovery for editorial pages; private/thread indexing remains gated.
-# Release task-aware evidence review for questions, summaries and catch-up.
-# Both normal and cache-busted health requests must converge before verification.
-# Site quality release: shared readable typography and recoverable messaging.
-# Keep credential-redacted upload diagnostics when isolated Groq setup fails.
-# Use bounded medium-effort evidence review; preserve low-latency generation.
-# Keep numbered result references through follow-ups without replaying source text.
-# General assistant repair: constrained retrieval, independent cancellation,
-# one total deadline, bounded schema recovery and large-discussion acceptance.
-# Keep the evaluation manifest in exactly the authenticated readiness order.
-# Require atomic source facts and one bounded, independently verified correction.
-# Resolve model-selected evidence IDs to server-owned complete source excerpts.
-# ROI playbook release: owner launch/experiment workspace and source-linked guides.
-# Bound provider collections with nullable slots before exact evidence resolution.
-# Verify historical/current document relationships and canonical summary intent.
-# Preserve conflicting reports during independent review and correction.
-# Accept complete two-source comparisons without requiring duplicate statements.
-# Collapse only exact same-discussion, same-time summary repeats before the guarded quality gate.
-# Retry only marked transient Supabase Auth timeouts during post-deploy invalid-session smoke.
-# Keep repeated-report summaries singular and cited at the material-fact level.
-# Require a separate H-4 stamping experience synthesis before releasing the updated assistant.
-# Treat documented H-4 visa interviews as useful partial answers without inventing EAD involvement.
-# Resolve the common H-4/EAD stamping shorthand consistently for generation and independent review.
-# Require the new experience case in the release verifier as well as both evaluator manifests.
+name: Release VisaThreads site
+# Chatbot removed at owner request. Verify no UI or inference endpoint remains.
 
 on:
   workflow_dispatch:
@@ -66,8 +21,8 @@ jobs:
     timeout-minutes: 35
     environment: production
     env:
-      ASSISTANT_PROVIDER: 'groq'
-      ASSISTANT_ENABLED: 'true'
+      ASSISTANT_PROVIDER: ''
+      ASSISTANT_ENABLED: 'false'
       ASSISTANT_COMMUNITIES_ENABLED: 'false'
       ASSISTANT_CATCHUP_ENABLED: 'false'
     steps:
@@ -89,16 +44,11 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
-      - name: Evaluate hosted chatbot regressions with three independent samples per case
-        run: node scripts/evaluate-groq-assistant.mjs --release
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Build candidate preserving current launch state and existing content
         run: node scripts/production-feature-release.mjs build
-      - name: Exercise streamed responses through the fully built application router
-        run: node scripts/smoke-assistant-built-stream.mjs
-      - name: Require model acceptance and unchanged live baseline
+      - name: Verify chatbot removal through the fully built application router
+        run: node scripts/smoke-chatbot-removed.mjs
+      - name: Require disabled chatbot and unchanged live baseline
         run: node scripts/production-feature-release.mjs deploy-check
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -135,16 +85,9 @@ jobs:
           name: production-ai-feature-evidence-${{ github.sha }}-attempt-${{ github.run_attempt }}
           path: |
             .cache/visaflow/live-preview/build-provenance.json
-            .cache/visaflow/assistant-acceptance.json
             .cache/visaflow/live-preview/rollout-verification.json
           include-hidden-files: true
           if-no-files-found: warn
-      - name: Restore isolated Groq evaluation preview routing
-        if: always()
-        run: node scripts/evaluate-groq-assistant.mjs --cleanup
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Remove recovered content
         if: always()
         run: rm -f src/data/api-archive.json .cache/visaflow/live-preview/public-build-values.json

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu, Search, Activity, ChevronDown, LogOut, MessageCircle, Plus, Settings, ShieldCheck, Sparkles, UserRound, UsersRound } from 'lucide-react';
+import { Menu, Search, Activity, ChevronDown, LogOut, MessageCircle, Plus, Settings, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 import { CommunityNavigation } from './CommunityNavigation';
@@ -67,7 +67,6 @@ export function SiteHeader() {
           </span>
         )}
         <FeedbackLauncher />
-        {process.env.NEXT_PUBLIC_SITE_URL === 'https://visathreads.com' && <Link href="/assistant" aria-label="Ask VisaThreads assistant" title="Ask VisaThreads assistant" className="header-secondary-action icon-control text-teal-800"><Sparkles size={20} aria-hidden="true" /></Link>}
         <Link href={user ? '/ask' : '/login?next=%2Fask#sign-in'} aria-label="Ask a Question" title="Ask a Question" className="header-secondary-action header-ask">
           <Plus size={16} /> <span className="hidden sm:inline">Ask</span>
         </Link>

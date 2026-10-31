@@ -229,10 +229,10 @@ async function verify() {
       await probeRolloutHealth(probe, 'start');
       const feed = await probe.request('dev-archive', '/api/community');
       assert.equal(hash(await feed.json()), receipt.publishedArchiveSha256, 'Dev content changed during sync.');
-      const flags = await probe.request('disabled-assistant-flags', '/api/assistant');
-      assert.deepEqual(await flags.json(), { posts: false, communities: false, catchup: false });
+      const flags = await probe.request('removed-chatbot', '/api/assistant', {}, { status: 410 });
+      assert.deepEqual(await flags.json(), { posts: false, communities: false, catchup: false, code: 'removed' });
       for (const [path, options, status] of [
-        ['/assistant', {}, 404], ['/api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'ask', scope: { kind: 'public' }, question: 'test' }) }, 503],
+        ['/assistant', {}, 404], ['/api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'ask', scope: { kind: 'public' }, question: 'test' }) }, 410],
         ['/api/communities/00000000-0000-4000-8000-000000000001/summary', {}, 503],
       ]) { const response = await probe.request(`disabled:${path}`, path, options, { status }); await response.body?.cancel(); }
       const page = await probe.request('dev-home', '/'); assert.match(page.headers.get('x-robots-tag') ?? '', /noindex/);

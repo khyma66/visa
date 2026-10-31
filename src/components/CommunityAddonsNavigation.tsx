@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Compass, Newspaper, Plus, Sparkles, Users } from 'lucide-react';
+import { Compass, Newspaper, Plus, Users } from 'lucide-react';
 
 /** Add beside the existing header; never replace the host application's navigation. */
 export function CommunityAddonsNavigation() {
@@ -11,7 +11,6 @@ export function CommunityAddonsNavigation() {
     ['/explore', 'Explore Communities', Compass],
     ['/my-communities', 'My Communities', Users],
     ['/news', 'News', Newspaper],
-    ['/assistant', 'Ask VisaThreads', Sparkles],
     ['/communities/new', 'Start a Community', Plus],
   ] as const;
   return <div className="community-shortcuts">

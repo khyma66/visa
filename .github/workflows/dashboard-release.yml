@@ -17,14 +17,15 @@ concurrency:
 
 jobs:
   release:
-    if: github.ref == 'refs/heads/release/dashboard-production-20261016' && inputs.candidate_sha == github.sha
+    # Retired one-off release: use production-features.yml after chatbot removal.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment: production
     env:
       DASHBOARD_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      ASSISTANT_PROVIDER: 'groq'
-      ASSISTANT_ENABLED: 'true'
+      ASSISTANT_PROVIDER: ''
+      ASSISTANT_ENABLED: 'false'
       ASSISTANT_COMMUNITIES_ENABLED: 'false'
       ASSISTANT_CATCHUP_ENABLED: 'false'
     steps:
@@ -48,12 +49,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
-      - name: Evaluate unchanged Groq assistant with all existing release cases
-        id: evaluate
-        run: node scripts/evaluate-groq-assistant.mjs --release
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Build the exact dashboard candidate
         run: node scripts/dashboard-release.mjs build
       - name: Require fresh model acceptance, unchanged live baseline and stopped schedules
@@ -99,17 +94,10 @@ jobs:
           path: |
             .cache/visaflow/live-preview/dashboard-scope.json
             .cache/visaflow/live-preview/build-provenance.json
-            .cache/visaflow/assistant-acceptance.json
             .cache/visaflow/live-preview/rollout-verification.json
             .cache/visaflow/live-preview/dashboard-verification.json
           include-hidden-files: true
           if-no-files-found: warn
-      - name: Restore isolated evaluation routing
-        if: always() && (steps.evaluate.outcome == 'success' || steps.evaluate.outcome == 'failure')
-        run: node scripts/evaluate-groq-assistant.mjs --cleanup
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Remove recovered content
         if: always()
         run: rm -f src/data/api-archive.json .cache/visaflow/live-preview/public-build-values.json

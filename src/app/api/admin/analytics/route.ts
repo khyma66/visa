@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     readiness: {
       searchEligible: publicSearchOrigin() !== null,
       canonicalOrigin: 'https://visathreads.com',
-      assistantEnabled: process.env.ASSISTANT_ENABLED === 'true',
+      assistantEnabled: false,
       visitorTracking: 'not-configured', billing: 'not-configured',
     },
     release: {

@@ -173,9 +173,9 @@ test('feature integration retains original whole-site assertions and both post-a
   const source = await readFile(new URL('./smoke-production-features.mjs', import.meta.url), 'utf8');
   assert(source.includes("await smokeSite(LIVE_SITE, expected, { fetchImpl: probe.siteFetch, skipHealthWait: true })"));
   assert(source.includes("await probeRolloutHealth(probe, 'start')")); assert(source.includes("await probeRolloutHealth(probe, 'end')"));
-  assert(source.includes('receipt.publishedArchiveSha256')); assert(source.includes('assert.deepEqual(await flagsResponse.json(), features)'));
-  assert(source.includes("['anonymous-denial', {}, 401]")); assert(source.includes("Origin: 'https://untrusted.example' }, 403")); assert(source.includes("'invalid-session-denial'"));
-  assert(source.includes('/private, no-store/')); assert(source.includes('rollout-verification.json'));
+  assert(source.includes('receipt.publishedArchiveSha256')); assert(source.includes("code: 'removed'"));
+  assert(source.includes("{ status: 410 }")); assert(source.includes("{ status: 404 }"));
+  assert(source.includes('/no-store/')); assert(source.includes('rollout-verification.json'));
   assert(source.includes('await verifyPlaybookPages(probe, feed, true)'));
 });
 

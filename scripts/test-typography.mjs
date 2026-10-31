@@ -85,7 +85,7 @@ test('compiled phone form floor wins against small utilities and the desktop hea
   assert.equal(property(floor, 'font-size'), 'max(1rem, 16px)');
 });
 
-test('post and assistant reading text use the shared body size with readable line spacing', async () => {
+test('post reading text use the shared body size with readable line spacing', async () => {
   const card = await readFile(new URL('src/components/QuestionCard.tsx', root), 'utf8');
   assert.match(card, /text-thread-title[^\n]+\n\s*\{question\.title\}/);
   assert.match(card, /text-base leading-6[^\n]+\{question\.body\}/);
@@ -93,11 +93,6 @@ test('post and assistant reading text use the shared body size with readable lin
   assert.match(detail, /text-2xl font-semibold text-slate-950 sm:text-3xl">\{question.title\}/);
   assert.doesNotMatch(detail, /<h2 className="text-(?:2xl|xl) font-black/);
   for (const field of ['question', 'answer']) assert(detail.includes(`text-base leading-relaxed text-slate-800">{${field}.body}`));
-  const assistant = await readFile(new URL('src/components/AssistantPanel.tsx', root), 'utf8');
-  assert.match(assistant, /text-base leading-relaxed text-slate-800/);
-  assert.match(assistant, /text-base leading-relaxed text-slate-700">\{post\.excerpt\}/);
-  assert.match(assistant, /text-base leading-relaxed text-white" aria-label="Your message"/);
-  assert.match(assistant, /text-xs leading-5 text-slate-600">Answers from community discussions/);
 });
 
 test('component text never reintroduces unreadable arbitrary sizes below the 12px metadata floor', async () => {
@@ -130,5 +125,5 @@ test('phone header keeps account controls on the first row and the complete logo
   const navigation = await readFile(new URL('src/components/CommunityNavigation.tsx', root), 'utf8');
   assert.match(navigation, /mobile \? \[\{ name: 'Create & Ask'/);
   assert.match(navigation, /href: askHref, label: 'Ask a Question'/);
-  assert.match(navigation, /NEXT_PUBLIC_SITE_URL === 'https:\/\/visathreads\.com'[\s\S]*?href: '\/assistant'/);
+  assert(!navigation.includes('/assistant'));
 });

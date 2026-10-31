@@ -20,42 +20,20 @@ await verifyStableRollout({ expected, previous: receipt.health,
     const feedResponse = await probe.request('archive', '/api/community');
     const feed = await feedResponse.json();
     assert.equal(sha256(canonicalJson(feed)), receipt.publishedArchiveSha256, 'Published content changed during feature deployment.');
-    const flagsResponse = await probe.request('assistant-flags', '/api/assistant', {}, { marked: true });
-    assert.equal(flagsResponse.headers.get('X-VisaThreads-Assistant-Provider'), process.env.ASSISTANT_PROVIDER ?? 'workers-ai', 'Live provider differs from the checked release.');
-    assert.deepEqual(await flagsResponse.json(), features);
-    const assistant = await probe.request('assistant-page', '/assistant');
-    assert.match(assistant.headers.get('x-robots-tag') ?? '', /noindex/);
-    await assistant.body?.cancel();
-    const question = JSON.stringify({ mode: 'ask', scope: { kind: 'public' }, question: 'What experiences have members reported?' });
-    for (const [check, headers, status] of [
-      ['anonymous-denial', {}, 401],
-      ['cross-origin-denial', { Origin: 'https://untrusted.example' }, 403],
-      ['invalid-session-denial', { Authorization: `Bearer ${'invalid-test'.repeat(4)}` }, 401],
-    ]) {
-      const response = await probe.request(check, '/api/assistant', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: question }, { status, denial: true, marked: true });
-      assert.match(response.headers.get('cache-control') ?? '', /private, no-store/);
-      await response.body?.cancel();
-      const streamed = await probe.request(`stream-${check}`, '/api/assistant', { method: 'POST',
-        headers: { 'content-type': 'application/json', Accept: 'application/x-ndjson', ...headers }, body: question }, { status: 200, marked: true });
-      assert.match(streamed.headers.get('content-type') ?? '', /^application\/x-ndjson/);
-      assert.match(streamed.headers.get('cache-control') ?? '', /private, no-store/);
-      const text = await streamed.text();
-      assert(text.length < 8000, 'Streaming denial exceeds the bounded envelope.');
-      const frames = text.trim().split('\n').map(line => JSON.parse(line));
-      assert(frames.length >= 2 && frames.length <= 16, 'Streaming denial must include progress and a finalized result.');
-      assert(frames.slice(0, -1).every(frame => frame.type === 'progress' && ['request', 'authentication'].includes(frame.stage)), 'Denied request entered factual processing.');
-      const final = frames.at(-1);
-      assert.equal(final.type, 'complete');
-      assert.equal(final.status, status, 'Streaming authentication denial differs from JSON.');
-      assert.equal(final.value.code, status === 403 ? 'permission' : 'authentication');
-      assert(!final.value.claims && !final.value.sources, 'A denied stream must not contain evidence.');
+    for (const method of ['GET', 'POST']) {
+      const response = await probe.request('removed-chatbot-' + method, '/api/assistant', { method }, { status: 410 });
+      assert.deepEqual(await response.json(), { posts: false, communities: false, catchup: false, code: 'removed' });
+      assert.match(response.headers.get('cache-control') ?? '', /no-store/);
     }
+    const removedPage = await probe.request('removed-chatbot-page', '/assistant', {}, { status: 404 });
+    await removedPage.body?.cancel();
     await smokeSite(LIVE_SITE, expected, { fetchImpl: probe.siteFetch, skipHealthWait: true });
     await verifyPlaybookPages(probe, feed, true);
     const home = await probe.request('search-home', '/');
     assert.equal(home.headers.get('x-visathreads-search'), 'editorial');
     assert(!/noindex/i.test(home.headers.get('x-robots-tag') ?? ''));
     const html = await home.text();
+    assert(!html.includes('href="/assistant"'), 'Chatbot navigation must be absent.');
     assert(!/<meta[^>]+name="robots"[^>]+content="[^"]*noindex/i.test(html));
     const robots = await (await probe.request('search-robots', '/robots.txt')).text();
     assert.match(robots, /Allow: \/\s/);
