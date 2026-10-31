@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 const origin = new URL(process.argv[2] ?? 'https://visathreads.com').origin;
 assert(['https://visathreads.com', 'http://127.0.0.1:3000'].includes(origin), 'Use the owned site or isolated local preview');
-const paths = ['/', '/?sort=score', '/explore', '/news', '/experiences', '/tags', '/my-communities', '/messages', '/communities/new', '/ask', '/experiences/new', '/login', '/account', '/community-safety', '/privacy', '/terms', '/cookies', '/privacy-choices', '/countries', '/contact'];
+const paths = ['/', '/?sort=score', '/explore', '/news', '/experiences', '/tags', '/my-communities', '/messages', '/communities/new', '/ask', '/experiences/new', '/login', '/account', '/community-safety', '/privacy', '/terms', '/cookies', '/privacy-choices', '/countries', '/contact', '/security'];
 const tags = ['h1b', 'h4', 'f1', 'ead', 'stamping', 'timeline'];
 const experiences = ['apify-2284772032337912', 'apify-2270233223791793', 'apify-2258283714986744', 'apify-2257123705102745'];
 paths.push(...tags.map(tag => `/?tag=${tag}`), ...experiences.map(id => `/questions/${id}`));

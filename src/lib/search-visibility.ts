@@ -7,7 +7,7 @@ export type SearchEnvironment = Partial<Record<
 // Imported content, member profiles and private areas are never enumerated here.
 export const PUBLIC_SITEMAP_PATHS = [
   '/', '/us', '/countries', '/community-safety', '/contact',
-  '/privacy', '/privacy-choices', '/terms', '/cookies', '/guides', '/about',
+  '/privacy', '/privacy-choices', '/terms', '/cookies', '/guides', '/about', '/security',
 ] as const;
 
 export const PRIVATE_CRAWL_PATHS = [

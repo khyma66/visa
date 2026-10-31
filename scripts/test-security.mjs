@@ -11,6 +11,15 @@ const { createAuthSessionSync } = await import(moduleUrl(await load('../src/lib/
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const user = (id) => ({ id, email: null });
 
+test('security.txt publishes a private reporting path without claiming a reward or response SLA', async () => {
+  const body = await readFile(new URL('../public/.well-known/security.txt', import.meta.url), 'utf8');
+  assert.match(body, /^Contact: mailto:/m);
+  assert.match(body, /^Expires: 2027-10-31T23:59:59Z$/m);
+  assert.match(body, /^Canonical: https:\/\/visathreads\.com\/\.well-known\/security\.txt$/m);
+  assert.match(body, /^Policy: https:\/\/visathreads\.com\/security$/m);
+  assert.doesNotMatch(body, /bounty|reward|guarantee|SLA/i);
+});
+
 test('unreviewed summary prototype cannot access data or trigger paid inference', async t => {
   t.mock.method(globalThis, 'fetch', () => { throw new Error('Disabled summaries must never contact a backend'); });
   const route = await import(moduleUrl(await load('../src/app/api/communities/[id]/summary/route.ts')));
