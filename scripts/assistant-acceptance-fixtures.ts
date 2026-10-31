@@ -152,7 +152,7 @@ export const acceptanceFixtures: AcceptanceFixture[] = [
     }, corpus: { sources: reports, partial: false }, checks: [answered,
       mentions('relative_kept_distinct', /sibling/), mentions('pending_decision', /pending|waiting|await/),
       mentions('job_loss', /lost.{0,15}job|job loss|laid off|layoff/), mentions('withdrawal_topic', /withdraw/),
-      mentions('withdrawal_uncertainty', /unknown|uncertain|not know|unconfirmed|unclear|not confirmed|no confirmation/),
+      mentions('withdrawal_uncertainty', /unknown|uncertain|not know|unconfirmed|unclear|not (?:yet )?(?:been )?confirmed|no confirmation/),
       absent('no_invented_gender', /\b(?:he|his|him|she|her|hers)\b/), absent('unrelated_topic_omitted', /museum|holiday/),
       absent('relative_not_made_the_writer', /\bsibling (?:reports?|says?|states?|asks?)\b/),
       { name: 'both_reports_cited', test: result => reports.every(s => result.claims.some(c => c.evidence.some(e => e.sourceId === s.id))) },
