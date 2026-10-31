@@ -1,0 +1,45 @@
+name: Refresh public visa news edition
+on:
+  schedule:
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: public-visa-news-edition
+  cancel-in-progress: false
+jobs:
+  refresh:
+    if: github.repository == 'khyma66/visa' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Restore the previous public edition when available
+        run: |
+          if git ls-remote --exit-code origin refs/heads/news-data >/dev/null; then
+            git fetch origin refs/heads/news-data:refs/remotes/origin/news-data
+            git show FETCH_HEAD:official-news.json > /tmp/official-news.json
+          else
+            cp src/data/official-news-snapshot.json /tmp/official-news.json
+          fi
+      - name: Fetch and validate public government notices
+        run: node scripts/refresh-news.mjs /tmp/official-news.json
+      - name: Publish only the validated edition to the data branch
+        run: |
+          git config user.name 'VisaThreads News'
+          git config user.email 'news-bot@users.noreply.github.com'
+          blob=$(git hash-object -w /tmp/official-news.json)
+          tree=$(printf '100644 blob %s\tofficial-news.json\n' "$blob" | git mktree)
+          parent=$(git rev-parse --verify refs/remotes/origin/news-data 2>/dev/null || true)
+          if [ -n "$parent" ]; then
+            commit=$(printf 'Refresh verified public visa notices\n' | git commit-tree "$tree" -p "$parent")
+          else
+            commit=$(printf 'Publish verified public visa notices\n' | git commit-tree "$tree")
+          fi
+          git push origin "$commit:refs/heads/news-data"

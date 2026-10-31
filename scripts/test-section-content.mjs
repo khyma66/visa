@@ -18,6 +18,7 @@ async function compile(path, suffix = '') {
   }));
 }
 dependencies['@/lib/official-news-shared'] = dependencies['./official-news-shared'] = await compile('../src/lib/official-news-shared.ts');
+dependencies['@/data/official-news-snapshot.json'] = moduleUrl('export default ' + await readFile(new URL('../src/data/official-news-snapshot.json', import.meta.url), 'utf8'));
 dependencies['@/lib/official-news'] = await compile('../src/lib/official-news.ts');
 const shared = await import(dependencies['./official-news-shared']);
 const { createOfficialNewsService, OFFICIAL_NEWS_URL } = await import(dependencies['@/lib/official-news']);
@@ -143,19 +144,26 @@ test('official resource index numbers cannot shrink or wrap inside the narrow si
     assert(classes.has('whitespace-nowrap'), `${label} must remain on one line`);
   });
 });
-test('edge cache is public, canonical, time bounded, and never trusts an arbitrary cached link', async () => {
+test('saved edition survives edge eviction, source failure and poisoned cache links', async () => {
   const originalFetch = globalThis.fetch, originalCaches = globalThis.caches;
   let requests = 0; const entries = new Map();
-  globalThis.fetch = async () => { requests++; return response(); };
-  globalThis.caches = { default: { match: async key => entries.get(key.url)?.clone(), put: async (key, value) => { entries.set(key.url, value.clone()); } } };
+  globalThis.fetch = async () => { requests++; throw new Error('offline'); };
+  globalThis.caches = { default: { match: async key => entries.get(key.url)?.clone(), put: async (key, value) => entries.set(key.url, value.clone()) } };
   try {
     const { GET } = await import(await compile('../src/app/api/official-news/route.ts', 'cache-test'));
-    const first = await GET(new Request('https://visathreads.com/api/official-news?user=a')); assert.equal(first.status, 200);
+    const first = await GET(new Request('https://visathreads.com/api/official-news?user=a'));
+    assert.equal(first.status, 200); const data = await first.json(); assert(data.articles.length > 0);
     assert.match(first.headers.get('Cache-Control'), /public/);
-    const cached = await GET(new Request('https://visathreads.com/api/official-news?user=b')); assert.equal(cached.status, 200); assert.equal(requests, 1);
-    assert.deepEqual([...entries.keys()], ['https://visathreads.com/api/official-news?feed=visa-v1']);
-    const poisoned = await cached.json(); poisoned.articles[0].url = 'https://evil.test/'; entries.set([...entries.keys()][0], Response.json(poisoned));
-    assert(!JSON.stringify(await (await GET(new Request('https://visathreads.com/api/official-news'))).json()).includes('evil.test'));
+    const before = requests;
+    const cached = await GET(new Request('https://visathreads.com/api/official-news?user=b'));
+    assert.deepEqual(await cached.json(), data); assert.equal(requests, before);
+    assert.deepEqual([...entries.keys()], ['https://visathreads.com/api/official-news?feed=visa-v2']);
+    const poisoned = structuredClone(data); poisoned.articles[0].url = 'https://evil.test/';
+    entries.set([...entries.keys()][0], Response.json(poisoned));
+    const recovered = await (await GET(new Request('https://visathreads.com/api/official-news'))).json();
+    assert(recovered.articles.length > 0); assert(!JSON.stringify(recovered).includes('evil.test'));
+    entries.clear();
+    assert((await (await GET(new Request('https://visathreads.com/api/official-news'))).json()).articles.length > 0);
   } finally { globalThis.fetch = originalFetch; globalThis.caches = originalCaches; }
 });
 test('topic cards show only actual positive counts and link to valid tag filters', () => {
@@ -164,22 +172,45 @@ test('topic cards show only actual positive counts and link to valid tag filters
   const html = renderToStaticMarkup(createElement(TopicCollectionCards, { topics })); assert.match(html, /42 existing discussions/); assert.doesNotMatch(html, /members|Join/);
   assert.throws(() => topicCollections({ tags: 'bad' })); assert.deepEqual(topicCollections({ tags: [] }), []);
 });
-test('edge failure backoff prevents repeated source requests without exposing internal errors', async () => {
-  const originalFetch = globalThis.fetch, originalCaches = globalThis.caches;
-  let requests = 0, entry;
-  globalThis.fetch = async () => { requests++; throw new Error('INTERNAL_SECRET'); };
-  globalThis.caches = { default: { match: async () => entry?.clone(), put: async (_key, value) => { entry = value.clone(); } } };
+test('stale editions retain dates and articles through total upstream and edge-storage failure', async () => {
+  const originalFetch = globalThis.fetch, originalCaches = globalThis.caches, originalNow = Date.now;
+  const snapshot = JSON.parse(await readFile(new URL('../src/data/official-news-snapshot.json', import.meta.url), 'utf8'));
+  Date.now = () => Date.parse(snapshot.retrievedAt) + 400 * 86400000;
+  globalThis.fetch = async () => { throw new Error('INTERNAL_SECRET'); };
+  globalThis.caches = { default: { match: async () => { throw Error('cache down'); }, put: async () => { throw Error('cache down'); } } };
   try {
     const { GET } = await import(await compile('../src/app/api/official-news/route.ts', 'failure-test'));
-    for (let index = 0; index < 2; index++) {
-      const result = await GET(new Request('https://visathreads.com/api/official-news'));
-      assert.equal(result.status, 503); assert.equal(result.headers.get('Cache-Control'), 'no-store'); assert(Number(result.headers.get('Retry-After')) <= 60);
-      assert.equal(await result.text(), '{"status":"unavailable"}');
+    const result = await GET(new Request('https://visathreads.com/api/official-news'));
+    assert.equal(result.status, 200); assert.deepEqual(await result.json(), snapshot);
+    assert(shared.isOfficialNews(snapshot));
+  } finally { globalThis.fetch = originalFetch; globalThis.caches = originalCaches; Date.now = originalNow; }
+});
+test('a scheduled edition newer than the bundled copy wins, while invalid and empty editions do not', async () => {
+  const originalFetch = globalThis.fetch, originalCaches = globalThis.caches;
+  const snapshot = JSON.parse(await readFile(new URL('../src/data/official-news-snapshot.json', import.meta.url), 'utf8'));
+  const next = { ...snapshot, retrievedAt: new Date().toISOString() };
+  globalThis.caches = undefined;
+  try {
+    const { GET } = await import(await compile('../src/app/api/official-news/route.ts', 'edition-test'));
+    for (const candidate of [next, {...next, articles: []}, {...next, articles: [{...next.articles[0], url: 'https://evil.test'}]}]) {
+      globalThis.fetch = async () => Response.json(candidate);
+      const result = await (await GET(new Request('https://visathreads.com/api/official-news'))).json();
+      assert.deepEqual(result, candidate === next ? next : snapshot);
     }
-    assert.equal(requests, 1);
-    entry = Response.json({status:'backoff',retryAt:Date.now()+86_400_000});
-    await GET(new Request('https://visathreads.com/api/official-news')); assert.equal(requests, 2, 'An invalid long backoff cannot suppress refresh');
   } finally { globalThis.fetch = originalFetch; globalThis.caches = originalCaches; }
+});
+test('server-rendered news includes the saved articles before JavaScript or network requests', async () => {
+  const snapshot = JSON.parse(await readFile(new URL('../src/data/official-news-snapshot.json', import.meta.url), 'utf8'));
+  const html = renderToStaticMarkup(createElement(OfficialNewsFeed, {initialFeed: snapshot}));
+  assert.equal((html.match(/<article\b/g) ?? []).length, snapshot.articles.length);
+  assert.doesNotMatch(html, /Try Again|Loading recent/);
+  assert.match(html, /News topics/); assert.match(html, /Last successful check/);
+});
+test('successful service data survives a later timeout or empty upstream response', async () => {
+  let clock = now, calls = 0;
+  const service = createOfficialNewsService(async () => ++calls === 1 ? response() : response({results: []}), () => clock);
+  const first = await service(); clock += shared.OFFICIAL_NEWS_TTL;
+  assert.deepEqual(await service(), first); assert.deepEqual(await service(), first); assert.equal(calls, 2);
 });
 // These IDs are already public selection configuration. All text and metadata
 // below are synthetic: public CI must not require or copy the private archive.
