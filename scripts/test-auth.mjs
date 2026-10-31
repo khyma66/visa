@@ -32,7 +32,7 @@ test('email request and verification use passwordless APIs with no password', as
   await assert.rejects(() => flow.verifyEmailCode({ auth: { verifyOtp: async () => ({ data: { session: null }, error: null }) } }, 'a@b.invalid', '123456'), /Session missing/);
 });
 
-test('email signup stores only trimmed private name metadata and supports a single name', async () => {
+test('legacy email-code signup requires private first and last names', async () => {
   const calls=[];
   const client={auth:{signInWithOtp:async input=>{calls.push(input);return {error:null};}}};
   await flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,{firstName:'  Ada  ',lastName:'  Lovelace  ',role:'admin'});
@@ -40,13 +40,13 @@ test('email signup stores only trimmed private name metadata and supports a sing
     email:'new@example.invalid',
     options:{shouldCreateUser:true,emailRedirectTo:'https://visathreads.com/login',data:{first_name:'Ada',last_name:'Lovelace'}},
   });
-  await flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,{firstName:'  李  '});
-  assert.deepEqual(calls[1].options.data,{first_name:'李',last_name:''});
+  await flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,{firstName:'  李  ',lastName:'  王  '});
+  assert.deepEqual(calls[1].options.data,{first_name:'李',last_name:'王'});
   await flow.requestEmailCode(client,'existing@example.invalid','https://visathreads.com/login',false,{firstName:'Unrelated',lastName:'Name'});
   assert.equal(calls[2].options.shouldCreateUser,false);
   assert(!Object.hasOwn(calls[2].options,'data'),'Signing in must not update a member’s private name');
   for(const firstName of ['Anne-Marie','O’Connor','Mary Jane','محمد','E\u0301lodie']) {
-    await flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,{firstName});
+    await flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,{firstName,lastName:'Tester'});
     assert.equal(calls.at(-1).options.data.first_name,firstName.normalize('NFC'));
   }
 });
@@ -57,14 +57,29 @@ test('email signup validates names before any network request without applying n
   for(const names of [undefined,{firstName:''},{firstName:'   '},{firstName:'123'},{firstName:'123John'},{firstName:'alice@example.test'},{firstName:'@John'},{firstName:'-John'},{firstName:'<John>'},{firstName:'😀John'},{firstName:'x'.repeat(81)},{firstName:'A\u0000da'}]) {
     await assert.rejects(()=>flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,names),error=>error.code==='invalid_first_name');
   }
-  for(const lastName of ['x'.repeat(81),'Lo\u0000ve']) {
+  for(const lastName of ['', '  ', '123', 'x'.repeat(81),'Lo\u0000ve']) {
     await assert.rejects(()=>flow.requestEmailCode(client,'new@example.invalid','https://visathreads.com/login',true,{firstName:'Ada',lastName}),error=>error.code==='invalid_last_name');
   }
   assert.equal(calls,0);
   await flow.requestEmailCode(client,'existing@example.invalid','https://visathreads.com/login');
   assert.equal(calls,1);
   assert.match(flow.authErrorMessage({code:'invalid_first_name'}),/first name/);
-  assert.match(flow.authErrorMessage({code:'invalid_last_name'}),/leave it blank/);
+  assert.match(flow.authErrorMessage({code:'invalid_last_name'}),/last name/);
+});
+
+test('password signup sends credentials to Supabase Auth and waits for confirmation when required', async () => {
+  const calls=[];
+  const client={auth:{signUp:async input=>{calls.push(input);return {data:{user:{id:'new-user'},session:null},error:null};}}};
+  const signedIn=await flow.registerWithPassword(client,'  ada@example.invalid  ','correct-horse-battery-staple','https://visathreads.com/login?auth=callback',{firstName:' Ada ',lastName:' Lovelace '},'captcha-fixture');
+  assert.equal(signedIn,false);
+  assert.deepEqual(calls[0],{email:'ada@example.invalid',password:'correct-horse-battery-staple',options:{emailRedirectTo:'https://visathreads.com/login?auth=callback',data:{first_name:'Ada',last_name:'Lovelace'},captchaToken:'captcha-fixture'}});
+  for(const [password,names] of [['short',{firstName:'Ada',lastName:'Lovelace'}],['correct-horse-battery-staple',{firstName:'Ada',lastName:''}]]) {
+    await assert.rejects(()=>flow.registerWithPassword(client,'ada@example.invalid',password,'https://visathreads.com/login',names),error=>['invalid_password','invalid_last_name'].includes(error.code));
+  }
+  assert.equal(calls.length,1,'Invalid signup never reaches Supabase');
+  const immediate={auth:{signUp:async()=>({data:{user:{id:'new-user'},session:{access_token:'fixture'}},error:null})}};
+  assert.equal(await flow.registerWithPassword(immediate,'ada@example.invalid','correct-horse-battery-staple','https://visathreads.com/login',{firstName:'Ada',lastName:'Lovelace'}),true);
+  await assert.rejects(()=>flow.registerWithPassword({auth:{signUp:async()=>({data:{user:null,session:null},error:null})}},'ada@example.invalid','correct-horse-battery-staple','https://visathreads.com/login',{firstName:'Ada',lastName:'Lovelace'}),/not confirmed/);
 });
 
 test('phone request and verification use sms otp APIs', async () => {
@@ -145,7 +160,7 @@ test('code template and screen keep branding and security boundaries', async () 
   const form = await readFile(new URL('../src/components/AuthForm.tsx', import.meta.url), 'utf8');
   const template = await readFile(new URL('../supabase/templates/sign-in-code.html', import.meta.url), 'utf8');
   const client = await readFile(new URL('../src/lib/supabase/client.ts', import.meta.url), 'utf8');
-  assert(form.includes('autoComplete="current-password"'));
+  assert(form.includes("'current-password'"));
   assert(!form.includes('Continue with Apple'));
   assert(!form.includes('Discuss visa experiences with a public pseudonym.'));
   assert(form.includes('autoComplete="one-time-code"'));
@@ -188,13 +203,14 @@ test('optional CAPTCHA passes fresh tokens to every supported Auth request and f
   const previous = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const calls = [];
   const record = name => async (...args) => { calls.push({ name, args }); return { error: null, data: { session: {} } }; };
-  const client = { auth: { signInWithOtp: record('otp'), verifyOtp: record('verify'), signInWithPassword: record('password'), resetPasswordForEmail: record('recovery') } };
+  const client = { auth: { signInWithOtp: record('otp'), verifyOtp: record('verify'), signInWithPassword: record('password'), signUp: async (...args) => { calls.push({name:'signup',args}); return {data:{user:{id:'fixture'},session:null},error:null}; }, resetPasswordForEmail: record('recovery') } };
   try {
     process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = 'configured-public-fixture';
     const requests = [
       token => flow.requestEmailCode(client, 'member@example.invalid', 'https://visathreads.com/login', false, undefined, token),
       token => flow.requestPhoneCode(client, '+15551234567', { phone: true }, false, token),
       token => flow.signInWithPassword(client, 'member@example.invalid', 'fixture-only', token),
+      token => flow.registerWithPassword(client, 'new@example.invalid', 'correct-horse-battery-staple', 'https://visathreads.com/login', {firstName:'Ada',lastName:'Lovelace'}, token),
       token => flow.verifyEmailCode(client, 'member@example.invalid', '123456', token),
       token => flow.verifyPhoneCode(client, '+15551234567', '123456', token),
       token => flow.requestPasswordRecovery(client, 'member@example.invalid', 'https://visathreads.com/account/update-password', token),

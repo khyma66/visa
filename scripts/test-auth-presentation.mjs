@@ -37,10 +37,12 @@ function render(values={},signup=false,auth={}){
 }
 const button=(html,label)=>[...html.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)].map(match=>match[0]).find(markup=>markup.includes(label));
 
-test('login defaults to email code and a stored session identifies its account explicitly',()=>{
+test('login requires email and password by default while retaining an email-code alternative',()=>{
   const html=render({11:{google:true,phone:false}});
-  assert.match(html,/Send verification code/);
-  assert.doesNotMatch(html,/type="password"/);
+  assert.match(html,/name="email"/);
+  assert.match(html,/name="password"/);
+  assert.match(html,/autoComplete="current-password"/);
+  assert.match(html,/Use an email code instead/);
   const signedIn=render({},false,{user:{id:'alice',email:'alice@example.invalid'}});
   assert.match(signedIn,/alice@example.invalid/);
   assert(button(signedIn,'Use a different account'));
@@ -106,7 +108,10 @@ test('email signup collects private names and policy acknowledgement happens onl
   const signup=render({11:{google:true,phone:true}},true);
   const inputs=[...signup.matchAll(/<input\b[^>]*>/g)].map(match=>match[0]);
   assert.match(inputs.find(input=>input.includes('name="firstName"')),/required=""/);
-  assert.doesNotMatch(inputs.find(input=>input.includes('name="lastName"')),/required/);
+  assert.match(inputs.find(input=>input.includes('name="lastName"')),/required=""/);
+  assert.match(inputs.find(input=>input.includes('name="email"')),/required=""/);
+  assert.match(inputs.find(input=>input.includes('name="password"')),/required=""/);
+  assert.match(inputs.find(input=>input.includes('name="passwordConfirmation"')),/required=""/);
   assert.doesNotMatch(signup,/type="checkbox"/);
   assert.doesNotMatch(render({11:{google:true,phone:true}}),/type="checkbox"/);
   assert.match(signup,/Your full name stays private/);
@@ -145,21 +150,22 @@ test('Google signup launches without email names or a preliminary checkbox',asyn
   assert.equal(new URL(calls[0][2]).searchParams.get('next'),'/messages');
 });
 
-test('email signup passes entered names and safe return target; verification does not require a password',async t=>{
+test('email signup passes required password and names to registration then shows confirmation',async t=>{
   const calls=[];
-  const {tree,state}=interactive(t,{values:{0:'ada@example.invalid',14:'Ada',15:'Lovelace'},auth:{requestCode:async(...args)=>{calls.push(args);}}});
+  const {tree,state}=interactive(t,{values:{0:'ada@example.invalid',3:'correct-horse-battery-staple',14:'Ada',15:'Lovelace',20:'correct-horse-battery-staple'},auth:{register:async(...args)=>{calls.push(args);return false;}}});
   findElement(tree,node=>node.type==='form').props.onSubmit({preventDefault(){}});await tick();
   assert.equal(calls.length,1);
   assert.equal(calls[0][0],'ada@example.invalid');
-  assert.equal(calls[0][2],true);
+  assert.equal(calls[0][1],'correct-horse-battery-staple');
   assert.deepEqual(calls[0][3],{firstName:'Ada',lastName:'Lovelace'});
-  assert.equal(new URL(calls[0][1]).searchParams.get('next'),'/messages');
-  state.index=0;state.effects=[];state.values[6]='code';state.values[2]='123456';
-  state.auth={verifyCode:async(...args)=>{calls.push(args);}};
-  const verify=AuthForm({signup:true});
-  findElement(verify,node=>node.type==='form').props.onSubmit({preventDefault(){}});await tick();
-  assert.deepEqual(state.redirects,['/messages']);
-  assert(!state.redirects.some(path=>path.includes('update-password')));
+  assert.equal(new URL(calls[0][2]).searchParams.get('next'),'/messages');
+  state.index=0;state.effects=[];
+  const confirmation=AuthForm({signup:true});
+  assert(findElement(confirmation,node=>node.type==='form'));
+  assert(renderToStaticMarkup(confirmation).includes('Confirmation code'));
+  assert.equal(state.values[3],'');
+  assert.equal(state.values[20],'');
+  assert.deepEqual(state.redirects,[]);
 });
 test('typography uses a local system font, readable shared scale and responsive headings',async()=>{
   const {fontFamily,fontSize,fontWeight}=typography.theme.extend;
