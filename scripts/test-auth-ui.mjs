@@ -328,8 +328,9 @@ test('signup and login are visible before provider actions and keep only safe re
       assert.equal(links[signup ? 1 : 0].props['aria-current'], 'page');
       assert.equal(links[signup ? 0 : 1].props['aria-current'], undefined);
       assert(links.every(link => link.props.className.includes('focus-visible:ring-2')), 'Account tabs retain a keyboard-visible focus state');
-      assert.match(links[signup ? 1 : 0].props.className, /hover:bg-slate-50/, 'The selected tab has immediate hover feedback');
-      assert.match(links[signup ? 0 : 1].props.className, /hover:bg-white/, 'The alternate tab has immediate hover feedback');
+      assert.match(links[signup ? 1 : 0].props.className, /ring-teal-300/, 'The selected tab keeps a persistent visual indicator');
+      assert.match(links[signup ? 1 : 0].props.className, /hover:bg-white/, 'Hovering the selected tab preserves its state');
+      assert.match(links[signup ? 0 : 1].props.className, /hover:bg-slate-200/, 'Hovering the alternate tab cannot mimic selection');
       assert(links.every(link => !link.props.href.includes('email=')), 'Only the sanitized return destination is forwarded');
     } finally { h.close(); }
   }

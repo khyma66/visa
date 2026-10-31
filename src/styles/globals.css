@@ -111,8 +111,8 @@
   .header-login:active { background: #134e4a; box-shadow: none; }
   .header-auth-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .header-signin { display: inline-flex; min-height: 42px; align-items: center; padding: 8px 12px; border-radius: 999px; font-size: var(--type-ui); font-weight: 600; color: #334155; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
-  .header-signin:hover { background: #e2e8f0; color: #0f172a; }
-  .header-signin:active { background: #cbd5e1; }
+  .header-signin:hover { background: #ccfbf1; color: #115e59; }
+  .header-signin:active { background: #99f6e4; color: #134e4a; }
   .header-login:focus-visible, .header-signin:focus-visible, .header-ask:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
   .brand-wordmark { color: #1e293b; white-space: nowrap; text-transform: none; letter-spacing: -0.65px; }
   .brand-mark { display: block; width: 40px; height: 40px; flex-shrink: 0; object-fit: contain; }

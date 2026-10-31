@@ -11,7 +11,9 @@ import { authCallbackUrl, authErrorMessage, authCaptchaOptions, safeAuthNext, ty
 
 const inputClass = 'mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 font-normal outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100';
 const buttonClass = 'flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white transition-colors duration-150 hover:bg-blue-800 active:bg-blue-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
-const accountTabClass = 'rounded-lg px-3 py-2.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1';
+const accountTabClass = 'rounded-lg px-3 py-2.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2';
+const selectedAccountTabClass = 'bg-white text-teal-900 shadow-sm ring-1 ring-inset ring-teal-300 hover:bg-white';
+const alternateAccountTabClass = 'cursor-pointer text-slate-600 hover:bg-slate-200 hover:text-slate-950 active:bg-slate-300';
 type CodeChannel = 'email' | 'phone';
 
 export function AuthForm({ signup = false }: { signup?: boolean }) {
@@ -142,8 +144,8 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
         </div> : <>
           {loading && <p role="status" className="mb-4 text-sm text-slate-600">Checking your session… {sessionSlow && <>This is taking longer than expected. <button type="button" onClick={() => window.location.reload()} className="underline">Reload sign-in</button></>}</p>}
           <nav aria-label="Account access" className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-center text-sm font-semibold">
-            <a href={accountHref(false)} aria-current={!signup ? 'page' : undefined} className={`${accountTabClass} ${!signup ? 'bg-white text-slate-950 shadow-sm hover:bg-slate-50 active:bg-slate-100' : 'cursor-pointer text-slate-600 hover:bg-white hover:text-slate-950 active:bg-slate-200'}`}>Log in</a>
-            <a href={accountHref(true)} aria-current={signup ? 'page' : undefined} className={`${accountTabClass} ${signup ? 'bg-white text-slate-950 shadow-sm hover:bg-slate-50 active:bg-slate-100' : 'cursor-pointer text-slate-600 hover:bg-white hover:text-slate-950 active:bg-slate-200'}`}>Create account</a>
+            <a href={accountHref(false)} aria-current={!signup ? 'page' : undefined} className={`${accountTabClass} ${!signup ? selectedAccountTabClass : alternateAccountTabClass}`}>Log in</a>
+            <a href={accountHref(true)} aria-current={signup ? 'page' : undefined} className={`${accountTabClass} ${signup ? selectedAccountTabClass : alternateAccountTabClass}`}>Create account</a>
           </nav>
           <div className="mb-5 inline-flex rounded-xl bg-blue-50 p-3 text-blue-700"><Mail aria-hidden="true" size={24} /></div>
           <h1 className="text-2xl font-black text-slate-950">{step === 'code' ? `Check your ${codeChannel === 'phone' ? 'phone' : 'email'}` : signup ? 'Join VisaThreads' : 'Welcome Back'}</h1>
