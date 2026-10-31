@@ -64,7 +64,6 @@ export function NewsFeed({ initialFeed = null }: { initialFeed?: NewsFeedData | 
     const timer = setTimeout(() => controller.abort(), 12_000);
     setError(false);
     setExternal(false);
-    setFeed(null);
     void fetch('/api/news', { signal: controller.signal }).then(async (response) => {
       if (!response.ok) throw new Error('News unavailable');
       const data: unknown = await response.json();
@@ -86,7 +85,7 @@ export function NewsFeed({ initialFeed = null }: { initialFeed?: NewsFeedData | 
       <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-800">VisaThreads · News desk</p><h1 className="mt-3 text-2xl font-semibold text-slate-950 sm:text-3xl">Your visa news brief</h1><p className="mt-3 max-w-2xl text-base leading-6 text-slate-600">U.S. visa and immigration coverage from Google News.</p></div>
       <a href={GOOGLE_NEWS_SEARCH_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Open Google News <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a>
     </div>
-    <div className="mt-6">{external ? <NewsExternal/> : error ? <NewsUnavailable retry={() => setAttempt((value) => value + 1)}/>
+    <div className="mt-6">{feed ? <section aria-label="Latest visa news" aria-live="polite"><NewsResults feed={feed}/></section> : external ? <NewsExternal/> : error ? <NewsUnavailable retry={() => setAttempt((value) => value + 1)}/>
       : !feed ? <div role="status" aria-live="polite" className="rounded-2xl border border-slate-200 bg-white p-7"><p className="text-sm text-slate-600">Loading latest headlines…</p><div aria-hidden="true" className="mt-5 space-y-3 motion-safe:animate-pulse"><div className="h-3 w-28 rounded bg-teal-100"/><div className="h-6 w-5/6 rounded bg-slate-100"/><div className="h-6 w-2/3 rounded bg-slate-100"/></div></div>
         : <section aria-label="Latest visa news" aria-live="polite"><NewsResults feed={feed}/></section>}</div>
   </main>;

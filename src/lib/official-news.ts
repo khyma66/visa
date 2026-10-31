@@ -1,7 +1,7 @@
 import { OFFICIAL_NEWS_BACKOFF, OFFICIAL_NEWS_TTL, parseOfficialNews, type OfficialNews } from './official-news-shared';
 
 const query = new URLSearchParams({ per_page: '60', order: 'newest', 'conditions[term]': 'visa' });
-for (const field of ['title', 'document_number', 'html_url', 'publication_date', 'type', 'agencies']) query.append('fields[]', field);
+for (const field of ['title', 'document_number', 'html_url', 'publication_date', 'type', 'agencies', 'abstract']) query.append('fields[]', field);
 export const OFFICIAL_NEWS_URL = `https://www.federalregister.gov/api/v1/documents.json?${query}`;
 const MAX_BYTES = 512 * 1024;
 
@@ -13,7 +13,7 @@ export function createOfficialNewsService(fetcher: typeof fetch = fetch, now = D
   return function getNews(): Promise<OfficialNews> {
     const age = cached ? now() - Date.parse(cached.retrievedAt) : Infinity;
     if (cached && age >= 0 && age < OFFICIAL_NEWS_TTL) return Promise.resolve(cached);
-    if (now() < retryAt) return Promise.reject(new Error('News temporarily unavailable'));
+    if (now() < retryAt) return cached ? Promise.resolve(cached) : Promise.reject(new Error('News temporarily unavailable'));
     if (pending) return pending;
     pending = (async () => {
       const controller = new AbortController();
@@ -39,10 +39,12 @@ export function createOfficialNewsService(fetcher: typeof fetch = fetch, now = D
           }
           body += decoder.decode();
         } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
-        cached = parseOfficialNews(JSON.parse(body), now());
+        const next = parseOfficialNews(JSON.parse(body), now());
+        if (!next.articles.length) throw new Error('No usable source articles');
+        cached = next;
         retryAt = 0;
         return cached;
-      } catch (error) { console.warn('Official visa news refresh failed', { kind: error instanceof Error ? error.name : 'Unknown' }); retryAt = now() + OFFICIAL_NEWS_BACKOFF; throw new Error('News temporarily unavailable'); }
+      } catch (error) { console.warn('Official visa news refresh failed', { kind: error instanceof Error ? error.name : 'Unknown' }); retryAt = now() + OFFICIAL_NEWS_BACKOFF; if (cached) return cached; throw new Error('News temporarily unavailable'); }
       finally { clearTimeout(timer); pending = undefined; }
     })();
     return pending;
