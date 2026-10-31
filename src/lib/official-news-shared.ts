@@ -1,19 +1,20 @@
-export const OFFICIAL_NEWS_TTL = 15 * 60_000;
+export const OFFICIAL_NEWS_TTL = 2 * 60 * 60_000;
+export const OFFICIAL_NEWS_STALE_MS = 4 * 60 * 60_000;
 export const OFFICIAL_NEWS_BACKOFF = 60_000;
 export const OFFICIAL_NEWS_LIMIT = 24;
 export const OFFICIAL_DOCUMENT_TYPES = ['Rule', 'Proposed Rule', 'Notice', 'Presidential Document'] as const;
-export type OfficialArticle = { id: string; title: string; url: string; publishedOn: string; type: typeof OFFICIAL_DOCUMENT_TYPES[number]; agencies: string[] };
+export type OfficialArticle = { id: string; title: string; url: string; publishedOn: string; type: typeof OFFICIAL_DOCUMENT_TYPES[number]; agencies: string[]; summary?: string };
 export type OfficialNews = { source: 'Federal Register'; articles: OfficialArticle[]; retrievedAt: string };
 const ALLOWED_AGENCIES = new Set(['homeland-security-department', 'citizenship-and-immigration-services', 'u-s-customs-and-border-protection', 'state-department', 'justice-department', 'executive-office-of-the-president', 'labor-department']);
-const VISA_TOPIC = /\b(?:visas?|immigra(?:nt|tion)|nonimmigrant|H-?1B|H-?4|L-?1|F-?1|OPT|optional practical training|USCIS|citizenship|academic students)\b/i;
+const VISA_TOPIC = /\b(?:visas?|immigra(?:nt|tion)|nonimmigrant|H-?1B|H-?4|H-?2[AB]|L-?[12]|F-?[12]|J-?[12]|O-?1|EB-?[1-5]|E-?[123]|B-?[12]|K-?1|M-?1|TN|OPT|optional practical training|USCIS|citizenship|academic students)\b/i;
 
 function text(value: unknown, maximum: number): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= maximum && !/[\x00-\x1f\x7f<>]/.test(value);
 }
-function publishedDate(value: unknown, now: number): value is string {
+function publishedDate(value: unknown, now: number, recent = true): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const timestamp = Date.parse(`${value}T00:00:00Z`);
-  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value && timestamp <= now && now - timestamp <= 180 * 86_400_000;
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value && timestamp <= now && (!recent || now - timestamp <= 180 * 86_400_000);
 }
 export function safeOfficialUrl(value: unknown, id: string, date: string): value is string {
   if (typeof value !== 'string' || value.length > 2000 || !/^\d{4}-\d{4,6}$/.test(id)) return false;
@@ -28,7 +29,7 @@ export function parseOfficialNews(value: unknown, now = Date.now()): OfficialNew
   const articles: OfficialArticle[] = [];
   const seen = new Set<string>();
   for (const row of value.results) {
-    if (!row || typeof row !== 'object' || !text(row.title, 1000) || !VISA_TOPIC.test(row.title)
+    if (!row || typeof row !== 'object' || !text(row.title, 1000) || !VISA_TOPIC.test(`${row.title} ${typeof row.abstract === 'string' ? row.abstract : ''}`)
       || !text(row.document_number, 20) || !publishedDate(row.publication_date, now)
       || !safeOfficialUrl(row.html_url, row.document_number, row.publication_date)
       || !OFFICIAL_DOCUMENT_TYPES.includes(row.type) || !Array.isArray(row.agencies) || row.agencies.length > 20
@@ -36,7 +37,7 @@ export function parseOfficialNews(value: unknown, now = Date.now()): OfficialNew
     const agencies = row.agencies.filter((agency: { name?: unknown }) => agency && text(agency.name, 200)).map((agency: { name: string }) => agency.name).slice(0, 5);
     if (!agencies.length) continue;
     seen.add(row.document_number);
-    articles.push({ id: row.document_number, title: row.title, url: row.html_url, publishedOn: row.publication_date, type: row.type, agencies });
+    articles.push({ id: row.document_number, title: row.title, url: row.html_url, publishedOn: row.publication_date, type: row.type, agencies, ...(text(row.abstract, 3000) ? { summary: row.abstract } : {}) });
   }
   articles.sort((a, b) => b.publishedOn.localeCompare(a.publishedOn) || b.id.localeCompare(a.id));
   return { source: 'Federal Register', articles: articles.slice(0, OFFICIAL_NEWS_LIMIT), retrievedAt: new Date(now).toISOString() };
@@ -48,9 +49,18 @@ export function isOfficialNews(value: unknown, now = Date.now()): value is Offic
   const seen = new Set<string>();
   return value.articles.every(row => {
     if (!row || typeof row !== 'object' || !text(row.id, 20) || seen.has(row.id) || !text(row.title, 1000)
-      || !VISA_TOPIC.test(row.title) || !publishedDate(row.publishedOn, now) || !safeOfficialUrl(row.url, row.id, row.publishedOn)
+      || !VISA_TOPIC.test(`${row.title} ${typeof row.summary === 'string' ? row.summary : ''}`) || !publishedDate(row.publishedOn, now, false) || !safeOfficialUrl(row.url, row.id, row.publishedOn)
       || !OFFICIAL_DOCUMENT_TYPES.includes(row.type) || !Array.isArray(row.agencies) || !row.agencies.length || row.agencies.length > 5
-      || !row.agencies.every((name: unknown) => text(name, 200))) return false;
+      || !row.agencies.every((name: unknown) => text(name, 200)) || (row.summary !== undefined && !text(row.summary, 3000))) return false;
     seen.add(row.id); return true;
   });
+}
+
+export const NEWS_TOPICS = ['All updates', 'Work visas', 'Students & exchange', 'Family & residence', 'Travel & other'] as const;
+export function newsTopic(article: OfficialArticle): typeof NEWS_TOPICS[number] {
+  const value = article.title;
+  if (/\b(?:H-?1B|H-?2[AB]|L-?[12]|O-?1|TN|E-?[123]|employ|workers?|labor)\b/i.test(value)) return 'Work visas';
+  if (/\b(?:F-?[12]|J-?[12]|M-?1|OPT|students?|exchange|practical training)\b/i.test(value)) return 'Students & exchange';
+  if (/\b(?:family|spous|H-?4|K-?1|EB-?[1-5]|immigrant|residen|citizenship|naturalization)\w*/i.test(value)) return 'Family & residence';
+  return 'Travel & other';
 }
