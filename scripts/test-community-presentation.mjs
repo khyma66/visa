@@ -17,6 +17,7 @@ const hooks = moduleUrl(`import * as React from ${JSON.stringify(reactUrl)};
   export function useState(initial){const state=globalThis.__presentation;
     const index=state.index++; return React.useState(Object.hasOwn(state.values,index)?state.values[index]:initial);}`);
 const dependencies = {
+  './AdvertisementSlot': moduleUrl('export const AdvertisementSlot=()=>null,FeedAdvertisementSlot=()=>null;'),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'), react: hooks,
   'next/link': link, 'next/navigation': moduleUrl('export const useSearchParams=()=>new URLSearchParams();export const useParams=()=>({id:globalThis.__presentation.question?.id});'),
   'lucide-react': import.meta.resolve('lucide-react'), 'date-fns': import.meta.resolve('date-fns'),
