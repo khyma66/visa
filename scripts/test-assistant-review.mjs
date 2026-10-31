@@ -51,7 +51,8 @@ test('generation and independent review share exactly the same ordered answer re
     const reviewed = JSON.parse(assistantReviewPrompt(request, corpus, result).user);
     assert.deepEqual(draft.answerRequirements, reviewed.answerRequirements);
     assert.match(draft.answerRequirements.priorities[0], /latest requested point/);
-    assert.match(draft.answerRequirements.priorities[2], /unknown result or timing.*personal-only/);
+    assert.equal(draft.answerRequirements.kind, mode === 'ask' ? 'focused-answer' : 'synthesis');
+    assert.match(draft.answerRequirements.priorities[2], mode === 'ask' ? /qualifications and corrections that change the requested fact/ : /unknown result or timing.*personal-only/);
     assert.match(draft.answerRequirements.priorities.at(-1), /Only then include background/);
   }
 });
@@ -63,6 +64,18 @@ test('plain source descriptions cannot be upgraded into formal legal labels or c
   assert.match(review.system, /hypothetical question does not establish a currently pending application/);
   assert.equal(JSON.parse(draft.user).sources[0].body, source.body);
   assert.equal(JSON.parse(review.user).sources[0].body, source.body);
+});
+
+test('focused questions keep a narrow completion contract while still reviewing the entire source', () => {
+  for (const question of ['On which day did this member receive their passport?', 'Which documents did the member mention?', 'What was the stated reason for the delay?']) {
+    const prompt = assistantReviewPrompt({ ...input, question }, corpus, result);
+    const context = JSON.parse(prompt.user);
+    assert.equal(context.answerRequirements.kind, 'focused-answer');
+    assert.match(context.answerRequirements.priorities[1], /requested fact or comparison directly/);
+    assert.match(prompt.system, /Do not reject a supported direct answer merely for omitting an unasked/);
+    assert.match(prompt.system, /Continue reading the full source for corrections and contradictions/);
+    assert.equal(context.sources[0].body, source.body);
+  }
 });
 
 test('a partially supported summary is not approved by deleting rejected qualifications', () => {

@@ -193,6 +193,13 @@ test('decision uncertainty accepts known-date paraphrases but rejects an omitted
   }
 });
 
+test('issue uncertainty accepts a missing decision-time report without accepting a known or invented decision', () => {
+  const check = acceptanceFixtures.find(item => item.id === 'broad-appointment-issues').checks.find(item => item.name === 'unresolved_decision');
+  const result = text => ({ status: 'answered', claims: [{ text, evidence: [] }], disagreements: [] });
+  for (const text of ['They have not been told when a decision will be made.', 'They have not yet been told when the decision will arrive.', 'The decision date remains unknown.']) assert.equal(check.test(result(text)), true, text);
+  for (const text of ['They have been told when a decision will be made.', 'The decision will arrive tomorrow.', 'The application was approved.', 'There was a five-month delay.']) assert.equal(check.test(result(text)), false, text);
+});
+
 test('acceptance checks the same bounded length as the server-resolved task', () => {
   const fixture = acceptanceFixtures.find(item => item.id === 'broad-stem-issues');
   const summary = { ...fixture.input, question: 'Summarize reported issues', turnPlan: { action: 'retrieve', query: 'Summarize reported issues', style: 'summary', focus: null, clarification: null } };

@@ -1,7 +1,7 @@
 import type { AssistantAvailability, AssistantCorpus, AssistantRequest, AssistantResult, AssistantSource, AssistantClaim } from './assistant-contract';
 import { assistantBoundedHistory, assistantMorePosts, assistantPostOrdinal, assistantPreviousPost, assistantRefersToEarlierTurn, assistantResolvedPostQuestion, assistantResultSetFollowUp, assistantSearchIntent, assistantStandaloneFollowUp, assistantSummaryFollowUp } from './assistant-context';
 
-export const ASSISTANT_VERSION = 'grounded-chat-v42-bounded-review-diagnostics';
+export const ASSISTANT_VERSION = 'grounded-chat-v43-focused-answer-scope';
 export const ASSISTANT_NOTICE = 'Based on community posts and replies, which may be incomplete or outdated. This does not verify current immigration rules or your eligibility.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POST_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|apify-[A-Za-z0-9_-]{1,160})$/i;
@@ -293,6 +293,7 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
   const resultSet = assistantResultSetFollowUp(input);
   const overview = assistantSearchIntent(input).overview;
   const collectionSummary = input.turnPlan ? input.turnPlan.style === 'summary' : (resultSet && assistantSummaryFollowUp(question)) || overview;
+  const synthesis = selectedSummary || collectionSummary || input.mode === 'summary' || input.mode === 'catchup';
   // The common shorthand "H4 EAD stamping experiences" can otherwise be read
   // as a demand for an EAD-stamping event. Share one precise interpretation
   // between generation and independent review without changing retrieval.
@@ -305,10 +306,13 @@ export function assistantPromptContext(input: AssistantRequest, corpus: Assistan
     // Identical for drafting and review: these priorities are not independent
     // prompts that can disagree about what a useful short answer must contain.
     answerRequirements: {
+      kind: synthesis ? 'synthesis' : 'focused-answer',
       priorities: [
         'Answer the latest requested point, not every topic mentioned in the sources.',
-        'Lead with relevant reported outcomes or problems. Keep different people separate.',
-        'Alongside each outcome preserve its material corrected dates, explicit unknown result or timing, and explicit personal-only limitations.',
+        synthesis ? 'Lead with relevant reported outcomes or problems. Keep different people separate.' : 'Give the requested fact or comparison directly, attributed to the relevant report.',
+        synthesis
+          ? 'Alongside each outcome preserve its material corrected dates, explicit unknown result or timing, and explicit personal-only limitations.'
+          : 'Preserve qualifications and corrections that change the requested fact. A focused answer need not add unasked background, other dates, location or a full summary. Missing optional context is not an incomplete answer.',
         'Preserve relevant opposing reports without inventing a winner or consensus.',
         'Only then include background, document inventories, routine steps or historical events if needed to answer the requested point.',
       ],
