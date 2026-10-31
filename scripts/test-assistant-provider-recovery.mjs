@@ -79,7 +79,7 @@ test('brief selected summaries enforce their word budget without truncating fact
 });
 
 test('brief-summary length repair shares the existing retry cap and never replays rejected text', async () => {
-  for (const maxAnswerWords of [50, 100, 150]) for (const alwaysTooLong of [false, true]) {
+  for (const maxAnswerWords of [50, 80, 100, 150]) for (const alwaysTooLong of [false, true]) {
     const calls = []; let validations = 0;
     const checked = { ...prompt, maxAnswerWords, validateOutput() {
       if (++validations === 1 || alwaysTooLong) throw new AssistantError(502, 'rejected private draft', undefined, 'answer_word_limit');
@@ -89,7 +89,7 @@ test('brief-summary length repair shares the existing retry cap and never replay
     else assert.equal(await pending, output);
     assert.equal(calls.length, 2); assert.equal(calls[0].signal, calls[1].signal);
     assert.match(JSON.parse(calls[1].body).messages[0].content, new RegExp(`at most ${maxAnswerWords} words`));
-    if (maxAnswerWords === 50) assert.match(JSON.parse(calls[1].body).messages[0].content, /two compact sentences totaling 35–45 words/);
+    if (maxAnswerWords <= 80) assert.match(JSON.parse(calls[1].body).messages[0].content, /Aim for 30–50 words/);
     assert.doesNotMatch(calls[1].body, /rejected private draft/);
   }
 });
@@ -138,8 +138,12 @@ test('shorter collection transforms enforce their own output budget instead of a
   const source = { id: 'q:apify-shorter', questionId: 'apify-shorter', kind: 'question', communityId: null, title: 'Open question', body: 'I am asking about a pending application and have not reported an outcome.', createdAt: '2026-10-01T00:00:00Z', url: '/questions/apify-shorter' };
   const corpus = { sources: [source], partial: false };
   const input = { mode: 'ask', scope: { kind: 'public' }, question: 'Summarize these discussions', originalQuestion: 'Make it shorter', transform: 'shorten', previousPosts: [{ questionId: source.questionId, sourceId: source.id }], turnPlan: { action: 'reuse', query: 'Summarize these discussions', focus: null, style: 'summary', clarification: null } };
-  assert.equal(assistantPrompt(input, corpus).maxAnswerWords, 50);
+  assert.equal(assistantPrompt(input, corpus).maxAnswerWords, 80);
   const draft = { status: 'answered', claims: [{ text: Array(51).fill('word').join(' '), evidence: [{ sourceId: source.id, quote: source.body }] }], disagreements: [], unanswered: [] };
+  // Structural acceptance is not semantic approval: every accepted draft still
+  // goes through independent factual review before publication.
+  assert.doesNotThrow(() => validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), input));
+  draft.claims[0].text = Array(81).fill('word').join(' ');
   assert.throws(() => validateAssistantOutput(JSON.stringify(draft), corpus, Date.now(), input), error => error.code === 'answer_word_limit');
 });
 

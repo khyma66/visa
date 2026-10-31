@@ -54,7 +54,7 @@ test('attribution regression fixtures reject invented gender and unrelated expan
     for (const text of ['She is waiting for her decision.', 'He lost his job.', 'The museum may be open during the holiday.']) {
       assert(fixture.checks.some(check => !check.test({ ...result, claims: [...result.claims, { text, evidence: [] }] })), text);
     }
-    if (stage === 'shorter') assert(fixture.checks.some(check => !check.test({ ...result, claims: [...result.claims, { text: 'word '.repeat(51), evidence: [] }] })));
+    if (stage === 'shorter') assert(fixture.checks.some(check => !check.test({ ...result, claims: [...result.claims, { text: 'word '.repeat(81), evidence: [] }] })));
   }
 });
 // Adapt fixed synthetic answer mocks to the actual internal provider contract.
@@ -228,7 +228,7 @@ test('acceptance checks the same bounded length as the server-resolved task', ()
   const fixture = acceptanceFixtures.find(item => item.id === 'broad-stem-issues');
   const summary = { ...fixture.input, question: 'Summarize reported issues', turnPlan: { action: 'retrieve', query: 'Summarize reported issues', style: 'summary', focus: null, clarification: null } };
   const ordinary = { ...summary, turnPlan: { ...summary.turnPlan, style: 'answer' } };
-  for (const [resolved, count, expected] of [[summary, 150, true], [summary, 151, false], [ordinary, 100, true], [ordinary, 101, false], [{ ...summary, transform: 'shorten' }, 51, false]]) {
+  for (const [resolved, count, expected] of [[summary, 150, true], [summary, 151, false], [ordinary, 100, true], [ordinary, 101, false], [{ ...summary, transform: 'shorten' }, 80, true], [{ ...summary, transform: 'shorten' }, 81, false]]) {
     const result = { status: 'insufficient', claims: [], disagreements: [], unanswered: [Array(count).fill('word').join(' ')] };
     assert.equal(evaluateAcceptance(fixture, result, resolved).checks.find(check => check.name === 'answer_is_concise').passed, expected);
   }
