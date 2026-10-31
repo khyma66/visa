@@ -34,6 +34,8 @@ cases.unshift('shorter-collection-summary');
 cases.unshift('broad-appointment-issues');
 cases.unshift('broad-stem-issues');
 const release = process.argv.includes('--release');
+const diagnostics = process.argv.includes('--diagnostics');
+assert(!diagnostics || !release, 'Detailed synthetic diagnostics cannot run in a production release');
 assert(!(smoke && release), 'Smoke results cannot authorize a release');
 const caseOption = process.argv.find(arg => arg.startsWith('--cases='));
 const targeted = caseOption?.slice('--cases='.length).split(',');
@@ -101,7 +103,7 @@ try {
   await writeFile(routingStatePath, JSON.stringify({ worker, account, routing, baseline }), { mode: 0o600, flag: 'wx' });
   ownsRouting = true;
   console.log('PASS stored Groq key, isolated bindings, and active deployment baselines');
-  await writeFile(configPath, JSON.stringify({ name: worker, account_id: account, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), compatibility_date: '2026-10-01', preview_urls: true, routes: [], observability: { enabled: false }, vars: { ACCEPTANCE_PROVIDER: 'groq', ACCEPTANCE_EXPIRES: String(expires), ACCEPTANCE_SOURCE_SHA: sourceSha } }));
+  await writeFile(configPath, JSON.stringify({ name: worker, account_id: account, main: resolve(root, 'scripts/assistant-acceptance-worker.ts'), compatibility_date: '2026-10-01', preview_urls: true, routes: [], observability: { enabled: false }, vars: { ACCEPTANCE_PROVIDER: 'groq', ACCEPTANCE_EXPIRES: String(expires), ACCEPTANCE_SOURCE_SHA: sourceSha, ...(diagnostics ? { ACCEPTANCE_DIAGNOSTICS: 'true' } : {}) } }));
   await writeFile(secretsPath, JSON.stringify({ ACCEPTANCE_SECRET: secret }), { mode: 0o600 });
   const upload = spawnSync(join(root, 'node_modules/.bin/wrangler'), ['versions', 'upload', '--config', configPath, '--env', '', '--secrets-file', secretsPath, '--preview-alias', alias, '--message', 'Isolated synthetic Groq acceptance; never deploy'], { cwd: root, env: { ...process.env, CI: 'true', WRANGLER_SEND_METRICS: 'false' }, encoding: 'utf8', timeout: 120_000, maxBuffer: 4_000_000 });
   if (upload.status !== 0) {

@@ -7,7 +7,19 @@ import { acceptanceFixtures, evaluateAcceptance } from './assistant-acceptance-f
 import { assistantPlanPrompt, parseAssistantPlan } from '../src/lib/assistant-planner';
 import { plannerFixtures, evaluatePlanner } from './assistant-planner-fixtures';
 
-type Env = { ASSISTANT_AI?: WorkersAiBinding; GROQ_API_KEY?: string; ACCEPTANCE_PROVIDER?: string; ACCEPTANCE_SECRET?: string; ACCEPTANCE_EXPIRES?: string; ACCEPTANCE_SOURCE_SHA?: string };
+type Env = { ASSISTANT_AI?: WorkersAiBinding; GROQ_API_KEY?: string; ACCEPTANCE_PROVIDER?: string; ACCEPTANCE_SECRET?: string; ACCEPTANCE_EXPIRES?: string; ACCEPTANCE_SOURCE_SHA?: string; ACCEPTANCE_DIAGNOSTICS?: string };
+/** Opt-in synthetic-test diagnostics only. Never used by the application. */
+export function syntheticProviderDiagnostic(value: unknown, secret: string) {
+  const error = value && typeof value === 'object' && 'error' in value ? value.error : undefined;
+  if (!error || typeof error !== 'object' || !secret) return undefined;
+  const fields: Record<string, string> = {};
+  for (const key of ['code', 'type', 'message']) {
+    const text = (error as Record<string, unknown>)[key];
+    if (typeof text === 'string') fields[key] = text.replaceAll(secret, '[redacted]')
+      .replace(/(?:Bearer\s+|gsk_)[A-Za-z0-9_.-]+/gi, '[redacted]').slice(0, key === 'message' ? 600 : 80);
+  }
+  return fields;
+}
 const response = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'X-Assistant-Acceptance': 'v1' } });
 type InferenceRound = {
   kind: 'answer' | 'review' | 'plan'; maxAttempts: number; semanticRepair: boolean;
@@ -165,6 +177,7 @@ export default {
       let rawReview: string | undefined;
       let serviceFailure: { stage: AssistantFailureStage; status: number; code?: AssistantValidationCode } | undefined;
       let providerReason: AssistantProviderFailure | undefined;
+      let providerDiagnostic: Record<string, string> | undefined;
       const handler = createAssistantHandler({
         model: providerCacheKey(provider),
         reportFailure: event => { serviceFailure = { stage: event.stage, status: event.status, ...(event.code ? { code: event.code } : {}) }; },
@@ -211,7 +224,13 @@ export default {
             if (value.length <= 24_000) round.rawOutputs.push(value);
             prompt.validateOutput!(value);
           } } : {}) };
-          const output = await runAssistantModel(checkedPrompt, { provider, apiKey, binding, signal, reportFailure: reason => { providerReason = reason; }, reportUsage: value => usage.push(value), reportTransport: value => { transport.push(value); round.transport.push(value); } });
+          const output = await runAssistantModel(checkedPrompt, { provider, apiKey, binding, signal,
+            ...(env.ACCEPTANCE_DIAGNOSTICS === 'true' && provider === 'groq' ? { fetcher: async (url: RequestInfo | URL, init?: RequestInit) => {
+              const reply = await fetch(url, init);
+              if (!reply.ok) providerDiagnostic = syntheticProviderDiagnostic(await readBoundedJson(reply.clone(), 16_000).catch(() => null), apiKey ?? '');
+              return reply;
+            } } : {}),
+            reportFailure: reason => { providerReason = reason; }, reportUsage: value => usage.push(value), reportTransport: value => { transport.push(value); round.transport.push(value); } });
           round.output = output;
           if (output.length <= (review ? 12_000 : 24_000) && round.rawOutputs.at(-1) !== output) round.rawOutputs.push(output);
           if (review) rawReview = output;
@@ -240,6 +259,7 @@ export default {
           syntheticDiagnostic: { source: 'compiled-synthetic-fixture-only', fixtureId: fixture.id,
             stage: raw === undefined ? 'application-service' : 'source-validation',
             ...(serviceFailure ? { serviceFailure } : {}), ...(providerReason ? { providerReason } : {}),
+            ...(providerDiagnostic ? { providerDiagnostic } : {}),
             ...(raw === undefined ? {} : output === undefined ? { rawOutput: raw } : { output }),
             ...(rawReview !== undefined && rawReview.length <= 12_000 ? { rawReviewOutput: rawReview } : {}),
             ...(inferenceRounds.some(round => round.rawOutputs.length) ? { inferenceRounds: inferenceRounds.map(({ kind, maxAttempts, semanticRepair, rawOutputs }) => ({ kind, maxAttempts, semanticRepair, rawOutputs })) } : {}),
