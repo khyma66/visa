@@ -136,7 +136,7 @@ const { SiteHeader } = await import(await compile('../src/components/SiteHeader.
 function setup({ loading = false, user = null, search = '', signup = false } = {}) {
   const h = new Harness();
   h.auth = { user, loading, profile: null, demoMode: false };
-  for (const method of ['requestCode', 'verifyCode', 'login', 'signInWithProvider']) h.auth[method] = (...args) => h.invoke(method, args);
+  for (const method of ['requestCode', 'verifyCode', 'login', 'register', 'signInWithProvider']) h.auth[method] = (...args) => h.invoke(method, args);
   h.handlers.getAuthMethods = async () => ({ google: true });
   h.router = {replace: url => h.replacements.push(url)};
   h.replacements = []; h.cleanUrls = []; h.timers = new Map(); h.reloads = 0;
@@ -166,8 +166,15 @@ test('header shows both login and signup document links before authentication', 
     assert(nodes(nav).includes(link));
     assert(nodes(nav).includes(signup));
     assert.match(link.props.className, /header-signin/);
-    assert.match(signup.props.className, /header-login/);
+    assert.match(signup.props.className, /header-signup/);
   } finally { h.close(); }
+});
+
+test('top-right green hover moves from signup to login instead of highlighting both', async () => {
+  const css = await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8');
+  assert.match(css, /\.header-signin:hover, \.header-signin:focus-visible \{ background: #0f766e; color: #fff; \}/);
+  assert.match(css, /\.header-signin:is\(:hover, :focus-visible\) \+ \.header-signup \{ background: #f0f3f4; color: #334155;/);
+  assert.match(css, /\.header-signup \{[^}]*background: #0f766e;/);
 });
 
 test('header search is a bounded native GET form, and mobile menu has an accessible label', () => {
@@ -303,7 +310,7 @@ test('Google receives the safe callback and repeated clicks start only one flow'
 test('email code flow shows VisaThreads and retains its return destination', async () => {
   const h = setup({ search: '?next=%2Fmy-communities' });
   try {
-    await h.settle(); change(h, 'Email Address', 'fixture@example.invalid');
+    await h.settle(); byText(h, 'button', 'Use an email code instead').props.onClick(); h.render(); change(h, 'Email Address', 'fixture@example.invalid');
     nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
     const call = h.calls.find(c => c.name === 'requestCode');
     assert.equal(new URL(call.args[1]).searchParams.get('next'), '/my-communities');
@@ -345,7 +352,7 @@ test('a first-time sign-in request failure stays at email and offers account cre
   const h = setup();
   h.handlers.requestCode = async () => { throw { code: 'user_not_found', message: 'provider secret response' }; };
   try {
-    await h.settle(); change(h, 'Email Address', 'new@example.invalid');
+    await h.settle(); byText(h, 'button', 'Use an email code instead').props.onClick(); h.render(); change(h, 'Email Address', 'new@example.invalid');
     nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
     assert.equal(h.calls.find(c => c.name === 'requestCode').args[2], false);
     assert(field(h, 'Email Address'));
@@ -363,7 +370,7 @@ test('Supabase otp_disabled for a first-time login offers signup without claimin
   const h = setup();
   h.handlers.requestCode = async () => { throw { code: 'otp_disabled', message: 'Signups not allowed for otp' }; };
   try {
-    await h.settle(); change(h, 'Email Address', 'new@example.invalid');
+    await h.settle(); byText(h, 'button', 'Use an email code instead').props.onClick(); h.render(); change(h, 'Email Address', 'new@example.invalid');
     nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
     assert.equal(h.calls.find(c => c.name === 'requestCode').args[2], false);
     assert(field(h, 'Email Address'));
@@ -377,14 +384,14 @@ test('Supabase otp_disabled for a first-time login offers signup without claimin
   } finally { h.close(); }
 });
 
-test('signup-disabled and delivery failures never advance to code verification', async () => {
+test('signup-disabled and delivery failures never claim password registration succeeded', async () => {
   for (const [code, expected] of [['signup_disabled', /New account registration is not available/], ['email_address_not_authorized', /Email delivery is not available/]]) {
     const h = setup({ signup: true });
-    h.handlers.requestCode = async () => { throw { code }; };
+    h.handlers.register = async () => { throw { code }; };
     try {
-      await h.settle(); change(h, 'First name', 'Ada'); change(h, 'Email Address', 'new@example.invalid');
+      await h.settle(); change(h, 'First name', 'Ada'); change(h, 'Last name', 'Lovelace'); change(h, 'Email Address', 'new@example.invalid'); change(h, 'Password', 'correct-horse-battery-staple'); change(h, 'Confirm password', 'correct-horse-battery-staple');
       nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
-      assert.equal(h.calls.find(c => c.name === 'requestCode').args[2], true);
+      assert.equal(h.calls.find(c => c.name === 'register').args[1], 'correct-horse-battery-staple');
       assert(field(h, 'First name'));
       assert.match(textOf(h.tree), expected);
       assert.equal(nodes(h.tree).filter(n => n.type === 'input' && n.props.name === 'code').length, 0);
@@ -393,11 +400,46 @@ test('signup-disabled and delivery failures never advance to code verification',
   }
 });
 
+test('email signup requires matching passwords and handles confirmed versus pending sessions', async () => {
+  for (const signedIn of [false, true]) {
+    const h = setup({ signup: true, search: '?next=%2Fask' });
+    h.handlers.register = async () => signedIn;
+    try {
+      await h.settle();
+      change(h, 'First name', 'Ada'); change(h, 'Last name', 'Lovelace');
+      change(h, 'Email Address', 'ada@example.invalid');
+      change(h, 'Password', 'correct-horse-battery-staple');
+      change(h, 'Confirm password', 'different-password');
+      nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+      assert.equal(h.calls.filter(c => c.name === 'register').length, 0);
+      assert.match(textOf(h.tree), /Passwords do not match/);
+      change(h, 'Confirm password', 'correct-horse-battery-staple');
+      nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+      const call = h.calls.find(c => c.name === 'register');
+      assert.deepEqual(call.args.slice(0, 2), ['ada@example.invalid', 'correct-horse-battery-staple']);
+      assert.equal(new URL(call.args[2]).searchParams.get('next'), '/ask');
+      assert.deepEqual(call.args[3], { firstName: 'Ada', lastName: 'Lovelace' });
+      assert.equal(h.calls.filter(c => c.name === 'requestCode').length, 0);
+      assert.equal(h.slots[3], '');
+      if (signedIn) assert.deepEqual(h.replacements, ['/ask']);
+      else {
+        assert.match(textOf(h.tree), /confirmation email/);
+        assert(field(h, 'Confirmation code'));
+        assert.deepEqual(h.replacements, []);
+        change(h, 'Confirmation code', '123456');
+        nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+        assert.deepEqual(h.calls.find(c => c.name === 'verifyCode').args.slice(0, 2), ['ada@example.invalid', '123456']);
+        assert.deepEqual(h.replacements, ['/ask']);
+      }
+    } finally { h.close(); }
+  }
+});
+
 test('verification failures mention the code rather than a password and retain the code form', async () => {
   const h = setup();
   h.handlers.verifyCode = async () => { throw { code: 'invalid_credentials' }; };
   try {
-    await h.settle(); change(h, 'Email Address', 'member@example.invalid');
+    await h.settle(); byText(h, 'button', 'Use an email code instead').props.onClick(); h.render(); change(h, 'Email Address', 'member@example.invalid');
     nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
     assert.match(textOf(h.tree), /If this email has an account/);
     change(h, 'Sign-in code', '123456');
@@ -410,11 +452,11 @@ test('verification failures mention the code rather than a password and retain t
   } finally { h.close(); }
 });
 
-test('password is an available alternative and provider failure does not block it', async () => {
+test('password is the default and provider failure does not block it', async () => {
   const h = setup();
   h.handlers.getAuthMethods = async () => { throw new Error('offline'); };
   try {
-    await h.settle(); byText(h, 'button', 'Use a password instead').props.onClick(); h.render();
+    await h.settle();
     change(h, 'Email Address', 'fixture@example.invalid'); change(h, 'Password', 'fixture-only-password');
     nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
     assert.equal(h.calls.filter(c => c.name === 'login').length, 1);
@@ -456,7 +498,7 @@ test('configured security check blocks unsolved attempts and resets after email 
   const h = setup();
   const challenge = () => nodes(h.tree).find(n => n.type?.name === 'TurnstileCheck');
   try {
-    await h.settle(); change(h, 'Email Address', 'fixture@example.invalid');
+    await h.settle(); byText(h, 'button', 'Use an email code instead').props.onClick(); h.render(); change(h, 'Email Address', 'fixture@example.invalid');
     assert(challenge());
     assert(byText(h, 'button', 'Send verification code').props.disabled);
     // Submitting directly also fails; disabled presentation is not the guard.
@@ -475,13 +517,13 @@ test('configured security check blocks unsolved attempts and resets after email 
   } finally { h.close(); }
   const password = setup();
   try {
-    await password.settle(); byText(password, 'button', 'Use a password instead').props.onClick(); password.render();
+    await password.settle();
     change(password, 'Email Address', 'fixture@example.invalid'); change(password, 'Password', 'fixture-password');
     nodes(password.tree).find(n => n.type?.name === 'TurnstileCheck').props.onToken('single-use-password-token'); password.render();
     password.handlers.login = async () => { throw { code: 'captcha_failed', message: 'private provider details' }; };
     nodes(password.tree).find(n => n.type === 'form').props.onSubmit(event()); await password.settle();
     assert.equal(password.calls.find(c => c.name === 'login').args[2], 'single-use-password-token');
-    assert(byText(password, 'button', 'Log In').props.disabled);
+    assert(byText(password, 'button', 'Log in').props.disabled);
     assert.match(textOf(password.tree), /Complete the security check/);
     assert(!textOf(password.tree).includes('private provider details'));
   } finally { password.close(); if (previous === undefined) delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY; else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = previous; }

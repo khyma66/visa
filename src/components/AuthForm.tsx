@@ -17,15 +17,15 @@ const alternateAccountTabClass = 'cursor-pointer text-slate-600 hover:bg-slate-2
 type CodeChannel = 'email' | 'phone';
 
 export function AuthForm({ signup = false }: { signup?: boolean }) {
-  const { requestCode, verifyCode, requestPhoneCode, verifyPhoneCode, login, signInWithProvider, signOut, user, loading, demoMode } = useAuth();
+  const { requestCode, verifyCode, requestPhoneCode, verifyPhoneCode, login, register, signInWithProvider, signOut, user, loading, demoMode } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
-  const [useCode, setUseCode] = useState(true);
+  const [useCode, setUseCode] = useState(false);
   const [codeChannel, setCodeChannel] = useState<CodeChannel>('email');
-  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [step, setStep] = useState<'email' | 'code' | 'confirmation'>('email');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,6 +39,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaReset, setCaptchaReset] = useState(0);
   const [returnTo, setReturnTo] = useState('/');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const captchaSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? '';
   const resetCaptcha = () => { setCaptchaToken(''); setCaptchaReset(value => value + 1); };
   useEffect(() => {
@@ -110,6 +111,23 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
   function submit(event: FormEvent) {
     event.preventDefault();
     void run(async () => {
+      if (step === 'confirmation') {
+        const token = authCaptchaOptions(captchaToken).captchaToken;
+        try { await verifyCode(email, code, token); } finally { resetCaptcha(); }
+        router.replace(safeAuthNext(new URLSearchParams(window.location.search).get('next')));
+        return;
+      }
+      if (step === 'email' && signup && codeChannel === 'email') {
+        if (password !== passwordConfirmation) throw { code: 'password_mismatch' };
+        const token = authCaptchaOptions(captchaToken).captchaToken;
+        try {
+          const signedIn = await register(email, password, callback(), { firstName, lastName }, token);
+          setPassword(''); setPasswordConfirmation('');
+          if (signedIn) router.replace(safeAuthNext(new URLSearchParams(window.location.search).get('next')));
+          else setStep('confirmation');
+        } finally { resetCaptcha(); }
+        return;
+      }
       if (step === 'email' && !useCode) {
         const token = authCaptchaOptions(captchaToken).captchaToken;
         try { await login(email, password, token); setPassword(''); } finally { resetCaptcha(); }
@@ -123,7 +141,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
         } finally { resetCaptcha(); }
       }
       if (step === 'code' || !useCode) router.replace(safeAuthNext(new URLSearchParams(window.location.search).get('next')));
-    }, { action: step === 'code' ? 'verify-code' : !useCode ? 'password' : 'request-code', createAccount: signup, channel: codeChannel });
+    }, { action: step === 'code' || step === 'confirmation' ? 'verify-code' : signup && codeChannel === 'email' ? 'signup' : !useCode ? 'password' : 'request-code', createAccount: signup, channel: codeChannel });
   }
 
   function social(provider: SocialProvider) {
@@ -148,8 +166,9 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             <a href={accountHref(true)} aria-current={signup ? 'page' : undefined} className={`${accountTabClass} ${signup ? selectedAccountTabClass : alternateAccountTabClass}`}>Create account</a>
           </nav>
           <div className="mb-5 inline-flex rounded-xl bg-blue-50 p-3 text-blue-700"><Mail aria-hidden="true" size={24} /></div>
-          <h1 className="text-2xl font-black text-slate-950">{step === 'code' ? `Check your ${codeChannel === 'phone' ? 'phone' : 'email'}` : signup ? 'Join VisaThreads' : 'Welcome Back'}</h1>
-          <p className="mt-2 text-base text-slate-600">{step === 'code' ? <>Enter the latest one-time code for <strong className="break-all">{codeChannel === 'phone' ? phone.trim() : email.trim()}</strong>.</> : signup ? 'Create your account with Google or verify your email below.' : 'Welcome back. New here? Choose Create account above.'}</p>
+          <h1 className="text-2xl font-black text-slate-950">{step === 'confirmation' ? 'Confirm your email' : step === 'code' ? `Check your ${codeChannel === 'phone' ? 'phone' : 'email'}` : signup ? 'Join VisaThreads' : 'Welcome Back'}</h1>
+          <p className="mt-2 text-base text-slate-600">{step === 'confirmation' ? <>If this address is eligible, a confirmation email will arrive at <strong className="break-all">{email.trim()}</strong>. Follow its link, then log in with your password.</> : step === 'code' ? <>Enter the latest one-time code for <strong className="break-all">{codeChannel === 'phone' ? phone.trim() : email.trim()}</strong>.</> : signup ? 'Create your account with Google or your email and password below.' : 'Log in with your email and password. New here? Choose Create account above.'}</p>
+          {step === 'confirmation' && <><form onSubmit={submit} className="mt-6 space-y-4"><label className="block text-sm font-bold text-slate-700">Confirmation code <span className="font-normal text-slate-500">(if your email includes one)</span><input type="text" name="code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,10}" minLength={6} maxLength={10} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} /></label>{captchaSiteKey && <TurnstileCheck siteKey={captchaSiteKey} resetKey={captchaReset} onToken={setCaptchaToken} />}{error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}<button disabled={busy || Boolean(captchaSiteKey && !captchaToken)} className={buttonClass}>{busy ? 'Please wait…' : 'Confirm email code'}<ArrowRight aria-hidden="true" size={17} /></button></form><Link href={accountHref(false)} className="mt-6 inline-flex rounded-xl border border-teal-700 px-5 py-3 font-bold text-teal-800 hover:bg-teal-50">Go to login</Link></>}
           {step === 'email' && <>
             <div className="mt-6 grid gap-3">
               {(['google'] as const).map(provider => <button key={provider} type="button" disabled={busy || loading || !methods?.[provider]} onClick={() => social(provider)} className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-800 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
@@ -161,21 +180,22 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             {settingsError ? <p className="mt-2 text-xs text-slate-600">Couldn’t check social sign-in. <button type="button" onClick={() => setRetry(value => value + 1)} className="underline">Retry</button> or use email below.</p> : !methods && <p className="mt-2 text-xs text-slate-500" role="status">Checking sign-in options…</p>}
             <div className="my-5 flex items-center gap-3 text-xs text-slate-500"><span className="h-px flex-1 bg-slate-200" />or continue with email<span className="h-px flex-1 bg-slate-200" /></div>
           </>}
-          <form onSubmit={submit} className="mt-5 space-y-4">
+          {step !== 'confirmation' && <form onSubmit={submit} className="mt-5 space-y-4">
             {signup && step === 'email' && codeChannel === 'email' && <>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm font-bold text-slate-700">First name<input type="text" name="firstName" autoComplete="given-name" required maxLength={80} disabled={busy || loading} value={firstName} onChange={event => setFirstName(event.target.value)} className={inputClass} /></label>
-                <label className="block text-sm font-bold text-slate-700">Last name <span className="font-normal text-slate-500">(optional)</span><input type="text" name="lastName" autoComplete="family-name" maxLength={80} disabled={busy || loading} value={lastName} onChange={event => setLastName(event.target.value)} className={inputClass} /></label>
+                <label className="block text-sm font-bold text-slate-700">Last name<input type="text" name="lastName" autoComplete="family-name" required maxLength={80} disabled={busy || loading} value={lastName} onChange={event => setLastName(event.target.value)} className={inputClass} /></label>
               </div>
               <p className="text-xs leading-5 text-slate-500">Your full name stays private. Only your first initial appears in your avatar.</p>
             </>}
             {step === 'email' ? codeChannel === 'phone' ? <label className="block text-sm font-bold text-slate-700">Phone number<input type="tel" name="phone" required autoComplete="tel" maxLength={20} placeholder="+15551234567" disabled={busy || loading} value={phone} onChange={event => setPhone(event.target.value)} className={inputClass} /></label> : <label className="block text-sm font-bold text-slate-700">Email Address<input type="email" name="email" required autoComplete="email" maxLength={254} placeholder="you@example.com" disabled={busy || loading} value={email} onChange={event => setEmail(event.target.value)} className={inputClass} /></label> : <label className="block text-sm font-bold text-slate-700">Sign-in code<input type="text" name="code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,10}" minLength={6} maxLength={10} autoFocus disabled={busy || loading} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 10))} className={`${inputClass} text-center text-2xl tracking-[0.25em]`} /></label>}
-            {step === 'email' && !useCode && <label className="block text-sm font-bold text-slate-700">Password<input type="password" name="password" required autoComplete="current-password" maxLength={128} disabled={busy || loading} value={password} onChange={event => setPassword(event.target.value)} className={inputClass} /></label>}
+            {step === 'email' && codeChannel === 'email' && (signup || !useCode) && <label className="block text-sm font-bold text-slate-700">Password<input type="password" name="password" required autoComplete={signup ? 'new-password' : 'current-password'} minLength={signup ? 12 : undefined} maxLength={128} disabled={busy || loading} value={password} onChange={event => setPassword(event.target.value)} className={inputClass} />{signup && <span className="mt-1 block text-xs font-normal text-slate-500">Use 12–128 characters.</span>}</label>}
+            {signup && step === 'email' && codeChannel === 'email' && <label className="block text-sm font-bold text-slate-700">Confirm password<input type="password" name="passwordConfirmation" required autoComplete="new-password" minLength={12} maxLength={128} disabled={busy || loading} value={passwordConfirmation} onChange={event => setPasswordConfirmation(event.target.value)} className={inputClass} /></label>}
             {captchaSiteKey && <TurnstileCheck siteKey={captchaSiteKey} resetKey={captchaReset} onToken={setCaptchaToken} />}
             {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
             {message && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
-            <button disabled={busy || loading || (step === 'email' && useCode && cooldown > 0) || Boolean(captchaSiteKey && !captchaToken)} className={buttonClass}>{busy ? 'Please wait…' : step === 'email' ? (!useCode ? 'Log In' : cooldown ? `Try again in ${cooldown}s` : 'Send verification code') : 'Verify & continue'}<ArrowRight aria-hidden="true" size={17} /></button>
-          </form>
+            <button disabled={busy || loading || (step === 'email' && useCode && cooldown > 0) || Boolean(captchaSiteKey && !captchaToken)} className={buttonClass}>{busy ? 'Please wait…' : step === 'email' ? (signup && codeChannel === 'email' ? 'Create account' : !useCode ? 'Log in' : cooldown ? `Try again in ${cooldown}s` : 'Send verification code') : 'Verify & continue'}<ArrowRight aria-hidden="true" size={17} /></button>
+          </form>}
           {signup && step === 'email' && <p className="mt-4 text-xs leading-5 text-slate-500">After signing in, you’ll confirm the <Link href="/terms" target="_blank" rel="noopener" className="underline">Terms</Link> and <Link href="/privacy" target="_blank" rel="noopener" className="underline">Privacy notice</Link> once before participating. Links open in a new tab.</p>}
           {step === 'email' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm text-blue-700"><span className="flex flex-wrap gap-3">{methods?.phone && <button type="button" disabled={busy || loading} onClick={() => { setCodeChannel('phone'); setUseCode(true); setPassword(''); setError(''); }}>Use phone instead</button>}{codeChannel === 'phone' && <button type="button" disabled={busy || loading} onClick={() => { setCodeChannel('email'); setUseCode(true); setPassword(''); setError(''); }}>Use email instead</button>}{codeChannel === 'email' && !signup && <button type="button" disabled={busy || loading} onClick={() => { setUseCode(value => !value); setPassword(''); setError(''); }}>{useCode ? 'Use a password instead' : 'Use an email code instead'}</button>}</span>{!signup && <Link href="/account/recovery" className="underline">Forgot password?</Link>}</div>}
           {step === 'code' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm font-bold text-blue-700"><button type="button" disabled={busy || cooldown > 0 || Boolean(captchaSiteKey && !captchaToken)} onClick={() => void run(sendCode, { action: 'request-code', createAccount: signup, channel: codeChannel })} className="disabled:text-slate-400">{cooldown ? `Resend in ${cooldown}s` : 'Resend code'}</button><button type="button" disabled={busy || loading} onClick={() => { setStep('email'); setCode(''); setError(''); setMessage(''); }}>Use a different {codeChannel === 'phone' ? 'phone' : 'email'}</button></div>}

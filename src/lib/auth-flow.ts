@@ -2,9 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type SocialProvider = 'google';
 export type AuthMethods = { google: boolean; phone: boolean };
-export type SignupNames = { firstName: string; lastName?: string };
+export type SignupNames = { firstName: string; lastName: string };
 export type AuthErrorContext = {
-  action?: 'request-code' | 'verify-code' | 'password' | 'oauth' | 'sign-out';
+  action?: 'request-code' | 'verify-code' | 'password' | 'signup' | 'oauth' | 'sign-out';
   createAccount?: boolean;
   channel?: 'email' | 'phone';
 };
@@ -40,10 +40,11 @@ export function authErrorMessage(reason: unknown, context: AuthErrorContext = {}
   if (error?.code === 'provider_disabled') return 'This sign-in option is not available yet. Please use email.';
   if (['invalid_email', 'email_address_invalid'].includes(error?.code ?? '')) return 'Enter a valid email address.';
   if (error?.code === 'invalid_first_name') return 'Enter your first name, starting with a letter and using up to 80 characters. Email addresses are not accepted here.';
-  if (error?.code === 'invalid_last_name') return 'Use up to 80 characters for your last name, or leave it blank.';
+  if (error?.code === 'invalid_last_name') return 'Enter your last name, starting with a letter and using up to 80 characters.';
   // Auth can intentionally hide whether an account exists. Do not turn a failed
   // request into an account lookup or claim that an unsent code was incorrect.
   if (['invalid_credentials', 'user_not_found', 'user_already_exists', 'email_exists', 'phone_exists'].includes(error?.code ?? '')) {
+    if (context.action === 'signup') return 'We couldn’t create the account with those details. Try another email or log in if you already have an account.';
     if (context.action === 'request-code') return requestFailure;
     if (context.action === 'verify-code') return 'We couldn’t verify that code. Check the contact details and enter the latest code, or request a new one.';
     return 'We couldn’t sign you in with those details. Try again or use an email code. New here? Choose Create account.';
@@ -56,11 +57,13 @@ export function authErrorMessage(reason: unknown, context: AuthErrorContext = {}
   if (error?.code === 'email_address_not_authorized') return 'Email delivery is not available for this address right now. Try another sign-in option.';
   if (error?.code === 'email_not_confirmed') return 'Verify your email before signing in.';
   if (['weak_password', 'invalid_password'].includes(error?.code ?? '')) return 'Use a unique password between 12 and 128 characters.';
+  if (error?.code === 'password_mismatch') return 'Passwords do not match.';
   if (['captcha_failed', 'captcha_required'].includes(error?.code ?? '')) return 'Complete the security check and try again.';
   if (context.action === 'request-code') return context.channel === 'phone'
     ? 'Your text message could not be sent. Check your connection and try again.'
     : 'Your verification email could not be sent. Check your connection and try again.';
   if (context.action === 'verify-code') return 'We couldn’t finish verifying your code. Check your connection and try again.';
+  if (context.action === 'signup') return 'We couldn’t create your account. Check your connection and try again.';
   if (context.action === 'sign-out') return 'We couldn’t sign you out. Check your connection and try again.';
   return 'We couldn’t complete sign-in. Check your connection and try again.';
 }
@@ -69,7 +72,7 @@ function signupNameData(names?: SignupNames) {
   const first_name = (names?.firstName ?? '').trim().normalize('NFC');
   const last_name = (names?.lastName ?? '').trim().normalize('NFC');
   if (!/^\p{L}/u.test(first_name) || first_name.includes('@') || [...first_name].length > 80 || /[\u0000-\u001f\u007f]/.test(first_name)) throw { code: 'invalid_first_name' };
-  if ([...last_name].length > 80 || /[\u0000-\u001f\u007f]/.test(last_name)) throw { code: 'invalid_last_name' };
+  if (!/^\p{L}/u.test(last_name) || last_name.includes('@') || [...last_name].length > 80 || /[\u0000-\u001f\u007f]/.test(last_name)) throw { code: 'invalid_last_name' };
   return { first_name, last_name };
 }
 
@@ -79,6 +82,18 @@ export async function requestEmailCode(client: SupabaseClient, email: string, re
   const data = createAccount ? signupNameData(names) : undefined;
   const { error } = await client.auth.signInWithOtp({ email: normalizeEmail(email), options: { shouldCreateUser: createAccount, emailRedirectTo: redirectTo, ...(data ? { data } : {}), ...authCaptchaOptions(captchaToken) } });
   if (error) throw error;
+}
+
+export async function registerWithPassword(client: SupabaseClient, email: string, password: string, redirectTo: string, names: SignupNames, captchaToken?: string): Promise<boolean> {
+  const data = signupNameData(names);
+  if (password.length < 12 || password.length > 128) throw { code: 'invalid_password' };
+  const { data: result, error } = await client.auth.signUp({
+    email: normalizeEmail(email), password,
+    options: { emailRedirectTo: redirectTo, data, ...authCaptchaOptions(captchaToken) },
+  });
+  if (error) throw error;
+  if (!result.user) throw new Error('Account creation was not confirmed');
+  return Boolean(result.session);
 }
 
 export async function verifyEmailCode(client: SupabaseClient, email: string, token: string, captchaToken?: string) {

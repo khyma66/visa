@@ -6,7 +6,7 @@ import { DEMO_USER } from '@/lib/demo-data';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import type { CommunityUser, Profile } from '@/lib/types';
 import { createAuthSessionSync, type AuthState } from '@/lib/auth-session';
-import { requestEmailCode, verifyEmailCode, requestPhoneCode, verifyPhoneCode, startSocialSignIn, signInWithPassword, type AuthMethods, type SocialProvider, type SignupNames } from '@/lib/auth-flow';
+import { requestEmailCode, registerWithPassword, verifyEmailCode, requestPhoneCode, verifyPhoneCode, startSocialSignIn, signInWithPassword, type AuthMethods, type SocialProvider, type SignupNames } from '@/lib/auth-flow';
 
 type AuthContextValue = {
   user: CommunityUser | null;
@@ -16,6 +16,7 @@ type AuthContextValue = {
   demoMode: boolean;
   refreshProfile: () => Promise<void>;
   login: (email: string, password: string, captchaToken?: string) => Promise<void>;
+  register: (email: string, password: string, redirectTo: string, names: SignupNames, captchaToken?: string) => Promise<boolean>;
   requestCode: (email: string, redirectTo: string, createAccount?: boolean, names?: SignupNames, captchaToken?: string) => Promise<void>;
   verifyCode: (email: string, token: string, captchaToken?: string) => Promise<void>;
   requestPhoneCode: (phone: string, methods: AuthMethods, createAccount?: boolean, captchaToken?: string) => Promise<void>;
@@ -60,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     demoMode: !isSupabaseConfigured,
     refreshProfile: async () => { await sessionSync.current?.refresh(); },
     login: async (email, password, captchaToken) => signInWithPassword(getSupabase(), email, password, captchaToken),
+    register: async (email, password, redirectTo, names, captchaToken) => registerWithPassword(getSupabase(), email, password, redirectTo, names, captchaToken),
     requestCode: async (email, redirectTo, createAccount = false, names, captchaToken) => requestEmailCode(getSupabase(), email, redirectTo, createAccount, names, captchaToken),
     verifyCode: async (email, token, captchaToken) => verifyEmailCode(getSupabase(), email, token, captchaToken),
     requestPhoneCode: async (phone, methods, createAccount = false, captchaToken) => requestPhoneCode(getSupabase(), phone, methods, createAccount, captchaToken),
