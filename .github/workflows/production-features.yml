@@ -1,4 +1,5 @@
 name: Release current VisaThreads AI features
+# Accept equivalent unconfirmed-withdrawal wording in tests; reject confirmed-event counterexamples.
 # Target 30–50-word shortening with bounded room for qualifications; retain factual and attribution checks.
 # Preserve third-party attribution and compress follow-ups without expanding their scope.
 # Separate focused-fact completeness from synthesis; keep factual support and full-source review mandatory.

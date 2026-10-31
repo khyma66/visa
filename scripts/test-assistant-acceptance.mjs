@@ -51,6 +51,13 @@ test('attribution regression fixtures reject invented gender and unrelated expan
       { text: 'Another member reports job loss and uncertainty about whether or when their employer submitted a withdrawal.', evidence: [{ sourceId: fixture.corpus.sources[1].id }] },
     ], disagreements: [], unanswered: [] };
     assert(fixture.checks.every(check => check.test(result)), stage);
+    const uncertainty = fixture.checks.find(check => check.name === 'withdrawal_uncertainty');
+    for (const text of ['The withdrawal has not yet been confirmed.', 'The withdrawal has not been confirmed.', 'The withdrawal is not confirmed.']) {
+      assert(uncertainty.test({ ...result, claims: [{ text, evidence: [] }] }), text);
+    }
+    for (const text of ['The withdrawal has been confirmed.', 'The employer submitted the withdrawal.']) {
+      assert(!uncertainty.test({ ...result, claims: [{ text, evidence: [] }] }), text);
+    }
     for (const text of ['She is waiting for her decision.', 'He lost his job.', 'The museum may be open during the holiday.']) {
       assert(fixture.checks.some(check => !check.test({ ...result, claims: [...result.claims, { text, evidence: [] }] })), text);
     }
