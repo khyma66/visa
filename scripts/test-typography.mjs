@@ -65,9 +65,10 @@ test('home uses a community heading and the same title scale in the discovery ra
   const home = await readFile(new URL('src/components/CommunityHome.tsx', root), 'utf8');
   assert.match(home, /'U\.S\. Visa Community'/);
   assert.doesNotMatch(home, /'U\.S\. Visa Questions'/);
-  for (const title of ['Find Your Community', 'Know the Source', 'Topics in This Feed']) {
+  for (const title of ['Find Your Community', 'Archive', 'Topics in This Feed']) {
     assert(home.includes(`text-thread-title font-semibold text-slate-900\">${title}</h2>`));
   }
+  assert.doesNotMatch(home, /identifies imported discussions|Member posts are created directly on VisaThreads|Topic tags work the same for both/);
   assert.doesNotMatch(home, /tracking-tight|tracking-\[0\.15em\]/);
 });
 
