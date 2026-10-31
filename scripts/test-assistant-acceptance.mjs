@@ -31,7 +31,16 @@ dependencies['./assistant-acceptance-fixtures'] = await compile('scripts/assista
 dependencies['../src/lib/assistant-planner'] = dependencies['./assistant-planner'];
 dependencies['./assistant-planner-fixtures'] = await compile('scripts/assistant-planner-fixtures');
 const { acceptanceFixtures, evaluateAcceptance } = await import(dependencies['./assistant-acceptance-fixtures']);
-const { default: compiledWorker, checkAcceptanceInference } = await import(await compile('scripts/assistant-acceptance-worker'));
+const { default: compiledWorker, checkAcceptanceInference, syntheticProviderDiagnostic } = await import(await compile('scripts/assistant-acceptance-worker'));
+
+test('opt-in synthetic provider diagnostics redact credentials and exclude generated payloads', () => {
+  const secret = 'synthetic-provider-credential';
+  const detail = syntheticProviderDiagnostic({ error: { code: 'invalid_request', type: 'invalid_request_error', message: `Rejected ${secret}, Bearer abcdef, gsk_anotherkey`, failed_generation: 'must not be retained' }, private: 'discard' }, secret);
+  assert.deepEqual(detail, { code: 'invalid_request', type: 'invalid_request_error', message: 'Rejected [redacted], [redacted], [redacted]' });
+  assert.equal(syntheticProviderDiagnostic({ error: { message: 'x'.repeat(1000) } }, secret).message.length, 600);
+  assert.equal(syntheticProviderDiagnostic({ error: { message: secret } }, ''), undefined);
+  assert.equal(syntheticProviderDiagnostic(null, secret), undefined);
+});
 const { assistantPrompt, prepareAssistantCorpus, validateAssistantOutput } = await import(dependencies['./assistant-core']);
 // Adapt fixed synthetic answer mocks to the actual internal provider contract.
 // No production adapter or verifier accepts quote text as a fallback. A bad
@@ -191,6 +200,13 @@ test('decision uncertainty accepts known-date paraphrases but rejects an omitted
   for (const text of ['The second member is pending.', 'The decision date is known.', 'The decision is expected tomorrow.', 'There was no decision before approval.']) {
     assert.equal(check.test(result(text)), false, text);
   }
+});
+
+test('issue uncertainty accepts a missing decision-time report without accepting a known or invented decision', () => {
+  const check = acceptanceFixtures.find(item => item.id === 'broad-appointment-issues').checks.find(item => item.name === 'unresolved_decision');
+  const result = text => ({ status: 'answered', claims: [{ text, evidence: [] }], disagreements: [] });
+  for (const text of ['They have not been told when a decision will be made.', 'They have not yet been told when the decision will arrive.', 'The decision date remains unknown.']) assert.equal(check.test(result(text)), true, text);
+  for (const text of ['They have been told when a decision will be made.', 'The decision will arrive tomorrow.', 'The application was approved.', 'There was a five-month delay.']) assert.equal(check.test(result(text)), false, text);
 });
 
 test('acceptance checks the same bounded length as the server-resolved task', () => {
