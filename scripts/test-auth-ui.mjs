@@ -198,11 +198,11 @@ test('shared navigation retains working community, feed, tags and messaging dest
   } finally { h.close(); }
 });
 
-test('mobile navigation retains the creation and production assistant actions moved out of the narrow header', () => {
+test('mobile navigation retains post creation without chatbot actions', () => {
   const previousOrigin = process.env.NEXT_PUBLIC_SITE_URL;
   const h = setup();
   try {
-    for (const [origin, assistant] of [['https://visathreads.com', true], ['https://visa-central.com', false]]) {
+    for (const [origin, assistant] of [['https://visathreads.com', false], ['https://visa-central.com', false]]) {
       process.env.NEXT_PUBLIC_SITE_URL = origin;
       let navigated = false;
       h.render(CommunityNavigation, { mobile: true, onNavigate: () => { navigated = true; } });

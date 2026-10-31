@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import { PLANNER_CASE_IDS } from './assistant-planner-cases.mjs';
-import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
 import { test } from 'node:test';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -77,7 +75,7 @@ test('recovery refuses lost branding and never treats arbitrary dirty ancestry a
 });
 
 const values = { NEXT_PUBLIC_SITE_URL: LIVE_SITE, NEXT_PUBLIC_SUPABASE_URL: LIVE_DATABASE, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: `sb_publishable_${'fixture'.repeat(5)}` };
-const config = enabled => ({ name: 'visaflow-dev', routes: ['visathreads.com', 'www.visathreads.com'].map(pattern => ({ pattern, custom_domain: true })), vars: featureEnvironment(values, enabled), ai: { binding: 'ASSISTANT_AI' } });
+const config = enabled => ({ name: 'visaflow-dev', routes: ['visathreads.com', 'www.visathreads.com'].map(pattern => ({ pattern, custom_domain: true })), vars: featureEnvironment(values, enabled) });
 
 test('only the independently identified legacy version may omit a site origin', () => {
   const health = { environment: 'development', releaseStatus: 'configured', build: { gitSha: '0624c651cb252436c47c5f2b020baecfec0bfbd0', gitTree: '1e67b513d22bd843ddcb587548feb68e71f0ef92', sourceSha256: '2b0809b06597008d2f9b911ec76b13648cfb3cefd271bdbe20809c2826762ea7', dirty: false, siteOrigin: null } };
@@ -119,7 +117,7 @@ test('an unavailable original commit requires exact tracked-source fingerprint i
 });
 
 test('existing preview feature configuration preserves launch gates and production-only AI', () => {
-  for (const enabled of ['true', 'false']) {
+  for (const enabled of ['false']) {
     const env = featureEnvironment(values, enabled);
     assert.equal(env.PUBLIC_LAUNCH_APPROVED, 'false');
     assert.equal(env.NEXT_PUBLIC_APP_ENV, 'development');
@@ -129,8 +127,7 @@ test('existing preview feature configuration preserves launch gates and producti
   }
   for (const change of [{ NEXT_PUBLIC_SITE_URL: 'https://visa-central.com' }, { NEXT_PUBLIC_SUPABASE_URL: 'https://ppdwysmeistjxzjpmxyk.supabase.co' }, { NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_secret_rejected' }]) assert.throws(() => featureEnvironment({ ...values, ...change }, 'true'));
   assert.throws(() => featureEnvironment(values, 'unexpected'));
-  const all = featureEnvironment(values, 'true', { communities: 'true', catchup: 'true' });
-  verifyFeatureWorker({ ...config('true'), vars: all }, 'true', { communities: 'true', catchup: 'true' });
+  assert.throws(() => featureEnvironment(values, 'true'), /removed/);
   assert.throws(() => featureEnvironment(values, 'false', { catchup: 'true' }));
 });
 
@@ -147,7 +144,7 @@ test('feature deployment rejects target swaps, public launch and additional AI m
     value => { value.vars.ASSISTANT_CATCHUP_ENABLED = 'true'; },
     value => { value.vars.APIFY_LIVE_FETCH_ENABLED = 'true'; },
     value => { value.ai = { binding: 'UNEXPECTED' }; },
-  ]) { const changed = config('true'); mutate(changed); assert.throws(() => verifyFeatureWorker(changed, 'true')); }
+  ]) { const changed = config('false'); mutate(changed); assert.throws(() => verifyFeatureWorker(changed, 'false')); }
 });
 
 test('Worker archive recovery interprets only static literals and never executes downloaded code', async () => {
@@ -181,99 +178,8 @@ test('Worker archive recovery interprets only static literals and never executes
   assert.equal(fixture.questions[0].answer_count, 2, 'Original source is immutable.');
 });
 
-function acceptanceReceipt() {
-  const ids = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context', 'thank-you-confirmation', 'public-multiple-thread-synthesis'];
-  const model = modelProfile.answer;
-  ids.push('hfour-ead-stamping-experience-synthesis');
-  ids.push('large-discussion-summary');
-  ids.push('numbered-interview-transcript');
-  ids.push('heterogeneous-report-summary');
-  ids.push('historical-current-document-separation');
-  ids.push('stem-post-overview');
-  ids.push('stem-followup-summary');
-  ids.push('stem-followup-comparison');
-  ids.unshift('mixed-unresolved-discussion-summary');
-  ids.unshift('question-only-summary');
-  ids.unshift('shorter-collection-summary');
-  ids.unshift('broad-appointment-issues');
-  ids.unshift('broad-stem-issues');
-  ids.unshift('attribution-shorter');
-  ids.unshift('attribution-summary');
-  ids.unshift('attribution-initial');
-  const checksFor = id => ['supported', 'application_evidence_reviewed_when_needed', ...(id === 'direct-post-search'
-    ? ['application_provider_not_called'] : ['application_provider_call_sequence', 'application_transport_budget'])];
-  return { schemaVersion: 1, sourceSha: 'a'.repeat(40), provider: 'workers-ai', model, modelProfile, createdAt: new Date().toISOString(), passed: true, repetitions: 3, features: { posts: true, communities: true, catchup: true }, workerDeleted: true, cases: ids.map(id => ({
-    id, model, passed: true,
-    samples: Array.from({ length: 3 }, () => ({ id, model, passed: true, checks: checksFor(id).map(name => ({ name, passed: true })) })),
-    checks: Array.from({ length: 3 }, (_, index) => checksFor(id).map(name => ({ name: `sample_${index + 1}_${name}`, passed: true }))).flat(),
-  })), plannerCases: PLANNER_CASE_IDS.map(id => ({ id, model, passed: true,
-    samples: Array.from({ length: 3 }, () => ({ id, model, passed: true, checks: ['action', 'context_retained', 'old_topic_removed', 'reference'].map(name => ({ name, passed: true })) })) })) };
-}
-
-test('production activation requires fresh exact-source hosted acceptance for every enabled feature', () => {
-  const receipt = acceptanceReceipt();
-  verifyAssistantAcceptance(receipt, receipt.sourceSha, { communities: 'true', catchup: 'true' });
-  for (const change of [{ sourceSha: 'b'.repeat(40) }, { model: 'wrong-model' }, { passed: false }, { workerDeleted: false }, { createdAt: '2020-01-01T00:00:00Z' }, { features: { posts: true } }, { cases: receipt.cases.slice(1) }, { cases: receipt.cases.map(row => ({ ...row, checks: [{ name: 'supported', passed: false }] })) }]) assert.throws(() => verifyAssistantAcceptance({ ...receipt, ...change }, receipt.sourceSha, { communities: 'true', catchup: 'true' }));
-});
-
-test('Groq release retains exact-model gates, stored-secret isolation and evaluation cleanup proofs', () => {
-  const features = { provider: 'groq' };
-  const vars = featureEnvironment(values, 'true', features);
-  assert.equal(vars.ASSISTANT_PROVIDER, 'groq');
-  verifyFeatureWorker({ ...config('true'), vars }, 'true', features);
-  assert.throws(() => verifyFeatureWorker({ ...config('true'), vars: { ...vars, GROQ_API_KEY: 'not-a-real-key' } }, 'true', features));
-  assert.throws(() => featureEnvironment(values, 'true', { provider: 'arbitrary' }));
-  const receipt = acceptanceReceipt();
-  receipt.provider = 'groq'; receipt.model = modelProfile.groq.answer; receipt.modelProfile = modelProfile.groq;
-  receipt.evaluationWorker = 'visaflow'; receipt.previewRoutingRestored = true; receipt.activeDeploymentsUnchanged = true;
-  delete receipt.workerDeleted;
-  for (const row of [...receipt.cases, ...receipt.plannerCases]) { row.model = receipt.model; for (const sample of row.samples) sample.model = receipt.model; }
-  verifyAssistantAcceptance(receipt, receipt.sourceSha, features);
-  for (const change of [{ previewRoutingRestored: false }, { activeDeploymentsUnchanged: false }, { evaluationWorker: 'visaflow-dev' }, { modelProfile: { ...modelProfile.groq, review: 'untested' } }, { provider: 'workers-ai' }, { repetitions: 1 }, { passed: false }]) {
-    assert.throws(() => verifyAssistantAcceptance({ ...receipt, ...change }, receipt.sourceSha, features));
-  }
-  assert.throws(() => verifyAssistantAcceptance(acceptanceReceipt(), receipt.sourceSha, features));
-});
-
-test('production acceptance cannot pass through aggregate-only, incomplete or failing samples', () => {
-  const mutations = [
-    receipt => { delete receipt.plannerCases; },
-    receipt => { receipt.plannerCases.pop(); },
-    receipt => { receipt.plannerCases[0].samples[0].checks[0].passed = false; },
-    receipt => { receipt.modelProfile = { ...receipt.modelProfile, review: 'untested-reviewer' }; },
-    receipt => { delete receipt.modelProfile; },
-    receipt => { delete receipt.repetitions; },
-    ...[1, 2, 4].map(count => receipt => { receipt.repetitions = count; }),
-    receipt => { delete receipt.cases[0].samples; },
-    receipt => { receipt.cases[0].samples.pop(); },
-    receipt => { receipt.cases[0].samples.push(receipt.cases[0].samples[0]); },
-    receipt => { receipt.cases[0].samples[0].passed = false; },
-    receipt => { receipt.cases[0].samples[0].checks[0].passed = false; },
-    receipt => { receipt.cases[0].samples[0].checks = []; },
-    receipt => { receipt.cases[0].samples[0].checks[0].name = ''; },
-    receipt => { receipt.cases[0].samples[0].checks = [{ name: 'supported', passed: true }]; receipt.cases[0].checks = receipt.cases[0].samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed }))); },
-    receipt => { receipt.cases[0].samples[0].model = 'another-model'; },
-    receipt => { receipt.cases[0].samples[0].id = receipt.cases[1].id; },
-    receipt => { receipt.cases[0].checks.pop(); },
-    receipt => { receipt.cases[0].checks[0].name = 'unsupported-aggregate'; },
-    receipt => { receipt.cases[0].model = 'another-model'; },
-    receipt => { receipt.cases[0].passed = false; },
-    receipt => { receipt.cases[0] = receipt.cases[1]; },
-  ];
-  for (const mutate of mutations) {
-    const receipt = acceptanceReceipt(); mutate(receipt);
-    assert.throws(() => verifyAssistantAcceptance(receipt, receipt.sourceSha, { communities: 'true', catchup: 'true' }));
-  }
-});
-
-test('production acceptance requires explicit bounded inference and transport proofs', () => {
-  for (const [caseId, name] of [['direct-post-search', 'application_provider_not_called'], ['post-question', 'application_provider_call_sequence'], ['post-question', 'application_transport_budget']]) {
-    const receipt = acceptanceReceipt();
-    const row = receipt.cases.find(item => item.id === caseId);
-    row.samples[0].checks = row.samples[0].checks.filter(check => check.name !== name);
-    row.checks = row.samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed })));
-    assert.throws(() => verifyAssistantAcceptance(receipt, receipt.sourceSha), /bounded inference sequence and transport budget/);
-  }
+test('retired model activation cannot be restored by an old acceptance receipt', () => {
+  assert.throws(() => verifyAssistantAcceptance({ passed: true }), /removed/);
 });
 
 const uploadedVersion = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -297,9 +203,9 @@ test('recording and rollback refuse unrelated deployments and accept a provable 
 
 test('production workflow captures structured deploy output and attempts guarded recovery after upload failure', async () => {
   const workflow = await readFile(new URL('../.github/workflows/production-features.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /ASSISTANT_PROVIDER: 'groq'/);
-  assert.match(workflow, /evaluate-groq-assistant\.mjs --release/);
-  assert.match(workflow, /evaluate-groq-assistant\.mjs --cleanup/);
+  assert.match(workflow, /ASSISTANT_ENABLED: 'false'/);
+  assert.match(workflow, /smoke-chatbot-removed\.mjs/);
+  assert(!workflow.includes('evaluate-groq-assistant'));
   assert(workflow.includes('name: production-ai-feature-evidence-${{ github.sha }}-attempt-${{ github.run_attempt }}'), 'Retries retain separate evidence instead of overwriting or colliding with failed attempts');
   assert(workflow.includes('.cache/visaflow/live-preview/rollout-verification.json'), 'Every release preserves failed rollout rounds as well as the final result');
   assert.match(workflow, /WRANGLER_OUTPUT_FILE_PATH: \$\{\{ github.workspace \}\}\/\.cache\/visaflow\/live-preview\/wrangler-deploy\.ndjson/);
@@ -320,7 +226,7 @@ test('only a fresh unchanged current-live archive may be used by an explicit pre
     const receipt = { siteOrigin: LIVE_SITE, databaseOrigin: LIVE_DATABASE, worker: 'visaflow-dev', health: { environment: 'development', build: { dirty: false, gitSha: 'a'.repeat(40) } }, deploymentId: '11111111-1111-1111-1111-111111111111', questionCount: 563, replyCount: 628, capturedAt: new Date().toISOString(), archiveSha256: sha256(content) };
     const write = object => writeFile(resolve(root, '.cache/visaflow/live-preview/receipt.json'), JSON.stringify(object));
     await write(receipt);
-    const env = { ...featureEnvironment(values, 'true'), CI: 'true' };
+    const env = { ...featureEnvironment(values, 'false'), CI: 'true' };
     assert.equal(checkedLiveArchive(root, env), resolve(root, 'src/data/api-archive.json'));
     assert.equal(archiveSource(root, env), resolve(root, 'src/data/api-archive.json'));
     for (const change of [{ NEXT_PUBLIC_APP_ENV: 'production' }, { CLOUDFLARE_ENV: 'production' }, { NEXT_PUBLIC_SITE_URL: 'https://visa-central.com' }, { VISATHREADS_EXISTING_PREVIEW: 'false' }]) assert.throws(() => checkedLiveArchive(root, { ...env, ...change }));
@@ -344,7 +250,7 @@ test('deploy metadata regeneration cannot replace immutable checked build proven
     git('add', '.'); git('commit', '-m', 'reviewed feature');
     await mkdir(resolve(root, '.cache/visaflow/live-preview'), { recursive: true });
     await writeFile(resolve(root, '.cache/visaflow/live-preview/receipt.json'), JSON.stringify({ archiveSha256: 'a'.repeat(64) }));
-    const buildEnv = featureEnvironment(values, 'true', { communities: 'true', catchup: 'true' });
+    const buildEnv = featureEnvironment(values, 'false');
     const expected = buildProvenance(root, buildEnv);
     const mutablePath = resolve(root, '.cache/visaflow/build-provenance.json');
     await writeFile(mutablePath, JSON.stringify(expected));

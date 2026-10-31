@@ -1,2 +1,0 @@
-export const PLANNER_CASE_IDS = ['first-summary', 'first-specific', 'first-ambiguous', 'gist', 'longest', 'constraint', 'negation', 'translation', 'new-topic', 'period-comparison', 'unknown-reference', 'aggregate', 'ordinal', 'location-correction', 'clarification-answer'].map(id => `planner:${id}`);
-PLANNER_CASE_IDS.unshift('planner:topic-after-transforms-hfour', 'planner:topic-after-transforms-visitor', 'planner:topic-after-transforms-student');

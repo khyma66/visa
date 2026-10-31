@@ -10,8 +10,6 @@ import { checkedLiveArchive, LIVE_SITE, LIVE_DATABASE, LIVE_WORKER, sha256 } fro
 import { buildProvenance, sourceProvenance } from './build-provenance.mjs';
 import { recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 import { pinnedChatbotRecovery, verifyRecoveryFiles } from './pinned-chatbot-recovery.mjs';
-import modelProfile from '../src/lib/assistant-models.json' with { type: 'json' };
-import { PLANNER_CASE_IDS } from './assistant-planner-cases.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const privateDirectory = resolve(root, '.cache/visaflow/live-preview');
@@ -20,11 +18,7 @@ const configPath = resolve(root, 'dist/server/wrangler.json');
 const deploymentOutputPath = resolve(privateDirectory, 'wrangler-deploy.ndjson');
 const hosts = ['visathreads.com', 'www.visathreads.com'];
 const publicVariableNames = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SITE_URL', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'GOOGLE_NEWS_RSS_ENABLED'];
-function releaseProvider(features) {
-  const provider = features.provider ?? 'workers-ai';
-  assert(['workers-ai', 'groq'].includes(provider), 'Unsupported release provider.');
-  return provider;
-}
+function releaseProvider() { return ''; }
 const LEGACY_BASELINE_SHA = '0624c651cb252436c47c5f2b020baecfec0bfbd0';
 const LEGACY_BASELINE_VERSION = '879503b4-e947-420e-8ad8-e1f2f7082ae5';
 // Original deployment and the independently observed guarded rollback from run 38582002973.
@@ -67,7 +61,7 @@ export function featureEnvironment(values, enabled, features = {}) {
   assert.equal(values.NEXT_PUBLIC_SITE_URL, LIVE_SITE);
   assert.equal(values.NEXT_PUBLIC_SUPABASE_URL, LIVE_DATABASE);
   assert(/^sb_publishable_[A-Za-z0-9_-]{20,}$/.test(values.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? ''), 'A production publishable key is required.');
-  assert(['true', 'false'].includes(enabled), 'ASSISTANT_ENABLED must be true or false.');
+  assert.equal(enabled, 'false', 'Chatbot has been removed and cannot be enabled.');
   const communities = features.communities ?? 'false';
   const catchup = features.catchup ?? 'false';
   assert(['true', 'false'].includes(communities) && ['true', 'false'].includes(catchup), 'Additional AI feature flags must be explicit booleans.');
@@ -78,7 +72,7 @@ export function featureEnvironment(values, enabled, features = {}) {
     VISATHREADS_EXISTING_PREVIEW: 'true', PUBLIC_LAUNCH_APPROVED: 'false', IMPORTED_CONTENT_APPROVED: 'false',
     SEARCH_DISCOVERY_ENABLED: 'true',
     COMMUNITY_SOURCE_MODE: 'snapshot', APIFY_LIVE_FETCH_ENABLED: 'false',
-    ASSISTANT_PROJECT_REF: 'cycnichledvqbxevrwnt', ASSISTANT_PROVIDER: releaseProvider(features),
+    ASSISTANT_PROJECT_REF: '', ASSISTANT_PROVIDER: releaseProvider(features),
     ASSISTANT_ENABLED: enabled, ASSISTANT_COMMUNITIES_ENABLED: communities, ASSISTANT_CATCHUP_ENABLED: catchup,
   };
 }
@@ -94,12 +88,13 @@ export function verifyFeatureWorker(config, enabled, features = {}) {
   assert.equal(config.vars.NEXT_PUBLIC_SITE_URL, LIVE_SITE);
   assert.equal(config.vars.NEXT_PUBLIC_SUPABASE_URL, LIVE_DATABASE);
   assert.equal(config.vars.ASSISTANT_ENABLED, enabled);
-  assert.equal(config.vars.ASSISTANT_PROJECT_REF, 'cycnichledvqbxevrwnt');
+  assert.equal(config.vars.ASSISTANT_PROJECT_REF, '');
+  assert.equal(enabled, 'false', 'Chatbot has been removed.');
   assert.equal(config.vars.ASSISTANT_PROVIDER, releaseProvider(features));
   assert.equal(config.vars.GROQ_API_KEY, undefined, 'Provider credentials must remain stored secrets.');
   assert.equal(config.vars.ASSISTANT_COMMUNITIES_ENABLED, features.communities ?? 'false');
   assert.equal(config.vars.ASSISTANT_CATCHUP_ENABLED, features.catchup ?? 'false');
-  assert.deepEqual(config.ai, { binding: 'ASSISTANT_AI' });
+  assert.equal(config.ai, undefined, 'Removed chatbot must not bind Workers AI.');
 }
 
 /** One observed older build omitted only its site origin. Routes are checked
@@ -256,7 +251,7 @@ export async function buildFeatureRelease(enabled, features = {}) {
   const config = JSON.parse(await readFile(configPath, 'utf8'));
   config.vars = { ...config.vars, ...featureEnvironment(values, enabled, features) };
   delete config.vars.CLOUDFLARE_ENV; delete config.vars.VISATHREADS_EXISTING_PREVIEW;
-  config.ai = { binding: 'ASSISTANT_AI' };
+  delete config.ai;
   // Wrangler preserves existing secrets. Never download, serialize or replace them.
   verifyFeatureWorker(config, enabled, features);
   await writeFile(configPath, JSON.stringify(config, null, 2));
@@ -264,72 +259,8 @@ export async function buildFeatureRelease(enabled, features = {}) {
   await run(process.execPath, ['scripts/check-bundle.mjs'], env);
 }
 
-export function verifyAssistantAcceptance(receipt, sourceSha, features = {}) {
-  assert.equal(receipt?.schemaVersion, 1);
-  assert.equal(receipt.sourceSha, sourceSha, 'Model acceptance must match the exact release commit.');
-  const provider = releaseProvider(features);
-  const expectedProfile = provider === 'groq' ? modelProfile.groq : modelProfile;
-  assert.equal(receipt.provider, provider);
-  assert.equal(receipt.model, expectedProfile.answer);
-  assert.deepEqual(receipt.modelProfile, expectedProfile, 'Hosted acceptance must cover the exact answer and review model configuration.');
-  assert.equal(receipt.passed, true, 'Hosted model acceptance did not pass.');
-  if (provider === 'groq') {
-    assert.equal(receipt.evaluationWorker, 'visaflow', 'Groq evaluation must use the isolated, unbound Worker.');
-    assert.equal(receipt.previewRoutingRestored, true, 'Evaluation preview routing must be restored.');
-    assert.equal(receipt.activeDeploymentsUnchanged, true, 'Evaluation must not change any active deployment.');
-  } else assert.equal(receipt.workerDeleted, true, 'Temporary evaluation Worker must be removed before release.');
-  assert.equal(receipt.features?.posts, true);
-  for (const feature of ['communities', 'catchup']) if (features[feature] === 'true') assert.equal(receipt.features?.[feature], true, `${feature} needs hosted model acceptance.`);
-  assert.equal(receipt.repetitions, 3, 'Hosted acceptance requires three independent samples per case.');
-  assert(Array.isArray(receipt.plannerCases) && receipt.plannerCases.length === PLANNER_CASE_IDS.length
-    && PLANNER_CASE_IDS.every(id => receipt.plannerCases.some(row => row.id === id)), 'Every contextual planning case must be tested.');
-  for (const row of receipt.plannerCases) {
-    assert.equal(row.model, receipt.model); assert.equal(row.passed, true);
-    assert.equal(row.samples?.length, 3);
-    for (const sample of row.samples) {
-      assert.equal(sample.id, row.id); assert.equal(sample.model, receipt.model); assert.equal(sample.passed, true);
-      for (const name of ['action', 'context_retained', 'old_topic_removed', 'reference']) {
-        assert(sample.checks?.some(check => check.name === name && check.passed === true), 'Contextual planning semantics must pass.');
-      }
-    }
-  }
-  const requiredCases = ['direct-post-search', 'post-question', 'post-summary', 'public-question', 'community-question', 'community-catchup', 'community-catchup-partial', 'conflicting-reports', 'unsupported-policy', 'irrelevant-evidence', 'prompt-injection', 'multilingual-post', 'concise-question-relevance', 'conversation-topic-switch', 'long-post-tail-answer', 'short-followup-context', 'public-denied-outcome', 'public-negation-context', 'public-prompt-injection', 'public-unsupported-policy', 'public-conflicting-reports', 'public-original-language', 'public-multi-hop-context', 'public-ordinal-context', 'thank-you-confirmation', 'public-multiple-thread-synthesis'];
-  requiredCases.push('hfour-ead-stamping-experience-synthesis');
-  requiredCases.push('large-discussion-summary');
-  requiredCases.push('numbered-interview-transcript');
-  requiredCases.push('heterogeneous-report-summary');
-  requiredCases.push('historical-current-document-separation');
-  requiredCases.push('stem-post-overview');
-  requiredCases.push('stem-followup-summary');
-  requiredCases.push('stem-followup-comparison');
-  requiredCases.unshift('mixed-unresolved-discussion-summary');
-  requiredCases.unshift('question-only-summary');
-  requiredCases.unshift('shorter-collection-summary');
-  requiredCases.unshift('broad-appointment-issues');
-  requiredCases.unshift('broad-stem-issues');
-  requiredCases.unshift('attribution-shorter');
-  requiredCases.unshift('attribution-summary');
-  requiredCases.unshift('attribution-initial');
-  assert(Array.isArray(receipt.cases) && receipt.cases.length === requiredCases.length && requiredCases.every(id => receipt.cases.some(row => row.id === id)), 'Every required hosted case must occur exactly once.');
-  for (const row of receipt.cases) {
-    assert.equal(row.model, receipt.model);
-    assert.equal(row.passed, true, 'Every hosted case must pass.');
-    assert(Array.isArray(row.samples) && row.samples.length === receipt.repetitions, 'Every hosted case must retain all three samples.');
-    for (const sample of row.samples) {
-      assert.equal(sample.id, row.id, 'Sample belongs to a different fixture.');
-      assert.equal(sample.model, receipt.model, 'Sample belongs to a different model.');
-      assert.equal(sample.passed, true, 'Every hosted sample must pass.');
-      assert(Array.isArray(sample.checks) && sample.checks.length > 0 && sample.checks.every(check => typeof check.name === 'string' && check.name.length > 0 && check.passed === true), 'Every sample must retain passing semantic checks.');
-      assert(sample.checks.some(check => check.name === 'application_evidence_reviewed_when_needed' && check.passed === true), 'Every sample must verify the independent evidence-review stage.');
-      const requiredLifecycle = row.id === 'direct-post-search'
-        ? ['application_provider_not_called'] : ['application_provider_call_sequence', 'application_transport_budget'];
-      for (const name of requiredLifecycle) assert(sample.checks.some(check => check.name === name && check.passed === true), 'Every sample must prove the bounded inference sequence and transport budget.');
-    }
-    const aggregate = row.samples.flatMap((sample, index) => sample.checks.map(check => ({ name: `sample_${index + 1}_${check.name}`, passed: check.passed })));
-    assert.deepEqual(row.checks, aggregate, 'Aggregate checks must exactly retain every sample result.');
-  }
-  const age = Date.now() - Date.parse(receipt.createdAt);
-  assert(age >= 0 && age < 60 * 60 * 1000, 'Hosted model acceptance is expired.');
+export function verifyAssistantAcceptance() {
+  throw new Error('Chatbot has been removed; model activation is forbidden.');
 }
 
 export async function predeployFeatureCheck(enabled, features = {}, requireAcceptance = false) {
@@ -341,13 +272,9 @@ export async function predeployFeatureCheck(enabled, features = {}, requireAccep
   const config = JSON.parse(await readFile(configPath, 'utf8'));
   await readFeatureBuildProvenance(root);
   verifyFeatureWorker(config, enabled, features);
-  if (enabled === 'true' && releaseProvider(features) === 'groq') {
-    const secrets = await cloudflare(`/workers/scripts/${LIVE_WORKER}/secrets`);
-    assert(secrets.some(secret => secret.name === 'GROQ_API_KEY' && secret.type === 'secret_text'), 'Live Worker is missing its stored GROQ_API_KEY.');
-  }
+
   checkedLiveArchive(root, { ...config.vars, CLOUDFLARE_ENV: 'development', VISATHREADS_EXISTING_PREVIEW: 'true' });
-  if (enabled === 'true' && requireAcceptance) verifyAssistantAcceptance(JSON.parse(await readFile(resolve(root, '.cache/visaflow/assistant-acceptance.json'), 'utf8')), sourceProvenance(root).gitSha, features);
-  console.log('Live route, deployment baseline, archive and production-only assistant target verified.');
+  console.log('Live route, deployment baseline, archive and chatbot removal verified.');
 }
 
 /** Read Wrangler's structured output, not console text or an arbitrary newest version.

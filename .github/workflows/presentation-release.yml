@@ -20,13 +20,14 @@ concurrency:
 
 jobs:
   release:
-    if: github.ref == 'refs/heads/codex/feed-typography-responsive-tabs' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.candidate_sha == github.sha))
+    # Retired one-off release: use production-features.yml after chatbot removal.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment: production
     env:
       PRESENTATION_CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
-      ASSISTANT_ENABLED: 'true'
+      ASSISTANT_ENABLED: 'false'
       ASSISTANT_COMMUNITIES_ENABLED: 'false'
       ASSISTANT_CATCHUP_ENABLED: 'false'
     steps:
@@ -50,12 +51,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
-      - name: Evaluate unchanged hosted assistant with all three samples per case
-        id: evaluate
-        run: node scripts/evaluate-hosted-assistant.mjs
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Build exact presentation candidate preserving launch state and content
         run: node scripts/presentation-release.mjs build
       - name: Require unchanged live baseline, UI-only scope and exact model acceptance
@@ -96,16 +91,9 @@ jobs:
           path: |
             .cache/visaflow/live-preview/presentation-scope.json
             .cache/visaflow/live-preview/build-provenance.json
-            .cache/visaflow/assistant-acceptance.json
             .cache/visaflow/live-preview/rollout-verification.json
           include-hidden-files: true
           if-no-files-found: warn
-      - name: Ensure temporary evaluation Worker is removed
-        if: always() && (steps.evaluate.outcome == 'success' || steps.evaluate.outcome == 'failure')
-        run: node scripts/evaluate-hosted-assistant.mjs --cleanup
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Remove recovered content
         if: always()
         run: rm -f src/data/api-archive.json .cache/visaflow/live-preview/public-build-values.json

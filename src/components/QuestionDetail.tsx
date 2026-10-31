@@ -19,7 +19,6 @@ import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 import { ReportButton } from './ReportButton';
 import { PostOriginBadge } from './PostOriginBadge';
-import { AssistantPanel } from './AssistantPanel';
 
 function Author({ username, seed, createdAt, sourceOnly = false }: { username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
   return (
@@ -182,7 +181,6 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             </div>
           </article>
 
-          <AssistantPanel scope={{ kind: 'post', id: question.id }} />
 
           <section className="mt-4 border-t border-slate-200 pt-7">
             <h2 className="text-thread-title font-semibold text-slate-950">{experience ? `${question.answer_count} ${question.answer_count === 1 ? 'reply' : 'replies'}` : imported ? `${question.answer_count} ${question.answer_count === 1 ? 'comment' : 'comments'}` : `${question.answer_count} ${question.answer_count === 1 ? 'answer' : 'answers'}`}</h2>
