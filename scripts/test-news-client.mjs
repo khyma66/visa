@@ -8,8 +8,9 @@ const require = createRequire(import.meta.url);
 const url = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
 const compile = source => ts.transpileModule(source, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
 const shared = url(compile(await readFile(new URL('../src/lib/official-news-shared.ts',import.meta.url),'utf8')));
+const headlinesShared = url(compile(await readFile(new URL('../src/lib/immigration-headlines.ts',import.meta.url),'utf8')));
 const react = url('export const useState = (...args) => globalThis.__newsHarness.useState(...args); export const useEffect = (...args) => globalThis.__newsHarness.useEffect(...args);');
-const component = compile(await readFile(new URL('../src/components/OfficialNewsFeed.tsx',import.meta.url),'utf8')).replace(/(from\s+)(['"])([^'"]+)\2/g,(_,prefix,q,name)=>prefix+JSON.stringify(name==='react'?react:name==='@/lib/official-news-shared'?shared:pathToFileURL(require.resolve(name)).href));
+const component = compile(await readFile(new URL('../src/components/OfficialNewsFeed.tsx',import.meta.url),'utf8')).replace(/(from\s+)(['"])([^'"]+)\2/g,(_,prefix,q,name)=>prefix+JSON.stringify(name==='react'?react:name==='@/lib/official-news-shared'?shared:name==='@/lib/immigration-headlines'?headlinesShared:pathToFileURL(require.resolve(name)).href));
 const {OfficialNewsFeed}=await import(url(component));
 const edition=JSON.parse(await readFile(new URL('../src/data/official-news-snapshot.json',import.meta.url),'utf8'));
 class Harness {

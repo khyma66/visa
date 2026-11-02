@@ -11,7 +11,9 @@ const ownerSession = uid(90), memberSession = uid(91);
 const migration = '../../supabase/migrations/20261016210135_owner_analytics_aggregates.sql';
 const scalar = async (sql,args=[]) => Object.values((await db.query(sql,args)).rows[0])[0];
 const analytics = days => scalar('select public.owner_analytics($1)',[days ?? 7]);
-const windowStart = "(date_trunc('day',now() at time zone 'UTC') at time zone 'UTC')-interval '6 days'";
+// Subtract calendar days before converting to timestamptz: interval arithmetic
+// on timestamptz otherwise follows the caller's DST boundary, not UTC days.
+const windowStart = "(date_trunc('day',now() at time zone 'UTC')-interval '6 days') at time zone 'UTC'";
 async function asUser(user,fn,{role='authenticated',session=ownerSession,claims={}}={}) {
   await db.exec('begin');
   try {

@@ -18,6 +18,7 @@ async function compile(path, suffix = '') {
   }));
 }
 dependencies['@/lib/official-news-shared'] = dependencies['./official-news-shared'] = await compile('../src/lib/official-news-shared.ts');
+dependencies['@/lib/immigration-headlines'] = await compile('../src/lib/immigration-headlines.ts');
 dependencies['@/data/official-news-snapshot.json'] = moduleUrl('export default ' + await readFile(new URL('../src/data/official-news-snapshot.json', import.meta.url), 'utf8'));
 dependencies['@/lib/official-news'] = await compile('../src/lib/official-news.ts');
 const shared = await import(dependencies['./official-news-shared']);
@@ -135,7 +136,7 @@ test('official single and empty result states leave the source resources availab
 });
 test('official resource index numbers cannot shrink or wrap inside the narrow sidebar', () => {
   const html = renderToStaticMarkup(createElement(OfficialNewsFeed));
-  const numbers = [...html.matchAll(/<span aria-hidden="true" class="([^"]*)">(0[1-4])<\/span>/g)];
+  const numbers = [...html.matchAll(/<span aria-hidden="true" class="([^"]*)">(\d{2})<\/span>/g)];
   assert.equal(numbers.length, VISA_RESOURCES.length);
   numbers.forEach(([, className, label], index) => {
     assert.equal(label, String(index + 1).padStart(2, '0'));
