@@ -1,5 +1,5 @@
-export const OFFICIAL_NEWS_TTL = 2 * 60 * 60_000;
-export const OFFICIAL_NEWS_STALE_MS = 4 * 60 * 60_000;
+export const OFFICIAL_NEWS_TTL = 24 * 60 * 60_000;
+export const OFFICIAL_NEWS_STALE_MS = 36 * 60 * 60_000;
 export const OFFICIAL_NEWS_BACKOFF = 60_000;
 export const OFFICIAL_NEWS_LIMIT = 24;
 export const OFFICIAL_DOCUMENT_TYPES = ['Rule', 'Proposed Rule', 'Notice', 'Presidential Document'] as const;
