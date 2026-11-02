@@ -1,7 +1,8 @@
 name: Refresh public visa news edition
 on:
   schedule:
-    - cron: '23 */2 * * *'
+    # Once a day at 07:23 America/Chicago during standard time (13:23 UTC).
+    - cron: '23 13 * * *'
   workflow_dispatch:
 permissions:
   contents: write

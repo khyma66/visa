@@ -27,9 +27,10 @@ test('one failed topic retains previous articles alongside newly collected artic
   }, () => now + 1000);
   assert.equal(next.articles.length, 2); assert.equal(previous.articles.length, 1);
 });
-test('scheduled news checks every two hours and keeps the previous edition as the next commit parent', async () => {
+test('scheduled news checks daily, can be run manually, and keeps the previous edition as the next commit parent', async () => {
   const workflow = await readFile(new URL('../.github/workflows/news-refresh.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /cron: '23 \*\/2 \* \* \*'/);
+  assert.match(workflow, /cron: '23 13 \* \* \*'/);
+  assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /git fetch origin refs\/heads\/news-data:refs\/remotes\/origin\/news-data/);
   assert.match(workflow, /git commit-tree "\$tree" -p "\$parent"/);
   assert.match(workflow, /git push origin "\$commit:refs\/heads\/news-data"/);
