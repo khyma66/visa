@@ -1,7 +1,19 @@
 {
   "source": "Federal Register",
-  "retrievedAt": "2026-11-01T20:38:07.166Z",
+  "retrievedAt": "2026-11-02T01:37:10.937Z",
   "articles": [
+    {
+      "id": "2026-22320",
+      "title": "Agency Information Collection Activities; Extension, Without Change, of a Currently Approved Collection: Application for Free Training for Civics and Citizenship Teachers of Adults; Civics and Citizenship Toolkit",
+      "url": "https://www.federalregister.gov/documents/2026/11/02/2026-22320/agency-information-collection-activities-extension-without-change-of-a-currently-approved-collection",
+      "publishedOn": "2026-11-02",
+      "type": "Notice",
+      "agencies": [
+        "Homeland Security Department",
+        "U.S. Citizenship and Immigration Services"
+      ],
+      "summary": "The Department of Homeland Security (DHS), U.S. Citizenship and Immigration Services (USCIS) will be submitting the following information collection request to the Office of Management and Budget (OMB) for review and clearance in accordance with the Paperwork Reduction Act of 1995. The purpose of this notice is to allow an additional 30 days for public comments."
+    },
     {
       "id": "2026-22139",
       "title": "Agency Information Collection Activities; New Collection",
@@ -261,16 +273,6 @@
       "id": "2026-19555",
       "title": "Enhancing Program Integrity and Interagency Coordination in the Administration of the H-1B Nonimmigrant Visa Program",
       "url": "https://www.federalregister.gov/documents/2026/09/23/2026-19555/enhancing-program-integrity-and-interagency-coordination-in-the-administration-of-the-h-1b",
-      "publishedOn": "2026-09-23",
-      "type": "Presidential Document",
-      "agencies": [
-        "Executive Office of the President"
-      ]
-    },
-    {
-      "id": "2026-19554",
-      "title": "Restriction on Entry of Certain Nonimmigrant Workers",
-      "url": "https://www.federalregister.gov/documents/2026/09/23/2026-19554/restriction-on-entry-of-certain-nonimmigrant-workers",
       "publishedOn": "2026-09-23",
       "type": "Presidential Document",
       "agencies": [
