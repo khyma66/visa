@@ -25,7 +25,7 @@ function date(value: unknown, now: number, maxAgeDays = 14): value is string {
   return Number.isFinite(time) && time <= now + 5 * 60_000 && time >= now - maxAgeDays * 86_400_000;
 }
 export function isImmigrationHeadlines(value: unknown, now = Date.now()): value is ImmigrationHeadlines {
-  if (!value || typeof value !== 'object' || !('source' in value) || !['GDELT Project', 'USCIS Newsroom'].includes(String(value.source))
+  if (!value || typeof value !== 'object' || !('source' in value) || (value.source !== 'GDELT Project' && value.source !== 'USCIS Newsroom')
     || !('retrievedAt' in value) || !date(value.retrievedAt, now)
     || !('articles' in value) || !Array.isArray(value.articles) || value.articles.length > HEADLINE_LIMIT) return false;
   const urls = new Set<string>();
