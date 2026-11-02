@@ -55,3 +55,16 @@ test('headline source failure preserves the previous edition', async () => {
   await assert.rejects(refreshImmigrationHeadlines(previous, async () => new Response('',{status:429}), () => now), /existing edition preserved/);
   assert.deepEqual(previous,{sentinel:'unchanged'});
 });
+test('USCIS newsroom is a verified fallback when the publisher index is unreachable', async () => {
+  const html = '<div class="views-row"><div class="views-field views-field-title"><h3 class="field-content"><a href="/newsroom/news-releases/uscis-visa-update" hreflang="en">USCIS Visa Update for H-1B Applicants</a></h3></div><div class="views-field views-field-field-display-date"><div class="field-content"><time datetime="2026-10-29T10:00:00Z" class="datetime">October 29, 2026</time></div></div></div><div class="views-row"><div class="views-field views-field-title"><h3 class="field-content"><a href="/newsroom/news-releases/visa-fraud-arrest" hreflang="en">Visa Fraud Arrest in Chicago</a></h3></div><div class="views-field views-field-field-display-date"><div class="field-content"><time datetime="2026-10-29T11:00:00Z" class="datetime">October 29, 2026</time></div></div></div>';
+  const urls = [];
+  const edition = await refreshImmigrationHeadlines(undefined, async url => {
+    urls.push(String(url));
+    return String(url).includes('gdeltproject.org') ? new Response('',{status:429}) : new Response(html,{headers:{'Content-Type':'text/html'}});
+  }, () => now);
+  assert.equal(edition.source,'USCIS Newsroom');
+  assert.equal(edition.articles.length,1);
+  assert.equal(edition.articles[0].publisher,'USCIS');
+  assert.match(edition.articles[0].url,/^https:\/\/www\.uscis\.gov\/newsroom\//);
+  assert.equal(urls.length,2);
+});
