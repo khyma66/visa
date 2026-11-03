@@ -4,8 +4,7 @@ set local lock_timeout = '5s';
 -- Preserve every prior receipt. The current notice now documents stable public
 -- aliases for previously published discussions and the verified business email
 -- forwarding routes; existing assent is not rewritten as acceptance of it.
-drop policy if exists record_current_policy on public.policy_acceptances;
-create policy record_current_policy on public.policy_acceptances for insert to authenticated
+alter policy record_current_policy on public.policy_acceptances to authenticated
   with check (user_id = (select auth.uid()) and policy_version = '2026-11-02-preview-v3');
 
 create or replace function private.community_write_guard() returns trigger
