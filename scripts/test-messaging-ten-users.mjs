@@ -46,6 +46,7 @@ test('ten isolated users exchange private messages using post topics', { timeout
       '20261004221850_policy_acceptance_receipts.sql',
       '20261006042952_public_avatar_initials.sql',
       '20261006043113_avatar_name_policy_v2.sql',
+      '20261103010757_public_alias_and_contact_policy_v3.sql',
     ]) await db.exec(await readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'));
 
     await t.test('signup trigger generates ten distinct valid usernames', async () => {
@@ -59,7 +60,7 @@ test('ten isolated users exchange private messages using post topics', { timeout
     });
 
     await t.test('new identities cannot publish or request a chat until they explicitly acknowledge the current policy', async () => {
-      const version = '2026-10-06-preview-v2';
+      const version = '2026-11-02-preview-v3';
       assert((await readFile(new URL('../src/lib/policy.ts', import.meta.url), 'utf8')).includes(version));
       for (const [index, user] of users.entries()) {
         await asUser(user.id);

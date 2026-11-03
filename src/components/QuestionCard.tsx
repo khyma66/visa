@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ArrowUp, CheckCircle2, GitFork, MessageCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { isImportedPost, topicLabel } from '@/lib/post-presentation';
+import { isImportedPost, publicImportedUsername, topicLabel } from '@/lib/post-presentation';
 import type { Question } from '@/lib/types';
 import { Avatar } from './Avatar';
 import { PostOriginBadge } from './PostOriginBadge';
@@ -20,7 +20,7 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
       <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
             {!imported && <Avatar seed={question.author_avatar_seed} size="sm" />}
-            <span className="break-all font-semibold text-slate-700">{imported ? 'Community Contributor' : `u/${question.author_username}`}</span>
+            <span className="break-all font-semibold text-slate-700">{imported ? publicImportedUsername(question) : `u/${question.author_username}`}</span>
             <PostOriginBadge post={question} />
             <span aria-hidden="true">·</span>
             <time dateTime={question.created_at} title={new Date(question.created_at).toLocaleString()}>{formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</time>

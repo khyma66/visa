@@ -13,7 +13,7 @@ export function GET() {
     });
   }
   if (process.env.COMMUNITY_SOURCE_MODE !== 'snapshot') {
-    return NextResponse.json({ error: 'The reviewed archive summary is unavailable.' }, {
+    return NextResponse.json({ error: 'The topic summary is temporarily unavailable.' }, {
       status: 503, headers: { 'Cache-Control': 'no-store' },
     });
   }

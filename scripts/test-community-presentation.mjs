@@ -64,7 +64,7 @@ function render(Component, props={}, {values={},user=null,question=props.initial
   finally{delete globalThis.__presentation;}
 }
 const text = (html) => html.replace(/<[^>]*>/g,' ');
-const noPipelineLabels = (html) => assert.doesNotMatch(text(html),/apify|collected archive|source records|completed runs|duplicate records|group question|group comment/i);
+const noPipelineLabels = (html) => assert.doesNotMatch(text(html),/apify|archive|source records|completed runs|duplicate records|group question|group comment|community contributor/i);
 
 test('shared page gutter removes the second centered left rail without forcing reading pages full-width', async () => {
   const css = await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8');
@@ -82,8 +82,7 @@ test('source question cards use normal discussion layout without fake member ide
   noPipelineLabels(html);
   assert(html.includes(source.title));assert(html.includes(source.body));
   assert(html.includes('reactions'));assert(html.includes('replies'));assert(!html.includes('views'));
-  assert(html.includes('Community Contributor'));assert(!html.includes(source.author_username));assert(!html.includes('Member avatar'));
-  assert(html.includes('Community archive'));assert(html.includes('not linked to a VisaThreads account'));
+  assert.match(html,/user-\d{4}/);assert(!html.includes(source.author_username));assert(!html.includes('Member avatar'));
   assert(!html.includes(source.source_url));assert(!html.includes('/messages?'));
 });
 test('native cards preserve public usernames, member avatars, votes and normal question links',()=>{
@@ -92,10 +91,10 @@ test('native cards preserve public usernames, member avatars, votes and normal q
   assert(html.includes(`/questions/${native.id}`));assert(!html.includes('Community Contributor'));
   assert(!html.includes('Community archive'));
 });
-test('selected archive experiences retain their working canonical question links',()=>{
+test('selected earlier experiences retain their working canonical question links',()=>{
   const html=render(QuestionCard,{question:{...source,post_kind:'experience',experience_category:'Visa interview'}});
   assert(html.includes(`/questions/${source.id}`)); assert(!html.includes(`/experiences/${source.id}`));
-  assert(html.includes('Experience · Visa interview')); assert(html.includes('Community Contributor'));
+  assert(html.includes('Experience · Visa interview')); assert.match(html,/user-\d{4}/);
 });
 test('experience cards and details expose category and discussion actions without answer acceptance',()=>{
   const experience={...native,post_kind:'experience',experience_category:'Other',visa_type:'Other'};
@@ -127,8 +126,7 @@ test('discussion and promotion labels describe content rather than where it came
 test('source detail uses neutral presentation with no source-author messaging or voting affordance',()=>{
   const html=render(QuestionDetail,{initialQuestion:source},{user:{id:bob}});
   noPipelineLabels(html);assert(!html.includes('Originally shared in'));
-  assert(!html.includes(source.source_url));assert(html.includes('Community Contributor'));
-  assert(html.includes('Community archive'));
+  assert(!html.includes(source.source_url));assert.match(html,/user-\d{4}/);
   assert(html.includes('Join the discussion'));assert(!html.includes('Original discussion'));
   assert(!html.includes('Message author'));assert(!html.includes('/messages?'));assert(!html.includes('aria-label="Upvote"'));
   assert(!html.includes(source.author_username));assert(!html.includes('Peer experiences, not legal advice'));
@@ -137,8 +135,7 @@ test('an apify ID remains source-only even when its source flag/link are absent 
   const malformed={...source,source:undefined,source_url:null,author_id:alice,author_username:'alice-test'};
   const html=render(QuestionDetail,{initialQuestion:malformed},{user:{id:bob}});
   assert(!html.includes('/messages?'));assert(!html.includes('u/alice-test'));assert(!html.includes('aria-label="Upvote"'));
-  assert(html.includes('Community Contributor'));
-  assert(html.includes('Community archive'));
+  assert.match(html,/user-\d{4}/);
 });
 test('native post messaging binds both public username and registered profile ID for guests and other members',()=>{
   for(const user of [null,{id:bob}]) {
@@ -178,11 +175,11 @@ test('tag directory presents combined discussion counts without splitting people
   noPipelineLabels(html);assert(html.includes('12 posts'));assert(html.includes('/?tag=h1b'));assert(html.includes('Transfer timelines'));
   assert(!html.includes('member-created'));
 });
-test('related questions show archive origin separately from topic tags and exact reply counts',()=>{
+test('related questions keep internal provenance out of the UI and show exact reply counts',()=>{
   const html=render(RelatedQuestions,{context:{tags:['h1b']}},{values:{0:[{...source,matched_tags:['h1b']}]}});
   noPipelineLabels(html);assert(html.includes('aria-label="3 replies"'));assert(html.includes('/questions/apify-fixture'));
   assert(html.includes('Shared topics: h1b'));assert(!html.includes('/messages?'));
-  assert(html.includes('Community archive'));assert(!html.includes('tag=community-archive'));
+  assert(!html.includes('Community archive'));assert(!html.includes('tag=community-archive'));
   const member=render(RelatedQuestions,{context:{tags:['h1b']}},{values:{0:[{...native,matched_tags:['h1b']} ]}});
   assert(!member.includes('Community archive'));
 });

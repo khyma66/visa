@@ -14,7 +14,8 @@ test('community upgrade preserves current policy, avatar and experience contract
   try {
     await db.exec("alter table auth.users add column raw_user_meta_data jsonb default '{}'::jsonb");
     for (const name of ['20261004221850_policy_acceptance_receipts.sql', '20261006042952_public_avatar_initials.sql',
-      '20261006043113_avatar_name_policy_v2.sql', '20261006044132_visa_experiences.sql'])
+      '20261006043113_avatar_name_policy_v2.sql', '20261006044132_visa_experiences.sql',
+      '20261103010757_public_alias_and_contact_policy_v3.sql'])
       await db.exec(await readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'));
     await db.query('insert into auth.users(id,raw_user_meta_data) values($1,$2)', [owner, JSON.stringify({first_name:'Alice',last_name:'PrivateSurname'})]);
     const guard = (await db.query("select pg_get_functiondef('private.community_write_guard()'::regprocedure) definition")).rows[0].definition;
@@ -25,7 +26,7 @@ test('community upgrade preserves current policy, avatar and experience contract
     await db.exec('set role authenticated');
     const create = () => db.query("select public.create_public_community('preview-group','Preview group','A community with enough detail for a compatibility test.','United States','General') id");
     await assert.rejects(create, /acknowledge/);
-    await db.query("insert into policy_acceptances(user_id,policy_version,market,terms_accepted,privacy_acknowledged,adult_confirmed) values($1,'2026-10-06-preview-v2','US',true,true,true)", [owner]);
+    await db.query("insert into policy_acceptances(user_id,policy_version,market,terms_accepted,privacy_acknowledged,adult_confirmed) values($1,'2026-11-02-preview-v3','US',true,true,true)", [owner]);
     const group = (await create()).rows[0].id;
     const post = (await db.query("insert into questions(author_id,title,body,post_kind,experience_category,community_id) values($1,'My interview experience','An actual interview experience with sufficient detail for this test.','experience','Other',$2) returning id", [owner,group])).rows[0].id;
     assert.equal((await db.query('select * from my_community_directory_page()')).rows[0].id, group);

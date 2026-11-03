@@ -43,7 +43,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const [revision, setRevision] = useState(0);
   const [related, setRelated] = useState<Question | null>(null);
   const [category, setCategory] = useState('');
-  const [origin, setOrigin] = useState<'' | 'member' | 'archive'>('');
+  const [origin, setOrigin] = useState<'' | 'member' | 'earlier'>('');
   const [loadedFilterKey, setLoadedFilterKey] = useState<string | null>(null);
   const olderLock = useRef<symbol | null>(null);
   const layoutRef = useRef<HTMLDivElement>(null);
@@ -129,7 +129,12 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     const experienceCategory = params.get('category') ?? '';
     setCategory(experience && EXPERIENCE_CATEGORIES.includes(experienceCategory) ? experienceCategory : '');
     const source = params.get('origin');
-    setOrigin(source === 'member' || source === 'archive' ? source : '');
+    if (source === 'archive') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('origin', 'earlier');
+      window.history.replaceState(window.history.state, '', url);
+    }
+    setOrigin(source === 'member' ? 'member' : source === 'earlier' || source === 'archive' ? 'earlier' : '');
     setSortMode(SORTS.some(([value]) => value === sort) ? sort as SortMode : 'newest');
     setKind(experience ? '' : postKind === 'question' || postKind === 'discussion' || postKind === 'promotion' ? postKind : initialKind);
     setPage(1);
@@ -148,7 +153,8 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     setLoading(true); setError(''); setMore(false); setCursor(undefined);
     olderLock.current = null; setLoadingOlder(false);
     const fetchQuestions = () => {
-      void getQuestionPage({ search, tag, visaType, sort: sortMode, experience, category, ...(origin ? { origin } : {}) })
+      const dataOrigin = origin === 'earlier' ? 'archive' : origin;
+      void getQuestionPage({ search, tag, visaType, sort: sortMode, experience, category, ...(dataOrigin ? { origin: dataOrigin } : {}) })
         .then((data) => { if (active) { setQuestions(data.questions); setMore(data.more); setCursor(data.cursor); setLoadedFilterKey(contentFilterKey); } })
         .catch(() => { if (active) { setQuestions([]); setError('Questions could not be loaded. Please try again.'); } })
         .finally(() => { if (active) setLoading(false); });
@@ -166,7 +172,8 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     olderLock.current = operation; setLoadingOlder(true);
     const requestedFilter = filterKey;
     try {
-      const data = await getQuestionPage({ search, tag, visaType, sort: sortMode, before: cursor, experience, category, ...(origin ? { origin } : {}) });
+      const dataOrigin = origin === 'earlier' ? 'archive' : origin;
+      const data = await getQuestionPage({ search, tag, visaType, sort: sortMode, before: cursor, experience, category, ...(dataOrigin ? { origin: dataOrigin } : {}) });
       if (!alive.current || filterRef.current !== requestedFilter) return;
       setQuestions((current) => [...current, ...data.questions.filter((question) => !current.some((item) => item.id === question.id))]);
       setMore(data.more); setCursor(data.cursor); setError('');
@@ -207,7 +214,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     const items = questions.filter((question) => {
       const haystack = [question.title, question.body, question.visa_type, question.destination_country, ...question.tags].join(' ').toLowerCase();
       return (experience ? question.post_kind === 'experience' : question.post_kind !== 'experience') && (!category || question.experience_category === category) && (!visaType || question.visa_type === visaType) && (!tag || question.tags.includes(tag))
-        && (!origin || (origin === 'archive' ? isImportedPost(question) : !isImportedPost(question)))
+        && (!origin || (origin === 'earlier' ? isImportedPost(question) : !isImportedPost(question)))
         && (experience || !kind || (question.post_kind ?? 'question') === kind)
         && (sortMode !== 'unanswered' || question.answer_count === 0)
         && ((!demoMode && !isImportedPost(question)) || terms.every((term) => haystack.includes(term)));
@@ -258,13 +265,13 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
                 <label className="flex min-w-0 items-center gap-1.5 text-sm text-slate-600"><SlidersHorizontal size={15} aria-hidden="true" /><select aria-label="Visa Type" value={visaType} onChange={(event) => { setVisaType(event.target.value); updateQuery({ visa: event.target.value }); }} className="max-w-[180px] rounded bg-transparent py-2 font-medium focus:outline-blue-600"><option value="">All U.S. Visa Types</option>{visaTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
-                <select aria-label="Post origin" value={origin} onChange={event => { const value = event.target.value as typeof origin; setOrigin(value); updateQuery({ origin: value }); }} className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-medium text-slate-700"><option value="">All Sources</option><option value="member">Member Posts</option><option value="archive">Community Archive</option></select>
+                <select aria-label="Post source" value={origin} onChange={event => { const value = event.target.value as typeof origin; setOrigin(value); updateQuery({ origin: value }); }} className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-medium text-slate-700"><option value="">All Posts</option><option value="member">Member Posts</option><option value="earlier">Earlier Discussions</option></select>
                 {!experience && <select aria-label="Post type" value={kind} onChange={(event) => { const value = event.target.value as PostKind; setKind(value); updateQuery({ type: value }); }} className="max-w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-600"><option value="">All Post Types</option><option value="question">Questions</option><option value="discussion">Discussions & experiences</option><option value="promotion">Promotional posts</option></select>}
                 {tag && <button onClick={() => selectTag('')} className="inline-flex max-w-full items-center gap-1 break-words rounded bg-blue-50 px-2 py-1.5 text-sm font-semibold text-blue-700">{topicLabel(tag)}<X size={13} aria-hidden="true" /><span className="sr-only">Clear tag</span></button>}
                 {filtered && <button onClick={resetFilters} className="text-sm font-semibold text-blue-700 hover:underline">Clear Filters</button>}
                 <span aria-live="polite" className="ml-auto text-xs text-slate-500">{loading ? refreshing ? 'Updating results…' : 'Loading questions...' : visibleQuestions.length ? `Showing ${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, visibleQuestions.length)} of ${visibleQuestions.length} loaded${more ? ' · More available' : ''}` : '0 posts shown'}</span>
               </div>
-              {origin === 'archive' && <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">Previously shared discussions, collected in the Community archive. Archive authors are not linked to member accounts; you can reply here, but cannot message the original author.</p>}
+              {origin === 'earlier' && <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">Previously published discussions use neutral public aliases. You can reply here, but the original contributor is not a VisaThreads member and cannot receive direct messages.</p>}
             </div>
             {!loading && feedUnavailable && <p className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">Some discussions are temporarily unavailable. Please try again later.</p>}
             {error && <div role="alert" className="my-3 rounded-lg bg-rose-50 p-4 text-sm text-rose-800">{error} <button onClick={() => setRevision((value) => value + 1)} className="font-semibold underline">Retry</button></div>}
@@ -284,7 +291,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
             <Link href="/explore" className="mt-3 flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"><span className="inline-flex items-center gap-2"><Compass size={17} aria-hidden="true" />Explore Communities</span><ArrowUpRight size={16} aria-hidden="true" /></Link>
             <Link href="/communities/new" className="mt-2 flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:text-blue-700"><Plus size={17} aria-hidden="true" />Start a Community</Link>
           </section>
-          <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4"><h2 className="text-thread-title font-semibold text-slate-900">Archive</h2><button onClick={() => { setOrigin(origin === 'member' ? '' : 'member'); updateQuery({ origin: origin === 'member' ? '' : 'member' }); }} className="mt-3 text-sm font-semibold text-teal-800 hover:underline">{origin === 'member' ? 'Show all sources' : 'See member posts'} <ArrowUpRight className="inline" size={13} aria-hidden="true" /></button></section>
+          <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4"><h2 className="text-thread-title font-semibold text-slate-900">Member Discussions</h2><p className="mt-2 text-sm leading-6 text-slate-600">See questions and experiences shared directly by VisaThreads members.</p><button onClick={() => { setOrigin(origin === 'member' ? '' : 'member'); updateQuery({ origin: origin === 'member' ? '' : 'member' }); }} className="mt-3 text-sm font-semibold text-teal-800 hover:underline">{origin === 'member' ? 'Show all posts' : 'See member posts'} <ArrowUpRight className="inline" size={13} aria-hidden="true" /></button></section>
           {popularTags.length > 0 && <section className="border-b border-slate-200 px-2 pb-5"><div className="flex items-center gap-2"><Tags size={17} className="shrink-0 text-slate-500" aria-hidden="true" /><h2 className="text-thread-title font-semibold text-slate-900">Topics in This Feed</h2></div><div className="mt-3 flex flex-wrap gap-2">{popularTags.map(([name, count]) => <button key={name} onClick={() => selectTag(name)} className="max-w-full break-words rounded bg-blue-50 px-2 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">{topicLabel(name)}<span className="ml-1.5 text-xs text-blue-500">{count}</span></button>)}</div><Link href="/tags" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-blue-700">All Tags<ArrowUpRight size={13} aria-hidden="true" /></Link></section>}
           {(related || search || tag || pageQuestions[0]) && <div id="feed-related" className="scroll-mt-24">{related && <div className="mb-2 flex items-start justify-between gap-2 px-2 text-xs text-slate-500"><span className="line-clamp-2">Similar to: {related.title}</span><button onClick={() => setRelated(null)} title="Clear related question selection" aria-label="Clear related question selection" className="shrink-0 rounded p-1 hover:bg-slate-100"><X size={14} /></button></div>}<RelatedQuestions context={related ?? (search || tag ? { title: search, tags: tag ? [tag] : [] } : pageQuestions[0])} /></div>}
         </aside>

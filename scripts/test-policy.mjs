@@ -34,7 +34,7 @@ test('all states and DC remain explicitly unapproved, not falsely certified',asy
   assert(report.jurisdictions.every(s=>s.status==='pending_counsel_review'));
 });
 test('published policies and database enforcement use the same version',async()=>{
-  for(const path of ['src/app/privacy/page.tsx','src/app/terms/page.tsx','supabase/migrations/20261006043113_avatar_name_policy_v2.sql']) {
+  for(const path of ['src/app/privacy/page.tsx','src/app/terms/page.tsx','supabase/migrations/20261103010757_public_alias_and_contact_policy_v3.sql']) {
     assert((await readFile(new URL(`../${path}`,import.meta.url),'utf8')).includes(policy.POLICY_VERSION),path);
   }
 });

@@ -18,7 +18,7 @@ export default function AboutPage() {
       </header>
       <section>
         <h2 className="text-thread-title font-semibold text-slate-950">Understand what you are reading</h2>
-        <p className="mt-3">Member posts and archived discussions are personal accounts. They can be incomplete, mistaken or out of date. A reported approval or timeline is not a verified result or a prediction for another application. Public usernames do not guarantee anonymity.</p>
+        <p className="mt-3">Member posts and previously published discussions are personal accounts. They can be incomplete, mistaken or out of date. A reported approval or timeline is not a verified result or a prediction for another application. Public usernames do not guarantee anonymity.</p>
         <p className="mt-3">Our <Link href="/guides" className="text-blue-700 underline">resource guides</Link> provide checklists and links to official information. Their editorial reference-check dates identify when those references were checked; they do not mean an attorney reviewed the guide or that an agency endorsed it.</p>
       </section>
       <section>

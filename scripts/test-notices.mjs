@@ -77,7 +77,7 @@ test('policy pages clearly disclose missing operator processes rather than prete
     const {default:Page}=await component(`../src/app/${page}/page.tsx`, { '@/lib/search-metadata': searchMetadata.moduleUrl });
     const html=renderToStaticMarkup(createElement(Page));
     assert(html.includes(phrase),page);
-    if (page === 'contact') assert(html.includes('href="mailto:varunchinna5966@gmail.com"'), 'Use only the approved temporary contact');
+    if (page === 'contact') assert(html.includes('href="mailto:support@visathreads.com"'), 'Use the verified support route');
     else assert(!html.includes('mailto:'),'Do not invent a support mailbox');
   }
 });

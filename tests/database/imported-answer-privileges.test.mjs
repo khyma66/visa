@@ -55,12 +55,13 @@ before(async () => {
     grant insert(question_id,author_id,body) on public.imported_answers to authenticated;`);
   await db.exec(await migration('20261004221850_policy_acceptance_receipts.sql'));
   await db.exec(await migration('20261006043113_avatar_name_policy_v2.sql'));
+  await db.exec(await migration('20261103010757_public_alias_and_contact_policy_v3.sql'));
   await db.exec(`create trigger community_imported_answer_limit before insert or update of body on public.imported_answers
     for each row execute function private.community_write_guard();`);
   await db.query('insert into auth.users values($1),($2)',[alice,bob]);
   await db.query("insert into public.profiles values($1,'alice-fixture','A'),($2,'bob-fixture','B')",[alice,bob]);
   await db.query(`insert into public.policy_acceptances(user_id,policy_version,market,terms_accepted,privacy_acknowledged,adult_confirmed)
-    values($1,'2026-10-06-preview-v2','US',true,true,true)`,[alice]);
+    values($1,'2026-11-02-preview-v3','US',true,true,true)`,[alice]);
   existingReply=(await db.query(`insert into public.imported_answers(question_id,author_id,body)
     values('apify-preserved',$1,'An existing reply that must survive permissions hardening.') returning *`,[alice])).rows[0];
   await asRole('authenticated',alice,async () => {

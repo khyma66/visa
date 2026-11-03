@@ -76,13 +76,11 @@ const renderDetail = (post, replies = [], viewerId = 'viewer') => {
 };
 const visibleText = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 const accessibleLabels = (html) => [...html.matchAll(/aria-label="([^"]*)"/g)].map((match) => match[1]).join(' ');
-function assertArchivePresentation(html) {
+function assertImportedPresentation(html) {
   const surface = `${visibleText(html)} ${accessibleLabels(html)}`;
-  assert.doesNotMatch(surface, /imported|apify|source reactions|source comments|view source|open group post|group comment|group question|group discussion|source of record|collected snapshot|VisaFlow replies|VisaFlow answer|VisaFlow only|external group sentinel|archive source sentinel/i);
+  assert.doesNotMatch(surface, /imported|apify|archive|source reactions|source comments|view source|open group post|group comment|group question|group discussion|source of record|collected snapshot|VisaFlow replies|VisaFlow answer|VisaFlow only|external group sentinel|archive source sentinel|community contributor/i);
   assert.doesNotMatch(html, /href="https:\/\/example\.org\/archive-sentinel/);
-  assert.match(visibleText(html), /Community archive/);
-  assert.match(accessibleLabels(html), /Community archive\. Republished from an external community discussion/);
-  assert.match(accessibleLabels(html), /not linked to a VisaThreads account/);
+  assert.match(visibleText(html), /user-\d{4}/);
   assert.doesNotMatch(html, /href="\/?\?tag=(?:community-archive|archive|imported)/);
 }
 function assertQuestionMessage(html, expected) {
@@ -95,16 +93,16 @@ function assertReplyMessage(html, expected) {
 }
 
 for (const sourceUrl of [imported.source_url, null, undefined]) {
-  test(`imported question with source URL ${String(sourceUrl)} has a consistent archive badge and no message action`, () => {
+test(`imported question with source URL ${String(sourceUrl)} has a stable neutral alias and no message action`, () => {
     const post = { ...imported, source_url: sourceUrl };
     for (const viewer of ['viewer', null]) {
       const html = renderDetail(post, [], viewer);
-      assertArchivePresentation(html);
+      assertImportedPresentation(html);
       assertQuestionMessage(html, false);
       assert(visibleText(html).includes(post.title));
       assert(visibleText(html).includes(post.body));
     }
-    assertArchivePresentation(renderToStaticMarkup(createElement(QuestionCard, { question: post })));
+    assertImportedPresentation(renderToStaticMarkup(createElement(QuestionCard, { question: post })));
   });
 }
 test('imported author ID cannot enable messaging, even when it looks like a real user', () => {
@@ -115,7 +113,7 @@ for (const source of ['visaflow', undefined]) {
     for (const viewer of ['viewer', null]) {
       const html = renderDetail({ ...question, source }, [], viewer);
       assertQuestionMessage(html, true);
-      assert.doesNotMatch(html, /Community archive/);
+      assert.doesNotMatch(html, /archive|Community Contributor/i);
     }
   });
 }
@@ -128,11 +126,11 @@ test('own question and question without an account have no messaging action', ()
 test('source URL alone is never used as a proxy for message eligibility', () => {
   assertQuestionMessage(renderDetail({ ...question, source_url: imported.source_url }), true);
 });
-test('imported answers retain the archive badge without messaging even if an author ID is present', () => {
+test('imported answers retain neutral aliases without messaging even if an author ID is present', () => {
   for (const source_url of [imported.source_url, undefined]) {
     const html = renderDetail(imported, [{ ...answer, source: 'apify', source_url }]);
-    assertArchivePresentation(html);
-    assert.equal((html.match(/aria-label="Community archive\./g) ?? []).length, 2);
+    assertImportedPresentation(html);
+    assert.equal((visibleText(html).match(/user-\d{4}/g) ?? []).length, 2);
     assertReplyMessage(html, false);
     assert(visibleText(html).includes(answer.body));
   }
@@ -140,8 +138,8 @@ test('imported answers retain the archive badge without messaging even if an aut
 test('real replies to imported questions retain messaging for other users and guests', () => {
   for (const viewer of ['viewer', null]) {
     const html = renderDetail(imported, [answer], viewer);
-    assertArchivePresentation(html);
-    assert.equal((html.match(/aria-label="Community archive\./g) ?? []).length, 1);
+    assertImportedPresentation(html);
+    assert.equal((visibleText(html).match(/user-\d{4}/g) ?? []).length, 1);
     assertQuestionMessage(html, false);
     assertReplyMessage(html, true);
   }
@@ -160,12 +158,12 @@ test('mixed discussion exposes messaging only for eligible native authors', () =
     { ...answer, id: 'own', author_id: 'viewer', author_username: 'self_tester' },
   ];
   const html = renderDetail(imported, replies);
-  assertArchivePresentation(html);
+  assertImportedPresentation(html);
   const messageLabels = [...html.matchAll(/aria-label="Message ([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(messageLabels, ['reply-tester']);
 });
 
-test('archive badge is presentation metadata and does not change source records or topic tags', () => {
+test('public alias presentation does not change source records or topic tags', () => {
   const post = structuredClone(imported);
   const before = structuredClone(post);
   renderToStaticMarkup(createElement(QuestionCard, { question: post }));

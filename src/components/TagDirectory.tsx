@@ -39,7 +39,7 @@ export function TagDirectory() {
     try {
       try {
         const response = await fetch('/api/tags', { signal });
-        if (!response.ok) throw new Error('Archive unavailable');
+        if (!response.ok) throw new Error('Topic summary unavailable');
         const summary = await response.json() as { tags: ArchiveTagSummary[] };
         if (current !== generation.current || signal?.aborted) return;
         archive.current = summary.tags;
@@ -108,7 +108,7 @@ export function TagDirectory() {
       </Link>)}</div>
       {!tags.length && !error && <p>No tags match “{search}”.</p>}
       {hasMore && <button onClick={() => void more()} disabled={loadingMore} className="mt-6 rounded border bg-white px-5 py-3 text-sm font-semibold text-blue-700">{loadingMore ? 'Loading…' : 'Load more tags'}</button>}
-      <p className="mt-6 text-xs text-slate-500">Counts exclude archived questions. A post may have several tags. Counts refresh when you return to this page or select Refresh counts.</p>
+      <p className="mt-6 text-xs text-slate-500">Counts exclude removed questions. A post may have several tags. Counts refresh when you return to this page or select Refresh counts.</p>
     </>}
   </main>;
 }

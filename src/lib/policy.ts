@@ -1,7 +1,7 @@
 // Bump the version and retain the old published text whenever the terms change.
-export const POLICY_VERSION = '2026-10-06-preview-v2';
-export const POLICY_UPDATED = 'October 6, 2026';
-export const SUPPORT_EMAIL = 'varunchinna5966@gmail.com';
+export const POLICY_VERSION = '2026-11-02-preview-v3';
+export const POLICY_UPDATED = 'November 2, 2026';
+export const SUPPORT_EMAIL = 'support@visathreads.com';
 export const MINIMUM_AGE = 18;
 export const POLICY_MARKET = 'US';
 
