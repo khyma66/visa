@@ -1,6 +1,6 @@
 'use client';
 
-import { isImportedPost, topicLabel } from '@/lib/post-presentation';
+import { isImportedPost, publicImportedUsername, topicLabel } from '@/lib/post-presentation';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -20,11 +20,11 @@ import { useAuth } from './AuthProvider';
 import { ReportButton } from './ReportButton';
 import { PostOriginBadge } from './PostOriginBadge';
 
-function Author({ username, seed, createdAt, sourceOnly = false }: { username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
+function Author({ id, username, seed, createdAt, sourceOnly = false }: { id: string; username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
   return (
     <div className="flex items-center gap-2 text-xs text-slate-500">
       {!sourceOnly && <Avatar seed={seed} size="sm" />}
-      <span><b className="text-slate-700">{sourceOnly ? 'Community Contributor' : `u/${username}`}</b><br />{formatDistanceToNow(new Date(createdAt), { addSuffix: true })}</span>
+      <span><b className="text-slate-700">{sourceOnly ? publicImportedUsername({ id }) : `u/${username}`}</b><br />{formatDistanceToNow(new Date(createdAt), { addSuffix: true })}</span>
     </div>
   );
 }
@@ -175,7 +175,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                   <button onClick={() => { void navigator.clipboard.writeText(window.location.href); setCopied(true); }} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900"><Share2 size={15} /> {copied ? 'Copied' : 'Share'}</button>
                   {authorMessageHref && <Link href={authorMessageHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900"><MessageCircle size={15} /> Message author</Link>}
                 </div>
-                <Author username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
+                <Author id={question.id} username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
               </div>
               {!imported && <ReportButton kind="question" target={question.id} />}
             </div>
@@ -204,7 +204,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                     {!sourceOnly && <ReportButton kind={imported ? 'imported_answer' : 'answer'} target={answer.id} />}
                     <div className="mt-6 flex items-end justify-between gap-4">
                       {!imported && !experience && owner && canAnswer && !sourceOnly && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline"><Check size={16} /> Accept this answer</button> : <span />}
-                      <div className="flex items-center gap-3"><Author username={answer.author_username} seed={answer.author_avatar_seed} createdAt={answer.created_at} sourceOnly={sourceOnly} />{messageHref && <Link href={messageHref} aria-label={`Message ${answer.author_username}`} className="text-slate-400 hover:text-blue-700"><MessageCircle size={18} /></Link>}</div>
+                      <div className="flex items-center gap-3"><Author id={answer.id} username={answer.author_username} seed={answer.author_avatar_seed} createdAt={answer.created_at} sourceOnly={sourceOnly} />{messageHref && <Link href={messageHref} aria-label={`Message ${answer.author_username}`} className="text-slate-400 hover:text-blue-700"><MessageCircle size={18} /></Link>}</div>
                     </div>
                   </div>
                 </article>

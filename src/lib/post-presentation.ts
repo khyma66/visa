@@ -2,11 +2,19 @@
 import type { Question } from './types';
 type PostAuthor = { id: string; source?: string; author_id?: string | null; author_username: string };
 
-export const COMMUNITY_ARCHIVE_LABEL = 'Community archive';
-export const COMMUNITY_ARCHIVE_DESCRIPTION = 'Republished from an external community discussion. This archive author is not linked to a VisaThreads account, so direct messaging is unavailable.';
-
 export function isImportedPost(post: Pick<PostAuthor, 'id' | 'source'>): boolean {
   return post.source === 'apify' || post.id.startsWith('apify-');
+}
+
+/** Stable public alias for previously published items. It intentionally uses
+ * only the item ID, never a source handle or account field. */
+export function publicImportedUsername(post: Pick<PostAuthor, 'id'>): string {
+  let hash = 2166136261;
+  for (const character of post.id) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `user-${String((hash >>> 0) % 9000 + 1000)}`;
 }
 
 export function canMessageAuthor(post: PostAuthor, viewerId?: string | null): boolean {

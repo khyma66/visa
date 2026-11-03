@@ -11,7 +11,7 @@ const source = await readFile(new URL('src/styles/globals.css', root), 'utf8');
 // Check the real Tailwind output: layer reordering can break a rule that looks
 // correct in the source stylesheet, especially the phone input font floor.
 const output = await postcss([tailwindcss({ ...config, content: [{ extension: 'html', raw:
-  '<div class="text-xs text-sm text-base text-lg text-xl text-2xl text-3xl text-4xl text-5xl text-thread-title header-search integrated-brand-logo header-secondary-action header-account header-signup site-brand feed-sort-button nav-item-active"></div>',
+  '<div class="text-xs text-sm text-base text-lg text-xl text-2xl text-3xl text-4xl text-5xl text-thread-title header-search integrated-brand-logo header-secondary-action header-account header-auth-button site-brand feed-sort-button nav-item-active"></div>',
 }] })]).process(source, { from: new URL('src/styles/globals.css', root).pathname });
 const rules = [];
 output.root.walkRules(rule => rules.push(rule));
@@ -65,9 +65,10 @@ test('home uses a community heading and the same title scale in the discovery ra
   const home = await readFile(new URL('src/components/CommunityHome.tsx', root), 'utf8');
   assert.match(home, /'U\.S\. Visa Community'/);
   assert.doesNotMatch(home, /'U\.S\. Visa Questions'/);
-  for (const title of ['Find Your Community', 'Archive', 'Topics in This Feed']) {
+  for (const title of ['Find Your Community', 'Member Discussions', 'Topics in This Feed']) {
     assert(home.includes(`text-thread-title font-semibold text-slate-900\">${title}</h2>`));
   }
+  assert.doesNotMatch(home, />Archive<|Community archive|Community Contributor/);
   assert.doesNotMatch(home, /identifies imported discussions|Member posts are created directly on VisaThreads|Topic tags work the same for both/);
   assert.doesNotMatch(home, /tracking-tight|tracking-\[0\.15em\]/);
 });
@@ -122,7 +123,7 @@ test('phone header keeps account controls on the first row and the complete logo
   assert.equal(property(phone('.integrated-brand-logo-frame'), 'max-width'), '172px');
   assert.equal(property(phone('.header-secondary-action'), 'display'), 'none');
   assert.equal(property(phone('.header-account'), 'flex-shrink'), '0');
-  assert(rules.some(rule => rule.selector === '.header-signup' && property(rule, 'flex-shrink') === '0'));
+  assert(rules.some(rule => rule.selector === '.header-auth-button' && property(rule, 'flex-shrink') === '0'));
   const navigation = await readFile(new URL('src/components/CommunityNavigation.tsx', root), 'utf8');
   assert.match(navigation, /mobile \? \[\{ name: 'Create & Ask'/);
   assert.match(navigation, /href: askHref, label: 'Ask a Question'/);

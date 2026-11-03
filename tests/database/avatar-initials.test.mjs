@@ -12,6 +12,7 @@ const fresh = '44444444-4444-4444-8444-444444444444';
 const migration = name => readFile(new URL(`../../supabase/migrations/${name}`, import.meta.url), 'utf8');
 const avatarMigration = await migration('20261006042952_public_avatar_initials.sql');
 const policyMigration = await migration('20261006043113_avatar_name_policy_v2.sql');
+const currentPolicyMigration = await migration('20261103010757_public_alias_and_contact_policy_v3.sql');
 const scalar = async (sql, args = []) => Object.values((await db.query(sql, args)).rows[0])[0];
 let handles;
 let question;
@@ -47,6 +48,7 @@ before(async () => {
     values($1,'2026-10-04-preview-v1','US',true,true,true)`, [alice]);
   await db.exec(avatarMigration);
   await db.exec(policyMigration);
+  await db.exec(currentPolicyMigration);
 });
 after(() => db.close());
 
@@ -137,20 +139,20 @@ test('browser roles cannot execute private avatar helpers or sync triggers', asy
   }
 });
 
-test('v2 migration preserves old receipts and never claims prior users accepted new terms', async () => {
+test('current policy migration preserves old receipts and never claims prior users accepted new terms', async () => {
   assert.deepEqual((await db.query('select user_id,policy_version from public.policy_acceptances')).rows, [{ user_id: alice, policy_version: '2026-10-04-preview-v1' }]);
   await assert.rejects(() => asUser(alice, () => db.query("update public.profiles set bio='An old receipt is insufficient.' where id=$1", [alice])), error => error.code === '42501');
 });
 
-test('a fresh v2 receipt enables bio publishing and leaves both versions intact', () => asUser(alice, async () => {
+test('a fresh v3 receipt enables bio publishing and leaves both versions intact', () => asUser(alice, async () => {
   await db.query(`insert into public.policy_acceptances(user_id,policy_version,market,terms_accepted,privacy_acknowledged,adult_confirmed)
-    values($1,'2026-10-06-preview-v2','US',true,true,true)`, [alice]);
+    values($1,'2026-11-02-preview-v3','US',true,true,true)`, [alice]);
   assert.equal((await db.query("update public.profiles set bio='A current acknowledgement.' where id=$1 returning bio", [alice])).rows.length, 1);
-  assert.deepEqual((await db.query('select policy_version from public.policy_acceptances order by policy_version')).rows.map(row => row.policy_version), ['2026-10-04-preview-v1', '2026-10-06-preview-v2']);
+  assert.deepEqual((await db.query('select policy_version from public.policy_acceptances order by policy_version')).rows.map(row => row.policy_version), ['2026-10-04-preview-v1', '2026-11-02-preview-v3']);
 }));
 
-test('new old-version receipts and impersonated v2 receipts are denied', async () => {
-  for (const [user, version] of [[bob, '2026-10-04-preview-v1'], [alice, '2026-10-06-preview-v2']]) {
+test('new old-version receipts and impersonated v3 receipts are denied', async () => {
+  for (const [user, version] of [[bob, '2026-10-04-preview-v1'], [alice, '2026-11-02-preview-v3']]) {
     await assert.rejects(() => asUser(bob, () => db.query(`insert into public.policy_acceptances(user_id,policy_version,market,terms_accepted,privacy_acknowledged,adult_confirmed)
       values($1,$2,'US',true,true,true)`, [user, version])), error => error.code === '42501');
   }

@@ -320,16 +320,16 @@ test('an empty post-type filter keeps the next server page available', async () 
   } finally { h.close(); }
 });
 
-test('origin URL state restores and filters member and archive rows independently of topic tags', async () => {
+test('public source URL state restores and filters member and earlier rows independently of topic tags', async () => {
   const rows = [question('member'), question('source-archive', { source: 'apify' }), question('apify-legacy')];
-  for (const [origin, expected] of [['member', ['member']], ['archive', ['source-archive', 'apify-legacy']]]) {
+  for (const [origin, dataOrigin, expected] of [['member', 'member', ['member']], ['earlier', 'archive', ['source-archive', 'apify-legacy']]]) {
     const h = new Harness(`?origin=${origin}&tag=documents`);
     h.getPage = async () => ({ questions: rows, more: false });
     try {
       h.render(); await h.flush();
-      assert.equal(h.calls.at(-1).origin, origin);
+      assert.equal(h.calls.at(-1).origin, dataOrigin);
       assert.equal(h.calls.at(-1).tag, 'documents');
-      assert.equal(nodes(h.tree).find(node => node.props?.['aria-label'] === 'Post origin').props.value, origin);
+      assert.equal(nodes(h.tree).find(node => node.props?.['aria-label'] === 'Post source').props.value, origin);
       assert.deepEqual([...ids(h)].sort(), expected.sort());
       for (const node of nodes(h.tree).filter(node => node.props?.question)) assert.deepEqual(node.props.question.tags, ['documents']);
       assert(!rows.some(row => row.tags.includes('archive') || row.tags.includes('member')));
@@ -337,35 +337,36 @@ test('origin URL state restores and filters member and archive rows independentl
   }
 });
 
-test('origin controls preserve other filters and Clear Filters removes the source parameter', async () => {
-  const h = new Harness('?q=documents&tag=documents&visa=H1B&origin=archive&sort=score');
+test('source controls preserve other filters and Clear Filters removes the source parameter', async () => {
+  const h = new Harness('?q=documents&tag=documents&visa=H1B&origin=earlier&sort=score');
   h.getPage = async () => ({ questions: [question('member'), question('apify-archive')], more: false });
   try {
     h.render(); await h.flush();
-    select(h, 'Post origin', 'member'); await h.flush();
+    select(h, 'Post source', 'member'); await h.flush();
     assert.deepEqual(Object.fromEntries(new URLSearchParams(h.search)), { q: 'documents', tag: 'documents', visa: 'H1B', origin: 'member', sort: 'score' });
     assert.equal(h.calls.at(-1).origin, 'member'); assert.deepEqual(ids(h), ['member']);
-    select(h, 'Post origin', ''); await h.flush();
+    select(h, 'Post source', ''); await h.flush();
     assert.equal(new URLSearchParams(h.search).has('origin'), false);
     assert.equal(Object.hasOwn(h.calls.at(-1), 'origin'), false);
-    select(h, 'Post origin', 'archive'); await h.flush();
+    select(h, 'Post source', 'earlier'); await h.flush();
     button(h, 'Clear Filters').props.onClick(); h.render(); await h.flush();
     assert.equal(h.search, '');
-    assert.equal(nodes(h.tree).find(node => node.props?.['aria-label'] === 'Post origin').props.value, '');
+    assert.equal(nodes(h.tree).find(node => node.props?.['aria-label'] === 'Post source').props.value, '');
     assert.equal(Object.hasOwn(h.calls.at(-1), 'origin'), false);
   } finally { h.close(); }
 });
 
-test('same-page origin navigation restores the source selector and rejects unknown sources', async () => {
+test('same-page source navigation restores the source selector, accepts legacy links, and rejects unknown sources', async () => {
   const h = new Harness('?origin=member');
   h.getPage = async () => ({ questions: [question('member'), question('apify-archive')], more: false });
   try {
     h.render(); await h.flush();
     h.search = '?origin=archive'; h.render(); await h.flush();
     assert.equal(h.calls.at(-1).origin, 'archive'); assert.deepEqual(ids(h), ['apify-archive']);
+    assert.equal(nodes(h.tree).find(node => node.props?.['aria-label'] === 'Post source').props.value, 'earlier');
     h.search = '?origin=not-a-source'; h.render(); await h.flush();
     assert.equal(Object.hasOwn(h.calls.at(-1), 'origin'), false);
-    assert.equal(nodes(h.tree).find(node => node.props?.['aria-label'] === 'Post origin').props.value, '');
+    assert.equal(nodes(h.tree).find(node => node.props?.['aria-label'] === 'Post source').props.value, '');
     assert.equal(ids(h).length, 2);
   } finally { h.close(); }
 });
@@ -391,15 +392,15 @@ test('loaded page ranges match twenty visible cards then the final twenty-first 
   } finally { h.close(); }
 });
 
-test('origin changes discard stale older pages and pass the new source to pagination', async () => {
+test('source changes discard stale older pages and pass the internal source to pagination', async () => {
   const h = new Harness(), older = deferred();
   h.getPage = ({ origin, before }) => before ? older.promise : Promise.resolve({ questions: [question(origin === 'archive' ? 'apify-current' : 'member')], more: origin !== 'archive', cursor: question('member') });
   try {
     h.render(); await h.flush();
-    select(h, 'Post origin', 'member'); await h.flush();
+    select(h, 'Post source', 'member'); await h.flush();
     button(h, 'Load more questions').props.onClick();
     assert.equal(h.calls.at(-1).origin, 'member'); assert(h.calls.at(-1).before);
-    select(h, 'Post origin', 'archive'); await h.flush();
+    select(h, 'Post source', 'earlier'); await h.flush();
     older.resolve({ questions: [question('apify-stale')], more: false }); await h.settle();
     assert.deepEqual(ids(h), ['apify-current']);
     assert.equal(h.calls.at(-1).origin, 'archive');
@@ -407,8 +408,8 @@ test('origin changes discard stale older pages and pass the new source to pagina
   } finally { h.close(); }
 });
 
-test('archive provenance keeps legacy source-less records subject to local search', async () => {
-  const h = new Harness('?origin=archive&q=interview');
+test('earlier-discussion provenance keeps legacy source-less records subject to local search', async () => {
+  const h = new Harness('?origin=earlier&q=interview');
   h.auth = { user: null, demoMode: false };
   h.getPage = async () => ({ questions: [question('apify-matching'), question('apify-unrelated', { title: 'H1B renewal', body: 'Filing documents only' })], more: false });
   try {

@@ -12,7 +12,7 @@ export default function SecurityPage() {
     <p>We welcome responsible reports that help protect VisaThreads members and their information. Please report suspected vulnerabilities privately so we can review them before details are shared publicly.</p>
     <section className="space-y-2">
       <h2 className="text-xl font-bold">Report a vulnerability</h2>
-      <p>Email <a className="break-all text-blue-700 underline" href="mailto:varunchinna5966@gmail.com?subject=VisaThreads%20security%20report">varunchinna5966@gmail.com</a> with “VisaThreads security report” in the subject. Include the affected URL or feature, what you observed, steps that reproduce it, and the potential impact. Send only the minimum data needed to explain the issue.</p>
+      <p>Email <a className="break-all text-blue-700 underline" href="mailto:security@visathreads.com?subject=VisaThreads%20security%20report">security@visathreads.com</a> with “VisaThreads security report” in the subject. Include the affected URL or feature, what you observed, steps that reproduce it, and the potential impact. Send only the minimum data needed to explain the issue.</p>
       <p>Do not send passwords, authentication codes, identity documents, access tokens, database exports, or personal information belonging to other people. If sensitive information appears in your evidence, redact it before sending.</p>
     </section>
     <section className="space-y-2">

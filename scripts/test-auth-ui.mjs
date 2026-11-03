@@ -151,30 +151,26 @@ function setup({ loading = false, user = null, search = '', signup = false } = {
   return h;
 }
 
-test('header shows both login and signup document links before authentication', async () => {
+test('header uses one login and signup entry point before authentication', async () => {
   const h = setup();
   try {
     h.render(SiteHeader);
-    const link = byText(h, 'a', 'Log in');
+    const link = byText(h, 'a', 'Log in / Sign up');
     assert.equal(link.props.href, '/login#sign-in');
     assert.equal(link.props.onClick, undefined);
-    const signup = byText(h, 'a', 'Sign up');
-    assert.equal(signup.props.href, '/signup#sign-in');
-    assert.equal(signup.props.onClick, undefined);
     const nav = nodes(h.tree).find(node => node.type === 'nav' && node.props['aria-label'] === 'Account access');
     assert(nav);
     assert(nodes(nav).includes(link));
-    assert(nodes(nav).includes(signup));
-    assert.match(link.props.className, /header-signin/);
-    assert.match(signup.props.className, /header-signup/);
+    assert.equal(nodes(nav).filter(node => node.type === 'a').length, 1);
+    assert.match(link.props.className, /header-auth-button/);
   } finally { h.close(); }
 });
 
-test('top-right green hover moves from signup to login instead of highlighting both', async () => {
+test('top-right account entry point stays a single green button', async () => {
   const css = await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8');
-  assert.match(css, /\.header-signin:hover, \.header-signin:focus-visible \{ background: #0f766e; color: #fff; \}/);
-  assert.match(css, /\.header-signin:is\(:hover, :focus-visible\) \+ \.header-signup \{ background: #f0f3f4; color: #334155;/);
-  assert.match(css, /\.header-signup \{[^}]*background: #0f766e;/);
+  assert.match(css, /\.header-auth-button \{[^}]*background: #0f766e;/);
+  assert.match(css, /\.header-auth-button:hover \{ background: #115e59;/);
+  assert.doesNotMatch(css, /\.header-signin|\.header-signup/);
 });
 
 test('header search is a bounded native GET form, and mobile menu has an accessible label', () => {
