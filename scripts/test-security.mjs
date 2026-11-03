@@ -14,6 +14,7 @@ const user = (id) => ({ id, email: null });
 test('security.txt publishes a private reporting path without claiming a reward or response SLA', async () => {
   const body = await readFile(new URL('../public/.well-known/security.txt', import.meta.url), 'utf8');
   assert.match(body, /^Contact: mailto:/m);
+  assert.match(body, /^Contact: mailto:security@visathreads\.com\?subject=VisaThreads%20security%20report$/m);
   assert.match(body, /^Expires: 2027-10-31T23:59:59Z$/m);
   assert.match(body, /^Canonical: https:\/\/visathreads\.com\/\.well-known\/security\.txt$/m);
   assert.match(body, /^Policy: https:\/\/visathreads\.com\/security$/m);
