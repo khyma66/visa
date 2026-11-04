@@ -20,18 +20,19 @@ const { ResizablePostLayout } = await import(url(code));
 function nodes(node) { return !node || typeof node !== 'object' ? [] : [node, ...[node.props?.children].flat(Infinity).flatMap(nodes)]; }
 function setup({ stored = null, blocked = false, width = 1232 } = {}) {
   const oldWindow = globalThis.window, oldObserver = globalThis.ResizeObserver;
-  const h = { slots: [], index: 0, effects: [], cleanups: [], width, stored, writes: [], captured: null, disconnected: false,
+  const h = { slots: [], index: 0, effects: [], cleanups: [], width, stored, frames: new Map(), frameId: 0, writes: [], captured: null, disconnected: false,
     state(value) { const i=this.index++; this.slots[i] ??= value; return [this.slots[i], next => { this.slots[i] = typeof next === 'function' ? next(this.slots[i]) : next; }]; },
     ref(value) { const i=this.index++; return this.slots[i] ??= { current:value }; },
     effect(fn) { const i=this.index++; if(!this.slots[i]) {this.slots[i]=true; this.effects.push(fn);} },
     render() { this.index=0; globalThis.layoutHarness=this; this.tree=ResizablePostLayout({children:'Post fixture',related:'Related fixture'}); for(const n of nodes(this.tree)) if(n.props.ref) n.props.ref.current={getBoundingClientRect:()=>({width:this.width})}; return this; },
     separator() { return nodes(this.tree).find(n=>n.props.role==='separator').props; },
     key(key, shiftKey=false) { let prevented=false; this.separator().onKeyDown({key,shiftKey,currentTarget:this.target,preventDefault(){prevented=true;}}); this.render(); return prevented; },
-    pointer(name,x,extra={}) { this.separator()[name]({pointerId:1,clientX:x,isPrimary:true,button:0,currentTarget:this.target,preventDefault(){},...extra}); this.render(); },
+    flush() { const callbacks=[...this.frames.values()]; this.frames.clear(); for(const fn of callbacks) fn(); this.render(); },
+    pointer(name,x,extra={}) { this.separator()[name]({pointerId:1,clientX:x,isPrimary:true,button:0,currentTarget:this.target,preventDefault(){},...extra}); if(extra.flush !== false)this.flush(); this.render(); },
     close() { for(const cleanup of this.cleanups) cleanup?.(); globalThis.window=oldWindow; globalThis.ResizeObserver=oldObserver; delete globalThis.layoutHarness; },
   };
   h.target={ focus(){},setPointerCapture(id){h.captured=id;},hasPointerCapture(id){return h.captured===id;},releasePointerCapture(){h.captured=null;} };
-  globalThis.window={localStorage:{getItem(){if(blocked)throw Error('blocked');return h.stored;},setItem(key,value){if(blocked)throw Error('blocked');h.stored=value;h.writes.push({key,value});}}};
+  globalThis.window={requestAnimationFrame(fn){const id=++h.frameId;h.frames.set(id,fn);return id;},cancelAnimationFrame(id){h.frames.delete(id);},localStorage:{getItem(){if(blocked)throw Error('blocked');return h.stored;},setItem(key,value){if(blocked)throw Error('blocked');h.stored=value;h.writes.push({key,value});}}};
   globalThis.ResizeObserver=class {constructor(fn){h.measure=fn;}observe(){}disconnect(){h.disconnected=true;}};
   h.render(); for(const fn of h.effects.splice(0))h.cleanups.push(fn()); h.render(); return h;
 }
@@ -45,7 +46,7 @@ test('60/40 default and keyboard access include limits, larger steps and reset',
     h.key('Home'); assert.equal(h.separator()['aria-valuenow'],h.separator()['aria-valuemin']);
     h.key('End'); assert.equal(h.separator()['aria-valuenow'],h.separator()['aria-valuemax']);
     assert.equal(h.key('Tab'),false);
-    nodes(h.tree).find(n=>n.type==='button' && n.props.children==='Reset 60/40').props.onClick(); h.render();
+    h.key('Enter');
     assert.equal(h.separator()['aria-valuenow'],60); assert.equal(h.stored,'60');
   }finally{h.close();}
 });
@@ -79,11 +80,11 @@ test('stored preferences survive viewport clamps and observer is disconnected on
   }finally{h.close();}assert.equal(h.disconnected,true);
 });
 
-test('invalid or unavailable storage does not break resizing; pointer alternatives work', () => {
+test('invalid or unavailable storage does not break keyboard resizing', () => {
   for(const options of [{stored:'garbage'},{stored:'200'},{stored:''},{blocked:true}]) {
     const h=setup(options);try{
       assert.equal(h.separator()['aria-valuenow'],60);
-      nodes(h.tree).find(n=>n.props['aria-label']==='Widen related questions').props.onClick();h.render();
+      h.key('ArrowLeft',true);
       assert.equal(h.separator()['aria-valuenow'],55);
       h.separator().onDoubleClick();h.render();assert.equal(h.separator()['aria-valuenow'],60);
     }finally{h.close();}
@@ -94,7 +95,31 @@ test('both question and experience pages share the layout; mobile hides resizing
   const root=new URL('../',import.meta.url);
   for(const page of ['src/app/questions/[id]/page.tsx','src/app/experiences/[id]/page.tsx']) assert.match(await readFile(new URL(page,root),'utf8'),/QuestionDetail/);
   const css=await readFile(new URL('src/components/ResizablePostLayout.module.css',root),'utf8');
-  assert.match(css,/\.controls, \.divider \{ display: none; \}/);
+  assert.match(css,/\.divider \{ display: none; \}/);
   assert.match(css,/@media \(min-width: 1024px\)/);
   assert.match(css,/minmax\(0, var\(--post-split\)\) 32px minmax\(0, var\(--related-split\)\)/);
+});
+
+
+test('pointer movement is coalesced per animation frame and cancelled before commit or unmount', () => {
+  const h=setup();try {
+    h.pointer('onPointerDown',800);
+    h.pointer('onPointerMove',860,{flush:false});h.pointer('onPointerMove',920,{flush:false});
+    assert.equal(h.frames.size,1);assert.equal(h.separator()['aria-valuenow'],60);
+    h.flush();assert.equal(h.separator()['aria-valuenow'],70);
+    h.pointer('onPointerMove',980,{flush:false});
+    h.pointer('onPointerUp',920);assert.equal(h.frames.size,0);assert.equal(h.stored,'70');
+    h.pointer('onPointerDown',800);h.pointer('onPointerMove',920,{flush:false});
+    h.key('Escape');assert.equal(h.frames.size,0);assert.equal(h.separator()['aria-valuenow'],70);
+    h.pointer('onPointerDown',800);h.pointer('onPointerMove',920,{flush:false});
+  }finally{h.close();}assert.equal(h.frames.size,0);
+});
+
+test('splitter has no visible instructions, percentage toolbar, buttons or grip', () => {
+  const h=setup();try {
+    assert.equal(nodes(h.tree).filter(n=>n.type==='button').length,0);
+    assert.equal(nodes(h.tree).filter(n=>n.type==='span').length,0);
+    assert.equal(h.separator().children,undefined);
+    assert.doesNotMatch(source,/Drag divider to resize|Reset 60\/40|styles\.(?:controls|ratio|grip)/);
+  }finally{h.close();}
 });

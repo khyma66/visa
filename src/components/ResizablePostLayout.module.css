@@ -1,22 +1,18 @@
 .layout { display: grid; gap: 2rem; }
 .post, .related { min-width: 0; overflow-wrap: anywhere; }
-.controls, .divider { display: none; }
+.divider { display: none; }
 
 @media (min-width: 1024px) {
-  .controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; color: #475569; font-size: .75rem; }
-  .ratio { font-variant-numeric: tabular-nums; }
-  .controls button { min-width: 32px; min-height: 32px; padding: .25rem .5rem; border: 1px solid #cbd5e1; border-radius: .5rem; background: white; font-weight: 600; color: #334155; }
-  .controls button:hover:not(:disabled) { background: #eff6ff; border-color: #2563eb; }
-  .controls button:disabled { opacity: .45; cursor: default; }
-  .controls button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
   .layout { grid-template-columns: minmax(0, var(--post-split)) 32px minmax(0, var(--related-split)); gap: 0; align-items: start; }
-  .divider { display: flex; align-self: stretch; justify-content: center; position: relative; cursor: col-resize; touch-action: none; user-select: none; border-radius: .5rem; outline-offset: -3px; }
-  .divider::before { content: ''; position: absolute; top: 0; bottom: 0; width: 1px; background: #cbd5e1; }
-  .grip { display: grid; place-items: center; position: sticky; top: 7rem; margin-top: 2rem; width: 24px; height: 48px; border: 1px solid #94a3b8; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 24px; }
-  .divider:hover::before, .divider:focus-visible::before, .dragging .divider::before { width: 2px; background: #2563eb; }
-  .divider:hover .grip, .divider:focus-visible .grip, .dragging .grip { background: #eff6ff; color: #1d4ed8; border-color: #2563eb; }
-  .divider:focus-visible { outline: 2px solid #2563eb; }
+  /* A hairline keeps the page quiet; the full gutter is an easy pointer target. */
+  .divider { display: block; align-self: stretch; position: relative; min-height: 48px; cursor: col-resize; touch-action: none; user-select: none; outline: none; }
+  .divider::before { content: ''; position: absolute; inset-block: 0; left: 50%; width: 1px; transform: translateX(-50%); background: #cbd5e1; transition: background-color 120ms ease; }
+  .divider:hover::before, .divider:focus-visible::before, .dragging .divider::before { width: 2px; background: #64748b; }
+  .divider:focus-visible::before { outline: 2px solid #2563eb; outline-offset: 2px; }
   .related { position: sticky; top: 6rem; max-height: calc(100dvh - 7rem); overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
   .dragging { cursor: col-resize; user-select: none; }
   .dragging * { cursor: col-resize !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .divider::before { transition: none; }
 }

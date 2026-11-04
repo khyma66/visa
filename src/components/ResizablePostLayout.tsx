@@ -13,6 +13,8 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
   const id = useId();
   const container = useRef<HTMLDivElement>(null);
   const drag = useRef<{ pointerId: number; startX: number; startSplit: number; width: number; preference: number } | null>(null);
+  const frame = useRef<number | null>(null);
+  const pendingSplit = useRef(DEFAULT_SPLIT);
   const [preference, setPreference] = useState(DEFAULT_SPLIT);
   const [width, setWidth] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -34,8 +36,13 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); cancelFrame(); };
   }, []);
+
+  function cancelFrame() {
+    if (frame.current !== null) window.cancelAnimationFrame(frame.current);
+    frame.current = null;
+  }
 
   function save(value: number) {
     setPreference(value);
@@ -45,6 +52,7 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
   function finish(event: PointerEvent<HTMLDivElement>, cancelled = false) {
     const active = drag.current;
     if (!active || active.pointerId !== event.pointerId) return;
+    cancelFrame();
     drag.current = null;
     setDragging(false);
     if (cancelled) setPreference(active.preference);
@@ -53,20 +61,13 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
   }
 
   return <div>
-    <div className={styles.controls}>
-      <span id={`${id}-hint`}>Drag divider to resize</span>
-      <span className={styles.ratio}>{Math.round(split)}% post / {Math.round(100 - split)}% related</span>
-      <button type="button" onClick={() => save(clamp(split - 5, min, max))} disabled={split <= min} aria-label="Widen related questions" title="Widen related questions">←</button>
-      <button type="button" onClick={() => save(clamp(split + 5, min, max))} disabled={split >= max} aria-label="Widen post" title="Widen post">→</button>
-      <button type="button" onClick={() => save(DEFAULT_SPLIT)} disabled={preference === DEFAULT_SPLIT}>Reset 60/40</button>
-    </div>
     <div ref={container} className={`${styles.layout} ${dragging ? styles.dragging : ''}`} style={{ '--post-split': `${split}fr`, '--related-split': `${100 - split}fr` } as CSSProperties}>
       <div id={`${id}-post`} className={styles.post}>{children}</div>
       <div role="separator" tabIndex={0} aria-label="Post" aria-orientation="vertical"
-        aria-controls={`${id}-post`} aria-describedby={`${id}-hint ${id}-keys`}
+        aria-controls={`${id}-post`} aria-describedby={`${id}-keys`}
         aria-valuemin={min} aria-valuemax={max} aria-valuenow={Math.round(split)}
         aria-valuetext={`${Math.round(split)} percent post, ${Math.round(100 - split)} percent related questions`}
-        className={styles.divider} title="Drag to resize. Double-click to reset to 60/40."
+        className={styles.divider} title="Resize panels"
         onPointerDown={event => {
           if (!event.isPrimary || event.button !== 0 || !container.current || drag.current) return;
           event.preventDefault();
@@ -79,16 +80,23 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
         }}
         onPointerMove={event => {
           const active = drag.current;
-          if (active?.pointerId === event.pointerId) setPreference(clamp(active.startSplit + (event.clientX - active.startX) / active.width * 100, min, max));
+          if (active?.pointerId !== event.pointerId) return;
+          pendingSplit.current = clamp(active.startSplit + (event.clientX - active.startX) / active.width * 100, min, max);
+          // Apply the latest position once per paint, without queuing pointer events.
+          if (frame.current === null) frame.current = window.requestAnimationFrame(() => {
+            frame.current = null;
+            setPreference(pendingSplit.current);
+          });
         }}
         onPointerUp={event => finish(event)} onPointerCancel={event => finish(event, true)}
         onLostPointerCapture={() => {
-          if (drag.current) { setPreference(drag.current.preference); drag.current = null; setDragging(false); }
+          if (drag.current) { cancelFrame(); setPreference(drag.current.preference); drag.current = null; setDragging(false); }
         }}
         onDoubleClick={() => save(DEFAULT_SPLIT)}
         onKeyDown={event => {
           if (event.key === 'Escape' && drag.current) {
             const active = drag.current;
+            cancelFrame();
             drag.current = null; setDragging(false); setPreference(active.preference);
             if (event.currentTarget.hasPointerCapture(active.pointerId)) event.currentTarget.releasePointerCapture(active.pointerId);
             event.preventDefault(); return;
@@ -96,13 +104,11 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
           if (drag.current) return;
           const step = event.shiftKey ? 5 : 1;
           const next = event.key === 'ArrowLeft' ? split - step : event.key === 'ArrowRight' ? split + step
-            : event.key === 'Home' ? min : event.key === 'End' ? max : null;
+            : event.key === 'Home' ? min : event.key === 'End' ? max : event.key === 'Enter' ? DEFAULT_SPLIT : null;
           if (next !== null) { event.preventDefault(); save(clamp(next, min, max)); }
-        }}>
-        <span className={styles.grip} aria-hidden="true">⋮</span>
-      </div>
+        }} />
       <aside aria-label="Related questions panel" className={styles.related}>{related}</aside>
     </div>
-    <p id={`${id}-keys`} className="sr-only">Use left and right arrow keys to resize, Shift for larger steps, Home or End for the limits. Use Reset 60/40 to restore the default. Press Escape to cancel a drag.</p>
+    <p id={`${id}-keys`} className="sr-only">Use left and right arrow keys to resize, Shift for larger steps, Home or End for the limits. Double-click or press Enter to restore the default widths. Press Escape to cancel a drag.</p>
   </div>;
 }
