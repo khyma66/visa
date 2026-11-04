@@ -15,7 +15,7 @@ const fileModule = (name) => pathToFileURL(require.resolve(name)).href;
 const jsx = fileModule('react/jsx-runtime');
 const link = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)}; export default function Link(props) { return jsx('a',{...props}); }`);
 const auth = moduleUrl(`let user=null; export function setUser(value){user=value;} export function useAuth(){return {user,demoMode:false};}`);
-const icons = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)}; function Icon({size,...props}){return jsx('svg',props);} export {Icon as ArrowDown,Icon as ArrowUp,Icon as Check,Icon as CheckCircle2,Icon as ExternalLink,Icon as Eye,Icon as GitFork,Icon as MessageCircle,Icon as Share2,Icon as ThumbsUp};`);
+const icons = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)}; function Icon({size,...props}){return jsx('svg',props);} export {Icon as ArrowDown,Icon as ArrowUp,Icon as Award,Icon as Check,Icon as CheckCircle2,Icon as ExternalLink,Icon as Eye,Icon as GitFork,Icon as MessageCircle,Icon as Share2,Icon as ThumbsUp};`);
 const dependencies = {
   'react/jsx-runtime': jsx,
   react: fileModule('react'),
@@ -29,6 +29,7 @@ const dependencies = {
   './RelatedQuestions': moduleUrl(`export function RelatedQuestions(){return null;}`),
   './AssistantPanel': moduleUrl(`export function AssistantPanel(){return null;}`),
   './AuthProvider': auth,
+  '@/lib/supabase/client': moduleUrl(`export const isSupabaseConfigured=false;export function getSupabase(){throw new Error('Unexpected network call');}`),
   './ReportButton': moduleUrl(`export function ReportButton(){return null;}`),
 };
 async function compile(relativePath) {
@@ -49,6 +50,7 @@ dependencies['./ResizablePostLayout.module.css'] = moduleUrl('export default {};
 dependencies['./ResizablePostLayout'] = await compile('../src/components/ResizablePostLayout.tsx');
 dependencies['./SafetyNotice'] = await compile('../src/components/SafetyNotice.tsx');
 dependencies['./PostShare'] = await compile('../src/components/PostShare.tsx');
+dependencies['./PostAward'] = await compile('../src/components/PostAward.tsx');
 const { QuestionCard } = await import(await compile('../src/components/QuestionCard.tsx'));
 const { QuestionDetail } = await import(await compile('../src/components/QuestionDetail.tsx'));
 const { setUser } = await import(auth);
