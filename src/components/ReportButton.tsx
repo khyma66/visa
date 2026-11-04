@@ -24,13 +24,13 @@ export function ReportButton({ kind, target }: { kind: 'question' | 'answer' | '
   if (demoMode) return null;
   return <div className="text-xs text-slate-600">
     <button onClick={() => setOpen(!open)} aria-expanded={open} className="rounded px-1 py-1 underline hover:text-rose-700 capitalize">Report</button>
-    {open && (!user ? <p><Link href="/login" className="text-blue-700 underline capitalize">Log In to report content</Link></p> :
+    {open && (!user ? <p className="capitalize"><Link href="/login" className="text-blue-700 underline capitalize">Log In to report content</Link></p> :
       <form onSubmit={submit} className="mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 text-slate-800 shadow-sm">
         <label className="block font-bold capitalize">Reason<select value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 w-full rounded border p-2">
           <option value="spam" className="capitalize">Spam</option><option value="harassment" className="capitalize">Harassment</option><option value="personal-information" className="capitalize">Exposed personal information</option><option value="scam" className="capitalize">Scam or impersonation</option><option value="other" className="capitalize">Other</option>
         </select></label>
         <label className="mt-2 block capitalize">Details (optional)<textarea value={details} maxLength={1000} onChange={(event) => setDetails(event.target.value)} className="mt-1 w-full rounded border p-2" /></label>
-        {kind === 'message' && <p className="my-2">Reporting shares this message with authorized moderators, not your entire conversation.</p>}
+        {kind === 'message' && <p className="my-2 capitalize">Reporting shares this message with authorized moderators, not your entire conversation.</p>}
         <button disabled={busy} className="rounded bg-slate-900 px-3 py-2 font-bold text-white disabled:opacity-50 capitalize">{busy ? 'Submitting…' : 'Submit report'}</button>
       </form>)}
     {status && <p role="status" className="mt-1 max-w-64">{status}</p>}

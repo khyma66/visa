@@ -331,9 +331,9 @@ test('signup and login are visible before provider actions and keep only safe re
       assert.equal(links[signup ? 1 : 0].props['aria-current'], 'page');
       assert.equal(links[signup ? 0 : 1].props['aria-current'], undefined);
       assert(links.every(link => link.props.className.includes('focus-visible:ring-2')), 'Account tabs retain a keyboard-visible focus state');
-      assert.match(links[signup ? 1 : 0].props.className, /ring-violet-200/, 'The selected tab keeps a persistent visual indicator');
+      assert.match(links[signup ? 1 : 0].props.className, /ring-teal-200/, 'The selected tab keeps a persistent visual indicator');
       assert.match(links[signup ? 1 : 0].props.className, /hover:bg-white/, 'Hovering the selected tab preserves its state');
-      assert.match(links[signup ? 0 : 1].props.className, /hover:bg-violet-100/, 'Hovering the alternate tab cannot mimic selection');
+      assert.match(links[signup ? 0 : 1].props.className, /hover:bg-teal-100/, 'Hovering the alternate tab cannot mimic selection');
       assert(links.every(link => !link.props.href.includes('email=')), 'Only the sanitized return destination is forwarded');
     } finally { h.close(); }
   }
@@ -568,14 +568,17 @@ test('compact signup marks every required input and associates the existing pass
   toggle().props.onClick();h.render();assert.equal(field(h,'Password').props.type,'password');
  }finally{h.close();}
 });
-test('account access header removes unrelated controls but preserves branding and a login entry',async()=>{
+test('account access keeps the regular search, mobile navigation, ask action and branding',async()=>{
  const h=setup();
  try{
-  h.pathname='/signup';h.render(SiteHeader);
-  assert.match(h.tree.props.className,/site-header-account/);
-  assert(!nodes(h.tree).some(node=>node.props?.role==='search'||node.type==='details'||node.props?.title==='Ask a Question'));
-  assert(nodes(h.tree).some(node=>node.props?.['aria-label']==='VisaThreads home'));
-  assert.equal(byText(h,'a','LogIn/SignUp').props.href,'/login#sign-in');
+  for(const route of ['/login','/signup','/account/recovery','/account/update-password']){
+   h.pathname=route;h.render(SiteHeader);
+   assert(nodes(h.tree).some(node=>node.props?.role==='search'));
+   assert(nodes(h.tree).some(node=>node.type==='details'&&node.props.className==='mobile-menu'));
+   assert(nodes(h.tree).some(node=>node.props?.title==='Ask a Question'));
+   assert(nodes(h.tree).some(node=>node.props?.['aria-label']==='VisaThreads home'));
+   assert.equal(byText(h,'a','LogIn/SignUp').props.href,'/login#sign-in');
+  }
  }finally{h.close();}
 });
 test('recovery preserves the existing password rule with visible guidance and required markers',async()=>{
