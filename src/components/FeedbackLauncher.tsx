@@ -43,6 +43,7 @@ export function OwnerFeedbackLink() {
     return () => { active = false; };
   }, [user?.id, demoMode]);
   return allowed ? <>
+    <Link href="/admin/members" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Inbox size={16} aria-hidden="true"/>Members</Link>
     <Link href="/admin/analytics" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><BarChart3 size={16} aria-hidden="true"/>Community Dashboard</Link>
     <Link href="/admin/launch" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><ClipboardList size={16} aria-hidden="true"/>Launch & Experiments</Link>
     <Link href="/owner/feedback" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Inbox size={16} aria-hidden="true"/>Feedback Inbox</Link>
