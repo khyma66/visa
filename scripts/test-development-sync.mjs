@@ -99,6 +99,14 @@ test('capture recognizes only the verified pre-assistant dev baseline and replac
   assert.throws(() => verifyDevelopmentSyncSettings({ bindings: [...bindings, { name: 'AI', type: 'ai' }] }));
 });
 
+test('subsequent dev sync retains only its exact isolated security limit bindings',async()=>{
+  const configFile=JSON.parse(await readFile(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
+  const bindings=Object.entries(config().vars).map(([name,text])=>({type:'plain_text',name,text}));
+  for(const limit of configFile.env.sandbox.ratelimits)verifyDevelopmentSyncSettings({bindings:[...bindings,{type:'ratelimit',...limit}]});
+  for(const limit of configFile.env.development.ratelimits)assert.throws(()=>verifyDevelopmentSyncSettings({bindings:[...bindings,{type:'ratelimit',...limit}]}));
+  assert.throws(()=>verifyDevelopmentSyncSettings({bindings:[...bindings,{type:'ratelimit',name:'UNREVIEWED',namespace_id:'1',simple:{limit:999,period:60}}]}));
+});
+
 test('an older dirty dev build can be captured only with the verified dev origin and valid provenance', () => {
   const health = { environment: 'development', releaseStatus: 'configured', build: { siteOrigin: DEV_SITE, gitSha: sha, dirty: true } };
   verifyExistingDevelopmentHealth(health);
