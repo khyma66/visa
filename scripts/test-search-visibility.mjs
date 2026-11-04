@@ -29,6 +29,7 @@ test('only a reviewed production deployment publishes a sitemap', () => {
   assert.equal(publicSearchOrigin(approved), 'https://visathreads.com');
   assert.equal(publicSearchOrigin({ ...approved, NEXT_PUBLIC_SITE_URL: 'https://www.visathreads.com/' }), 'https://visathreads.com');
   assert.deepEqual(publicSitemap(approved), [...PUBLIC_SITEMAP_PATHS, ...VISA_GUIDES.map(guide => `/us/en/guides/${guide.slug}`)].map((path) => ({ url: `https://visathreads.com${path}` })));
+  assert(!publicSitemap(approved).some(row => row.url === 'https://visathreads.com/'), 'Redirecting homepage is not a sitemap entry');
   assert.equal(new Set(publicSitemap(approved).map(({ url }) => url)).size, PUBLIC_SITEMAP_PATHS.length + VISA_GUIDES.length);
 });
 
