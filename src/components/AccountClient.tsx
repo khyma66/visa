@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { NotificationSettings } from './NotificationSettings';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Bell, Bookmark, CheckCircle2, CircleHelp, LockKeyhole, MessageCircle, Settings, UserRound } from 'lucide-react';
@@ -140,6 +141,7 @@ function AccountSettings() {
         {identity.email && identity.emailVerified && <Link href="/account/update-password" className="mt-5 inline-block text-sm font-bold text-blue-700 underline capitalize">Set or change your password</Link>}
       </>}
     </section>
+    <NotificationSettings />
     <section className="p-5 sm:p-7"><h2 className="text-xl font-bold capitalize">Privacy and support</h2><div className="mt-4 flex flex-wrap gap-5 text-sm font-semibold text-blue-700 capitalize"><Link href="/privacy-choices" className="underline capitalize">Privacy choices</Link><Link href="/contact" className="underline capitalize">Request account help or deletion</Link></div></section>
   </div>;
 }

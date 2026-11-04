@@ -12,7 +12,7 @@ export const PUBLIC_SITEMAP_PATHS = [
 ] as const;
 
 export const PRIVATE_CRAWL_PATHS = [
-  '/api/', '/account', '/admin', '/owner', '/login', '/signup', '/messages',
+  '/api/', '/account', '/admin', '/owner', '/login', '/signup', '/messages', '/notifications',
   '/moderation', '/ask', '/assistant', '/feedback', '/my-communities', '/communities/new', '/experiences/new',
 ] as const;
 

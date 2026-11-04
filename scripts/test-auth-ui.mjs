@@ -27,6 +27,8 @@ const navigation = dataUrl(`
 `);
 const auth = dataUrl('export function useAuth(){return globalThis.__authHarness.auth;}');
 const dependencies = {
+  './NotificationLinks': dataUrl('export const NotificationLinks=()=>null;'),
+  './NotificationSettings': dataUrl('export const NotificationSettings=()=>null;'),
   './TurnstileCheck': dataUrl('export function TurnstileCheck(){return null;}'),
   'react/jsx-runtime': jsx, react: hooks, 'next/link': links, 'next/navigation': navigation,
   './AuthProvider': auth, '@/components/AuthProvider': auth,

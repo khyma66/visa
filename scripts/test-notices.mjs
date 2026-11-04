@@ -43,6 +43,7 @@ test('safety and professional community description appear once in the footer in
   const { default: Layout } = await component('../src/app/layout.tsx', {
     react: pathToFileURL(require.resolve('react')).href,
     '@/components/SafetyNotice': safety.moduleUrl,
+    '@/components/NotificationProvider': url('export const NotificationProvider=({children})=>children;'),
     '@/components/AuthProvider': url('export const AuthProvider=({children})=>children;'),
     '@/components/PolicyAcceptance': url('export const PolicyAcceptance=({children})=>children;'),
     '@/components/CommunityAddonsNavigation': url('export const CommunityAddonsNavigation=()=>null;'),
