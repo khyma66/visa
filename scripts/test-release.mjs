@@ -42,14 +42,14 @@ test('editorial crawl headers match metadata while dev, filters and private rout
   const previous = Object.fromEntries(Object.keys(env).map(key => [key,process.env[key]]));
   try {
     Object.assign(process.env,env);
-    for (const path of ['/', '/about', '/guides', '/robots.txt', '/sitemap.xml']) {
-      const response = await middleware({ nextUrl: new URL(path,env.NEXT_PUBLIC_SITE_URL) });
+    for (const path of ['/us/en', '/about', '/us/en/guides', '/robots.txt', '/sitemap.xml']) {
+      const response = await middleware({ method: 'GET', nextUrl: new URL(path,env.NEXT_PUBLIC_SITE_URL) });
       assert.equal(response.status,200);
       assert.equal(response.headers.get('x-robots-tag'),null);
       assert.equal(response.headers.get('x-visathreads-search'),'editorial');
     }
-    for (const url of ['https://visa-central.com/', 'https://visathreads.com/?sort=unanswered', 'https://visathreads.com/admin/analytics', 'https://visathreads.com/questions/apify-123', 'https://visathreads.com/guides/not-a-guide']) {
-      assert.match((await middleware({ nextUrl:new URL(url) })).headers.get('x-robots-tag'),/noindex/);
+    for (const url of ['https://visa-central.com/us/en', 'https://visathreads.com/us/en?sort=unanswered', 'https://visathreads.com/admin/analytics', 'https://visathreads.com/us/en/questions/apify-123', 'https://visathreads.com/us/en/guides/not-a-guide']) {
+      assert.match((await middleware({ method: 'GET', nextUrl:new URL(url) })).headers.get('x-robots-tag'),/noindex/);
     }
   } finally {
     for (const [key,value] of Object.entries(previous)) value === undefined ? delete process.env[key] : process.env[key] = value;
