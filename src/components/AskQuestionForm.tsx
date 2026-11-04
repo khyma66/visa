@@ -55,7 +55,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
     setCommunityId(params.get('community') ?? '');
     setSos(!experience && params.get('sos') === '1');
     const shared = params.get('shared') ?? '';
-    if (/^\/(?:questions|experiences)\/(?:apify-\d+|[a-f0-9-]{36})$/i.test(shared)) setSharedPath(shared);
+    if (/^\/(?:questions|experiences)\/(?:apify-[a-z0-9_-]{1,100}|[a-f0-9-]{36})$/i.test(shared)) setSharedPath(shared);
   }, []);
   const draftKey = `visathreads:${experience ? 'experience' : 'question'}-draft:v1`;
   useEffect(() => {
