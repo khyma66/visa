@@ -100,6 +100,20 @@ test('initial feed and sort clicks start fetching without the search debounce', 
   } finally { h.close(); }
 });
 
+test('SOS requests only SOS-tagged newest posts and explains emergency limits', async () => {
+  const h = new Harness();
+  h.getPage = async options => ({questions: options.tag === 'sos' ? [question('urgent', {tags:['sos']}), question('ordinary')] : [question('ordinary')], more:false});
+  try {
+    h.render(); await h.settle();
+    button(h, 'SOS').props.onClick(); h.render(); await h.settle();
+    assert.equal(h.calls.at(-1).tag,'sos');
+    assert.equal(h.calls.at(-1).sort,'newest');
+    assert.deepEqual(ids(h),['urgent']);
+    assert.match(textOf(h.tree),/call 911/);
+    assert(nodes(h.tree).some(node => node.props?.href?.includes('sos%3D1')));
+  } finally {h.close();}
+});
+
 test('home page offers Ask a Question to everyone and requires sign-in before composing', async () => {
   const h = new Harness(); h.getPage = async () => ({ questions: [], more: false });
   try {

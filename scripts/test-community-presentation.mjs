@@ -44,6 +44,7 @@ async function component(name) {
 dependencies['./ResizablePostLayout.module.css'] = moduleUrl('export default {};');
 dependencies['./ResizablePostLayout'] = (await component('ResizablePostLayout')).url;
 dependencies['./PostOriginBadge'] = (await component('PostOriginBadge')).url;
+dependencies['./PostShare'] = (await component('PostShare')).url;
 const {value:{QuestionCard},url:cardUrl} = await component('QuestionCard');
 dependencies['./QuestionCard']=cardUrl;
 const {value:{QuestionDetail}} = await component('QuestionDetail');

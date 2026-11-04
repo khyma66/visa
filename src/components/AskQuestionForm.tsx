@@ -19,6 +19,8 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
   const { user, profile, loading } = useAuth();
   const router = useRouter();
   const [category, setCategory] = useState(EXPERIENCE_CATEGORIES[0]);
+  const [sos, setSos] = useState(false);
+  const [sharedPath, setSharedPath] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const country = 'United States';
@@ -49,7 +51,11 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => { submitLock.current = null; setSubmitting(false); setCommunityAfter(null); setCommunityHistory([]); setCommunityPage(1); communityNavigation.current = false; }, [user?.id]);
   useEffect(() => {
-    setCommunityId(new URLSearchParams(window.location.search).get('community') ?? '');
+    const params = new URLSearchParams(window.location.search);
+    setCommunityId(params.get('community') ?? '');
+    setSos(!experience && params.get('sos') === '1');
+    const shared = params.get('shared') ?? '';
+    if (/^\/(?:questions|experiences)\/(?:apify-[a-z0-9_-]{1,100}|[a-f0-9-]{36})$/i.test(shared)) setSharedPath(shared);
   }, []);
   const draftKey = `visathreads:${experience ? 'experience' : 'question'}-draft:v1`;
   useEffect(() => {
@@ -99,7 +105,11 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
     return () => controller.abort();
   }, [user?.id, loading, communityId, communityRevision]);
   const selectedCommunity = selection?.userId === user?.id && selection?.id === communityId ? selection.community : null;
-  const loginReturn = `/login?next=${encodeURIComponent(`${experience ? '/experiences/new' : '/ask'}${communityId ? `?community=${encodeURIComponent(communityId)}` : ''}`)}`;
+  const returnParams = new URLSearchParams();
+  if (communityId) returnParams.set('community', communityId);
+  if (sos && !experience) returnParams.set('sos', '1');
+  if (sharedPath) returnParams.set('shared', sharedPath);
+  const loginReturn = `/login?next=${encodeURIComponent(`${experience ? '/experiences/new' : '/ask'}${returnParams.size ? `?${returnParams}` : ''}`)}`;
 
   const suggestedTags = suggestTags(`${title}\n${body}`);
 
@@ -125,18 +135,25 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
     event.preventDefault();
     if (submitLock.current || loading) return;
     if (!user) { router.push(loginReturn); return; }
+    if (sharedPath && !communityId) { setError('Choose a community you have joined before sharing this discussion.'); return; }
     if (communityId && (selectionLoading || selectionError || selection?.id !== communityId || selection?.userId !== user.id || !selection.active)) {
       setError('Join this community before posting, or choose General Questions.'); return;
     }
+    if (sos && !experience && normalizeTags(selectedTags).filter(tag => tag !== 'sos').length >= 5) {
+      setError('SOS uses one of the five tag slots. Remove a tag before posting.'); return;
+    }
+    const sourceUrl = sharedPath ? new URL(sharedPath, window.location.origin).href : '';
+    const sharedBody = sourceUrl && !body.includes(sourceUrl) ? `${body.trim()}\n\nOriginal discussion: ${sourceUrl}` : body.trim();
+    if (sharedBody.length > 10000) { setError('Shorten your post to make room for the original discussion link.'); return; }
     const operation = Symbol();
     const actor = user.id;
     submitLock.current = operation;
-    const normalizedTags = normalizeTags([...selectedTags, tagInput, ...suggestedTags]);
+    const normalizedTags = normalizeTags([...(sos && !experience ? ['sos'] : []), ...selectedTags, tagInput, ...suggestedTags]);
     setSubmitting(true);
     setError('');
     try {
       const id = await createQuestion(user.id, {
-        title: title.trim(), body: body.trim(), destination_country: country.trim(), visa_type: visaType, tags: normalizedTags,
+        title: title.trim(), body: sharedBody, destination_country: country.trim(), visa_type: visaType, tags: normalizedTags,
         ...(experience ? { post_kind: 'experience' as const, experience_category: category } : {}),
         ...(communityId ? { community_id: communityId } : {}),
       });
@@ -163,6 +180,8 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 capitalize">{experience ? 'Help others learn from your visa journey' : 'Share the details that make your case different'}</h1>
         {user ? <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your public username'}</b>.</p> : <p className="mt-3 text-sm text-slate-600 capitalize"><Link href={loginReturn} className="font-semibold text-blue-700 underline capitalize">Log in</Link> or <Link href={loginReturn.replace('/login?', '/signup?')} className="font-semibold text-blue-700 underline capitalize">create an account</Link> to publish. Your draft is kept in this browser tab while you sign in.</p>}
         <form onSubmit={submit} className="mt-7 space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+          {!experience && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={sos} onChange={event => setSos(event.target.checked)} /> Mark as SOS: urgent visa question</label>{sos && <p className="mt-2 leading-6">Community replies are not immediate or guaranteed. If someone is in immediate danger in the U.S., call 911.</p>}</div>}
+          {sharedPath && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><p>Choose a community you have joined and add your own title and context. A link to the original discussion will be added when you post. Check that sharing it is appropriate for the chosen audience.</p></div>}
           <p className="text-sm text-slate-500 capitalize"><span aria-hidden="true" className="font-semibold text-rose-700 capitalize">*</span> Required fields</p>
           <label className="block"><span className="font-bold text-slate-900 capitalize">Community <span className="text-sm font-normal text-slate-500 capitalize">(optional)</span></span>
             <select aria-label="Community" value={communityId} onChange={(event) => setCommunityId(event.target.value)} disabled={submitting} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">

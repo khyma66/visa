@@ -150,6 +150,34 @@ function createHarness(search = '', storage = new Map()) {
 const publish = (h) => nodes(h.tree).find((n) => n.type === 'form').props.onSubmit(event());
 const popularTag = (h, label) => nodes(h.tree).find((node) => node.type === 'button' && node.props['aria-pressed'] !== undefined && textOf(node).trim() === label);
 
+test('SOS link creates a tagged question and makes emergency limitations clear', async () => {
+  const h = createHarness('?sos=1');
+  try {
+    h.render(AskQuestionForm); await h.settle();
+    assert.equal(field(h, 'Mark as SOS').props.checked, true);
+    assert.match(textOf(h.tree), /call 911/);
+    change(h, 'Question Title', 'Urgent question about visa appointment');
+    change(h, 'Details', 'My appointment is approaching and I need help understanding the documents.');
+    await publish(h);
+    assert.equal(h.calls.find(call => call.name === 'createQuestion').args[1].tags[0], 'sos');
+  } finally {h.close();}
+});
+
+test('sharing to a joined community adds only a link to the original post', async () => {
+  const id='33333333-3333-4333-8333-333333333333';
+  const h = createHarness(`?community=group-a&shared=%2Fquestions%2F${id}`);
+  window.location.origin='https://visathreads.com';
+  try {
+    h.render(AskQuestionForm); await h.settle();
+    change(h, 'Question Title', 'Discussion about a visa appointment');
+    change(h, 'Details', 'Sharing this for discussion in our community.');
+    await publish(h);
+    const payload=h.calls.find(call => call.name === 'createQuestion').args[1];
+    assert.equal(payload.community_id,'group-a');
+    assert.match(payload.body, new RegExp(`Original discussion: https://visathreads.com/questions/${id}`));
+  } finally {h.close();}
+});
+
 test('question and experience forms clearly mark required editable fields and keep dates optional', async () => {
   for (const experience of [false, true]) {
     const h = createHarness();

@@ -17,7 +17,7 @@ import { ResizablePostLayout } from './ResizablePostLayout';
 import { EXPERIENCE_CATEGORIES, VISA_TYPES } from '@/lib/post-categories';
 
 const PAGE_SIZE = 20;
-const SORTS = [['newest', 'New'], ['activity', 'Active'], ['score', 'Top'], ['unanswered', 'Unanswered']] as const;
+const SORTS = [['newest', 'New'], ['activity', 'Active'], ['score', 'Top'], ['unanswered', 'Unanswered'], ['sos', 'SOS']] as const;
 type SortMode = typeof SORTS[number][0];
 type PostKind = '' | 'question' | 'discussion' | 'promotion';
 
@@ -45,7 +45,8 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const [loadedFilterKey, setLoadedFilterKey] = useState<string | null>(null);
   const olderLock = useRef<symbol | null>(null);
   const alive = useRef(true);
-  const askHref = user ? '/ask' : '/login?next=%2Fask#sign-in';
+  const askTarget = sortMode === 'sos' ? '/ask?sos=1' : '/ask';
+  const askHref = user ? askTarget : `/login?next=${encodeURIComponent(askTarget)}#sign-in`;
 
   // Sort immediately over the already loaded rows while the fresh server page
   // arrives, but never present rows from a different search/filter as results.
@@ -72,7 +73,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
       window.history.replaceState(window.history.state, '', url);
     }
     setOrigin(source === 'member' ? 'member' : source === 'earlier' || source === 'archive' ? 'earlier' : '');
-    setSortMode(SORTS.some(([value]) => value === sort) ? sort as SortMode : 'newest');
+    setSortMode(SORTS.some(([value]) => value === sort) && !(experience && sort === 'sos') ? sort as SortMode : 'newest');
     setKind(experience ? '' : postKind === 'question' || postKind === 'discussion' || postKind === 'promotion' ? postKind : initialKind);
     setPage(1);
   }, [queryString, initialKind, experience]);
@@ -91,7 +92,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     olderLock.current = null; setLoadingOlder(false);
     const fetchQuestions = () => {
       const dataOrigin = origin === 'earlier' ? 'archive' : origin;
-      void getQuestionPage({ search, tag, visaType, sort: sortMode, experience, category, ...(dataOrigin ? { origin: dataOrigin } : {}) })
+      void getQuestionPage({ search, tag: sortMode === 'sos' ? 'sos' : tag, visaType, sort: sortMode === 'sos' ? 'newest' : sortMode, experience, category, ...(dataOrigin ? { origin: dataOrigin } : {}) })
         .then((data) => { if (active) { setQuestions(data.questions); setMore(data.more); setCursor(data.cursor); setLoadedFilterKey(contentFilterKey); } })
         .catch(() => { if (active) { setQuestions([]); setError('Questions could not be loaded. Please try again.'); } })
         .finally(() => { if (active) setLoading(false); });
@@ -110,7 +111,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     const requestedFilter = filterKey;
     try {
       const dataOrigin = origin === 'earlier' ? 'archive' : origin;
-      const data = await getQuestionPage({ search, tag, visaType, sort: sortMode, before: cursor, experience, category, ...(dataOrigin ? { origin: dataOrigin } : {}) });
+      const data = await getQuestionPage({ search, tag: sortMode === 'sos' ? 'sos' : tag, visaType, sort: sortMode === 'sos' ? 'newest' : sortMode, before: cursor, experience, category, ...(dataOrigin ? { origin: dataOrigin } : {}) });
       if (!alive.current || filterRef.current !== requestedFilter) return;
       setQuestions((current) => [...current, ...data.questions.filter((question) => !current.some((item) => item.id === question.id))]);
       setMore(data.more); setCursor(data.cursor); setError('');
@@ -154,6 +155,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
         && (!origin || (origin === 'earlier' ? isImportedPost(question) : !isImportedPost(question)))
         && (experience || !kind || (question.post_kind ?? 'question') === kind)
         && (sortMode !== 'unanswered' || question.answer_count === 0)
+        && (sortMode !== 'sos' || question.tags.includes('sos'))
         && ((!demoMode && !isImportedPost(question)) || terms.every((term) => haystack.includes(term)));
     });
     return items.sort((a, b) => {
@@ -205,9 +207,10 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
 
           {experience && <label className="mb-4 flex flex-wrap items-center gap-2 text-sm">Experience Category<select value={category} onChange={event => { setCategory(event.target.value); updateQuery({ category: event.target.value }); }} className="rounded border px-3 py-2"><option value="" className="capitalize">All Experience Categories</option>{EXPERIENCE_CATEGORIES.map(value => <option key={value} value={value}>{value.replace(/\b\w/g, letter => letter.toUpperCase())}</option>)}</select></label>}
           <section id="question-list" aria-label="Community questions" aria-busy={loading} className="min-w-0 scroll-mt-24">
+            {sortMode === 'sos' && <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><strong>Urgent community questions</strong><p>Replies are not immediate or guaranteed. If someone is in immediate danger in the U.S., call 911.</p><Link href={askHref} className="mt-2 inline-block font-semibold underline">Post an SOS question</Link></div>}
             <div className="feed-controls">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap gap-1" aria-label="Sort questions">{SORTS.map(([value, label]) => <button key={value} type="button" onClick={() => selectSort(value)} aria-pressed={sortMode === value} className={`feed-sort-button capitalize rounded-lg px-3 py-2 text-sm font-semibold ${sortMode === value ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}</div>
+                <div className="flex flex-wrap gap-1" aria-label="Sort questions">{SORTS.filter(([value]) => !experience || value !== 'sos').map(([value, label]) => <button key={value} type="button" onClick={() => selectSort(value)} aria-pressed={sortMode === value} className={`feed-sort-button capitalize rounded-lg px-3 py-2 text-sm font-semibold ${sortMode === value ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}</div>
                 <label className="flex min-w-0 items-center gap-1.5 text-sm text-slate-600"><SlidersHorizontal size={15} aria-hidden="true" /><select aria-label="Visa Type" value={visaType} onChange={(event) => { setVisaType(event.target.value); updateQuery({ visa: event.target.value }); }} className="max-w-[180px] rounded bg-transparent py-2 font-medium focus:outline-blue-600"><option value="" className="capitalize">All U.S. Visa Types</option>{visaTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
