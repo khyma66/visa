@@ -15,6 +15,7 @@ import type { Answer, Question } from '@/lib/types';
 import { subscribeLive, type LiveStatus } from '@/lib/realtime';
 import { getMemberMessageHref, isMemberId } from '@/lib/messaging-state';
 import { RelatedQuestions } from './RelatedQuestions';
+import { ResizablePostLayout } from './ResizablePostLayout';
 import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 import { ReportButton } from './ReportButton';
@@ -154,7 +155,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
   const canAnswer = question.status === 'open';
   return (
     <main className="page-shell mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_310px]">
+      <ResizablePostLayout related={<RelatedQuestions drafting={Boolean(answerBody.trim())} context={{ ...question, draftText: answerBody, commentText: discussionContext }} />}>
         <div>
           <section className="border-b border-slate-200 pb-6">
             {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/experiences" className="underline">Experience</Link> · {question.experience_category}</p>}
@@ -224,10 +225,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
           </section>
         </div>
 
-        <aside className="space-y-5 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto">
-          <RelatedQuestions drafting={Boolean(answerBody.trim())} context={{ ...question, draftText: answerBody, commentText: discussionContext }} />
-        </aside>
-      </div>
+      </ResizablePostLayout>
     </main>
   );
 }
