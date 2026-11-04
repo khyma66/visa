@@ -147,12 +147,12 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
   }
 
   if (loading) return <main className="page-shell mx-auto max-w-6xl p-8"><div className="h-64 animate-pulse rounded-2xl bg-slate-100" /></main>;
-  if (!question) return <main className="page-shell mx-auto max-w-4xl p-8"><h1 className="text-2xl font-black capitalize">Question not found</h1><Link href="/" className="mt-4 inline-block font-bold text-blue-700 capitalize">Back to questions</Link></main>;
+  if (!question) return <main className="page-shell mx-auto max-w-4xl p-8"><h1 className="text-2xl font-black capitalize">Question not found</h1><Link href="/us/en" className="mt-4 inline-block font-bold text-blue-700 capitalize">Back to questions</Link></main>;
 
   const owner = user?.id === question.author_id;
   const imported = isImportedPost(question);
   const experience = question.post_kind === 'experience';
-  const threadPath = `/${experience ? 'experiences' : 'questions'}/${id}`;
+  const threadPath = `/us/en/${experience ? 'experiences' : 'questions'}/${id}`;
   const authorMessageHref = getMemberMessageHref(question, user?.id);
   const canAnswer = question.status === 'open';
   return (
@@ -160,7 +160,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
       <ResizablePostLayout related={<RelatedQuestions drafting={Boolean(answerBody.trim())} context={{ ...question, draftText: answerBody, commentText: discussionContext }} />}>
         <div>
           <section className="border-b border-slate-200 pb-8">
-            {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/experiences" className="underline capitalize">Experience</Link> · {question.experience_category}</p>}
+            {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/us/en/experiences" className="underline capitalize">Experience</Link> · {question.experience_category}</p>}
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span>{question.destination_country !== 'Global' && <span className="text-slate-400">{question.destination_country}</span>}<PostOriginBadge post={question} /></div>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-950">{question.title}</h1>
             <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : experience ? 'replies' : 'answers'}</span></div>
@@ -172,7 +172,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             }} />}
             <div className="min-w-0 flex-1">
               <div className="max-w-prose whitespace-pre-wrap text-lg leading-relaxed text-slate-800">{question.body}</div>
-              <div className="mt-6 flex flex-wrap gap-2">{question.tags.map((tag) => <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}</div>
+              <div className="mt-6 flex flex-wrap gap-2">{question.tags.map((tag) => <Link key={tag} href={`/us/en?tag=${encodeURIComponent(tag)}`} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}</div>
               <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
                 <div className="flex gap-2">
 

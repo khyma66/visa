@@ -196,5 +196,5 @@ export function visaGuide(slug: string): VisaGuide | undefined {
 }
 
 export function guideCommunityHref(guide: VisaGuide, experiences = false): string {
-  return `${experiences ? '/experiences' : '/'}?visa=${encodeURIComponent(guide.visaType)}`;
+  return `${experiences ? '/us/en/experiences' : '/us/en'}?visa=${encodeURIComponent(guide.visaType)}`;
 }

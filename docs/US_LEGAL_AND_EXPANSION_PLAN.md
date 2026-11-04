@@ -49,13 +49,9 @@ Federal and cross-state work:
 
 ## Country architecture
 
-Recommendation: one shared application and an explicit country registry. Start with visathreads.com/us and keep current root/login URLs stable. Only the US page is implemented now; it shares the existing feed. Country of interest is distinct from residence, citizenship, billing address and legal jurisdiction.
+Updated November 4, 2026: the approved country model is **visa destination**, using one permanent base domain with `/{destination}/{language}` subdirectories. The US community is `/us/en`; old `/us` and legacy public content paths redirect while root, shared login, recovery, account and support URLs remain stable. Planned examples are `/gb/en`, `/ca/en`, `/ca/fr` and `/au/en`; these are unavailable until their content, data boundaries and launch reviews are ready.
 
-When a second country is actually approved, provision an explicit host such as gb.visathreads.com or in.visathreads.com, certificate, matching Worker routing and exact authentication callbacks. Cloudflare [Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/) route a hostname to a Worker; DNS does not partition database records. Avoid wildcard auth redirects and automatic location-based forced redirects. Give people an explicit country selector and preserve accessibility and deep links. Never trust a client-supplied country or forwarded-host header as authorization.
-
-For genuinely separate user bases, prefer a per-market backend project with independent keys, exact auth callbacks, storage, backups and regional vendor review. The same build can run with market-specific configuration. Accounts are separate unless a later explicit linking design is approved. Do not copy existing accounts, posts or private messages into another country by default. If a shared database is chosen instead, first add server-authorized memberships, market IDs on every relevant table, composite constraints, scoped realtime/storage/search, and cross-market RLS tests. A browser filter is not isolation. No foreign market launches before one of these isolation designs is deployed and tested.
-
-Before each country opens, complete local privacy, consumer, age, online-safety, tax, payment, residency and transfer reviews; localize policy versions, notices, currencies and language. DNS geography is not a data-residency guarantee. Test unknown hosts/country codes, cross-market IDs, login callbacks, cache keys and rollback. Keep unopened country codes unavailable.
+The [destination URL expansion plan](DESTINATION_URL_EXPANSION_2026-11-04.md) supersedes this document's original recommendation to introduce country subdomains and separate accounts. It records the implemented compatibility contract, provider audit, SEO rules, staged data model, operational launch gates and guarded rollout. Existing privacy and legal review requirements remain in place; destination selection does not determine citizenship, residence, legal jurisdiction or data residency. No historical policy text or acceptance receipt is changed by this architecture update.
 
 ## Monetization and branch strategy
 

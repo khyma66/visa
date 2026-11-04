@@ -49,20 +49,20 @@ export async function verifyPlaybookPages(probe, feed, discovery = false) {
     requireCheck(html.length < 2_000_000 && !html.includes('sb_secret_'), `${label}-document`);
     return html;
   }
-  const index = await page('guides', '/guides?sort=unanswered');
-  checkMetadata(index, '/guides', 'U.S. Visa Guides and Official Resources', 'guides');
+  const index = await page('guides', '/us/en/guides?sort=unanswered');
+  checkMetadata(index, '/us/en/guides', 'U.S. Visa Guides and Official Resources', 'guides');
   requireCheck(visible(index).includes('U.S. Visa Guides'), 'guides-visible-heading');
   for (const guide of PLAYBOOK_GUIDE_CHECKS) {
-    requireCheck(hasLink(index, `/guides/${guide.slug}`), 'guides-navigation');
-    const html = await page(`guide-${guide.slug}`, `/guides/${guide.slug}`, discovery);
-    checkMetadata(html, `/guides/${guide.slug}`, guide.title, 'guide', discovery);
+    requireCheck(hasLink(index, `/us/en/guides/${guide.slug}`), 'guides-navigation');
+    const html = await page(`guide-${guide.slug}`, `/us/en/guides/${guide.slug}`, discovery);
+    checkMetadata(html, `/us/en/guides/${guide.slug}`, guide.title, 'guide', discovery);
     const text = visible(html);
     requireCheck(text.includes(guide.title) && text.includes('Your preparation checklist') && text.includes('Official references'), 'guide-visible-content');
     requireCheck(hasLink(html, guide.source) && hasLink(html, '/contact'), 'guide-source-and-correction');
   }
   const about = await page('about', '/about', discovery);
   checkMetadata(about, '/about', 'About VisaThreads', 'about', discovery);
-  requireCheck(visible(about).includes('independent community') && hasLink(about, '/guides') && hasLink(about, '/contact'), 'about-scope-and-links');
+  requireCheck(visible(about).includes('independent community') && hasLink(about, '/us/en/guides') && hasLink(about, '/contact'), 'about-scope-and-links');
 
   const owner = await page('owner-launch-shell', '/admin/launch');
   const shell = visible(owner);
@@ -74,7 +74,7 @@ export async function verifyPlaybookPages(probe, feed, discovery = false) {
     && row.status !== 'archived' && row.post_kind !== 'experience' && row.destination_country === 'United States'
     && typeof row.body === 'string' && row.body.trim().length >= 40 && typeof row.title === 'string');
   requireCheck(imported, 'imported-fixture-available');
-  const path = `/questions/${imported.id}`;
+  const path = `/us/en/questions/${imported.id}`;
   const thread = await page('imported-thread', path);
   checkMetadata(thread, path, imported.title, 'imported-thread');
   const text = visible(thread);

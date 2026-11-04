@@ -1,3 +1,4 @@
+import { destinationModule } from '../../scripts/destination-test-module.mjs';
 import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -344,8 +345,8 @@ test('feedback launcher tooltip and signed-out inbox render neutral labels', asy
 test('feedback and owner pages stay uncached and unindexed even after public launch', async () => {
   const stub = moduleUrl('export class NextResponse extends Response { static next(){return new NextResponse(null);} }');
   const guides = moduleUrl(transpile(await readFile(new URL('../../src/lib/visa-guides.ts',import.meta.url),'utf8')));
-  const search = moduleUrl(transpile(await readFile(new URL('../../src/lib/search-visibility.ts',import.meta.url),'utf8')).replace("'./visa-guides'",JSON.stringify(guides)));
-  const source = transpile(await readFile(new URL('../../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub)).replace("'./lib/search-visibility'",JSON.stringify(search));
+  const search = moduleUrl(transpile(await readFile(new URL('../../src/lib/search-visibility.ts',import.meta.url),'utf8')).replace("'./visa-guides'",JSON.stringify(guides)).replace("'./destination-routing'",JSON.stringify(destinationModule)));
+  const source = transpile(await readFile(new URL('../../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub)).replace("'./lib/search-visibility'",JSON.stringify(search)).replace("'./lib/destination-routing'",JSON.stringify(destinationModule));
   const {middleware} = await import(moduleUrl(source));
   const saved = { APP_ENV:process.env.APP_ENV, PUBLIC_LAUNCH_APPROVED:process.env.PUBLIC_LAUNCH_APPROVED };
   try {

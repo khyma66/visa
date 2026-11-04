@@ -1,3 +1,4 @@
+import { destinationModule } from './destination-test-module.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { access, readFile } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import ts from 'typescript';
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 const transpile = (source) => ts.transpileModule(source, { compilerOptions: {
   target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022,
-} }).outputText;
+} }).outputText.replaceAll("'./destination-routing'", JSON.stringify(destinationModule)).replaceAll("'./lib/destination-routing'", JSON.stringify(destinationModule));
 const guideUrl = moduleUrl(transpile(await readFile(new URL('../src/lib/visa-guides.ts', import.meta.url), 'utf8')));
 const { VISA_GUIDES } = await import(guideUrl);
 const helperUrl = moduleUrl(transpile(await readFile(new URL('../src/lib/search-visibility.ts', import.meta.url), 'utf8')).replace("'./visa-guides'", JSON.stringify(guideUrl)));
@@ -27,7 +28,7 @@ test('owner-enabled editorial discovery publishes resources without opening nati
 test('only a reviewed production deployment publishes a sitemap', () => {
   assert.equal(publicSearchOrigin(approved), 'https://visathreads.com');
   assert.equal(publicSearchOrigin({ ...approved, NEXT_PUBLIC_SITE_URL: 'https://www.visathreads.com/' }), 'https://visathreads.com');
-  assert.deepEqual(publicSitemap(approved), [...PUBLIC_SITEMAP_PATHS, ...VISA_GUIDES.map(guide => `/guides/${guide.slug}`)].map((path) => ({ url: `https://visathreads.com${path}` })));
+  assert.deepEqual(publicSitemap(approved), [...PUBLIC_SITEMAP_PATHS, ...VISA_GUIDES.map(guide => `/us/en/guides/${guide.slug}`)].map((path) => ({ url: `https://visathreads.com${path}` })));
   assert.equal(new Set(publicSitemap(approved).map(({ url }) => url)).size, PUBLIC_SITEMAP_PATHS.length + VISA_GUIDES.length);
 });
 

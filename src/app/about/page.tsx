@@ -19,7 +19,7 @@ export default function AboutPage() {
       <section>
         <h2 className="text-thread-title font-semibold text-slate-950 capitalize">Understand what you are reading</h2>
         <p className="mt-3 capitalize">Member posts and previously published discussions are personal accounts. They can be incomplete, mistaken or out of date. A reported approval or timeline is not a verified result or a prediction for another application. Public usernames do not guarantee anonymity.</p>
-        <p className="mt-3 capitalize">Our <Link href="/guides" className="text-blue-700 underline capitalize">resource guides</Link> provide checklists and links to official information. Their editorial reference-check dates identify when those references were checked; they do not mean an attorney reviewed the guide or that an agency endorsed it.</p>
+        <p className="mt-3 capitalize">Our <Link href="/us/en/guides" className="text-blue-700 underline capitalize">resource guides</Link> provide checklists and links to official information. Their editorial reference-check dates identify when those references were checked; they do not mean an attorney reviewed the guide or that an agency endorsed it.</p>
       </section>
       <section>
         <h2 className="text-thread-title font-semibold text-slate-950 capitalize">Use the community alongside official sources</h2>
@@ -32,8 +32,8 @@ export default function AboutPage() {
         <p className="mt-3 capitalize">Read the <Link href="/community-safety" className="text-blue-700 underline capitalize">community safety guidance</Link>, <Link href="/privacy" className="text-blue-700 underline capitalize">privacy notice</Link> and <Link href="/terms" className="text-blue-700 underline capitalize">community rules</Link> before contributing.</p>
       </section>
       <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-6 capitalize">
-        <Link href="/guides" className="inline-flex min-h-11 items-center rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 capitalize">Find a Visa Guide</Link>
-        <Link href="/" className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize">Browse the Community</Link>
+        <Link href="/us/en/guides" className="inline-flex min-h-11 items-center rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 capitalize">Find a Visa Guide</Link>
+        <Link href="/us/en" className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize">Browse the Community</Link>
       </div>
     </article>
   </main>;

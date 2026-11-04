@@ -1,3 +1,4 @@
+import { destinationModule } from './destination-test-module.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { releaseProblems as releaseProblemsWithSource, requiredReviews } from './release-check.mjs';
@@ -26,7 +27,7 @@ test('CI and production never include the private development archive', () => {
 });
 
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
-const compile = (source) => ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+const compile = (source) => ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replaceAll("'./destination-routing'", JSON.stringify(destinationModule)).replaceAll("'./lib/destination-routing'", JSON.stringify(destinationModule));
 const guideModule = moduleUrl(compile(await readFile(new URL('../src/lib/visa-guides.ts',import.meta.url),'utf8')));
 const searchModule = moduleUrl(compile(await readFile(new URL('../src/lib/search-visibility.ts',import.meta.url),'utf8')).replace("'./visa-guides'",JSON.stringify(guideModule)));
 const transpile = source => compile(source).replace("'./lib/search-visibility'",JSON.stringify(searchModule));

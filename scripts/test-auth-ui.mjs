@@ -178,7 +178,7 @@ test('header search is a bounded native GET form, and mobile menu has an accessi
   try {
     h.render(SiteHeader);
     const form = nodes(h.tree).find(n => n.type === 'form' && n.props.role === 'search');
-    assert.equal(form.props.action, '/');
+    assert.equal(form.props.action, '/us/en');
     assert.equal(form.props.method, 'get');
     const input = nodes(form).find(n => n.type === 'input');
     assert.equal(input.props.name, 'q');
@@ -192,7 +192,7 @@ test('shared navigation retains working community, feed, tags and messaging dest
   try {
     h.render(CommunityNavigation, {});
     const hrefs = nodes(h.tree).map(n => n.props?.href).filter(Boolean);
-    for (const href of ['/', '/?sort=score', '/explore', '/news', '/tags', '/messages', '/my-communities', '/communities/new']) {
+    for (const href of ['/us/en', '/us/en?sort=score', '/us/en/explore', '/us/en/news', '/us/en/tags', '/messages', '/my-communities', '/communities/new']) {
       assert(hrefs.includes(href), `Missing navigation to ${href}`);
     }
     assert.equal(nodes(h.tree).find(n => n.type === 'nav').props['aria-label'], 'Main navigation');
@@ -230,10 +230,10 @@ test('Popular selection reflects URL sort and mobile Escape restores the navigat
     h.render(CommunityNavigation, {});
     let selected = nodes(h.tree).filter(n => n.props?.['aria-current'] === 'page');
     assert.equal(selected.length, 1);
-    assert.equal(selected[0].props.href, '/?sort=score');
+    assert.equal(selected[0].props.href, '/us/en?sort=score');
     h.search = ''; h.render();
     selected = nodes(h.tree).filter(n => n.props?.['aria-current'] === 'page');
-    assert.equal(selected[0].props.href, '/');
+    assert.equal(selected[0].props.href, '/us/en');
   } finally { h.close(); }
   const header = setup();
   try {
