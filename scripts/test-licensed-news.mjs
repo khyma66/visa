@@ -138,3 +138,19 @@ for(const [label,fetcher,expected] of [
   try{h.render();await h.settle();assert.equal(h.slots[0].articles.length,expected);assert.equal(h.slots[0].retrievedAt,snapshot.retrievedAt);if(!expected)assert.match(content(h.tree),/No eligible reporting/);}
   finally{h.close();globalThis.fetch=previous;globalThis.document=previousDocument;}
 });
+
+test('reporting uses chronological order and one story treatment with or without a photo',()=>{
+  const h=new Harness();const reversed={...snapshot,articles:[...snapshot.articles].reverse()};
+  try{
+    h.render(interactive.LicensedNewsFeed,{initialEdition:reversed});
+    const stories=elements(h.tree).filter(n=>n.type===interactive.LicensedStory);
+    const dates=stories.map(n=>Date.parse(n.props.article.publishedAt));
+    assert.deepEqual(dates,[...dates].sort((a,b)=>b-a));
+    assert.equal(stories.filter(n=>n.props.lead).length,1);
+    assert.deepEqual(reversed.articles,[...snapshot.articles].reverse());
+    for(const lead of [true,false]){
+      h.render(interactive.LicensedStory,{article:snapshot.articles[0],lead});
+      assert.equal(h.tree.props.className,'news-story');
+    }
+  }finally{h.close();}
+});
