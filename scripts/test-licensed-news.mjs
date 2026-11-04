@@ -111,14 +111,12 @@ class Harness {
 }
 function elements(node){if(Array.isArray(node))return node.flatMap(elements);if(!node||typeof node!=='object')return [];return [node,...elements(node.props?.children)];}
 function content(node){if(Array.isArray(node))return node.map(content).join(' ');if(node==null||typeof node==='boolean')return '';return typeof node==='object'?content(node.props?.children):String(node);}
-test('news search, pagination, empty results and image-error removal work through component state',()=>{
+test('news pagination and image-error removal work without search controls',()=>{
   const h=new Harness();
   const stories=()=>elements(h.tree).filter(n=>n.type===interactive.LicensedStory);
   try{
-    h.render();assert.equal(stories().length,5);
+    h.render();assert.equal(stories().length,5);assert(!elements(h.tree).some(n=>n.type==='input'));
     elements(h.tree).find(n=>n.type==='button').props.onClick();h.render();assert.equal(stories().length,6);
-    elements(h.tree).find(n=>n.type==='input').props.onChange({target:{value:'Dolores'}});h.render();assert.equal(stories().length,1);
-    elements(h.tree).find(n=>n.type==='input').props.onChange({target:{value:'no-such-story'}});h.render();assert.match(content(h.tree),/No stories match/);
   }finally{h.close();}
   const imageHarness=new Harness();const props={article:snapshot.articles[0],lead:true};
   try{
@@ -135,7 +133,7 @@ for(const [label,fetcher,expected] of [
 ]) test(`client handles ${label} without fabricated updates or resurfacing withdrawn stories`,async()=>{
   const previous=globalThis.fetch, previousDocument=globalThis.document;const h=new Harness();
   globalThis.fetch=fetcher;globalThis.document={visibilityState:'visible'};
-  try{h.render();await h.settle();assert.equal(h.slots[0].articles.length,expected);assert.equal(h.slots[0].retrievedAt,snapshot.retrievedAt);if(!expected)assert.match(content(h.tree),/No eligible reporting/);}
+  try{h.render();await h.settle();assert.equal(h.slots[0].articles.length,expected);assert.equal(h.slots[0].retrievedAt,snapshot.retrievedAt);if(!expected)assert.match(content(h.tree),/No Eligible Reporting/);}
   finally{h.close();globalThis.fetch=previous;globalThis.document=previousDocument;}
 });
 

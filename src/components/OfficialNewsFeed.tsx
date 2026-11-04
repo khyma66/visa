@@ -47,24 +47,19 @@ function OfficialStory({ article, featured = false }: { article: OfficialArticle
   </article>;
 }
 export function HeadlineResults({ headlines }: { headlines: ImmigrationHeadlines }) {
-  const [query, setQuery] = useState('');
-  const [topic, setTopic] = useState('All headlines');
+  const [topic, setTopic] = useState('All Headlines');
   const [limit, setLimit] = useState(12);
   const topics: Record<string, RegExp> = {
-    'Work visas': /\b(?:H-?1B|H-?2[AB]|L-?1|workers?|employment)\b/i,
+    'Work Visas': /\b(?:H-?1B|H-?2[AB]|L-?1|workers?|employment)\b/i,
     'Students': /\b(?:F-?1|J-?1|OPT|students?|universit\w*)\b/i,
-    'Green cards & family': /\b(?:green cards?|family|spous\w*|residen\w*|H-?4)\b/i,
-    'Policy & courts': /\b(?:rule\w*|polic\w*|court\w*|judge\w*|lawsuit\w*|ban\w*)\b/i,
+    'Green Cards & Family': /\b(?:green cards?|family|spous\w*|residen\w*|H-?4)\b/i,
+    'Policy & Courts': /\b(?:rule\w*|polic\w*|court\w*|judge\w*|lawsuit\w*|ban\w*)\b/i,
   };
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const articles = [...headlines.articles].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).filter(article => words.every(word => `${article.title} ${article.publisher}`.toLowerCase().includes(word)) && (topic === 'All headlines' || topics[topic].test(article.title)));
-  const searchUrl = `https://www.google.com/search?${new URLSearchParams({ q: `${query.trim() || 'us immigration visa'} news`, tbm: 'nws' })}`;
+  const articles = [...headlines.articles].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).filter(article => (topic === 'All Headlines' || topics[topic].test(article.title)));
+  const searchUrl = `https://www.google.com/search?${new URLSearchParams({ q: 'us immigration visa news', tbm: 'nws' })}`;
   return <div className="min-w-0">
     <div className="min-w-0">
-      <label className="block text-sm font-semibold text-slate-700">Search this news edition
-        <input type="search" value={query} maxLength={150} onChange={event => { setQuery(event.target.value); setLimit(12); }} placeholder="Try H-1B, green card, USCIS…" className="news-search mt-2" />
-      </label>
-      <nav aria-label="Headline topics" className="news-topics mt-4">{['All headlines', ...Object.keys(topics)].map(label => <button type="button" key={label} aria-pressed={topic === label} onClick={() => { setTopic(label); setLimit(12); }}>{label}</button>)}</nav>
+      <nav aria-label="Headline topics" className="news-topics mt-4">{['All Headlines', ...Object.keys(topics)].map(label => <button type="button" key={label} aria-pressed={topic === label} onClick={() => { setTopic(label); setLimit(12); }}>{label}</button>)}</nav>
       <p role="status" aria-live="polite" className="mb-3 text-xs text-slate-500">{articles.length} {articles.length === 1 ? 'headline' : 'headlines'} · {headlines.source === 'GDELT Project' ? 'News coverage · dates indicate when indexed' : 'Agency announcements · publication dates'}</p>
       <div className="news-story-list">
         {articles.slice(0, limit).map(article => <article key={article.url} className="news-story">
@@ -72,7 +67,7 @@ export function HeadlineResults({ headlines }: { headlines: ImmigrationHeadlines
           <h3 className="break-words text-thread-title font-semibold text-slate-950"><a href={article.url} target="_blank" rel="noopener noreferrer" className="rounded-sm hover:text-teal-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">{article.title}<span className="sr-only"> (opens in a new tab)</span></a></h3>
           <a href={article.url} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-9 items-center text-sm font-medium text-teal-800 hover:underline">Read at source <span aria-hidden="true" className="ml-1">↗</span><span className="sr-only"> (opens in a new tab)</span></a>
         </article>)}
-        {!articles.length && <div className="p-6"><p className="font-semibold text-slate-800">No headlines match these filters.</p><button type="button" onClick={() => { setQuery(''); setTopic('All headlines'); setLimit(12); }} className="mt-3 min-h-10 text-sm font-semibold text-teal-800 underline">Clear filters</button></div>}
+        {!articles.length && <div className="p-6"><p className="font-semibold text-slate-800">No headlines match these filters.</p><button type="button" onClick={() => { setTopic('All Headlines'); setLimit(12); }} className="mt-3 min-h-10 text-sm font-semibold text-teal-800 underline">Clear filters</button></div>}
       </div>
       {articles.length > limit && <button type="button" onClick={() => setLimit(value => value + 12)} className="mt-4 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">Show more headlines ({articles.length - limit} remaining)</button>}
     </div>
@@ -88,9 +83,9 @@ export function OfficialNewsFeed({ initialFeed = null, children }: { initialFeed
   const [attempt, setAttempt] = useState(0);
   const [section, setSection] = useState(children ? 'reporting' : 'official');
   const sections = [
-    ...(children ? [{ id: 'reporting', label: 'Reporting' }] : []),
-    { id: 'headlines', label: 'Headlines' },
-    { id: 'official', label: 'Official notices' },
+    ...(children ? [{ id: 'reporting', label: 'Latest News' }] : []),
+    { id: 'headlines', label: 'News Headlines' },
+    { id: 'official', label: 'Official Notices' },
   ];
   useEffect(() => {
     const controller = new AbortController();
