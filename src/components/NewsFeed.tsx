@@ -23,7 +23,7 @@ export function NewsResults({ feed }: { feed: NewsFeedData }) {
           {remaining.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">{remaining.slice(0, 2).map(article => <NewsStory key={article.id} article={article} />)}</div>}
         </div>
         {remaining.length > 2 && <section aria-label="More visa headlines" className="mt-8">
-          <h2 className="mb-4 flex items-center gap-3 text-thread-title font-semibold text-slate-900">More coverage<span aria-hidden="true" className="h-px flex-1 bg-slate-200" /></h2>
+          <h2 className="mb-4 flex items-center gap-3 text-thread-title font-semibold text-slate-900 capitalize">More coverage<span aria-hidden="true" className="h-px flex-1 bg-slate-200" /></h2>
           <div className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white">{remaining.slice(2).map(article => <NewsStory key={article.id} article={article} compact />)}</div>
         </section>}
       </>}
@@ -46,11 +46,11 @@ function NewsStory({ article, featured = false, compact = false }: { article: Ne
 }
 
 export function NewsUnavailable({ retry }: { retry: () => void }) {
-  return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm leading-6 text-amber-950"><p className="font-semibold">We couldn’t load the headlines.</p><p className="mt-1">News headlines are currently unavailable here. You can still read the latest visa news on Google News.</p><button type="button" onClick={retry} className="mt-4 min-h-11 rounded-lg border border-amber-500 bg-white px-4 py-2 font-semibold hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-800">Try again</button></div>;
+  return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm leading-6 text-amber-950"><p className="font-semibold">We couldn’t load the headlines.</p><p className="mt-1">News headlines are currently unavailable here. You can still read the latest visa news on Google News.</p><button type="button" onClick={retry} className="mt-4 min-h-11 rounded-lg border border-amber-500 bg-white px-4 py-2 font-semibold hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-800 capitalize">Try again</button></div>;
 }
 
 export function NewsExternal() {
-  return <section aria-label="U.S. Visa News" className="rounded-2xl border border-blue-200 bg-blue-50/60 p-6 sm:p-8"><p className="text-xs font-bold uppercase tracking-[0.12em] text-blue-800">Explore the headlines</p><h2 className="mt-3 text-thread-title font-semibold text-slate-950">A wider view of visa news</h2><p className="mt-3 max-w-xl text-base leading-6 text-slate-600">Follow the latest U.S. visa and immigration coverage directly on Google News.</p><a href={GOOGLE_NEWS_SEARCH_URL} target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-800 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-700">Browse Google News <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a></section>;
+  return <section aria-label="U.S. Visa News" className="rounded-2xl border border-blue-200 bg-blue-50/60 p-6 sm:p-8"><p className="text-xs font-bold uppercase tracking-[0.12em] text-blue-800">Explore the headlines</p><h2 className="mt-3 text-thread-title font-semibold text-slate-950 capitalize">A wider view of visa news</h2><p className="mt-3 max-w-xl text-base leading-6 text-slate-600">Follow the latest U.S. visa and immigration coverage directly on Google News.</p><a href={GOOGLE_NEWS_SEARCH_URL} target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-800 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-700 capitalize">Browse Google News <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a></section>;
 }
 
 export function NewsFeed({ initialFeed = null }: { initialFeed?: NewsFeedData | null }) {
@@ -80,10 +80,10 @@ export function NewsFeed({ initialFeed = null }: { initialFeed?: NewsFeedData | 
   }, [attempt]);
 
   return <main className="page-shell py-7 sm:py-10">
-    <Link href="/explore" className="text-sm font-semibold text-teal-800 hover:underline">← Explore Communities</Link>
+    <Link href="/explore" className="text-sm font-semibold text-teal-800 hover:underline capitalize">← Explore Communities</Link>
     <div className="mt-6 flex flex-wrap items-end justify-between gap-5 border-b border-slate-200 pb-7">
-      <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-800">VisaThreads · News desk</p><h1 className="mt-3 text-2xl font-semibold text-slate-950 sm:text-3xl">Your visa news brief</h1><p className="mt-3 max-w-2xl text-base leading-6 text-slate-600">U.S. visa and immigration coverage from Google News.</p></div>
-      <a href={GOOGLE_NEWS_SEARCH_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Open Google News <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a>
+      <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-800">VisaThreads · News desk</p><h1 className="mt-3 text-2xl font-semibold text-slate-950 sm:text-3xl capitalize">Your visa news brief</h1><p className="mt-3 max-w-2xl text-base leading-6 text-slate-600">U.S. visa and immigration coverage from Google News.</p></div>
+      <a href={GOOGLE_NEWS_SEARCH_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 capitalize">Open Google News <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a>
     </div>
     <div className="mt-6">{feed ? <section aria-label="Latest visa news" aria-live="polite"><NewsResults feed={feed}/></section> : external ? <NewsExternal/> : error ? <NewsUnavailable retry={() => setAttempt((value) => value + 1)}/>
       : !feed ? <div role="status" aria-live="polite" className="rounded-2xl border border-slate-200 bg-white p-7"><p className="text-sm text-slate-600">Loading latest headlines…</p><div aria-hidden="true" className="mt-5 space-y-3 motion-safe:animate-pulse"><div className="h-3 w-28 rounded bg-teal-100"/><div className="h-6 w-5/6 rounded bg-slate-100"/><div className="h-6 w-2/3 rounded bg-slate-100"/></div></div>

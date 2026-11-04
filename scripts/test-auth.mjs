@@ -125,12 +125,12 @@ test('code request, verification and password failures describe the actual step 
   const verify = { action: 'verify-code' };
   const failure = flow.authErrorMessage({ code: 'user_not_found' }, request);
   assert.match(failure, /couldn’t send a sign-in code/);
-  assert.match(failure, /Choose Create account/);
+  assert.match(failure, /Choose Sign Up/);
   assert.doesNotMatch(failure, /invalid|expired|not found|does not exist|password/i);
   for (const code of ['invalid_credentials', 'email_exists', 'phone_exists', 'user_already_exists', 'signup_disabled', 'otp_disabled']) {
     assert.equal(flow.authErrorMessage({ code }, request), failure, 'A request must not confirm whether contact details have an account');
   }
-  assert.match(flow.authErrorMessage({ code: 'invalid_credentials' }, signup), /Already a member\? Choose Log in/);
+  assert.match(flow.authErrorMessage({ code: 'invalid_credentials' }, signup), /Already a member\? Choose Log In/);
   assert.match(flow.authErrorMessage({ code: 'signup_disabled' }, signup), /New account registration is not available/);
   assert.doesNotMatch(flow.authErrorMessage({ code: 'signup_disabled' }, signup), /code.*invalid|code.*expired/);
   assert.match(flow.authErrorMessage({ code: 'otp_disabled' }, verify), /Code sign-in is not available/);
@@ -224,4 +224,21 @@ test('optional CAPTCHA passes fresh tokens to every supported Auth request and f
     assert.deepEqual(flow.authCaptchaOptions(), {});
     assert.match(flow.authErrorMessage({code:'captcha_required'}), /security check/);
   } finally { if (previous === undefined) delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY; else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = previous; }
+});
+
+test('signup and password changes preserve the existing twelve-character boundary and password text', async () => {
+  const calls=[];
+  const client={auth:{signUp:async input=>{calls.push(input.password);return{data:{user:{id:'fixture'},session:null},error:null};},getUser:async()=>({data:{user:{email_confirmed_at:'2026-11-03T00:00:00Z'}},error:null}),updateUser:async input=>{calls.push(input.password);return{data:{user:{id:'fixture'}},error:null};}}};
+  for(const password of ['abcdefghijkl','123456789012','with a space','!?@#%^&*()_-',' a password ','x'.repeat(128)]){
+    await flow.registerWithPassword(client,'fixture@example.invalid',password,'https://visathreads.com/login',{firstName:'Ada',lastName:'Lovelace'});
+    await flow.setVerifiedPassword(client,password);
+    assert.deepEqual(calls.slice(-2),[password,password]);
+  }
+  const count=calls.length;
+  for(const password of ['', 'abcdefgh', 'abcdefghijk','x'.repeat(129)]){
+    await assert.rejects(()=>flow.registerWithPassword(client,'fixture@example.invalid',password,'https://visathreads.com/login',{firstName:'Ada',lastName:'Lovelace'}),error=>error.code==='invalid_password');
+    await assert.rejects(()=>flow.setVerifiedPassword(client,password),error=>error.code==='invalid_password');
+  }
+  assert.equal(calls.length,count,'Rejected passwords never reach Auth');
+  assert.equal(flow.MIN_PASSWORD_LENGTH,12);assert.equal(flow.MAX_PASSWORD_LENGTH,128);
 });

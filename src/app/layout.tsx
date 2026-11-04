@@ -56,15 +56,15 @@ export default function RootLayout({
             <p className="mb-2 font-semibold text-slate-700">U.S. visa questions, shared experiences, and helpful resources.</p>
             <SafetyNotice />
             <nav aria-label="Policies and support" className="mt-2 flex flex-wrap gap-x-4">
-              <Link href="/guides" className="underline">U.S. Visa Guides</Link>
-              <Link href="/about" className="underline">About VisaThreads</Link>
-              <Link href="/privacy" className="underline">Privacy Notice</Link>
-              <Link href="/terms" className="underline">Terms and Conditions</Link>
-              <Link href="/cookies" className="underline">Cookies and Storage</Link>
-              <Link href="/privacy-choices" className="underline">Your Privacy Choices</Link>
-              <Link href="/countries" className="underline">U.S. Community</Link>
-              <Link href="/contact" className="underline">Reporting and Privacy Requests</Link>
-              <Link href="/security" className="underline">Security</Link>
+              <Link href="/guides" className="underline capitalize">U.S. Visa Guides</Link>
+              <Link href="/about" className="underline capitalize">About VisaThreads</Link>
+              <Link href="/privacy" className="underline capitalize">Privacy Notice</Link>
+              <Link href="/terms" className="underline capitalize">Terms and Conditions</Link>
+              <Link href="/cookies" className="underline capitalize">Cookies and Storage</Link>
+              <Link href="/privacy-choices" className="underline capitalize">Your Privacy Choices</Link>
+              <Link href="/countries" className="underline capitalize">U.S. Community</Link>
+              <Link href="/contact" className="underline capitalize">Reporting and Privacy Requests</Link>
+              <Link href="/security" className="underline capitalize">Security</Link>
             </nav>
           </footer>
           </div>

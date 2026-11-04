@@ -155,7 +155,7 @@ test('header uses one login and signup entry point before authentication', async
   const h = setup();
   try {
     h.render(SiteHeader);
-    const link = byText(h, 'a', 'Log in / Sign up');
+    const link = byText(h, 'a', 'LogIn/SignUp');
     assert.equal(link.props.href, '/login#sign-in');
     assert.equal(link.props.onClick, undefined);
     const nav = nodes(h.tree).find(node => node.type === 'nav' && node.props['aria-label'] === 'Account access');
@@ -331,16 +331,16 @@ test('signup and login are visible before provider actions and keep only safe re
       assert.equal(links[signup ? 1 : 0].props['aria-current'], 'page');
       assert.equal(links[signup ? 0 : 1].props['aria-current'], undefined);
       assert(links.every(link => link.props.className.includes('focus-visible:ring-2')), 'Account tabs retain a keyboard-visible focus state');
-      assert.match(links[signup ? 1 : 0].props.className, /ring-teal-300/, 'The selected tab keeps a persistent visual indicator');
+      assert.match(links[signup ? 1 : 0].props.className, /ring-violet-200/, 'The selected tab keeps a persistent visual indicator');
       assert.match(links[signup ? 1 : 0].props.className, /hover:bg-white/, 'Hovering the selected tab preserves its state');
-      assert.match(links[signup ? 0 : 1].props.className, /hover:bg-slate-200/, 'Hovering the alternate tab cannot mimic selection');
+      assert.match(links[signup ? 0 : 1].props.className, /hover:bg-violet-100/, 'Hovering the alternate tab cannot mimic selection');
       assert(links.every(link => !link.props.href.includes('email=')), 'Only the sanitized return destination is forwarded');
     } finally { h.close(); }
   }
   const unsafe = setup({ search: '?next=%2F%2Fevil.invalid' });
   try {
     await unsafe.settle();
-    assert.equal(byText(unsafe, 'a', 'Create account').props.href, '/signup#sign-in');
+    assert.equal(byText(unsafe, 'a', 'Sign Up').props.href, '/signup#sign-in');
   } finally { unsafe.close(); }
 });
 
@@ -355,7 +355,7 @@ test('a first-time sign-in request failure stays at email and offers account cre
     assert.equal(nodes(h.tree).filter(n => n.type === 'input' && n.props.name === 'code').length, 0);
     const alert = byText(h, 'p', 'We couldn’t send a sign-in code');
     assert.equal(alert.props.role, 'alert');
-    assert.match(textOf(alert), /Choose Create account/);
+    assert.match(textOf(alert), /Choose Sign Up/);
     assert.doesNotMatch(textOf(alert), /invalid|expired|not found|secret response/i);
     assert.equal(h.calls.filter(c => c.name === 'verifyCode').length, 0);
     assert.deepEqual(h.replacements, []);
@@ -373,7 +373,7 @@ test('Supabase otp_disabled for a first-time login offers signup without claimin
     assert.equal(nodes(h.tree).filter(n => n.type === 'input' && n.props.name === 'code').length, 0);
     const alert = nodes(h.tree).find(n => n.props?.role === 'alert');
     assert.match(textOf(alert), /couldn’t send a sign-in code/);
-    assert.match(textOf(alert), /Choose Create account/);
+    assert.match(textOf(alert), /Choose Sign Up/);
     assert.doesNotMatch(textOf(alert), /invalid|expired|not available|disabled|not found|does not exist|Signups not allowed/i);
     assert.equal(h.calls.filter(c => c.name === 'verifyCode').length, 0);
     assert.deepEqual(h.replacements, []);
@@ -385,10 +385,10 @@ test('signup-disabled and delivery failures never claim password registration su
     const h = setup({ signup: true });
     h.handlers.register = async () => { throw { code }; };
     try {
-      await h.settle(); change(h, 'First name', 'Ada'); change(h, 'Last name', 'Lovelace'); change(h, 'Email Address', 'new@example.invalid'); change(h, 'Password', 'correct-horse-battery-staple'); change(h, 'Confirm password', 'correct-horse-battery-staple');
+      await h.settle(); change(h, 'First Name', 'Ada'); change(h, 'Last Name', 'Lovelace'); change(h, 'Email Address', 'new@example.invalid'); change(h, 'Password', 'correct-horse-battery-staple'); change(h, 'Confirm password', 'correct-horse-battery-staple');
       nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
       assert.equal(h.calls.find(c => c.name === 'register').args[1], 'correct-horse-battery-staple');
-      assert(field(h, 'First name'));
+      assert(field(h, 'First Name'));
       assert.match(textOf(h.tree), expected);
       assert.equal(nodes(h.tree).filter(n => n.type === 'input' && n.props.name === 'code').length, 0);
       assert.deepEqual(h.replacements, []);
@@ -402,7 +402,7 @@ test('email signup requires matching passwords and handles confirmed versus pend
     h.handlers.register = async () => signedIn;
     try {
       await h.settle();
-      change(h, 'First name', 'Ada'); change(h, 'Last name', 'Lovelace');
+      change(h, 'First Name', 'Ada'); change(h, 'Last Name', 'Lovelace');
       change(h, 'Email Address', 'ada@example.invalid');
       change(h, 'Password', 'correct-horse-battery-staple');
       change(h, 'Confirm password', 'different-password');
@@ -519,7 +519,7 @@ test('configured security check blocks unsolved attempts and resets after email 
     password.handlers.login = async () => { throw { code: 'captcha_failed', message: 'private provider details' }; };
     nodes(password.tree).find(n => n.type === 'form').props.onSubmit(event()); await password.settle();
     assert.equal(password.calls.find(c => c.name === 'login').args[2], 'single-use-password-token');
-    assert(byText(password, 'button', 'Log in').props.disabled);
+    assert(byText(password, 'button', 'Log In').props.disabled);
     assert.match(textOf(password.tree), /Complete the security check/);
     assert(!textOf(password.tree).includes('private provider details'));
   } finally { password.close(); if (previous === undefined) delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY; else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = previous; }
@@ -545,4 +545,45 @@ test('password recovery passes and clears the CAPTCHA token, while disabled conf
     delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;h.render();
     assert(!challenge());assert.equal(byText(h,'button','Send recovery email').props.disabled,false);
   } finally { h.close();if(previous===undefined)delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY=previous; }
+});
+
+test('compact signup marks every required input and associates the existing password guidance',async()=>{
+ const h=setup({signup:true});
+ try{
+  await h.settle();assert.equal(nodes(h.tree).filter(node=>node.type==='section').length,1);
+  assert.equal(byText(h,'a','Sign Up').props['aria-current'],'page');assert.match(textOf(h.tree),/12–128 characters/);
+  assert.doesNotMatch(textOf(h.tree),/No required mix/);
+  for(const input of nodes(h.tree).filter(node=>node.type==='input'&&node.props.required)){
+   const label=nodes(h.tree).find(node=>node.type==='label'&&nodes(node).includes(input));
+   assert(label);assert(nodes(label).some(node=>node.type==='span'&&node.props['aria-hidden']==='true'&&node.props.className?.includes('text-red-600')&&textOf(node)==='*'));
+   assert(input.props['aria-label']);
+  }
+  assert.equal(field(h,'Password').props.minLength,12);assert.equal(field(h,'Confirm password').props.minLength,12);
+  assert.equal(field(h,'Password').props['aria-describedby'],'password-guidance');
+  assert(nodes(h.tree).some(node=>node.props?.id==='password-guidance'));
+  const toggle=()=>nodes(h.tree).find(node=>node.type==='button'&&['Show password','Hide password'].includes(node.props['aria-label']));
+  assert.equal(toggle().props.type,'button');change(h,'Password','eight123');change(h,'Confirm password','eight123');
+  toggle().props.onClick();h.render();assert.equal(field(h,'Password').props.type,'text');assert.equal(field(h,'Confirm password').props.type,'text');
+  assert.equal(field(h,'Password').props.value,'eight123');assert.equal(h.calls.filter(call=>call.name==='register').length,0);
+  toggle().props.onClick();h.render();assert.equal(field(h,'Password').props.type,'password');
+ }finally{h.close();}
+});
+test('account access header removes unrelated controls but preserves branding and a login entry',async()=>{
+ const h=setup();
+ try{
+  h.pathname='/signup';h.render(SiteHeader);
+  assert.match(h.tree.props.className,/site-header-account/);
+  assert(!nodes(h.tree).some(node=>node.props?.role==='search'||node.type==='details'||node.props?.title==='Ask a Question'));
+  assert(nodes(h.tree).some(node=>node.props?.['aria-label']==='VisaThreads home'));
+  assert.equal(byText(h,'a','LogIn/SignUp').props.href,'/login#sign-in');
+ }finally{h.close();}
+});
+test('recovery preserves the existing password rule with visible guidance and required markers',async()=>{
+ const h=setup();
+ try{
+  h.auth.user={id:'fixture'};h.slots=[];h.effects=[];h.render(PasswordRecovery,{update:true});await h.settle();
+  assert.equal(field(h,'New password').props.minLength,12);assert.equal(field(h,'Confirm password').props.minLength,12);
+  assert.equal(field(h,'New password').props['aria-describedby'],'password-guidance');assert.match(textOf(h.tree),/12–128 characters/);
+  assert(nodes(h.tree).some(node=>node.props?.id==='password-guidance'));
+ }finally{h.close();}
 });

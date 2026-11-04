@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }), [loading, profile, profileLoading, user]);
 
   if (process.env.NEXT_PUBLIC_APP_ENV === 'production' && !isSupabaseConfigured) {
-    return <main className="mx-auto max-w-xl p-10"><h1 className="text-2xl font-bold">Service temporarily unavailable</h1><p className="mt-3">The community configuration needs attention. Please try again later.</p></main>;
+    return <main className="mx-auto max-w-xl p-10"><h1 className="text-2xl font-bold capitalize">Service temporarily unavailable</h1><p className="mt-3">The community configuration needs attention. Please try again later.</p></main>;
   }
   // Remount account-scoped UI so cached inboxes, messages and drafts cannot carry
   // across identities. Late results from the unmounted tree cannot display.

@@ -89,13 +89,13 @@ export function TagDirectory() {
   }
 
   return <main className="page-shell">
-    <Link href="/" className="text-sm text-blue-700 hover:underline">← All questions</Link>
-    <div className="mt-5 flex items-center gap-3"><Tags className="text-orange-600" /><h1 className="text-2xl font-semibold sm:text-3xl">Tags</h1></div>
+    <Link href="/" className="text-sm text-blue-700 hover:underline capitalize">← All questions</Link>
+    <div className="mt-5 flex items-center gap-3"><Tags className="text-orange-600" /><h1 className="text-2xl font-semibold sm:text-3xl capitalize">Tags</h1></div>
     <p className="mt-3 max-w-2xl text-base leading-6 text-slate-600">Find your topic, explore similar experiences, and join the discussion. Choose a tag to see matching questions and posts.</p>
     <div className="my-6 flex flex-wrap items-center gap-3">
       <label className="relative"><Search size={17} className="absolute left-3 top-3 text-slate-400" /><input aria-label="Filter tags" maxLength={40} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter by tag name" className="rounded border bg-white py-2 pl-10 pr-3" /></label>
-      <select aria-label="Sort tags" value={sort} onChange={(event) => setSort(event.target.value)} className="rounded border bg-white p-2"><option value="popular">Most used</option><option value="name">Name A–Z</option></select>
-      <button onClick={() => void refresh()} disabled={loading} className="inline-flex items-center gap-2 rounded border bg-white px-3 py-2 text-sm disabled:opacity-50"><RefreshCw size={15} />Refresh counts</button>
+      <select aria-label="Sort tags" value={sort} onChange={(event) => setSort(event.target.value)} className="rounded border bg-white p-2"><option value="popular" className="capitalize">Most used</option><option value="name" className="capitalize">Name A–Z</option></select>
+      <button onClick={() => void refresh()} disabled={loading} className="inline-flex items-center gap-2 rounded border bg-white px-3 py-2 text-sm disabled:opacity-50 capitalize"><RefreshCw size={15} />Refresh counts</button>
       <p role="status" className="ml-auto text-sm text-slate-500">{loading ? 'Updating tags…' : `${tags.length} tags shown${hasMore ? ' · more available' : ''}`}</p>
     </div>
     {archiveWarning && <p className="mb-4 rounded bg-amber-50 p-3 text-sm text-amber-900">{archiveWarning}</p>}
@@ -107,7 +107,7 @@ export function TagDirectory() {
         <span className="mt-auto text-xs font-semibold text-slate-500">{row.question_count} {row.question_count === 1 ? 'post' : 'posts'}</span>
       </Link>)}</div>
       {!tags.length && !error && <p>No tags match “{search}”.</p>}
-      {hasMore && <button onClick={() => void more()} disabled={loadingMore} className="mt-6 rounded border bg-white px-5 py-3 text-sm font-semibold text-blue-700">{loadingMore ? 'Loading…' : 'Load more tags'}</button>}
+      {hasMore && <button onClick={() => void more()} disabled={loadingMore} className="mt-6 rounded border bg-white px-5 py-3 text-sm font-semibold text-blue-700 capitalize">{loadingMore ? 'Loading…' : 'Load more tags'}</button>}
       <p className="mt-6 text-xs text-slate-500">Counts exclude removed questions. A post may have several tags. Counts refresh when you return to this page or select Refresh counts.</p>
     </>}
   </main>;
