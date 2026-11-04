@@ -37,7 +37,7 @@ function setup({ stored = null, blocked = false, width = 1232, props = {} } = {}
   h.render(); for(const fn of h.effects.splice(0))h.cleanups.push(fn()); h.render(); return h;
 }
 
-test('70/30 default and keyboard access include limits, larger steps and reset', () => {
+test('70/30 default and keyboard access include limits and larger steps without reset', () => {
   const h=setup();try {
     assert.equal(h.separator()['aria-valuenow'],70);
     assert.equal(h.separator()['aria-orientation'],'vertical');
@@ -46,8 +46,9 @@ test('70/30 default and keyboard access include limits, larger steps and reset',
     h.key('Home'); assert.equal(h.separator()['aria-valuenow'],h.separator()['aria-valuemin']);
     h.key('End'); assert.equal(h.separator()['aria-valuenow'],h.separator()['aria-valuemax']);
     assert.equal(h.key('Tab'),false);
-    h.key('Enter');
-    assert.equal(h.separator()['aria-valuenow'],70); assert.equal(h.stored,'70');
+    const before = h.separator()['aria-valuenow'];
+    assert.equal(h.key('Enter'),false);
+    assert.equal(h.separator()['aria-valuenow'],before); assert.equal(h.stored,String(before));
   }finally{h.close();}
 });
 
@@ -86,7 +87,7 @@ test('invalid or unavailable storage does not break keyboard resizing', () => {
       assert.equal(h.separator()['aria-valuenow'],70);
       h.key('ArrowLeft',true);
       assert.equal(h.separator()['aria-valuenow'],65);
-      h.separator().onDoubleClick();h.render();assert.equal(h.separator()['aria-valuenow'],70);
+      assert.equal(h.separator().onDoubleClick, undefined);
     }finally{h.close();}
   }
 });
@@ -95,7 +96,7 @@ test('both question and experience pages share the layout; mobile hides resizing
   const root=new URL('../',import.meta.url);
   for(const page of ['src/app/questions/[id]/page.tsx','src/app/experiences/[id]/page.tsx']) assert.match(await readFile(new URL(page,root),'utf8'),/QuestionDetail/);
   const css=await readFile(new URL('src/components/ResizablePostLayout.module.css',root),'utf8');
-  assert.match(css,/\.divider, \.reset \{ display: none; \}/);
+  assert.match(css,/\.divider \{ display: none; \}/);
   assert.match(css,/@container post-layout \(min-width: 1000px\)/);
   assert.match(css,/minmax\(0, var\(--post-split\)\) 32px minmax\(0, var\(--related-split\)\)/);
 });
@@ -115,19 +116,16 @@ test('pointer movement is coalesced per animation frame and cancelled before com
   }finally{h.close();}assert.equal(h.frames.size,0);
 });
 
-test('splitter keeps instructions and percentages off-screen; icon reset restores the saved default', () => {
-  const h=setup();try {
-    const reset = () => nodes(h.tree).find(n=>n.type==='button').props;
-    assert.equal(nodes(h.tree).filter(n=>n.type==='button').length,1);
-    assert.equal(reset()['aria-label'],'Reset panel widths');
-    assert.equal(reset().disabled,true);
-    h.key('ArrowRight',true);assert.equal(reset().disabled,false);
-    reset().onClick();h.render();
-    assert.equal(h.separator()['aria-valuenow'],70);assert.equal(h.stored,'70');
-    assert.equal(reset().disabled,true);
+test('shared splitter exposes no reset control or gesture while keeping a saved preference', () => {
+  const h=setup({stored:'65'});try {
+    assert.equal(nodes(h.tree).filter(n=>n.type==='button').length,0);
+    assert.equal(h.separator().onDoubleClick,undefined);
+    assert.equal(h.key('Enter'),false);
+    assert.equal(h.separator()['aria-valuenow'],65);
+    assert.equal(h.writes.length,0);
     assert.equal(nodes(h.tree).filter(n=>n.type==='span').length,0);
     assert.equal(h.separator().children,undefined);
-    assert.doesNotMatch(source,/Drag divider to resize|Reset 60\/40|styles\.(?:controls|ratio|grip)/);
+    assert.doesNotMatch(source,/Reset panel widths|restore the default|Drag divider to resize|Reset 60\/40|styles\.(?:reset|controls|ratio|grip)/);
   }finally{h.close();}
 });
 

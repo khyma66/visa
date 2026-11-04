@@ -1,17 +1,14 @@
 .container { container: post-layout / inline-size; }
 .layout { display: grid; gap: 2rem; }
 .post, .related { min-width: 0; overflow-wrap: anywhere; }
-.divider, .reset { display: none; }
+.divider { display: none; }
 
 @container post-layout (min-width: 1000px) {
   .layout { grid-template-columns: minmax(0, var(--post-split)) 32px minmax(0, var(--related-split)); gap: 0; align-items: start; }
   .post { grid-column: 1; grid-row: 1; }
-  .divider, .reset { grid-column: 2; grid-row: 1; }
+  .divider { grid-column: 2; grid-row: 1; }
   .related { grid-column: 3; grid-row: 1; }
-  .reset { display: grid; place-items: center; position: sticky; top: 6rem; align-self: start; z-index: 1; width: 32px; height: 32px; margin-top: 8px; border-radius: 50%; border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer; }
-  .reset:hover:not(:disabled) { background: #f1f5f9; color: #0f172a; }
-  .reset:disabled { color: #cbd5e1; cursor: default; }
-  .reset:focus-visible, .related:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+  .related:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
   /* A hairline keeps the page quiet; the full gutter is an easy pointer target. */
   .divider { display: block; align-self: stretch; position: relative; min-height: 48px; cursor: col-resize; touch-action: none; user-select: none; outline: none; }
   .divider::before { content: ''; position: absolute; inset-block: 0; left: 50%; width: 1px; transform: translateX(-50%); background: #cbd5e1; transition: background-color 120ms ease; }

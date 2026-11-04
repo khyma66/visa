@@ -271,3 +271,29 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* One reading layout across the news desk, including after a panel resize. */
+.news-tabs { display: flex; gap: .5rem; overflow-x: auto; border-bottom: 1px solid #cbd5e1; }
+.news-tabs > button { flex: 0 0 auto; min-height: 48px; padding: .875rem .75rem; border-bottom: 3px solid transparent; color: #475569; font-size: 1rem; font-weight: 600; white-space: nowrap; }
+.news-tabs > button:hover { background: #f8fafc; color: #115e59; }
+.news-tabs > button[aria-selected="true"] { border-bottom-color: #0f766e; color: #115e59; }
+.news-edition { container: news-edition / inline-size; min-width: 0; }
+.news-edition[hidden] { display: none; }
+.news-story-list { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.news-story { min-width: 0; padding: 1.25rem; border-bottom: 1px solid #e2e8f0; }
+.news-story:last-child { border-bottom: 0; }
+.news-story-layout { display: grid; gap: 1.25rem; align-items: start; }
+.news-story-media { min-width: 0; max-width: 24rem; }
+.news-search { display: block; width: 100%; min-height: 44px; padding: .75rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-size: 1rem; font-weight: 400; }
+.news-topics { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.25rem; }
+.news-topics > button { min-height: 44px; padding: .5rem .875rem; border: 1px solid #cbd5e1; border-radius: 999px; background: #fff; color: #475569; font-size: .875rem; font-weight: 600; }
+.news-topics > button:hover { background: #f0fdfa; }
+.news-topics > button[aria-pressed="true"] { border-color: #115e59; background: #115e59; color: #fff; }
+.news-source-link { color: #115e59; font-weight: 600; }
+.news-source-link:hover { text-decoration: underline; }
+.news-desk :is(button, a, summary, input, [role="tabpanel"]):focus-visible { outline: 2px solid #0f766e; outline-offset: 3px; }
+.news-tabs > button:focus-visible { outline-offset: -4px; }
+@container news-edition (min-width: 520px) {
+  .news-story { padding: 1.5rem; }
+  .news-story-layout { grid-template-columns: minmax(0, 1fr) minmax(140px, 26%); gap: 1.5rem; }
+}
