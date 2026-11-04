@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 
-export const smokeRoutes = ['/account', '/cookies', '/privacy-choices', '/countries', '/us/en', '/us/en/experiences', '/experiences/new', '/', '/login', '/signup', '/account/recovery', '/account/update-password', '/messages', '/notifications', '/moderation', '/admin/reports', '/admin/security', '/community-safety', '/privacy', '/terms', '/contact', '/security', '/us/en/tags', '/us/en/explore', '/my-communities', '/communities/new', '/us/en/news', '/api/health'];
+export const smokeRoutes = ['/account', '/cookies', '/privacy-choices', '/countries', '/us/en', '/us/en/experiences', '/experiences/new', '/login', '/signup', '/account/recovery', '/account/update-password', '/messages', '/notifications', '/moderation', '/admin/reports', '/admin/security', '/community-safety', '/privacy', '/terms', '/contact', '/security', '/us/en/tags', '/us/en/explore', '/my-communities', '/communities/new', '/us/en/news', '/api/health'];
 
 export function assertHealthProvenance(health, expected) {
   assert.match(expected?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Expected manifest must identify an exact Git commit');
@@ -68,7 +68,7 @@ for (const path of smokeRoutes) {
   if (response.headers.get('content-type')?.includes('text/html')) {
     const policy=response.headers.get('content-security-policy') ?? '';
     const nonce=policy.match(/'nonce-([^']+)'/)?.[1];
-    if(path==='/') firstNonce=nonce;
+    if(path==='/us/en') firstNonce=nonce;
     assert(nonce,`${path}: missing script nonce policy`);
     assert(!policy.split(';').find((part)=>part.trim().startsWith('script-src '))?.includes('unsafe-inline'),`${path}: inline script bypass`);
     assert(response.headers.get('cache-control')?.includes('no-store'),`${path}: nonce HTML must not be cached`);
@@ -87,7 +87,7 @@ for (const path of smokeRoutes) {
   }
   console.log(`PASS ${path}`);
 }
-const injected=await fetchImpl(new URL('/',origin),{cache:'no-store',signal:AbortSignal.timeout(15000),redirect:'error',headers:{
+const injected=await fetchImpl(new URL('/us/en',origin),{cache:'no-store',signal:AbortSignal.timeout(15000),redirect:'error',headers:{
   'content-security-policy':"script-src 'nonce-attacker'",'x-nonce':'attacker',
   'x-middleware-subrequest':'middleware:middleware:middleware:middleware:middleware',
 }});

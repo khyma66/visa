@@ -25,9 +25,8 @@ export function destinationPath(value: string): string {
   return US_EN_ROOT + (path === '/' || path === '/us' ? '' : path) + suffix;
 }
 
-/** Root remains a global entry point and existing saved root searches still work. */
+/** Root defaults to the current destination; middleware keeps this choice temporary. */
 export function legacyDestinationRedirect(pathname: string): string | null {
-  if (pathname === '/') return null;
   const target = destinationPath(pathname);
   return target === pathname ? null : target;
 }

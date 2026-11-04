@@ -6,7 +6,7 @@ Decision: country means **visa destination**, not the visitor's nationality, res
 
 | Purpose | URL |
 | --- | --- |
-| Global entry, retaining today's feed and existing saved searches | `/` |
+| Global entry, temporarily redirecting to `/us/en` with saved search filters | `/` |
 | Available destination directory | `/countries` |
 | US English community | `/us/en` |
 | Country content | `/us/en/news`, `/us/en/tags`, `/us/en/explore`, `/us/en/experiences`, `/us/en/guides` |
@@ -17,7 +17,7 @@ Decision: country means **visa destination**, not the visitor's nationality, res
 
 The country registry records availability and languages. Explicit routes reuse the current US pages and data; changing a registry entry alone cannot publish a country. Unimplemented countries, languages and country-prefixed private/API routes return 404. Existing launch controls remain authoritative.
 
-Old `/us`, `/news`, `/tags`, `/explore`, `/guides`, `/guides/{slug}`, `/questions/{id}`, `/experiences`, `/experiences/{id}` and `/c/{slug}` receive same-origin 308 redirects for GET/HEAD. Query strings are retained, including repeated filters. The redirect does not replace a URL fragment; browsers retain existing reply anchors. POST and other mutations are not redirected. Root bookmarks and global actions remain valid. Keep these redirects indefinitely; never reuse their paths for another meaning.
+Old `/us`, `/news`, `/tags`, `/explore`, `/guides`, `/guides/{slug}`, `/questions/{id}`, `/experiences`, `/experiences/{id}` and `/c/{slug}` receive same-origin 308 redirects for GET/HEAD. Query strings are retained, including repeated filters. The redirect does not replace a URL fragment; browsers retain existing reply anchors. POST and other mutations are not redirected. Root bookmarks use a private/no-store 307 redirect to `/us/en`, preserving filters and fragments. The destination banner is removed. Global actions remain valid. Keep these redirects indefinitely; never reuse their paths for another meaning.
 
 Navigation, search submissions, cards, related content, saved posts, account activity, creation success links, sharing, canonical metadata, structured data and sitemaps use the new URLs. Sharing validation also accepts previously copied legacy URLs. Feedback section classification recognizes the new prefix without retaining private query strings or post IDs. Existing post IDs, accounts, drafts, votes, messages, imports, news rights and policy receipts are preserved; no database migration or account copy is part of this change.
 
@@ -38,7 +38,7 @@ Read-only provider audit on November 4, 2026:
 
 Use a neutral global domain and path-based country sections; new destinations do not require new DNS, certificates or brands. Language is separate from destination. `en` describes English content for people anywhere seeking a US visa; do not infer `en-US` audience targeting from the destination country. Emit alternate-language links only for actually published translations of the same content, with reciprocal links and self-references. A UK visa page is not a translation of a US visa page.
 
-Preserve existing noindex, imported-content exclusion, private-page exclusion and launch/discovery controls. Update sitemap and canonical URLs together. Do not generate empty destination landing pages or publish automatic machine translations as reviewed immigration guidance. When several countries have useful content, evolve the root into a real global destination selector while retaining old filtered root bookmarks. Let visitors choose their destination and language; do not force IP-based redirects.
+Preserve existing noindex, imported-content exclusion, private-page exclusion and launch/discovery controls. Update sitemap and canonical URLs together. Do not generate empty destination landing pages or publish automatic machine translations as reviewed immigration guidance. A future change may route the root using an explicit destination preference, potentially stored in the profile. Location-based suggestions require a separate design; no geolocation routing or profile selector is enabled now. Let visitors choose their destination and language; do not force IP-based redirects.
 
 References: [Google multilingual and multiregional guidance](https://developers.google.com/search/docs/specialty/international/managing-multi-regional-sites), [Supabase redirect URL guidance](https://supabase.com/docs/guides/auth/redirect-urls).
 
