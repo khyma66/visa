@@ -200,7 +200,7 @@ test('untracked views never appear as zero or as an inferred count on member or 
         const post = { ...question, source, view_count, answer_count };
         const before = structuredClone(post);
         const html = renderToStaticMarkup(createElement(QuestionCard, { question: post }));
-        assert.match(visibleText(html), new RegExp(`\\b${answer_count} replies\\b`));
+        assert.match(visibleText(html), new RegExp(`\\b${answer_count} ${answer_count === 1 ? 'reply' : 'replies'}\\b`));
         assert.doesNotMatch(`${visibleText(html)} ${accessibleLabels(html)}`, /\bviews?\b/i);
         assert.deepEqual(post, before, 'Replies must not fabricate or rewrite a view count');
         assert.doesNotMatch(visibleText(renderDetail(post)), /\b\d+ views?\b/i);
