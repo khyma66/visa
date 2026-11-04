@@ -22,7 +22,7 @@ export function OfficialNewsResults({ feed }: { feed: OfficialNews }) {
     <nav aria-label="News topics" className="mb-6 flex flex-wrap gap-2">{NEWS_TOPICS.map(label => <button type="button" key={label} aria-pressed={topic === label} onClick={() => setTopic(label)} className={`rounded-full border px-4 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-700 ${topic === label ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}</nav>
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
       <h2 className="text-thread-title font-semibold text-slate-950">Latest updates <span className="ml-1.5 rounded-md bg-teal-100 px-2 py-1 text-xs text-teal-900">{visible.length}</span></h2>
-      <p role="status" className="text-xs leading-5 text-slate-500">Last successful check <time dateTime={feed.retrievedAt}>{new Date(feed.retrievedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</time></p>
+      <p role="status" className="text-xs leading-5 text-slate-500">Updated <time dateTime={feed.retrievedAt}>{new Date(feed.retrievedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</time></p>
     </div>
     {lead ? <>
       <div className={`grid gap-4 ${remaining.length ? 'lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] xl:grid-cols-1 2xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : ''}`}>
@@ -50,6 +50,43 @@ function OfficialStory({ article, featured = false, compact = false }: { article
     <div className={featured ? 'mt-auto pt-6' : 'mt-3'}><a href={article.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-sm text-sm font-semibold text-blue-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-700">Read Source Notice <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a></div>
   </article>;
 }
+export function HeadlineResults({ headlines }: { headlines: ImmigrationHeadlines }) {
+  const [query, setQuery] = useState('');
+  const [topic, setTopic] = useState('All headlines');
+  const [limit, setLimit] = useState(12);
+  const topics: Record<string, RegExp> = {
+    'Work visas': /\b(?:H-?1B|H-?2[AB]|L-?1|workers?|employment)\b/i,
+    'Students': /\b(?:F-?1|J-?1|OPT|students?|universit\w*)\b/i,
+    'Green cards & family': /\b(?:green cards?|family|spous\w*|residen\w*|H-?4)\b/i,
+    'Policy & courts': /\b(?:rule\w*|polic\w*|court\w*|judge\w*|lawsuit\w*|ban\w*)\b/i,
+  };
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const articles = headlines.articles.filter(article => words.every(word => `${article.title} ${article.publisher}`.toLowerCase().includes(word)) && (topic === 'All headlines' || topics[topic].test(article.title)));
+  const searchUrl = `https://www.google.com/search?${new URLSearchParams({ q: `${query.trim() || 'us immigration visa'} news`, tbm: 'nws' })}`;
+  return <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+    <div className="min-w-0">
+      <label className="block text-sm font-semibold text-slate-700">Search this news edition
+        <input type="search" value={query} maxLength={150} onChange={event => { setQuery(event.target.value); setLimit(12); }} placeholder="Try H-1B, green card, USCIS…" className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-normal outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100" />
+      </label>
+      <nav aria-label="Headline topics" className="my-4 flex flex-wrap gap-2">{['All headlines', ...Object.keys(topics)].map(label => <button type="button" key={label} aria-pressed={topic === label} onClick={() => { setTopic(label); setLimit(12); }} className={`min-h-10 rounded-full border px-3 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${topic === label ? 'border-teal-800 bg-teal-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}</nav>
+      <p role="status" aria-live="polite" className="mb-3 text-xs text-slate-500">{articles.length} {articles.length === 1 ? 'headline' : 'headlines'} · {headlines.source === 'GDELT Project' ? 'News coverage · dates indicate when indexed' : 'Agency announcements · publication dates'}</p>
+      <div className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {articles.slice(0, limit).map(article => <article key={article.url} className="p-5 transition-colors hover:bg-slate-50 sm:p-6">
+          <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500"><span className="font-semibold text-teal-800">{article.publisher}</span><span aria-hidden="true">·</span><span>{headlines.source === 'GDELT Project' ? 'Indexed ' : ''}<time dateTime={article.publishedAt}>{new Date(article.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}</time></span></div>
+          <h3 className="max-w-3xl break-words text-thread-title font-semibold leading-7 text-slate-950"><a href={article.url} target="_blank" rel="noopener noreferrer" className="rounded-sm hover:text-blue-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{article.title}<span className="sr-only"> (opens in a new tab)</span></a></h3>
+          <a href={article.url} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-9 items-center text-sm font-medium text-blue-800 hover:underline">Read at source <span aria-hidden="true" className="ml-1">↗</span><span className="sr-only"> (opens in a new tab)</span></a>
+        </article>)}
+        {!articles.length && <div className="p-6"><p className="font-semibold text-slate-800">No headlines match these filters.</p><button type="button" onClick={() => { setQuery(''); setTopic('All headlines'); setLimit(12); }} className="mt-3 min-h-10 text-sm font-semibold text-blue-800 underline">Clear filters</button></div>}
+      </div>
+      {articles.length > limit && <button type="button" onClick={() => setLimit(value => value + 12)} className="mt-4 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">Show more headlines ({articles.length - limit} remaining)</button>}
+    </div>
+    <aside aria-label="More news coverage" className="space-y-4">
+      <section className="rounded-2xl border border-teal-200 bg-teal-50/60 p-5"><p className="text-xs font-bold uppercase tracking-wider text-teal-800">Beyond this edition</p><h3 className="mt-2 text-lg font-semibold text-slate-950">Explore wider coverage</h3><p className="mt-2 text-sm leading-6 text-slate-600">Compare reporting across publishers. Google News opens separately; its results are not copied into this feed.</p><a href={searchUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-teal-800 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-900">Search Google News ↗<span className="sr-only"> (opens in a new tab)</span></a></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5"><h3 className="font-semibold text-slate-900">News, then the official record</h3><p className="mt-2 text-sm leading-6 text-slate-600">Reporting explains the story. Agency notices below provide the original policy documents and effective dates.</p><a href="#government-notices" className="mt-3 inline-flex min-h-10 items-center text-sm font-semibold text-blue-800 hover:underline">Browse government notices ↓</a></section>
+    </aside>
+  </div>;
+}
+
 export function OfficialNewsFeed({ initialFeed = null }: { initialFeed?: OfficialNews | null }) {
   const [feed, setFeed] = useState<OfficialNews | null>(initialFeed);
   const [headlines, setHeadlines] = useState<ImmigrationHeadlines | null>(null);
@@ -75,14 +112,18 @@ export function OfficialNewsFeed({ initialFeed = null }: { initialFeed?: Officia
   }, []);
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
+    const timeout = setTimeout(() => { if (active) setHeadlinesFailed(true); controller.abort(); }, 10_000);
     void fetch('/api/immigration-headlines', { signal: controller.signal, credentials: 'omit' }).then(async response => {
       if (!response.ok) throw new Error('Headlines unavailable');
       const data: unknown = await response.json();
       if (!isImmigrationHeadlines(data) || !data.articles.length) throw new Error('Invalid headlines');
-      setHeadlines(data);
-      setHeadlinesFailed(false);
-    }).catch(() => { if (!controller.signal.aborted) setHeadlinesFailed(true); });
-    return () => controller.abort();
+      if (active) {
+        setHeadlines(current => !current || Date.parse(data.retrievedAt) >= Date.parse(current.retrievedAt) ? data : current);
+        setHeadlinesFailed(false);
+      }
+    }).catch(() => { if (active) setHeadlinesFailed(true); }).finally(() => clearTimeout(timeout));
+    return () => { active = false; clearTimeout(timeout); controller.abort(); };
   }, [attempt]);
   return <main className="page-shell py-7 sm:py-10">
     <header className="flex flex-wrap items-end justify-between gap-5 border-b-4 border-slate-900 pb-7">
@@ -90,15 +131,13 @@ export function OfficialNewsFeed({ initialFeed = null }: { initialFeed?: Officia
       <a href="#visa-official-resources" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-teal-200 bg-white px-4 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">Find official tools <span aria-hidden="true">↓</span></a>
     </header>
     <section aria-labelledby="headline-section-title" className="border-b border-slate-200 py-7">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-700">{headlines?.source === 'USCIS Newsroom' ? 'From the agency' : 'Across the news'}</p><h2 id="headline-section-title" className="mt-1 font-serif text-thread-title font-semibold text-slate-950">U.S. Immigration &amp; Visa Headlines</h2></div>{headlines && <p className="text-xs text-slate-500">Checked <time dateTime={headlines.retrievedAt}>{new Date(headlines.retrievedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</time></p>}</div>
-      {headlines ? <>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{headlines.articles.slice(0, 9).map(article => <article key={article.url} className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 hover:border-blue-200 hover:bg-blue-50/30"><p className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-500"><span className="font-semibold text-orange-800">{article.publisher}</span><span aria-hidden="true">·</span><time dateTime={article.publishedAt}>{new Date(article.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}</time></p><h3 className="text-thread-title font-semibold leading-6 text-slate-950"><a href={article.url} target="_blank" rel="noopener noreferrer" className="break-words hover:text-blue-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{article.title}<span className="sr-only"> (opens in a new tab)</span></a></h3></article>)}</div>
-        {headlines.articles.length > 9 && <div className="mt-5 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white px-4">{headlines.articles.slice(9).map(article => <article key={article.url} className="flex flex-wrap items-baseline justify-between gap-x-4 py-3"><a href={article.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 text-sm font-semibold text-blue-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{article.title}<span className="sr-only"> (opens in a new tab)</span></a><span className="text-xs text-slate-500">{article.publisher}</span></article>)}</div>}
-      </> : <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600"><p>{headlinesFailed ? 'Publisher headlines are temporarily unavailable. Official notices and source links remain below.' : 'Gathering publisher headlines…'}</p>{headlinesFailed && <button type="button" onClick={() => setAttempt(value => value + 1)} className="min-h-10 rounded-lg border border-slate-300 px-3 py-1.5 font-semibold text-blue-800 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Check again</button>}</div>}
-      <p className="mt-4 text-xs leading-5 text-slate-500">Headlines are collected daily from {headlines?.source === 'USCIS Newsroom' ? <a href="https://www.uscis.gov/newsroom/all-news" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-800">USCIS Newsroom<span className="sr-only"> (opens in a new tab)</span></a> : <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-800">the GDELT Project<span className="sr-only"> (opens in a new tab)</span></a>}. Read the linked source for complete details; publisher reporting should be verified against official guidance before acting.</p>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-800">Your daily reading list</p><h2 id="headline-section-title" className="mt-1 text-2xl font-semibold text-slate-950">U.S. Immigration &amp; Visa Headlines</h2></div>{headlines && <p className="text-xs text-slate-500">Updated <time dateTime={headlines.retrievedAt}>{new Date(headlines.retrievedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</time></p>}</div>
+      {headlines && (headlinesFailed || Date.now() - Date.parse(headlines.retrievedAt) > OFFICIAL_NEWS_STALE_MS) && <p role="status" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">A newer headline edition is not available yet. Your saved headlines remain readable with their original dates.</p>}
+      {headlines ? <HeadlineResults headlines={headlines} /> : <div role="status" className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600"><p>{headlinesFailed ? 'Publisher headlines are temporarily unavailable. Official notices remain below.' : 'Gathering publisher headlines…'}</p>{headlinesFailed && <button type="button" onClick={() => setAttempt(value => value + 1)} className="mt-3 min-h-10 rounded-lg border border-slate-300 px-3 py-1.5 font-semibold text-blue-800">Try again</button>}</div>}
+      <p className="mt-4 text-xs leading-5 text-slate-500">Daily edition · Headlines from {headlines?.source === 'USCIS Newsroom' ? <a href="https://www.uscis.gov/newsroom/all-news" target="_blank" rel="noopener noreferrer" className="underline">USCIS Newsroom</a> : <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener noreferrer" className="underline">the GDELT Project</a>}. Updated is the edition retrieval time, not the article publication time. Full reporting is available at each source.</p>
     </section>
     <div className="grid items-start gap-7 pt-6 xl:grid-cols-[minmax(0,1fr)_290px]">
-      <section aria-label="Visa-related Federal Register notices" className="min-w-0">
+      <section id="government-notices" aria-label="Visa-related Federal Register notices" className="min-w-0 scroll-mt-28">
         <div className="mb-5"><p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-800">Official record</p><h2 className="mt-1 font-serif text-thread-title font-semibold text-slate-950">Government Notices</h2></div>
         {feed && (error || Date.now() - Date.parse(feed.retrievedAt) >= OFFICIAL_NEWS_STALE_MS) && <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950"><p>{error ? 'The latest source check did not complete. Showing the last saved edition; all available articles remain readable below.' : 'This saved edition is older than 36 hours. Showing all available articles while the next daily source check runs.'}</p><button type="button" onClick={() => setAttempt(value => value + 1)} className="min-h-10 rounded-lg border border-amber-500 bg-white px-3 py-1.5 font-semibold hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-800">Check again</button></div>}
         {feed ? <OfficialNewsResults feed={feed} /> : error ? <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm leading-6 text-amber-950"><p className="font-bold">We couldn’t refresh the notices.</p><p className="mt-1">You can still use the official resources on this page.</p><div className="mt-4 flex flex-wrap items-center gap-4"><button type="button" onClick={() => setAttempt(value => value + 1)} className="min-h-11 rounded-lg border border-amber-500 bg-white px-4 py-2 font-semibold hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-800">Try Again</button><a href="https://www.federalregister.gov/documents/search?conditions%5Bterm%5D=visa" target="_blank" rel="noopener noreferrer" className="font-semibold underline">Search Federal Register <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a></div></div> : <div role="status" className="rounded-2xl border border-slate-200 bg-white p-7"><p className="text-sm text-slate-600">Loading recent visa notices…</p><div aria-hidden="true" className="mt-5 space-y-3 motion-safe:animate-pulse"><div className="h-3 w-28 rounded bg-teal-100"/><div className="h-6 w-5/6 rounded bg-slate-100"/><div className="h-6 w-2/3 rounded bg-slate-100"/><div className="h-3 w-1/2 rounded bg-slate-100"/></div></div>}

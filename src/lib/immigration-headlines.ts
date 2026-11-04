@@ -46,9 +46,11 @@ export function parseGdelt(value: unknown, now = Date.now()): ImmigrationHeadlin
   for (const row of value.articles) {
     if (!row || typeof row !== 'object' || !clean(row.title, 500) || !TOPIC.test(row.title) || !US_CONTEXT.test(row.title)
       || NOISE.test(row.title) || !safeUrl(row.url) || urls.has(row.url)) continue;
-    const rawDate = typeof row.seendate === 'string' && /^\d{14}$/.test(row.seendate)
-      ? `${row.seendate.slice(0, 4)}-${row.seendate.slice(4, 6)}-${row.seendate.slice(6, 8)}T${row.seendate.slice(8, 10)}:${row.seendate.slice(10, 12)}:${row.seendate.slice(12, 14)}Z` : '';
-    if (!date(rawDate, now)) continue;
+    // DOC 2 emits YYYYMMDDTHHMMSSZ; retain support for older digit-only editions.
+    const stamp = typeof row.seendate === 'string' ? /^(\d{8})T?(\d{6})Z?$/.exec(row.seendate) : null;
+    const digits = stamp ? stamp[1] + stamp[2] : '';
+    const rawDate = digits ? `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}T${digits.slice(8, 10)}:${digits.slice(10, 12)}:${digits.slice(12, 14)}Z` : '';
+    if (!date(rawDate, now) || new Date(rawDate).toISOString() !== rawDate.replace('Z', '.000Z')) continue;
     const publisher = clean(row.domain, 120) ? row.domain : new URL(row.url).hostname;
     if (!clean(publisher, 120)) continue;
     urls.add(row.url);

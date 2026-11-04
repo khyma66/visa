@@ -29,6 +29,8 @@ export async function refreshImmigrationHeadlines(previous, fetcher = fetch, now
     fresh = parseGdelt(JSON.parse(await bounded(response, 512 * 1024)), now());
     if (!fresh.articles.length) throw new Error('No matching publisher headlines');
   } catch {
+    // A temporary index outage must not replace an existing publisher edition with agency-only results.
+    if (isImmigrationHeadlines(previous, now()) && previous.source === 'GDELT Project' && previous.articles.length) return previous;
     try {
       const response = await fetcher('https://www.uscis.gov/newsroom/all-news?query=visa&items_per_page=50', { signal: AbortSignal.timeout(15_000), redirect: 'error', headers: { Accept: 'text/html' } });
       fresh = parseUscisNewsroom(await bounded(response, 1024 * 1024), now());

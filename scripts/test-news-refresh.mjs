@@ -68,3 +68,20 @@ test('USCIS newsroom is a verified fallback when the publisher index is unreacha
   assert.match(edition.articles[0].url,/^https:\/\/www\.uscis\.gov\/newsroom\//);
   assert.equal(urls.length,2);
 });
+
+test('real GDELT compact UTC timestamps produce publisher headlines instead of forcing fallback', async () => {
+  let calls=0;
+  const edition=await refreshImmigrationHeadlines(undefined,async()=>{calls++;return Response.json({articles:[{title:'USCIS H-1B visa update',url:'https://example.com/h1b',domain:'example.com',seendate:'20261029T110000Z'}]});},()=>now);
+  assert.equal(calls,1); assert.equal(edition.source,'GDELT Project');
+  assert.equal(edition.articles[0].publishedAt,'2026-10-29T11:00:00Z');
+});
+test('invalid calendar timestamps cannot roll over into valid publisher stories', async () => {
+  await assert.rejects(refreshImmigrationHeadlines(undefined,async url=>String(url).includes('gdeltproject')?Response.json({articles:[{title:'USCIS visa update',url:'https://example.com/a',seendate:'20260230T110000Z'}]}):new Response('',{status:503}),()=>Date.parse('2026-03-03T12:00:00Z')));
+});
+
+test('publisher index throttling keeps the earlier publisher edition without advancing its timestamp',async()=>{
+  const previous=await refreshImmigrationHeadlines(undefined,async()=>Response.json({articles:[{title:'USCIS H-1B visa update',url:'https://example.com/h1b',domain:'example.com',seendate:'20261029T110000Z'}]}),()=>now);
+  let calls=0;
+  const saved=await refreshImmigrationHeadlines(previous,async()=>{calls++;return new Response('',{status:429});},()=>now+1000);
+  assert.deepEqual(saved,previous);assert.equal(calls,1);
+});

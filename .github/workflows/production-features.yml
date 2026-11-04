@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Chatbot removed at owner request. Verify no UI or inference endpoint remains.
+# News desk: searchable publisher headlines, accurate edition timestamps; chatbot stays removed.
 
 on:
   workflow_dispatch:
