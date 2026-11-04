@@ -10,7 +10,7 @@ const compile = source => ts.transpileModule(source, {compilerOptions:{target:ts
 const shared = url(compile(await readFile(new URL('../src/lib/official-news-shared.ts',import.meta.url),'utf8')));
 const headlinesShared = url(compile(await readFile(new URL('../src/lib/immigration-headlines.ts',import.meta.url),'utf8')));
 const react = url('export const useState = (...args) => globalThis.__newsHarness.useState(...args); export const useEffect = (...args) => globalThis.__newsHarness.useEffect(...args);');
-const component = compile(await readFile(new URL('../src/components/OfficialNewsFeed.tsx',import.meta.url),'utf8')).replace(/(from\s+)(['"])([^'"]+)\2/g,(_,prefix,q,name)=>prefix+JSON.stringify(name==='react'?react:name==='@/lib/official-news-shared'?shared:name==='@/lib/immigration-headlines'?headlinesShared:pathToFileURL(require.resolve(name)).href));
+const component = compile(await readFile(new URL('../src/components/OfficialNewsFeed.tsx',import.meta.url),'utf8')).replace(/(from\s+)(['"])([^'"]+)\2/g,(_,prefix,q,name)=>prefix+JSON.stringify(name==='./ResizablePostLayout'?url('export function ResizablePostLayout(){return null;}'):name==='react'?react:name==='@/lib/official-news-shared'?shared:name==='@/lib/immigration-headlines'?headlinesShared:pathToFileURL(require.resolve(name)).href));
 const {OfficialNewsFeed,HeadlineResults}=await import(url(component));
 const edition=JSON.parse(await readFile(new URL('../src/data/official-news-snapshot.json',import.meta.url),'utf8'));
 class Harness {
@@ -33,8 +33,8 @@ for(const [name,fetcher] of [
   try{h.render();assert.deepEqual(resultFeed(h.tree),edition);await h.settle();assert.deepEqual(resultFeed(h.tree),edition);}finally{h.close();globalThis.fetch=previous;}
 });
 
-function elements(node){if(Array.isArray(node))return node.flatMap(elements);if(!node||typeof node!=='object')return [];return [node,...elements(node.props?.children)];}
-function content(node){if(Array.isArray(node))return node.map(content).join(' ');if(node==null||typeof node==='boolean')return '';return typeof node==='object'?content(node.props?.children):String(node);}
+function elements(node){if(Array.isArray(node))return node.flatMap(elements);if(!node||typeof node!=='object')return [];return [node,...elements([node.props?.children,node.props?.related])];}
+function content(node){if(Array.isArray(node))return node.map(content).join(' ');if(node==null||typeof node==='boolean')return '';return typeof node==='object'?content([node.props?.children,node.props?.related]):String(node);}
 test('headline search, topic chips, reset and pagination work without additional network requests',()=>{
   const h=new Harness();
   const headlines={source:'GDELT Project',retrievedAt:'2026-11-03T20:12:00Z',articles:Array.from({length:15},(_,i)=>({title:i===0?'USCIS F-1 student visa update':'USCIS H-1B work visa update '+i,url:'https://example.com/'+i,publisher:'Example',publishedAt:'2026-11-03T10:00:00Z'}))};

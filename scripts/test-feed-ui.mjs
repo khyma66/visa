@@ -13,6 +13,7 @@ const source = await readFile(new URL('../src/components/CommunityHome.tsx', imp
 const icons = source.match(/import\s*\{([^}]+)\}\s*from\s*'lucide-react'/)[1].split(',').map((name) => name.trim());
 const presentationSource = ts.transpileModule(await readFile(new URL('../src/lib/post-presentation.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const dependencies = {
+  './ResizablePostLayout': dataUrl('export function ResizablePostLayout(){return null;}'),
   '@/lib/post-presentation': dataUrl(presentationSource),
   react: hooks,
   'react/jsx-runtime': jsx,
@@ -83,8 +84,8 @@ class Harness {
   async flush() { await this.settle(); await wait(220); await this.settle(); }
   close() { for (const slot of this.slots) slot?.cleanup?.(); delete globalThis.__feedHarness; delete globalThis.window; delete globalThis.document; }
 }
-function nodes(node) { return Array.isArray(node) ? node.flatMap(nodes) : node && typeof node === 'object' ? [node, ...nodes(node.props?.children)] : []; }
-function textOf(node) { return Array.isArray(node) ? node.map(textOf).join(' ') : node == null || typeof node === 'boolean' ? '' : typeof node === 'object' ? textOf(node.props?.children) : String(node); }
+function nodes(node) { return Array.isArray(node) ? node.flatMap(nodes) : node && typeof node === 'object' ? [node, ...nodes([node.props?.children,node.props?.related])] : []; }
+function textOf(node) { return Array.isArray(node) ? node.map(textOf).join(' ') : node == null || typeof node === 'boolean' ? '' : typeof node === 'object' ? (textOf(node.props?.children) + (node.props?.related ? ' ' + textOf(node.props.related) : '')) : String(node); }
 function button(h, label) { const result = nodes(h.tree).find((node) => node.type === 'button' && textOf(node).trim() === label); assert(result, `Missing ${label} button`); return result; }
 function search(h, value) { const input = nodes(h.tree).find((node) => node.type === 'input'); input.props.onChange({ target: { value } }); h.render(); }
 function ids(h) { return nodes(h.tree).filter((node) => node.props?.question).map((node) => node.props.question.id); }
@@ -111,27 +112,15 @@ test('home page offers Ask a Question to everyone and requires sign-in before co
   } finally { h.close(); }
 });
 
-test('desktop feed separator resizes both panels with pointer and keyboard and remembers the width', async () => {
-  const h = new Harness();
-  h.storage.set('visathreads:discovery-panel-width:v1', '420');
-  try {
-    h.render(); await h.settle();
-    const separator = () => nodes(h.tree).find(node => node.props?.role === 'separator');
-    assert.equal(separator().props['aria-valuenow'], 420);
-    assert.equal(nodes(h.tree).find(node => node.props?.className === 'home-feed-layout').props.style['--discovery-width'], '420px');
-    const target = { setPointerCapture() {}, hasPointerCapture: () => true, releasePointerCapture() {} };
-    separator().props.onPointerDown({ button: 0, pointerId: 7, clientX: 500, preventDefault() {}, currentTarget: target });
-    separator().props.onPointerMove({ pointerId: 7, clientX: 440 });
-    h.render();
-    assert.equal(separator().props['aria-valuenow'], 480);
-    separator().props.onPointerUp({ pointerId: 7, currentTarget: target });
-    assert.equal(h.storage.get('visathreads:discovery-panel-width:v1'), '480');
-    separator().props.onKeyDown({ key: 'ArrowRight', preventDefault() {} });
-    h.render();
-    assert.equal(separator().props['aria-valuenow'], 456);
-    separator().props.onDoubleClick(); h.render();
-    assert.equal(separator().props['aria-valuenow'], 300);
-  } finally { h.close(); }
+test('all feed modes use the shared posts/discovery layout', async () => {
+  for(const props of [{},{initialKind:'question'},{initialKind:'discussion'},{experience:true}]) {
+    const h=new Harness();try {
+      h.render(props);await h.settle();
+      const layout=nodes(h.tree).find(node=>node.props?.relatedLabel==='Community discovery');
+      assert(layout);assert.equal(layout.props.mainLabel,'Posts');
+      assert(layout.props.children);assert(layout.props.related);
+    }finally{h.close();}
+  }
 });
 
 test('sort selection responds immediately and keeps loaded cards visible while fresh results arrive', async () => {

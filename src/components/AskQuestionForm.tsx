@@ -1,5 +1,7 @@
 'use client';
 
+import { ResizablePostLayout } from './ResizablePostLayout';
+
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -151,7 +153,11 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
   if (loading) return <div className="mx-auto max-w-4xl p-8">Loading your profile…</div>;
 
   return (
-    <main className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <main className="page-shell">
+      <ResizablePostLayout mainLabel="Compose a post" relatedLabel="Related questions and posting guidance" related={<div className="space-y-4">
+        <RelatedQuestions drafting context={{ title, body, tags: normalizeTags([...selectedTags, tagInput, ...suggestedTags]), visa_type: visaType, destination_country: country }} />
+        {['Search first and review close matches.', 'Use a specific title with the visa type.', 'Return to accept the answer that solved your question.'].map((tip) => <div key={tip} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600"><CheckCircle2 className="mt-0.5 shrink-0 text-blue-600" size={18} />{tip}</div>)}
+      </div>}>
       <section>
         <p className="text-sm font-bold tracking-wider text-blue-700">{experience ? 'Share a Visa Experience' : 'Ask the Community'}</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 capitalize">{experience ? 'Help others learn from your visa journey' : 'Share the details that make your case different'}</h1>
@@ -215,10 +221,8 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
           <button disabled={submitting} className="rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-60 capitalize">{submitting ? 'Publishing…' : experience ? 'Publish Experience' : 'Publish Question'}</button>
         </form>
       </section>
-      <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-        <RelatedQuestions drafting context={{ title, body, tags: normalizeTags([...selectedTags, tagInput, ...suggestedTags]), visa_type: visaType, destination_country: country }} />
-        {['Search first and review close matches.', 'Use a specific title with the visa type.', 'Return to accept the answer that solved your question.'].map((tip) => <div key={tip} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600"><CheckCircle2 className="mt-0.5 shrink-0 text-blue-600" size={18} />{tip}</div>)}
-      </aside>
+
+      </ResizablePostLayout>
     </main>
   );
 }
