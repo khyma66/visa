@@ -436,13 +436,24 @@ test('outgoing requests allow one introduction and loaded accepted chats allow r
   assert.equal(button(render(fixture({ ...values, conversations: [accepted], activeId: accepted.id, messages: [message('earlier')] })).tree, 'Send message').props.disabled, false);
 });
 
-test('read receipts and report controls display for the correct sender', () => {
+test('read receipts remain while reporting moves out of message bubbles into conversation options', () => {
   const row = conversation('accepted');
-  const { html } = render(fixture({ conversations: [row], activeId: row.id, messages: [message('own-sent'), message('own-read', alice, { read_at: '2026-01-01' }), message('received', bob)], inboxLoading: false }));
+  const f = fixture({ conversations: [row], activeId: row.id, messages: [message('own-sent'), message('own-read', alice, { read_at: '2026-01-01' }), message('received', bob)], inboxLoading: false, messagesLoading: false });
+  const { html, tree } = render(f);
   assert.match(html, /· Sent/);
   assert.match(html, /· Read/);
-  assert.match(html, /data-report-target="received"/);
-  assert.doesNotMatch(html, /data-report-target="own-/);
+  assert.match(html, /Conversation options/);
+  assert.doesNotMatch(html, /data-report-target/);
+  const select = nodes(tree, node => node.type === 'select')[0];
+  select.props.onChange({ target: { value: 'received' } });
+  const selected = render(f);
+  assert.match(selected.html, /data-report-target="received"/);
+  const bubbles = nodes(selected.tree, node => node.props['aria-label'] === 'Conversation messages')[0];
+  assert.doesNotMatch(renderToStaticMarkup(bubbles), /data-report-target|>Report</);
+  for (const selection of [{conversation:'other',message:'received'}, {conversation:row.id,message:'own-sent'}, {conversation:row.id,message:'missing'}]) {
+    f.state[stateNames.indexOf('reportSelection')] = selection;
+    assert.doesNotMatch(render(f).html, /data-report-target/);
+  }
 });
 
 test('late author-link lookup never overrides an explicitly chosen folder or sends a request', async () => {
