@@ -2,10 +2,11 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { Flag } from 'lucide-react';
 import { getSupabase } from '@/lib/supabase/client';
 import { useAuth } from './AuthProvider';
 
-export function ReportButton({ kind, target, username }: { kind: 'question' | 'answer' | 'imported_answer' | 'message' | 'member'; target: string; username?: string }) {
+export function ReportButton({ kind, target, username, compact = false }: { kind: 'question' | 'answer' | 'imported_answer' | 'message' | 'member' | 'source_question'; compact?: boolean; target: string; username?: string }) {
   const { user, demoMode } = useAuth();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('spam');
@@ -25,9 +26,9 @@ export function ReportButton({ kind, target, username }: { kind: 'question' | 'a
     return () => { currentScope.current = ''; };
   }, [scope]);
   useEffect(() => {
-    if (kind !== 'member' || !open) { dialog.current?.close(); return; }
+    if ((!compact && kind !== 'member') || !open) { dialog.current?.close(); return; }
     dialog.current?.showModal();
-  }, [kind, open]);
+  }, [kind, open, compact]);
   function close() { setOpen(false); dialog.current?.close(); trigger.current?.focus(); }
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -35,15 +36,30 @@ export function ReportButton({ kind, target, username }: { kind: 'question' | 'a
     lock.current = true; setBusy(true); setStatus('');
     const submittingScope = scope;
     try {
-      const { error } = kind === 'member'
+      const { error } = kind === 'source_question'
+        ? await getSupabase().rpc('feedback_submit', { client_request_id: crypto.randomUUID(), feedback_category: 'other', feedback_message: `Report of public source discussion /questions/${target}\nReason: ${reason}\n${details.trim()}`, page_section: 'questions' })
+        : kind === 'member'
         ? await getSupabase().rpc('report_community_member', { conversation_id: target, report_reason: reason, report_details: details.trim() })
         : await getSupabase().rpc('report_community_content', { kind, target, report_reason: reason, report_details: details.trim() });
       if (error) throw error;
-      if (currentScope.current === submittingScope) { setStatus('Report Submitted For Review.'); if (kind !== 'member') setOpen(false); }
+      if (currentScope.current === submittingScope) { setStatus('Report Submitted For Review.'); if (!compact && kind !== 'member') setOpen(false); }
     } catch { if (currentScope.current === submittingScope) setStatus('Could Not Submit The Report. Please Try Again Later.'); }
     finally { if (currentScope.current === submittingScope) { lock.current = false; setBusy(false); } }
   }
-  if (demoMode) return null;
+  if (demoMode && !compact) return null;
+  if (compact) return <>
+    <button ref={trigger} type="button" className="post-action" onClick={() => setOpen(true)}><Flag size={16} aria-hidden="true"/>Report</button>
+    <dialog ref={dialog} aria-labelledby={titleId} onCancel={event => { event.preventDefault(); close(); }} onClose={() => setOpen(false)} className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl backdrop:bg-slate-950/45">
+      <div className="flex items-center justify-between gap-3"><h2 id={titleId} className="text-lg font-bold">Report post</h2><button type="button" onClick={close} className="rounded-lg border px-3 py-2 text-sm">Close</button></div>
+      {!user || demoMode ? <p className="mt-4"><Link href="/login" className="text-blue-700 underline">Log in to report this post</Link></p> : <form onSubmit={submit} className="mt-4 space-y-4 text-sm">
+        <p className="text-slate-600">{kind === 'source_question' ? 'The public post link and your report will be sent privately to the site owner for review.' : 'Your report will be shared privately with authorized moderators.'}</p>
+        <label className="block font-semibold">Reason<select autoFocus value={reason} onChange={event => setReason(event.target.value)} className="mt-2 w-full rounded-lg border p-2.5"><option value="spam">Spam</option><option value="scam">Scam or impersonation</option><option value="harassment">Harassment</option><option value="personal-information">Exposed personal information</option><option value="other">Other</option></select></label>
+        <label className="block font-semibold">Details (optional)<textarea value={details} maxLength={1000} rows={2} onChange={event => setDetails(event.target.value)} className="mt-2 w-full rounded-lg border p-2.5"/></label>
+        <button disabled={busy || status === 'Report Submitted For Review.'} className="rounded-full bg-teal-700 px-4 py-2.5 font-semibold text-white disabled:opacity-50">{busy ? 'Submitting…' : 'Submit report'}</button>
+        {status && <p role="status">{status}</p>}
+      </form>}
+    </dialog>
+  </>;
   if (kind === 'member') return <>
     <button ref={trigger} type="button" onClick={() => setOpen(true)} aria-label={`Report u/${username}`} className="shrink-0 rounded-full px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-rose-50 hover:text-rose-700">Report</button>
     <dialog ref={dialog} aria-labelledby={titleId} onCancel={event => { event.preventDefault(); close(); }} onClose={() => setOpen(false)} className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl backdrop:bg-slate-950/45">

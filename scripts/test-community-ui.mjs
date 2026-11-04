@@ -27,6 +27,7 @@ const navigation = dataUrl(`
 `);
 const auth = dataUrl('export function useAuth(){return globalThis.__communityHarness.auth;}');
 const dependencies = {
+  './CompactTextarea': dataUrl("export const CompactTextarea='textarea';"),
   './ResizablePostLayout': dataUrl('export function ResizablePostLayout(){return null;}'),
   'react/jsx-runtime': jsx, react: hooks, 'next/link': links, 'next/navigation': navigation,
   './AuthProvider': auth, '@/components/AuthProvider': auth,

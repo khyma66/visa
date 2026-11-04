@@ -22,7 +22,7 @@
     "test:archive": "node --test scripts/test-archive.mjs scripts/test-demo-reply-counts.mjs scripts/test-editorial.mjs",
     "test:notices": "node --test scripts/test-notices.mjs scripts/test-policy.mjs",
     "test:security": "node --test scripts/test-security.mjs",
-    "test:auth": "node --test scripts/test-auth.mjs scripts/test-auth-presentation.mjs scripts/test-auth-settings.mjs scripts/test-account.mjs scripts/test-account-presentation.mjs scripts/test-auth-ui.mjs scripts/test-turnstile.mjs",
+    "test:auth": "node --test scripts/test-auth.mjs scripts/test-auth-presentation.mjs scripts/test-auth-settings.mjs scripts/test-account.mjs scripts/test-post-library.mjs scripts/test-account-presentation.mjs scripts/test-auth-ui.mjs scripts/test-turnstile.mjs",
     "test:isolation": "node --test scripts/test-isolation.mjs",
     "test:database": "node --test --test-concurrency=1 --test-timeout=60000 tests/database/*.test.mjs",
     "test:news": "node --test scripts/test-news.mjs scripts/test-section-content.mjs scripts/test-news-edge.mjs scripts/test-news-refresh.mjs scripts/test-news-client.mjs scripts/test-licensed-news.mjs",

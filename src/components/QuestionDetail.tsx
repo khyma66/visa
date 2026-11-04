@@ -1,5 +1,7 @@
 'use client';
 
+import { CompactTextarea } from './CompactTextarea';
+
 import { isImportedPost, publicImportedUsername, topicLabel } from '@/lib/post-presentation';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
@@ -20,8 +22,7 @@ import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 import { ReportButton } from './ReportButton';
 import { PostOriginBadge } from './PostOriginBadge';
-import { PostShare } from './PostShare';
-import { PostAward } from './PostAward';
+import { PostActions } from './PostActions';
 
 function Author({ id, username, seed, createdAt, sourceOnly = false }: { id: string; username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
   return (
@@ -164,7 +165,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-950">{question.title}</h1>
             <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : experience ? 'replies' : 'answers'}</span></div>
           </section>
-          <article className="flex gap-3 py-8 sm:gap-5">
+          <article className="flex flex-wrap gap-3 py-8 sm:gap-5">
             {imported ? <ImportedScore score={question.vote_score} /> : <VoteRail score={question.vote_score} own={question.author_id === user?.id} onVote={(value) => {
               if (!user) { window.location.href = `/login?next=${threadPath}`; return; }
               void voteQuestion(id, user.id, value).then((score) => setQuestion((current) => current ? { ...current, vote_score: score } : current)).catch((reason: Error) => setError(reason.message));
@@ -174,14 +175,14 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
               <div className="mt-6 flex flex-wrap gap-2">{question.tags.map((tag) => <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}</div>
               <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
                 <div className="flex gap-2">
-                  <PostShare path={threadPath} />
-                  <PostAward postId={question.id} authorId={question.author_id} path={threadPath} />
+
                   {authorMessageHref && <Link href={authorMessageHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 capitalize"><MessageCircle size={15} /> Message author</Link>}
                 </div>
                 <Author id={question.id} username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
               </div>
-              {!imported && <ReportButton kind="question" target={question.id} />}
+
             </div>
+            <div className="mt-1 basis-full"><PostActions postId={question.id} path={threadPath} imported={imported} onReply={() => document.getElementById('reply-body')?.focus()} /></div>
           </article>
 
 
@@ -218,10 +219,10 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
           </section>
 
           <section className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-            <h2 className="text-thread-title font-semibold text-slate-950 capitalize">{imported || experience ? 'Join the discussion' : 'Your answer'}</h2>
+            <h2 id="reply" className="scroll-mt-24 text-lg font-semibold text-slate-950 capitalize">{imported || experience ? 'Join the discussion' : 'Your answer'}</h2>
             {canAnswer && <p className="mt-2 text-sm leading-6 text-slate-500 capitalize">Related posts update as you write, using the topics in your reply.</p>}
             {!canAnswer ? <p className="mt-3 rounded-lg bg-slate-100 p-4 text-sm text-slate-700 capitalize">{experience ? 'This experience is closed to new replies.' : 'This question is closed. Existing answers remain available, but new answers and acceptance are disabled.'}</p> : !user ? <p className="mt-3 text-sm text-slate-600 capitalize"><Link href={`/login?next=${threadPath}`} className="font-bold text-blue-700 underline capitalize">Log In</Link> to reply with your public username.</p> : (
-              <form onSubmit={submitAnswer} className="mt-4"><textarea aria-label="Your reply" required minLength={20} maxLength={10000} rows={7} value={answerBody} onChange={(event) => setAnswerBody(event.target.value)} placeholder="Explain what worked and cite official guidance where possible." className="w-full rounded-xl border border-slate-300 p-4 leading-7 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" /><button disabled={submitting} className="mt-3 rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50 capitalize">{submitting ? 'Posting…' : experience ? 'Post reply' : 'Post answer'}</button></form>
+              <form onSubmit={submitAnswer} className="mt-4"><CompactTextarea id="reply-body" aria-label="Your reply" required minLength={20} maxLength={10000} rows={1} value={answerBody} onChange={(event) => setAnswerBody(event.target.value)} placeholder="Explain what worked and cite official guidance where possible." className="w-full rounded-xl border border-slate-300 px-3 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" /><button disabled={submitting} className="mt-3 rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50 capitalize">{submitting ? 'Posting…' : experience ? 'Post reply' : 'Post answer'}</button></form>
             )}
             {error && <p className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
           </section>

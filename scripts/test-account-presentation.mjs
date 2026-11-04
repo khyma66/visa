@@ -19,6 +19,7 @@ const dependencies = {
   './AuthProvider': asModule('export const useAuth=()=>globalThis.__accountPresentation.auth;'),
   './CommunityNavigation': asModule('export const CommunityNavigation=()=>null;'),
   './FeedbackLauncher': asModule('export const FeedbackLauncher=()=>null,OwnerFeedbackLink=()=>null;'),
+  './SavedPosts': 'data:text/javascript,export const SavedPosts=()=>null;',
   './Avatar': asModule(`import React from ${JSON.stringify(reactUrl)};export const Avatar=({name})=>React.createElement('span',{'data-public-avatar-name':name,'aria-hidden':true},'Avatar');`),
   '@/lib/supabase/client': asModule('export const getSupabase=()=>{throw new Error("Network prohibited in presentation tests");};'),
   '@/lib/account': asModule('const unavailable=()=>{throw new Error("Network prohibited in presentation tests")};export const getAccountActivity=unavailable,getAccountIdentity=unavailable,hasAccountPolicyAcceptance=unavailable,saveProfileBio=unavailable;'),

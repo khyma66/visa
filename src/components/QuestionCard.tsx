@@ -7,8 +7,7 @@ import { isImportedPost, publicImportedUsername, topicLabel } from '@/lib/post-p
 import type { Question } from '@/lib/types';
 import { Avatar } from './Avatar';
 import { PostOriginBadge } from './PostOriginBadge';
-import { PostShare } from './PostShare';
-import { PostAward } from './PostAward';
+import { PostActions } from './PostActions';
 
 function compact(value: number) {
   return Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
@@ -44,10 +43,10 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
               {question.answer_count} replies{question.accepted_answer_id && <span className="sr-only capitalize">, accepted answer</span>}
             </Link>
             {onRelated && <button onClick={() => onRelated(question)} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 hover:bg-slate-200 capitalize"><GitFork size={14} aria-hidden="true" />Related</button>}
-            <PostShare path={path} />
-            <PostAward postId={question.id} authorId={question.author_id} path={path} />
+
             {/* Views are not instrumented. A legacy zero or share count is not a measured view total. */}
           </div>
+          <div className="mt-2"><PostActions postId={question.id} path={path} imported={imported}/></div>
       </div>
     </article>
   );

@@ -1,5 +1,7 @@
 'use client';
 
+import { CompactTextarea } from './CompactTextarea';
+
 import { ResizablePostLayout } from './ResizablePostLayout';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
@@ -179,7 +181,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
         <p className="text-sm font-bold tracking-wider text-blue-700 capitalize">{experience ? 'Share a Visa Experience' : 'Ask the Community'}</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 capitalize">{experience ? 'Help others learn from your visa journey' : 'Share the details that make your case different'}</h1>
         {user ? <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your public username'}</b>.</p> : <p className="mt-3 text-sm text-slate-600 capitalize"><Link href={loginReturn} className="font-semibold text-blue-700 underline capitalize">Log in</Link> or <Link href={loginReturn.replace('/login?', '/signup?')} className="font-semibold text-blue-700 underline capitalize">create an account</Link> to publish. Your draft is kept in this browser tab while you sign in.</p>}
-        <form onSubmit={submit} className="mt-7 space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+        <form onSubmit={submit} className="mt-5 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           {!experience && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={sos} onChange={event => setSos(event.target.checked)} /> Mark as SOS: urgent visa question</label>{sos && <p className="mt-2 leading-6">Community replies are not immediate or guaranteed. If someone is in immediate danger in the U.S., call 911.</p>}</div>}
           {sharedPath && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><p>Choose a community you have joined and add your own title and context. A link to the original discussion will be added when you post. Check that sharing it is appropriate for the chosen audience.</p></div>}
           <p className="text-sm text-slate-500 capitalize"><span aria-hidden="true" className="font-semibold text-rose-700 capitalize">*</span> Required fields</p>
@@ -214,7 +216,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
           <label className="block capitalize">
             <span className="font-bold text-slate-900 capitalize">Details <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span>
             <span id="post-body-help" className="mt-1 block text-sm text-slate-500 capitalize">Share the relevant context in at least 30 characters. Dates and timelines are optional.</span>
-            <textarea aria-label="Details" aria-describedby="post-body-help" required minLength={30} maxLength={10000} rows={9} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
+            <CompactTextarea aria-label="Details" aria-describedby="post-body-help" required minLength={30} maxLength={10000} rows={3} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
           </label>
           <div className="block">
             <span className="font-bold text-slate-900 capitalize">Tags <span className="text-sm font-normal text-slate-500 capitalize">(optional)</span></span>
