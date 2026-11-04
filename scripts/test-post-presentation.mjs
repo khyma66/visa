@@ -48,9 +48,17 @@ dependencies['./PostOriginBadge'] = await compile('../src/components/PostOriginB
 dependencies['./ResizablePostLayout.module.css'] = moduleUrl('export default {};');
 dependencies['./ResizablePostLayout'] = await compile('../src/components/ResizablePostLayout.tsx');
 dependencies['./SafetyNotice'] = await compile('../src/components/SafetyNotice.tsx');
+dependencies['./PostShare'] = await compile('../src/components/PostShare.tsx');
 const { QuestionCard } = await import(await compile('../src/components/QuestionCard.tsx'));
 const { QuestionDetail } = await import(await compile('../src/components/QuestionDetail.tsx'));
 const { setUser } = await import(auth);
+
+test('post sharing links to a community composer with the original post path', () => {
+  const post = { id:'33333333-3333-4333-8333-333333333333',author_id:null,author_username:'member',author_avatar_seed:'m',title:'Visa question',body:'Visa details',destination_country:'United States',visa_type:'H-1B',tags:[],status:'open',vote_score:0,answer_count:0,accepted_answer_id:null,created_at:'2026-10-03T12:00:00Z',updated_at:'2026-10-03T12:00:00Z' };
+  const html=renderToStaticMarkup(createElement(QuestionCard,{question:post}));
+  assert.match(html,/Copy link/);
+  assert.match(html,/\/ask\?shared=%2Fquestions%2F33333333-3333-4333-8333-333333333333/);
+});
 
 const question = {
   id: '33333333-3333-4333-8333-333333333333', author_id: '11111111-1111-4111-8111-111111111111', author_username: 'visa-tester',

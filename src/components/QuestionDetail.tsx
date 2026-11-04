@@ -5,7 +5,7 @@ import { isImportedPost, publicImportedUsername, topicLabel } from '@/lib/post-p
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowDown, ArrowUp, Check, CheckCircle2, MessageCircle, Share2, ThumbsUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, CheckCircle2, MessageCircle, ThumbsUp } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   acceptAnswer, createAnswer, getAnswerPage, getDiscussionContext, getQuestion, sortAnswers, voteAnswer, voteQuestion,
@@ -20,6 +20,7 @@ import { Avatar } from './Avatar';
 import { useAuth } from './AuthProvider';
 import { ReportButton } from './ReportButton';
 import { PostOriginBadge } from './PostOriginBadge';
+import { PostShare } from './PostShare';
 
 function Author({ id, username, seed, createdAt, sourceOnly = false }: { id: string; username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
   return (
@@ -78,7 +79,6 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
   const [answerBody, setAnswerBody] = useState('');
   const [loading, setLoading] = useState(!initialQuestion);
   const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     const version = ++loadVersion.current;
@@ -173,7 +173,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
               <div className="mt-6 flex flex-wrap gap-2">{question.tags.map((tag) => <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}</div>
               <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
                 <div className="flex gap-2">
-                  <button onClick={() => { void navigator.clipboard.writeText(window.location.href); setCopied(true); }} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 capitalize"><Share2 size={15} /> {copied ? 'Copied' : 'Share'}</button>
+                  <PostShare path={threadPath} />
                   {authorMessageHref && <Link href={authorMessageHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 capitalize"><MessageCircle size={15} /> Message author</Link>}
                 </div>
                 <Author id={question.id} username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
