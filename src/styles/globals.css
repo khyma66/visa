@@ -283,7 +283,6 @@
 .news-story:last-child { border-bottom: 0; }
 .news-story-layout { display: grid; gap: 1.25rem; align-items: start; }
 .news-story-media { min-width: 0; max-width: 24rem; }
-.news-search { display: block; width: 100%; min-height: 44px; padding: .75rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-size: 1rem; font-weight: 400; }
 .news-topics { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.25rem; }
 .news-topics > button { min-height: 44px; padding: .5rem .875rem; border: 1px solid #cbd5e1; border-radius: 999px; background: #fff; color: #475569; font-size: .875rem; font-weight: 600; }
 .news-topics > button:hover { background: #f0fdfa; }
@@ -296,3 +295,7 @@
   .news-story { padding: 1.5rem; }
   .news-story-layout { grid-template-columns: minmax(0, 1fr) minmax(140px, 26%); gap: 1.5rem; }
 }
+
+/* Consistent news presentation, including loaded headlines and topic controls. */
+.news-desk { text-transform: capitalize; }
+.news-desk :is(button, a, summary) { text-transform: inherit; }

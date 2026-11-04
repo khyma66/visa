@@ -28,7 +28,6 @@ export function LicensedStory({ article, lead = false }: { article: LicensedNews
 export function LicensedNewsFeed({ initialEdition }: { initialEdition: LicensedNewsEdition }) {
   const [edition, setEdition] = useState(initialEdition);
   const [stale, setStale] = useState(false);
-  const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(5);
   useEffect(() => {
     let active = true; let controller: AbortController | undefined;
@@ -47,17 +46,15 @@ export function LicensedNewsFeed({ initialEdition }: { initialEdition: LicensedN
     void refresh(); const interval = setInterval(() => { void refresh(); }, LICENSED_NEWS_REFRESH_MS);
     return () => { active = false; controller?.abort(); clearInterval(interval); };
   }, []);
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const articles = [...edition.articles].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).filter(a => words.every(w => `${a.title} ${a.excerpt} ${a.author}`.toLowerCase().includes(w)));
+  const articles = [...edition.articles].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
   const [lead, ...rest] = articles;
   return <section aria-labelledby="reporting-heading" className="min-w-0">
     <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-      <div><h2 id="reporting-heading" className="text-thread-title font-semibold text-slate-950">Independent reporting</h2><p className="mt-1 text-sm text-slate-500">The Texas Tribune · Immigration coverage</p></div>
+      <div><h2 id="reporting-heading" className="text-thread-title font-semibold text-slate-950">Latest News</h2><p className="mt-1 text-sm text-slate-500">The Texas Tribune · Immigration coverage</p></div>
       <p className="text-xs text-slate-500">Updated <time dateTime={edition.retrievedAt}>{new Date(edition.retrievedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</time></p>
     </div>
-    <label className="mb-5 block text-sm font-semibold text-slate-700"><span>Search independent reporting</span><input type="search" value={query} maxLength={120} onChange={e => { setQuery(e.target.value); setLimit(5); }} placeholder="Search immigration reporting…" className="news-search mt-2" /></label>
     {(stale || Date.now() - Date.parse(edition.retrievedAt) > 3 * LICENSED_NEWS_REFRESH_MS) && <p role="status" className="mb-4 text-sm text-amber-900">Showing the last saved edition. Story dates below are the original publication dates.</p>}
-    {lead ? <><div className="news-story-list"><LicensedStory key={lead.photo?.id ?? lead.id} article={lead} lead /><div>{rest.slice(0, limit - 1).map(article => <LicensedStory key={article.photo?.id ?? article.id} article={article} />)}</div></div>{articles.length > limit && <button type="button" onClick={() => setLimit(v => v + 5)} className="mt-4 min-h-11 rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold hover:bg-white">More stories ({articles.length - limit})</button>}</> : <p role="status" className="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">{query.trim() ? 'No stories match. Try a different search.' : 'No eligible reporting is available in this edition. Official updates are available in their tab.'}</p>}
+    {lead ? <><div className="news-story-list"><LicensedStory key={lead.photo?.id ?? lead.id} article={lead} lead /><div>{rest.slice(0, limit - 1).map(article => <LicensedStory key={article.photo?.id ?? article.id} article={article} />)}</div></div>{articles.length > limit && <button type="button" onClick={() => setLimit(v => v + 5)} className="mt-4 min-h-11 rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold hover:bg-white">More stories ({articles.length - limit})</button>}</> : <p role="status" className="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">No Eligible Reporting Is Available In This Edition. Official Updates Are Available In Their Tab.</p>}
     <details className="mt-5 text-xs leading-5 text-slate-500"><summary className="cursor-pointer font-medium text-slate-600">Sources &amp; photo credits</summary><p className="mt-2">Publisher-provided previews link to the full reporting. Photos are shown only with the story they accompanied and retain the original credit. No stock illustrations or unlicensed wire-service photos.</p><p className="mt-2"><a href="https://www.texastribune.org/" className="underline" target="_blank" rel="noopener noreferrer">The Texas Tribune</a> is a nonprofit, nonpartisan media organization that informs Texans — and engages with them — about public policy, politics, government and statewide issues. <a href="https://www.texastribune.org/republishing-guidelines/" className="underline" target="_blank" rel="noopener noreferrer">Republishing guidelines</a>. Feed checked hourly; publication frequency varies.</p></details>
   </section>;
 }

@@ -35,7 +35,7 @@ for(const [name,fetcher] of [
 
 function elements(node){if(Array.isArray(node))return node.flatMap(elements);if(!node||typeof node!=='object')return [];return [node,...elements([node.props?.children,node.props?.related])];}
 function content(node){if(Array.isArray(node))return node.map(content).join(' ');if(node==null||typeof node==='boolean')return '';return typeof node==='object'?content([node.props?.children,node.props?.related]):String(node);}
-test('headline search, topic chips, reset and pagination work without additional network requests',()=>{
+test('headline topic chips and pagination without search work without additional network requests',()=>{
   const h=new Harness();
   const headlines={source:'GDELT Project',retrievedAt:'2026-11-03T20:12:00Z',articles:Array.from({length:15},(_,i)=>({title:i===0?'USCIS F-1 student visa update':'USCIS H-1B work visa update '+i,url:'https://example.com/'+i,publisher:'Example',publishedAt:'2026-11-03T10:00:00Z'}))};
   const render=()=>{h.index=0;globalThis.__newsHarness=h;h.tree=HeadlineResults({headlines});};
@@ -44,9 +44,7 @@ test('headline search, topic chips, reset and pagination work without additional
     render();assert.equal(elements(h.tree).filter(n=>n.type==='article').length,12);
     button('Show more').props.onClick();render();assert.equal(elements(h.tree).filter(n=>n.type==='article').length,15);
     button('Students').props.onClick();render();assert.equal(elements(h.tree).filter(n=>n.type==='article').length,1);
-    elements(h.tree).find(n=>n.type==='input').props.onChange({target:{value:'no-matching-story'}});render();
-    assert.match(content(h.tree),/No headlines match/);
-    button('Clear filters').props.onClick();render();assert.equal(elements(h.tree).filter(n=>n.type==='article').length,12);
+    button('All Headlines').props.onClick();render();assert(!elements(h.tree).some(n=>n.type==='input'));assert.equal(elements(h.tree).filter(n=>n.type==='article').length,12);
     assert.match(content(h.tree),/Indexed/);assert.equal(elements(h.tree).filter(n=>n.type==='img').length,0);
     for(const a of elements(h.tree).filter(n=>n.type==='a'&&n.props.target==='_blank'))assert.match(a.props.rel,/noopener/);
   }finally{h.close();}
@@ -75,7 +73,7 @@ test('news tabs expose one panel, support keyboard navigation and retain mounted
     render();return prevented;
   };
   try {
-    render();check('reporting');const effects=h.effects.length;
+    render();check('reporting');assert.deepEqual(tabs().map(n=>n.props.children),['Latest News','News Headlines','Official Notices']);const effects=h.effects.length;
     assert.equal(key('ArrowRight'),true);check('headlines');assert.equal(focused,1);
     key('End');check('official');assert.equal(focused,2);
     key('ArrowRight');check('reporting');
@@ -100,7 +98,7 @@ test('without licensed reporting, news opens an available official edition and d
   }finally{h.close();}
 });
 
-test('publisher coverage stays newest first within topic and search filters without changing source dates',()=>{
+test('publisher coverage stays newest first within topic filters without changing source dates',()=>{
   const h=new Harness();
   const headlines={source:'USCIS Newsroom',retrievedAt:'2026-11-04T00:00:00Z',articles:[
     {title:'H-1B older update',url:'https://example.com/older',publisher:'USCIS',publishedAt:'2026-11-01T09:00:00Z'},
@@ -111,7 +109,7 @@ test('publisher coverage stays newest first within topic and search filters with
   const dates=()=>elements(h.tree).filter(n=>n.type==='time').map(n=>n.props.dateTime);
   try{
     render();assert.deepEqual(dates(),[headlines.articles[1].publishedAt,headlines.articles[2].publishedAt,headlines.articles[0].publishedAt]);
-    elements(h.tree).find(n=>n.type==='button'&&content(n).trim()==='Work visas').props.onClick();render();
+    elements(h.tree).find(n=>n.type==='button'&&content(n).trim()==='Work Visas').props.onClick();render();
     assert.deepEqual(dates(),[headlines.articles[2].publishedAt,headlines.articles[0].publishedAt]);
     assert.doesNotMatch(content(h.tree),/Indexed/);
     assert.equal(headlines.articles[0].title,'H-1B older update','Do not reorder cached source data');
