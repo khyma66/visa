@@ -26,7 +26,7 @@ export function TopicCollectionCards({ topics }: { topics: ReturnType<typeof top
     <span className="text-xs font-semibold text-blue-700">{topic.count.toLocaleString('en-US')} existing discussions</span>
     <h3 className="mt-2 text-thread-title font-semibold text-slate-950 group-hover:text-blue-800">{topic.title}</h3>
     <p className="mt-1 text-base leading-6 text-slate-600">{topic.description}</p>
-    <span className="mt-3 block text-sm font-semibold text-blue-700">Browse Discussions →</span>
+    <span className="mt-3 block text-sm font-semibold text-blue-700 capitalize">Browse Discussions →</span>
   </Link>)}</div>;
 }
 
@@ -48,9 +48,9 @@ export function TopicCollections() {
   }, [retry]);
   return <section aria-labelledby="topic-collections" className="mt-6 rounded-xl bg-slate-50 p-4 sm:p-5">
     <h2 id="topic-collections" className="text-thread-title font-semibold text-slate-950 capitalize">Browse U.S. Visa Topics</h2>
-    <p className="mt-1 text-base leading-6 text-slate-600">Start with real discussions already here. These topic collections are separate from member-created communities below.</p>
-    {error ? <p role="alert" className="mt-3 text-sm text-slate-600">Topic counts are temporarily unavailable. <button onClick={() => setRetry(value => value + 1)} className="font-semibold text-blue-700 underline capitalize">Retry</button> or <Link href="/tags" className="font-semibold text-blue-700 underline capitalize">browse all tags</Link>.</p>
-      : topics ? <>{topics.length ? <TopicCollectionCards topics={topics} /> : <p className="mt-3 text-sm text-slate-600">No topic collections are available yet. <Link href="/" className="text-blue-700 underline capitalize">Browse recent discussions</Link>.</p>}</>
-      : <p role="status" className="mt-4 text-sm text-slate-500">Loading topic collections…</p>}
+    <p className="mt-1 text-base leading-6 text-slate-600 capitalize">Start with real discussions already here. These topic collections are separate from member-created communities below.</p>
+    {error ? <p role="alert" className="mt-3 text-sm text-slate-600 capitalize">Topic counts are temporarily unavailable. <button onClick={() => setRetry(value => value + 1)} className="font-semibold text-blue-700 underline capitalize">Retry</button> or <Link href="/tags" className="font-semibold text-blue-700 underline capitalize">browse all tags</Link>.</p>
+      : topics ? <>{topics.length ? <TopicCollectionCards topics={topics} /> : <p className="mt-3 text-sm text-slate-600 capitalize">No topic collections are available yet. <Link href="/" className="text-blue-700 underline capitalize">Browse recent discussions</Link>.</p>}</>
+      : <p role="status" className="mt-4 text-sm text-slate-500 capitalize">Loading topic collections…</p>}
   </section>;
 }

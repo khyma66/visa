@@ -115,6 +115,6 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
       </button>
       <aside aria-label="Related questions panel" tabIndex={width >= 800 ? 0 : undefined} className={styles.related}>{related}</aside>
     </div>
-    <p id={`${id}-keys`} className="sr-only">Use left and right arrow keys to resize, Shift for larger steps, Home or End for the limits. Double-click or press Enter to restore the default widths. Press Escape to cancel a drag.</p>
+    <p id={`${id}-keys`} className="sr-only capitalize">Use left and right arrow keys to resize, Shift for larger steps, Home or End for the limits. Double-click or press Enter to restore the default widths. Press Escape to cancel a drag.</p>
   </div>;
 }

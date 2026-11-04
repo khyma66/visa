@@ -40,10 +40,10 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
       })}
     </div>)}
     <div className="nav-section">
-      <p className="nav-section-title">Resources</p>
+      <p className="nav-section-title capitalize">Resources</p>
       <Link href="/guides" onClick={onNavigate} aria-current={pathname.startsWith('/guides') ? 'page' : undefined} className={`nav-item ${pathname.startsWith('/guides') ? 'nav-item-active' : ''} capitalize`}><BookOpen size={20} strokeWidth={1.7} aria-hidden="true"/>Visa Guides</Link>
       <Link href="/community-safety" onClick={onNavigate} className="nav-item capitalize"><ShieldCheck size={20} strokeWidth={1.7} aria-hidden="true"/>Community Safety</Link>
-      <div className="nav-policy-links">
+      <div className="nav-policy-links capitalize">
         <Link href="/about" onClick={onNavigate} className="capitalize">About</Link>
         <Link href="/privacy" onClick={onNavigate} className="capitalize">Privacy</Link>
         <Link href="/terms" onClick={onNavigate} className="capitalize">Rules</Link>

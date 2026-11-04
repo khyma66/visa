@@ -1,6 +1,6 @@
 export default function Loading() {
   return <div role="status" aria-label="Loading section" className="page-shell py-7 sm:py-10">
-    <span className="sr-only">Loading section…</span>
+    <span className="sr-only capitalize">Loading section…</span>
     <div aria-hidden="true" className="space-y-6 motion-safe:animate-pulse">
       <div className="h-8 w-48 rounded bg-slate-100" />
       <div className="h-11 rounded-full bg-slate-100" />
