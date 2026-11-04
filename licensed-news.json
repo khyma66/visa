@@ -1,0 +1,108 @@
+{
+  "source": "The Texas Tribune",
+  "retrievedAt": "2026-11-04T01:21:04.948Z",
+  "policyCheckedAt": "2026-11-04T01:21:04.948Z",
+  "policyDigest": "83e8cafce5e3cba8d74297f86204f3a50ff06a6f6cd84ed93dac0bc33fc2d1d5",
+  "articles": [
+    {
+      "id": "tt-249373",
+      "title": "Texas ICE agent indicted for striking fleeing Houston pedestrian with vehicle",
+      "url": "https://www.texastribune.org/2026/10/30/ice-agent-indictment-criminal-charges-texas/",
+      "author": "Uriel J. García and Stephen Simpson",
+      "publishedAt": "2026-10-30T15:36:39.000Z",
+      "excerpt": "A Harris County grand jury indicted a federal immigration agent caught on video striking a pedestrian during a vehicle pursuit.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-249373-13d0d2c1794568bf",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/10/20261030_Houston-DA-ICE_AT-_05.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Harris County District Attorney Sean Teare and officials watch body camera footage during a press conference announcing a grand jury indictment of ICE agent Mario Alberto Morales on a charge of aggravated assault with a deadly weapon on Friday, Oct. 30, 2026, in Houston. The indictment alleges Morales drove his vehicle into Miguel Parra-Hernandez.",
+        "credit": "Antranik Tavitian for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-248902",
+      "title": "Dolores Huerta, trailblazing advocate for migrant farmworkers, dies at 96",
+      "url": "https://www.texastribune.org/2026/10/28/dolores-huerta-civil-rights-advocate-dies/",
+      "author": "Colleen DeGuzman",
+      "publishedAt": "2026-10-28T17:58:21.000Z",
+      "excerpt": "Huerta co-founded several organizations to support Texas farmworkers. She was also an ardent advocate for women and immigrant's rights.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-248902-c01cd7fb15f96657",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/10/20260626-Texas-Dem-Convention-EG-115.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Dolores Huerta, civil rights leader and co-founder of United Farm Workers, speaks at the Texas Democratic Convention in Corpus Christi June 26, 2026.",
+        "credit": "Eddie Gaspar/The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-248709",
+      "title": "U.S. Supreme Court leaves in place limits on when deportation cases can be paused",
+      "url": "https://www.texastribune.org/2026/10/27/immigration-court-texas-ice-deportation-supreme-court-ruling/",
+      "author": "Uriel J. García",
+      "publishedAt": "2026-10-27T22:32:46.000Z",
+      "excerpt": "The court declined to block a settlement between Texas and the Justice Department that effectively restricts when judges can use their discretion in how quickly immigration cases are resolved.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/"
+    },
+    {
+      "id": "tt-248673",
+      "title": "Austin man shot by ICE officer pleads not guilty to federal assault charge",
+      "url": "https://www.texastribune.org/2026/10/27/wilber-rafael-garces-perez-not-guilty-plea-ice-austin/",
+      "author": "Uriel J. García and Alex Nguyen",
+      "publishedAt": "2026-10-27T20:27:42.000Z",
+      "excerpt": "Wilber Rafael Garces Perez entered the plea a week after a grand jury indicted him on one count of assaulting, resisting, impeding and obstructing a federal officer.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-248673-5f593803745a5b2f",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/10/20260930-Austin-ICE-Hearing-EH-01-.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Kate Lincoln-Goldfinch, an immigration attorney representing Wilber Rafael Garcés Pérez, who was shot by federal immigration agents on Sept. 20, holds a news conference following his federal bail hearing at the federal courthouse in Austin on Sept. 30, 2026.",
+        "credit": "Eli Hartman for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-248533",
+      "title": "Feds may build border wall through South Texas refuge as original plan stalls in court",
+      "url": "https://www.texastribune.org/2026/10/26/feds-may-build-border-wall-through-south-texas-refuge-as-original-plan-stalls-in-court/",
+      "author": "Berenice Garcia",
+      "publishedAt": "2026-10-26T22:12:02.000Z",
+      "excerpt": "The original plan, which has been stalled since July, called for construction of a wall along the Santa Ana wildlife refuge.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-248533-19333c0d91bf96a4",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/08/20260708-Cuellar-RGV-Border-Wall-GVC-33.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Survey stakes mark the proposed location of the border wall at the Santa Ana National Wildlife Refuge near Alamo on July 8, 2026.",
+        "credit": "Gabriel V. Cárdenas for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-248369",
+      "title": "Trump administration can hold immigrants in ICE custody without bond, court rules",
+      "url": "https://www.texastribune.org/2026/10/23/immigration-bond-detention-texas-court-ice-ruling-5th-circuit/",
+      "author": "Uriel J. García",
+      "publishedAt": "2026-10-23T22:38:05.000Z",
+      "excerpt": "The 5th U.S. Circuit Court of Appeals ruled detained immigrants don’t have a constitutional right to a bond hearing after they enter the country illegally.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-248369-18ab803aa98fc811",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/10/20260822-Bluebonnet-Detention-Center-RE-01.jpg?fit=1024%2C683&ssl=1",
+        "caption": "The entrance to the Bluebonnet Detention Center in Anson on Aug. 22, 2026. The privately run immigration detention center is operated by Management & Training Corporation, under contract with U.S. Immigration and Customs Enforcement.",
+        "credit": "Ronald W. Erdrich for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    }
+  ]
+}
