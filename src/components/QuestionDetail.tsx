@@ -145,7 +145,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
   }
 
   if (loading) return <main className="page-shell mx-auto max-w-6xl p-8"><div className="h-64 animate-pulse rounded-2xl bg-slate-100" /></main>;
-  if (!question) return <main className="page-shell mx-auto max-w-4xl p-8"><h1 className="text-2xl font-black">Question not found</h1><Link href="/" className="mt-4 inline-block font-bold text-blue-700">Back to questions</Link></main>;
+  if (!question) return <main className="page-shell mx-auto max-w-4xl p-8"><h1 className="text-2xl font-black capitalize">Question not found</h1><Link href="/" className="mt-4 inline-block font-bold text-blue-700 capitalize">Back to questions</Link></main>;
 
   const owner = user?.id === question.author_id;
   const imported = isImportedPost(question);
@@ -158,7 +158,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
       <ResizablePostLayout related={<RelatedQuestions drafting={Boolean(answerBody.trim())} context={{ ...question, draftText: answerBody, commentText: discussionContext }} />}>
         <div>
           <section className="border-b border-slate-200 pb-8">
-            {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/experiences" className="underline">Experience</Link> · {question.experience_category}</p>}
+            {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/experiences" className="underline capitalize">Experience</Link> · {question.experience_category}</p>}
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span>{question.destination_country !== 'Global' && <span className="text-slate-400">{question.destination_country}</span>}<PostOriginBadge post={question} /></div>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-950">{question.title}</h1>
             <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : experience ? 'replies' : 'answers'}</span></div>
@@ -173,8 +173,8 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
               <div className="mt-6 flex flex-wrap gap-2">{question.tags.map((tag) => <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}</div>
               <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
                 <div className="flex gap-2">
-                  <button onClick={() => { void navigator.clipboard.writeText(window.location.href); setCopied(true); }} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900"><Share2 size={15} /> {copied ? 'Copied' : 'Share'}</button>
-                  {authorMessageHref && <Link href={authorMessageHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900"><MessageCircle size={15} /> Message author</Link>}
+                  <button onClick={() => { void navigator.clipboard.writeText(window.location.href); setCopied(true); }} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 capitalize"><Share2 size={15} /> {copied ? 'Copied' : 'Share'}</button>
+                  {authorMessageHref && <Link href={authorMessageHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 capitalize"><MessageCircle size={15} /> Message author</Link>}
                 </div>
                 <Author id={question.id} username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
               </div>
@@ -204,7 +204,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                     <div className="max-w-prose whitespace-pre-wrap text-lg leading-relaxed text-slate-800">{answer.body}</div>
                     {!sourceOnly && <ReportButton kind={imported ? 'imported_answer' : 'answer'} target={answer.id} />}
                     <div className="mt-6 flex items-end justify-between gap-4">
-                      {!imported && !experience && owner && canAnswer && !sourceOnly && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline"><Check size={16} /> Accept this answer</button> : <span />}
+                      {!imported && !experience && owner && canAnswer && !sourceOnly && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline capitalize"><Check size={16} /> Accept this answer</button> : <span />}
                       <div className="flex items-center gap-3"><Author id={answer.id} username={answer.author_username} seed={answer.author_avatar_seed} createdAt={answer.created_at} sourceOnly={sourceOnly} />{messageHref && <Link href={messageHref} aria-label={`Message ${answer.author_username}`} className="text-slate-400 hover:text-blue-700"><MessageCircle size={18} /></Link>}</div>
                     </div>
                   </div>
@@ -212,14 +212,14 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
               ); })}
             </div>
             {moreAnswers && <button type="button" onClick={() => void loadMoreAnswers()} disabled={loadingMore || refreshing}
-              className="mt-4 rounded-lg border border-blue-200 px-4 py-2 text-sm font-bold text-blue-700 disabled:opacity-50">{loadingMore ? 'Loading replies…' : imported || experience ? 'Load more replies' : 'Load more answers'}</button>}
+              className="mt-4 rounded-lg border border-blue-200 px-4 py-2 text-sm font-bold text-blue-700 disabled:opacity-50 capitalize">{loadingMore ? 'Loading replies…' : imported || experience ? 'Load more replies' : 'Load more answers'}</button>}
           </section>
 
           <section className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-            <h2 className="text-thread-title font-semibold text-slate-950">{imported || experience ? 'Join the discussion' : 'Your answer'}</h2>
+            <h2 className="text-thread-title font-semibold text-slate-950 capitalize">{imported || experience ? 'Join the discussion' : 'Your answer'}</h2>
             {canAnswer && <p className="mt-2 text-sm leading-6 text-slate-500">Related posts update as you write, using the topics in your reply.</p>}
-            {!canAnswer ? <p className="mt-3 rounded-lg bg-slate-100 p-4 text-sm text-slate-700">{experience ? 'This experience is closed to new replies.' : 'This question is closed. Existing answers remain available, but new answers and acceptance are disabled.'}</p> : !user ? <p className="mt-3 text-sm text-slate-600"><Link href={`/login?next=${threadPath}`} className="font-bold text-blue-700 underline">Log In</Link> to reply with your public username.</p> : (
-              <form onSubmit={submitAnswer} className="mt-4"><textarea aria-label="Your reply" required minLength={20} maxLength={10000} rows={7} value={answerBody} onChange={(event) => setAnswerBody(event.target.value)} placeholder="Explain what worked and cite official guidance where possible." className="w-full rounded-xl border border-slate-300 p-4 leading-7 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" /><button disabled={submitting} className="mt-3 rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50">{submitting ? 'Posting…' : experience ? 'Post reply' : 'Post answer'}</button></form>
+            {!canAnswer ? <p className="mt-3 rounded-lg bg-slate-100 p-4 text-sm text-slate-700">{experience ? 'This experience is closed to new replies.' : 'This question is closed. Existing answers remain available, but new answers and acceptance are disabled.'}</p> : !user ? <p className="mt-3 text-sm text-slate-600"><Link href={`/login?next=${threadPath}`} className="font-bold text-blue-700 underline capitalize">Log In</Link> to reply with your public username.</p> : (
+              <form onSubmit={submitAnswer} className="mt-4"><textarea aria-label="Your reply" required minLength={20} maxLength={10000} rows={7} value={answerBody} onChange={(event) => setAnswerBody(event.target.value)} placeholder="Explain what worked and cite official guidance where possible." className="w-full rounded-xl border border-slate-300 p-4 leading-7 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" /><button disabled={submitting} className="mt-3 rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50 capitalize">{submitting ? 'Posting…' : experience ? 'Post reply' : 'Post answer'}</button></form>
             )}
             {error && <p className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
           </section>

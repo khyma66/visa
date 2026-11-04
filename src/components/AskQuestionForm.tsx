@@ -154,39 +154,39 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
     <main className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section>
         <p className="text-sm font-bold tracking-wider text-blue-700">{experience ? 'Share a Visa Experience' : 'Ask the Community'}</p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">{experience ? 'Help others learn from your visa journey' : 'Share the details that make your case different'}</h1>
-        {user ? <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your public username'}</b>.</p> : <p className="mt-3 text-sm text-slate-600"><Link href={loginReturn} className="font-semibold text-blue-700 underline">Log in</Link> or <Link href={loginReturn.replace('/login?', '/signup?')} className="font-semibold text-blue-700 underline">create an account</Link> to publish. Your draft is kept in this browser tab while you sign in.</p>}
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 capitalize">{experience ? 'Help others learn from your visa journey' : 'Share the details that make your case different'}</h1>
+        {user ? <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your public username'}</b>.</p> : <p className="mt-3 text-sm text-slate-600"><Link href={loginReturn} className="font-semibold text-blue-700 underline capitalize">Log in</Link> or <Link href={loginReturn.replace('/login?', '/signup?')} className="font-semibold text-blue-700 underline capitalize">create an account</Link> to publish. Your draft is kept in this browser tab while you sign in.</p>}
         <form onSubmit={submit} className="mt-7 space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <p className="text-sm text-slate-500"><span aria-hidden="true" className="font-semibold text-rose-700">*</span> Required fields</p>
           <label className="block"><span className="font-bold text-slate-900">Community <span className="text-sm font-normal text-slate-500">(optional)</span></span>
             <select aria-label="Community" value={communityId} onChange={(event) => setCommunityId(event.target.value)} disabled={submitting} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">
-              <option value="">General Questions</option>
+              <option value="" className="capitalize">General Questions</option>
               {communityId && !communities.some((community) => community.id === communityId) && <option value={communityId}>{selectedCommunity?.display_name ?? (selectionLoading ? 'Checking community…' : 'Join this community before posting')}</option>}
               {communities.map((community) => <option key={community.id} value={community.id}>{community.display_name}</option>)}
             </select>
-            <span className="mt-2 block text-sm text-slate-500">Choose a community you joined, or ask the whole community. <Link href="/explore" className="font-bold text-blue-700 underline">Find a community</Link></span>
+            <span className="mt-2 block text-sm text-slate-500">Choose a community you joined, or ask the whole community. <Link href="/explore" className="font-bold text-blue-700 underline capitalize">Find a community</Link></span>
           </label>
           {user && <div className="space-y-3">
-            <label className="block text-sm font-semibold">Search your communities<input maxLength={80} value={communitySearch} onChange={(event) => { setCommunitySearch(event.target.value); resetCommunityPage(); }} placeholder="Find a community you joined" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
-            <div className="flex flex-wrap items-center gap-3 text-sm">{communityAfter && <button type="button" disabled={communitiesLoading} onClick={resetCommunityPage} className="rounded border px-3 py-2 disabled:opacity-40">First page</button>}<button type="button" disabled={communitiesLoading || !communityHistory.length} onClick={previousCommunityPage} className="rounded border px-3 py-2 disabled:opacity-40">Previous communities</button><button type="button" disabled={communitiesLoading || !communityNext} onClick={nextCommunityPage} className="rounded border px-3 py-2 disabled:opacity-40">Next communities</button><span className="text-xs text-slate-500">Page {communityPage} · up to 24 communities</span></div>
+            <label className="block text-sm font-semibold capitalize">Search your communities<input maxLength={80} value={communitySearch} onChange={(event) => { setCommunitySearch(event.target.value); resetCommunityPage(); }} placeholder="Find a community you joined" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
+            <div className="flex flex-wrap items-center gap-3 text-sm">{communityAfter && <button type="button" disabled={communitiesLoading} onClick={resetCommunityPage} className="rounded border px-3 py-2 disabled:opacity-40 capitalize">First page</button>}<button type="button" disabled={communitiesLoading || !communityHistory.length} onClick={previousCommunityPage} className="rounded border px-3 py-2 disabled:opacity-40 capitalize">Previous communities</button><button type="button" disabled={communitiesLoading || !communityNext} onClick={nextCommunityPage} className="rounded border px-3 py-2 disabled:opacity-40 capitalize">Next communities</button><span className="text-xs text-slate-500">Page {communityPage} · up to 24 communities</span></div>
           </div>}
           {communitiesLoading && <p role="status">Loading your communities…</p>}
           {selectionLoading && <p role="status">Checking selected community…</p>}
-          {selectionError && <div role="alert" className="text-sm text-rose-700">{selectionError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline">Retry selection</button></div>}
-          {communityError && <div role="alert" className="text-sm text-rose-700">{communityError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline">Retry</button></div>}
-          <label className="block">
+          {selectionError && <div role="alert" className="text-sm text-rose-700">{selectionError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline capitalize">Retry selection</button></div>}
+          {communityError && <div role="alert" className="text-sm text-rose-700">{communityError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline capitalize">Retry</button></div>}
+          <label className="block capitalize">
             <span className="font-bold text-slate-900">{experience ? 'Experience Title' : 'Question Title'} <span aria-hidden="true" className="text-rose-700">*</span></span>
             <span id="post-title-help" className="mt-1 block text-sm text-slate-500">Be specific. Use 15–180 characters.</span>
             <input aria-label={experience ? 'Experience Title' : 'Question Title'} aria-describedby="post-title-help" required minLength={15} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Can I… / How should I…"
               className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
           </label>
           <div className="grid gap-5 sm:grid-cols-2">
-            <label><span className="font-bold text-slate-900">Destination Country</span><input readOnly value={country} className="mt-2 w-full rounded-lg border border-slate-200 bg-blue-50 px-4 py-3 text-blue-900" /><span className="mt-1 block text-xs text-slate-500">U.S. visa topics only for now.</span></label>
+            <label className="capitalize"><span className="font-bold text-slate-900">Destination Country</span><input readOnly value={country} className="mt-2 w-full rounded-lg border border-slate-200 bg-blue-50 px-4 py-3 text-blue-900" /><span className="mt-1 block text-xs text-slate-500">U.S. visa topics only for now.</span></label>
             <label><span className="font-bold text-slate-900">Visa Type <span aria-hidden="true" className="text-rose-700">*</span></span><select aria-label="Visa Type" required value={visaType} onChange={(event) => setVisaType(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600">{VISA_TYPES.map((type) => <option key={type} value={type}>{type === 'Family / spouse' ? 'Family / Spouse' : type}</option>)}</select></label>
           </div>
           {visaType === 'Other' && <p className="text-sm text-slate-600">Please mention your visa type in the title or details below.</p>}
           {experience && <label className="block"><span className="font-bold text-slate-900">Experience Category <span aria-hidden="true" className="text-rose-700">*</span></span><select aria-label="Experience Category" required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
-          <label className="block">
+          <label className="block capitalize">
             <span className="font-bold text-slate-900">Details <span aria-hidden="true" className="text-rose-700">*</span></span>
             <span id="post-body-help" className="mt-1 block text-sm text-slate-500">Share the relevant context in at least 30 characters. Dates and timelines are optional.</span>
             <textarea aria-label="Details" aria-describedby="post-body-help" required minLength={30} maxLength={10000} rows={9} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
@@ -212,7 +212,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
             <p className="mt-2 text-xs text-slate-500">Your selected tags are saved. Suggested tags are added automatically when you publish.</p>
           </div>
           {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
-          <button disabled={submitting} className="rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-60">{submitting ? 'Publishing…' : experience ? 'Publish Experience' : 'Publish Question'}</button>
+          <button disabled={submitting} className="rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-60 capitalize">{submitting ? 'Publishing…' : experience ? 'Publish Experience' : 'Publish Question'}</button>
         </form>
       </section>
       <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">

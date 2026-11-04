@@ -31,10 +31,10 @@ export default function ModerationPage() {
     finally { setBusy(false); }
   }
   return <main className="mx-auto max-w-4xl px-4 py-10">
-    <h1 className="text-3xl font-black">Moderation queue</h1>
+    <h1 className="text-3xl font-black capitalize">Moderation queue</h1>
     <p className="mt-3 text-sm text-slate-600">Restricted to operator-approved moderators. Review reports individually; reporting does not automatically remove content.</p>
     {loading ? <p>Loading…</p> : !user || demoMode ? <p className="mt-5">Log In with an approved moderator account.</p> : allowed && <>
-      <button disabled={busy} onClick={() => void load().catch(() => setError('Could not refresh reports.'))} className="my-5 rounded border px-4 py-2">Refresh reports</button>
+      <button disabled={busy} onClick={() => void load().catch(() => setError('Could not refresh reports.'))} className="my-5 rounded border px-4 py-2 capitalize">Refresh reports</button>
       {!reports.length && <p>No pending reports.</p>}
       {reports.map((report) => <article key={report.id} className="mb-5 rounded-xl border bg-white p-5">
         <h2 className="font-bold">{report.target_kind} · {report.reason}</h2>
@@ -42,9 +42,9 @@ export default function ModerationPage() {
         <p className="my-4 whitespace-pre-wrap break-words rounded bg-slate-50 p-3">{report.content ?? 'Content no longer available.'}</p>
         <p className="mb-4 whitespace-pre-wrap text-sm">Reporter details: {report.details || 'None'}</p>
         <div className="flex flex-wrap gap-3">
-          <button disabled={busy} onClick={() => void resolve(report.id,'dismissed')} className="rounded border px-3 py-2">Dismiss</button>
-          <button disabled={busy} onClick={() => void resolve(report.id,'removed')} className="rounded bg-rose-700 px-3 py-2 text-white">Remove content</button>
-          <button disabled={busy} onClick={() => void resolve(report.id,'removed',true)} className="rounded border border-rose-300 px-3 py-2 text-rose-800">Remove + suspend author</button>
+          <button disabled={busy} onClick={() => void resolve(report.id,'dismissed')} className="rounded border px-3 py-2 capitalize">Dismiss</button>
+          <button disabled={busy} onClick={() => void resolve(report.id,'removed')} className="rounded bg-rose-700 px-3 py-2 text-white capitalize">Remove content</button>
+          <button disabled={busy} onClick={() => void resolve(report.id,'removed',true)} className="rounded border border-rose-300 px-3 py-2 text-rose-800 capitalize">Remove + suspend author</button>
         </div>
       </article>)}
       {reports.length === 50 && <p>Showing the oldest 50 reports. Resolve these to see the next batch.</p>}
