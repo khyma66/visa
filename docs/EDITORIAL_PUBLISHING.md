@@ -47,7 +47,15 @@ rewrite version. Restarting continues missing rows. Every row starts pending.
 node scripts/editorial-rewrite.mjs \
   --input /absolute/private/output-directory/source-posts.json \
   --out /absolute/private/output-directory/drafts
+
+node scripts/editorial-export.mjs \
+  --sources /absolute/private/output-directory/source-posts.json \
+  --drafts /absolute/private/output-directory/drafts \
+  --out /absolute/private/output-directory/review.csv
 ```
+
+Export requires a complete batch, resets every row to pending and refuses to
+overwrite an existing CSV. Never regenerate over a human-edited review file.
 
 Rewriting preserves the member's account and unanswered questions. It adds no
 immigration advice and does not turn another person's experience into the
@@ -85,8 +93,10 @@ email addresses, user-editable profile metadata or a CSV approval flag alone.
 Service-role clients have no access to these endpoints or tables.
 
 Stage only the intended changed rows. Staging increments the revision and removes
-all old approval/assignment information. Copy returned revisions from the private
-receipt into the working CSV before review or scheduling. A stale revision fails
+all old approval/assignment information. On complete success, the command creates
+a separate CSV with the returned revisions and preserves the human decisions and
+source fields. Use that new file and its new checksum for review and scheduling;
+the original CSV is untouched. A stale revision fails
 instead of overwriting newer work. Receipts are saved after each successful batch.
 After an uncertain response, use `editorial_owner_action('list', {after_id: ...})`
 to reconcile the current revision; do not blindly repeat a mutating command.

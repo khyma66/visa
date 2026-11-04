@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { hash, postDate, selectPosts, sourceGroups, apifyRead, collect } from './editorial-apify.mjs';
 import { serializeCsv,parseCsv,COLUMNS } from './editorial-csv.mjs';
-import { validateReview,ownerRpc } from './editorial-review.mjs';
+import { validateReview,ownerRpc,withStageReceipts } from './editorial-review.mjs';
 import { redact,validateRewrite } from './editorial-rewrite.mjs';
+import { prepareReview } from './editorial-export.mjs';
 const url='https://www.facebook.com/groups/123/posts/456';
 const original={id:hash(url),source_url:url,source_key:'https://www.facebook.com/groups/123',source_posted_at:'2026-09-03T05:00:00.000Z',source_hash:hash('Original text'),original_text:'Original text',run_id:'I0AI56pOzxvFHTz40'};
 const review={...original,review_decision:'pending',title:'A member asks about H-1B processing',body:'A member asks about H-1B processing and reported delays.',visa_type:'H-1B',post_kind:'question',experience_category:'',tags:['h1b'],review_flags:[],backend_revision:0};
@@ -87,4 +88,17 @@ test('questions cannot silently become claims and absent source images are flagg
   assert(flags.includes('Source references an image not included in this text-only review'));
   draft.body='A member is asking whether this employer is currently hiring.';
   assert(!validateRewrite(source,draft).includes('Check question preserved as a question'));
+});
+test('export requires a complete batch and resets all cached approvals and assignments',()=>{
+  assert.throws(()=>prepareReview([original],[]),/Every source/);
+  const {rows,csv}=prepareReview([original],[{...review,review_decision:'approved',reviewer_notes:'old',reuse_basis:'old',author_id:'old',scheduled_at:'old',backend_revision:8}]);
+  assert.equal(rows[0].review_decision,'pending');assert.equal(rows[0].backend_revision,0);assert.equal(rows[0].author_id,'');
+  assert.equal(parseCsv(csv)[0].original_text,original.original_text);
+});
+test('staging receipts refresh revisions without altering human decisions or source text',()=>{
+  const row={...review,review_decision:'approved',reviewer_notes:'Compared with source',backend_revision:3};
+  const updated=withStageReceipts([row],[{id:row.id,revision:4,status:'draft'}]);
+  assert.equal(updated[0].backend_revision,4);assert.equal(updated[0].review_decision,'approved');assert.equal(row.backend_revision,3);
+  assert.throws(()=>withStageReceipts([row],[]),/Incomplete/);
+  assert.throws(()=>withStageReceipts([row],[{id:row.id,revision:5,status:'draft'}]),/Invalid/);
 });
