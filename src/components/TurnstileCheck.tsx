@@ -71,8 +71,8 @@ export function TurnstileCheck({ siteKey, resetKey, onToken }: {
     };
   }, [siteKey, resetKey, retry]);
   if (!siteKey) return null;
-  return <div className="space-y-2">
+  return <div className="space-y-2 capitalize">
     <div ref={container} aria-label="Security check" />
-    {failed && <p role="alert" className="text-sm text-rose-700">The security check couldn’t load. <button type="button" className="underline" onClick={() => { onTokenRef.current(''); setRetry(value => value + 1); }}>Retry security check</button></p>}
+    {failed && <p role="alert" className="text-sm text-rose-700 capitalize">The security check couldn’t load. <button type="button" className="underline capitalize" onClick={() => { onTokenRef.current(''); setRetry(value => value + 1); }}>Retry security check</button></p>}
   </div>;
 }

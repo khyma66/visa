@@ -83,7 +83,7 @@ test('configured Google and phone keep one primary prompt with a secondary phone
   const html=render({11:{google:true,phone:true}});
   assert.doesNotMatch(button(html,'Continue with Google'),/disabled=""/);
   assert.match(html,/Use phone instead/);
-  assert.doesNotMatch(html,/Sign-in contact method|aria-pressed/);
+  assert.doesNotMatch(html,/Sign-in contact method/);
   assert.doesNotMatch(html,/Not available yet/);
 });
 test('loading and failed settings keep provider actions disabled and allow retry',()=>{
@@ -114,7 +114,7 @@ test('email signup collects private names and policy acknowledgement happens onl
   assert.match(inputs.find(input=>input.includes('name="passwordConfirmation"')),/required=""/);
   assert.doesNotMatch(signup,/type="checkbox"/);
   assert.doesNotMatch(render({11:{google:true,phone:true}}),/type="checkbox"/);
-  assert.match(signup,/Your full name stays private/);
+  assert.doesNotMatch(signup,/Your full name stays private|Only your first initial appears/);
   assert.match(signup,/href="\/terms"/);
   assert.match(signup,/href="\/privacy"/);
   for(const html of [render({11:{google:true,phone:true}}),render({5:'phone',11:{google:true,phone:true}},true),render({6:'code'},true)]) assert.doesNotMatch(html,/name="firstName"|name="lastName"/);

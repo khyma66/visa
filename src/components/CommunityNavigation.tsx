@@ -29,7 +29,7 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
       { href: '/communities/new', label: 'Start a Community', icon: Plus },
     ] },
   ];
-  return <nav aria-label={mobile ? 'Mobile navigation' : 'Main navigation'} className="community-navigation">
+  return <nav aria-label={mobile ? 'Mobile navigation' : 'Main navigation'} className="community-navigation capitalize">
     {sections.map((section) => <div key={section.name} className="nav-section">
       <p className="nav-section-title">{section.name}</p>
       {section.links.map(({ href, label, icon: Icon, ...state }) => {
@@ -40,14 +40,14 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
       })}
     </div>)}
     <div className="nav-section">
-      <p className="nav-section-title">Resources</p>
-      <Link href="/guides" onClick={onNavigate} aria-current={pathname.startsWith('/guides') ? 'page' : undefined} className={`nav-item ${pathname.startsWith('/guides') ? 'nav-item-active' : ''}`}><BookOpen size={20} strokeWidth={1.7} aria-hidden="true"/>Visa Guides</Link>
-      <Link href="/community-safety" onClick={onNavigate} className="nav-item"><ShieldCheck size={20} strokeWidth={1.7} aria-hidden="true"/>Community Safety</Link>
-      <div className="nav-policy-links">
-        <Link href="/about" onClick={onNavigate}>About</Link>
-        <Link href="/privacy" onClick={onNavigate}>Privacy</Link>
-        <Link href="/terms" onClick={onNavigate}>Rules</Link>
-        <Link href="/contact" onClick={onNavigate}>Help & Contact</Link>
+      <p className="nav-section-title capitalize">Resources</p>
+      <Link href="/guides" onClick={onNavigate} aria-current={pathname.startsWith('/guides') ? 'page' : undefined} className={`nav-item ${pathname.startsWith('/guides') ? 'nav-item-active' : ''} capitalize`}><BookOpen size={20} strokeWidth={1.7} aria-hidden="true"/>Visa Guides</Link>
+      <Link href="/community-safety" onClick={onNavigate} className="nav-item capitalize"><ShieldCheck size={20} strokeWidth={1.7} aria-hidden="true"/>Community Safety</Link>
+      <div className="nav-policy-links capitalize">
+        <Link href="/about" onClick={onNavigate} className="capitalize">About</Link>
+        <Link href="/privacy" onClick={onNavigate} className="capitalize">Privacy</Link>
+        <Link href="/terms" onClick={onNavigate} className="capitalize">Rules</Link>
+        <Link href="/contact" onClick={onNavigate} className="capitalize">Help & Contact</Link>
       </div>
     </div>
   </nav>;

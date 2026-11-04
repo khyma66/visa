@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+export const MIN_PASSWORD_LENGTH = 12;
+export const MAX_PASSWORD_LENGTH = 128;
+export const PASSWORD_GUIDANCE = 'Use a unique password with 12–128 characters.';
+
 export type SocialProvider = 'google';
 export type AuthMethods = { google: boolean; phone: boolean };
 export type SignupNames = { firstName: string; lastName: string };
@@ -26,8 +30,8 @@ export function authCallbackUrl(origin: string, next: string | null): string {
 export function authErrorMessage(reason: unknown, context: AuthErrorContext = {}): string {
   const error = reason as { code?: string; status?: number } | null;
   const requestFailure = context.createAccount
-    ? 'We couldn’t send your verification code. Check your details and try again. Already a member? Choose Log in.'
-    : 'We couldn’t send a sign-in code. Check your details. New to VisaThreads? Choose Create account first.';
+    ? 'We couldn’t send your verification code. Check your details and try again. Already a member? Choose Log In.'
+    : 'We couldn’t send a sign-in code. Check your details. New to VisaThreads? Choose Sign Up first.';
   if (error?.code === 'policy_required') return 'Please review the policies and confirm your eligibility first.';
   if (error?.status === 429 || ['over_email_send_rate_limit', 'over_sms_send_rate_limit', 'over_request_rate_limit'].includes(error?.code ?? '')) return 'Too many attempts. Please wait a few minutes before trying again.';
   // Supabase also returns otp_disabled when create_user:false cannot find an
@@ -47,7 +51,7 @@ export function authErrorMessage(reason: unknown, context: AuthErrorContext = {}
     if (context.action === 'signup') return 'We couldn’t create the account with those details. Try another email or log in if you already have an account.';
     if (context.action === 'request-code') return requestFailure;
     if (context.action === 'verify-code') return 'We couldn’t verify that code. Check the contact details and enter the latest code, or request a new one.';
-    return 'We couldn’t sign you in with those details. Try again or use an email code. New here? Choose Create account.';
+    return 'We couldn’t sign you in with those details. Try again or use an email code. New here? Choose Sign Up.';
   }
   if (error?.code === 'signup_disabled') return context.action === 'request-code' && !context.createAccount
     ? requestFailure
@@ -86,7 +90,7 @@ export async function requestEmailCode(client: SupabaseClient, email: string, re
 
 export async function registerWithPassword(client: SupabaseClient, email: string, password: string, redirectTo: string, names: SignupNames, captchaToken?: string): Promise<boolean> {
   const data = signupNameData(names);
-  if (password.length < 12 || password.length > 128) throw { code: 'invalid_password' };
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) throw { code: 'invalid_password' };
   const { data: result, error } = await client.auth.signUp({
     email: normalizeEmail(email), password,
     options: { emailRedirectTo: redirectTo, data, ...authCaptchaOptions(captchaToken) },
@@ -143,7 +147,7 @@ export async function signInWithPassword(client: SupabaseClient, email: string, 
 }
 
 export async function setVerifiedPassword(client: SupabaseClient, password: string) {
-  if (password.length < 12 || password.length > 128) throw { code: 'invalid_password' };
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) throw { code: 'invalid_password' };
   // Verify against the auth server, not a client-edited session or metadata.
   const { data: current, error: currentError } = await client.auth.getUser();
   if (currentError || !current.user?.email_confirmed_at) throw { code: 'email_not_confirmed' };

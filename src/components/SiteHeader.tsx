@@ -37,7 +37,7 @@ export function SiteHeader() {
 
   return (
     <header className="site-header">
-      <a href="#main-content" className="skip-link">Skip to content</a>
+      <a href="#main-content" className="skip-link capitalize">Skip to content</a>
       <div className="header-content">
         <details ref={mobileMenu} className="mobile-menu" onKeyDown={(event) => {
           if (event.key === 'Escape' && mobileMenu.current) {
@@ -57,18 +57,18 @@ export function SiteHeader() {
         </Link>
         <form action="/" method="get" role="search" className="header-search">
           <Search size={19} aria-hidden="true"/>
-          <label className="sr-only" htmlFor="site-search">Search VisaThreads</label>
+          <label className="sr-only capitalize" htmlFor="site-search">Search VisaThreads</label>
           <input id="site-search" name="q" type="search" placeholder="Search visa questions" maxLength={200}/>
           <button type="submit" className="icon-control" aria-label="Search" title="Search"><Search size={18}/></button>
         </form>
         {demoMode && (
-          <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 sm:flex">
+          <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 sm:flex capitalize">
             <ShieldCheck size={13} /> Local profile
           </span>
         )}
         <FeedbackLauncher />
-        <Link href={user ? '/ask' : '/login?next=%2Fask#sign-in'} aria-label="Ask a Question" title="Ask a Question" className="header-secondary-action header-ask">
-          <Plus size={16} /> <span className="hidden sm:inline">Ask</span>
+        <Link href={user ? '/ask' : '/login?next=%2Fask#sign-in'} aria-label="Ask a Question" title="Ask a Question" className="header-secondary-action header-ask capitalize">
+          <Plus size={16} /> <span className="hidden sm:inline capitalize">Ask</span>
         </Link>
         {loading ? <span role="status" aria-label="Checking account" className="header-account h-10 w-10 animate-pulse rounded-full bg-slate-100" /> : user ? (
           <div ref={accountRef} className="header-account relative">
@@ -77,12 +77,12 @@ export function SiteHeader() {
               <ChevronDown size={14} aria-hidden="true" className="mr-1 text-slate-500" />
             </button>
             {open && <div id="account-panel" className="absolute right-0 top-12 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-              <p className="text-xs font-semibold tracking-wide text-slate-500">Your Account</p>
+              <p className="text-xs font-semibold tracking-wide text-slate-500 capitalize">Your Account</p>
               <p className="mt-1 break-words font-bold text-slate-900">{profile ? `u/${profile.username}` : 'Signed in'}</p>
-              <p className="text-xs text-slate-500">{profile ? `${profile.reputation} reputation` : 'Private account menu'}</p>
-              {user.email && <p className="mt-2 break-all text-xs text-slate-600">{user.email}<span className="mt-1 block text-slate-400">Sign-in email · visible only to you</span></p>}
-              {!profile && (profileLoading ? <p role="status" className="mt-2 text-xs text-slate-500">Loading profile…</p> : <button className="mt-2 text-xs text-blue-700 underline" onClick={() => { void refreshProfile().catch(() => setError('Couldn’t load your profile. Try again.')); }}>Reload profile</button>)}
-              <nav aria-label="Account options" className="mt-3 border-y border-slate-100 py-2" onClick={() => setOpen(false)}>
+              <p className="text-xs text-slate-500 capitalize">{profile ? `${profile.reputation} reputation` : 'Private account menu'}</p>
+              {user.email && <p className="mt-2 break-all text-xs text-slate-600">{user.email}<span className="mt-1 block text-slate-400 capitalize">Sign-in email · visible only to you</span></p>}
+              {!profile && (profileLoading ? <p role="status" className="mt-2 text-xs text-slate-500 capitalize">Loading profile…</p> : <button className="mt-2 text-xs text-blue-700 underline capitalize" onClick={() => { void refreshProfile().catch(() => setError('Couldn’t load your profile. Try again.')); }}>Reload profile</button>)}
+              <nav aria-label="Account options" className="mt-3 border-y border-slate-100 py-2 capitalize" onClick={() => setOpen(false)}>
                 <OwnerFeedbackLink />
                 {[
                   ['/account?tab=profile', 'My profile', UserRound],
@@ -93,15 +93,15 @@ export function SiteHeader() {
                 ].map(([href, label, Icon]) => { const ItemIcon = Icon as typeof UserRound; return <Link key={href as string} href={href as string} className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><ItemIcon size={16} aria-hidden="true" />{label as string}</Link>; })}
               </nav>
               {!demoMode && <div className="mt-2">
-                <button disabled={busy} onClick={() => void logout(true)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><UsersRound size={16} /> Use a different account</button>
-                <button disabled={busy} onClick={() => void logout()} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><LogOut size={16} /> {busy ? 'Signing out…' : 'Sign out'}</button>
+                <button disabled={busy} onClick={() => void logout(true)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 capitalize"><UsersRound size={16} /> Use a different account</button>
+                <button disabled={busy} onClick={() => void logout()} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 capitalize"><LogOut size={16} /> {busy ? 'Signing out…' : 'Sign out'}</button>
               </div>}
               {error && <p role="alert" className="mt-2 text-xs text-rose-700">{error}</p>}
             </div>}
           </div>
         ) : (
           <nav aria-label="Account access" className="header-auth-actions">
-            <a href="/login#sign-in" className="header-auth-button">Log in / Sign up</a>
+            <a href="/login#sign-in" aria-label="Log In or Sign Up" className="header-auth-button capitalize">LogIn/SignUp</a>
           </nav>
         )}
       </div>
