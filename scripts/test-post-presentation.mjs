@@ -62,7 +62,7 @@ test('post sharing links to a community composer with the original post path', (
   const post = { id:'33333333-3333-4333-8333-333333333333',author_id:null,author_username:'member',author_avatar_seed:'m',title:'Visa question',body:'Visa details',destination_country:'United States',visa_type:'H-1B',tags:[],status:'open',vote_score:0,answer_count:0,accepted_answer_id:null,created_at:'2026-10-03T12:00:00Z',updated_at:'2026-10-03T12:00:00Z' };
   const html=renderToStaticMarkup(createElement(QuestionCard,{question:post}));
   assert.match(html,/Copy link/);
-  assert.match(html,/\/ask\?shared=%2Fquestions%2F33333333-3333-4333-8333-333333333333/);
+  assert.match(html,/\/ask\?shared=%2Fus%2Fen%2Fquestions%2F33333333-3333-4333-8333-333333333333/);
 });
 
 const question = {
@@ -184,7 +184,7 @@ test('public alias presentation does not change source records or topic tags', (
   renderToStaticMarkup(createElement(QuestionCard, { question: post }));
   renderDetail(post);
   assert.deepEqual(post, before);
-  for (const tag of post.tags) assert(renderDetail(post).includes(`/?tag=${tag}`));
+  for (const tag of post.tags) assert(renderDetail(post).includes(`/us/en?tag=${tag}`));
 });
 
 test('cards expose exact reply totals without rounding', () => {

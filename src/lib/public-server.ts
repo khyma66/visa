@@ -78,5 +78,5 @@ export async function publicThreadSitemap() {
     order: 'created_at.desc,id.desc', limit: '1000',
   }) ?? [];
   return rows.filter(row => NATIVE_THREAD_ID.test(row.id) && ['question', 'experience'].includes(row.post_kind ?? 'question'))
-    .map(row => ({ url: new URL(`/${row.post_kind === 'experience' ? 'experiences' : 'questions'}/${row.id}`, origin).href }));
+    .map(row => ({ url: new URL(`/us/en/${row.post_kind === 'experience' ? 'experiences' : 'questions'}/${row.id}`, origin).href }));
 }

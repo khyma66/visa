@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readFile} from 'node:fs/promises';
 import ts from 'typescript';
+import {destinationModule} from './destination-test-module.mjs';
 const source=await readFile(new URL('../src/lib/security-edge.ts',import.meta.url),'utf8');
-const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace("'./destination-routing'",JSON.stringify(destinationModule));
 const {trafficGroup,trafficDecision,trafficFingerprint,recordTrafficSignal}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
 const request=(path,headers={},method='GET')=>new Request('https://visathreads.com'+path,{method,headers:{'cf-connecting-ip':'192.0.2.2',...headers}});
 const pass={limit:async()=>({success:true})},deny={limit:async()=>({success:false})};
@@ -16,6 +17,7 @@ test('archive has a separate limit and normal browsing passes',async()=>{
   assert.equal(await trafficDecision(request('/api/community'),{SECURITY_ARCHIVE_LIMIT:pass,SECURITY_READ_LIMIT:deny}),null);
   assert.equal((await trafficDecision(request('/questions/123'),{SECURITY_READ_LIMIT:deny})).kind,'read_rate_limit');
   assert.equal((await trafficDecision(request('/api/community'),{SECURITY_ARCHIVE_LIMIT:deny})).decision,'limited');
+  for(const path of ['/us/en','/us/en/questions/123','/us/en/news','/us/en/explore'])assert.equal((await trafficDecision(request(path),{SECURITY_READ_LIMIT:deny})).kind,'read_rate_limit');
 });
 test('common file and admin probes are blocked without disclosing path or query',async()=>{
   for(const path of ['/.env','/.env.local','/.git/config','/wp-login.php','/phpmyadmin/'])assert.deepEqual(await trafficDecision(request(path+'?password=do-not-log'),{}),{kind:'probe_path',route_group:'probe',decision:'blocked'});
@@ -64,6 +66,7 @@ test('real middleware returns safe blocked responses, schedules evidence, and pr
     .replace("'./security-edge'",JSON.stringify(moduleUrl(js)))
     .replace("'cloudflare:workers'",JSON.stringify(moduleUrl('export const env=globalThis.__securityBindings;'))));
   const source=compile(await readFile(new URL('../src/middleware.ts',import.meta.url),'utf8'))
+    .replace("'./lib/destination-routing'",JSON.stringify(destinationModule))
     .replace("'./lib/security-runtime'",JSON.stringify(runtime))
     .replace("'./lib/search-visibility'",JSON.stringify(moduleUrl('export const discoveryOrigin=()=>"";export const discoveryPath=()=>false;')))
     .replace("'next/server'",JSON.stringify(moduleUrl('export class NextResponse extends Response { static next(){return new NextResponse(null)} static redirect(url,status){return new NextResponse(null,{status,headers:{location:url.toString()}})} }')));
@@ -79,7 +82,7 @@ test('real middleware returns safe blocked responses, schedules evidence, and pr
       if(expected===200)assert.equal(tasks.length,0);else assert.equal(tasks.length,1);
     }
     env.SECURITY_READ_LIMIT={limit:async()=>{throw new Error('unavailable');}};
-    const req=request('/questions/123');req.nextUrl=new URL(req.url);
+    const req=request('/us/en/questions/123');req.nextUrl=new URL(req.url);
     assert.equal((await middleware(req,{waitUntil:()=>{}})).status,200,'Limiter outage fails open for public reads, not database permissions');
   } finally {delete globalThis.__securityBindings;if(old===undefined)delete process.env.APP_ENV;else process.env.APP_ENV=old;}
 });

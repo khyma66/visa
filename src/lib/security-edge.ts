@@ -1,4 +1,5 @@
 // Server-only traffic controls. These are deterrents, not proof that a visitor is a bot.
+import { unprefixedDestinationPath } from './destination-routing';
 export type TrafficGroup = 'archive' | 'discussion' | 'directory' | 'news' | 'probe';
 export type TrafficSignal = { kind: 'read_rate_limit' | 'cross_site_read' | 'probe_path'; route_group: TrafficGroup; decision: 'blocked' | 'limited' };
 type Limiter = { limit(input: { key: string }): Promise<{ success: boolean }> };
@@ -8,9 +9,10 @@ export type SecurityBindings = {
   SECURITY_INGEST_KEY?: string;
 };
 export function trafficGroup(path: string): TrafficGroup | null {
+  path = unprefixedDestinationPath(path);
   if (/^\/(?:\.env(?:\.|\/|$)|\.git(?:\/|$)|wp-admin(?:\/|$)|wp-login\.php$|phpmyadmin(?:\/|$))/i.test(path)) return 'probe';
   if (path === '/api/community') return 'archive';
-  if (/^\/questions(?:\/|$)/.test(path)) return 'discussion';
+  if (/^\/(?:questions|experiences|c)(?:\/|$)/.test(path)) return 'discussion';
   if (/^\/(?:explore|tags|users)(?:\/|$)/.test(path) || path === '/') return 'directory';
   if (/^\/(?:news|api\/news)(?:\/|$)/.test(path)) return 'news';
   return null;

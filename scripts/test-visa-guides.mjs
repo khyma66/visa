@@ -65,7 +65,7 @@ test('curated guide routes have unique slugs and valid existing U.S. visa filter
     assert(VISA_TYPES.includes(guide.visaType));
     for (const experiences of [false, true]) {
       const url = new URL(guideCommunityHref(guide, experiences), 'https://visathreads.com');
-      assert.equal(url.pathname, experiences ? '/experiences' : '/');
+      assert.equal(url.pathname, experiences ? '/us/en/experiences' : '/us/en');
       assert.equal(url.searchParams.get('visa'), guide.visaType);
       assert.deepEqual([...url.searchParams.keys()], ['visa']);
     }
@@ -107,7 +107,7 @@ test('guides and about remain noindex in preview, sandbox and unapproved environ
       for (const guide of VISA_GUIDES) {
         const meta = await detail.generateMetadata(props(guide.slug));
         assert.deepEqual(meta.robots, { index: false, follow: false });
-        assert.equal(meta.alternates.canonical, `https://visathreads.com/guides/${guide.slug}`);
+        assert.equal(meta.alternates.canonical, `https://visathreads.com/us/en/guides/${guide.slug}`);
         assert.equal(meta.description, guide.description);
       }
     });
@@ -142,10 +142,10 @@ test('unknown guide slugs return not-found rather than a thin or indexed generic
 
 test('guide index and about connect all actual pages and disclose community/source limitations', () => {
   const indexHtml = renderToStaticMarkup(createElement(index.default));
-  for (const guide of VISA_GUIDES) assert(indexHtml.includes(`href="/guides/${guide.slug}"`));
+  for (const guide of VISA_GUIDES) assert(indexHtml.includes(`href="/us/en/guides/${guide.slug}"`));
   assert(indexHtml.includes('href="/about"'));
   const aboutHtml = renderToStaticMarkup(createElement(about.default));
-  for (const path of ['/guides', '/contact', '/privacy', '/terms', '/community-safety']) assert(aboutHtml.includes(`href="${path}"`));
+  for (const path of ['/us/en/guides', '/contact', '/privacy', '/terms', '/community-safety']) assert(aboutHtml.includes(`href="${path}"`));
   assert.match(aboutHtml, /independent community/);
   assert.match(aboutHtml, /not a government service/);
   assert.match(aboutHtml, /not mean an attorney reviewed/);

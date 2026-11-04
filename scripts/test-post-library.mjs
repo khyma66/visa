@@ -53,3 +53,10 @@ test('post cards and details share the five actions and no longer mount Award',a
   const ask=await readFile(new URL('../src/components/AskQuestionForm.tsx',import.meta.url),'utf8');
   assert.match(reply,/<CompactTextarea[^>]+rows=\{1\}/);assert.match(ask,/<CompactTextarea[^>]+rows=\{3\}/);
 });
+
+test('narrow profile cards keep one action row and account tabs do not collapse',async()=>{
+  const css=await readFile(new URL('../src/styles/globals.css',import.meta.url),'utf8');
+  assert.match(css,/@container post-actions \(max-width: 280px\)/);
+  const account=await readFile(new URL('../src/components/AccountClient.tsx',import.meta.url),'utf8');
+  assert.match(account,/inline-flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2/);
+});

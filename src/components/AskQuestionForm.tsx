@@ -57,7 +57,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
     setCommunityId(params.get('community') ?? '');
     setSos(!experience && params.get('sos') === '1');
     const shared = params.get('shared') ?? '';
-    if (/^\/(?:questions|experiences)\/(?:apify-[a-z0-9_-]{1,100}|[a-f0-9-]{36})$/i.test(shared)) setSharedPath(shared);
+    if (/^\/(?:us\/en\/)?(?:questions|experiences)\/(?:apify-[a-z0-9_-]{1,100}|[a-f0-9-]{36})$/i.test(shared)) setSharedPath(shared);
   }, []);
   const draftKey = `visathreads:${experience ? 'experience' : 'question'}-draft:v1`;
   useEffect(() => {
@@ -160,7 +160,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
         ...(communityId ? { community_id: communityId } : {}),
       });
       try { sessionStorage.removeItem(draftKey); } catch { /* Draft cleanup is best-effort. */ }
-      if (alive.current && currentActor.current === actor && submitLock.current === operation) router.push(`/${experience ? 'experiences' : 'questions'}/${id}`);
+      if (alive.current && currentActor.current === actor && submitLock.current === operation) router.push(`/us/en/${experience ? 'experiences' : 'questions'}/${id}`);
     } catch (reason) {
       if (alive.current && currentActor.current === actor && submitLock.current === operation) {
         setError(reason instanceof Error ? reason.message : 'Could not publish the question.');
@@ -191,7 +191,7 @@ export function AskQuestionForm({ experience = false }: { experience?: boolean }
               {communityId && !communities.some((community) => community.id === communityId) && <option value={communityId}>{selectedCommunity?.display_name ?? (selectionLoading ? 'Checking community…' : 'Join this community before posting')}</option>}
               {communities.map((community) => <option key={community.id} value={community.id}>{community.display_name}</option>)}
             </select>
-            <span className="mt-2 block text-sm text-slate-500 capitalize">Choose a community you joined, or ask the whole community. <Link href="/explore" className="font-bold text-blue-700 underline capitalize">Find a community</Link></span>
+            <span className="mt-2 block text-sm text-slate-500 capitalize">Choose a community you joined, or ask the whole community. <Link href="/us/en/explore" className="font-bold text-blue-700 underline capitalize">Find a community</Link></span>
           </label>
           {user && <div className="space-y-3">
             <label className="block text-sm font-semibold capitalize">Search your communities<input maxLength={80} value={communitySearch} onChange={(event) => { setCommunitySearch(event.target.value); resetCommunityPage(); }} placeholder="Find a community you joined" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>

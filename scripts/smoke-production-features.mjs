@@ -1,3 +1,4 @@
+import { verifyDestinationRoutes } from './smoke-destination-routing.mjs';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { LIVE_SITE, sha256 } from './live-preview-archive.mjs';
@@ -39,8 +40,9 @@ await verifyStableRollout({ expected, previous: receipt.health,
     assert.match(robots, /Allow: \/\s/);
     assert.match(robots, /Sitemap: https:\/\/visathreads.com\/sitemap.xml/);
     const sitemap = await (await probe.request('search-sitemap', '/sitemap.xml')).text();
-    assert.match(sitemap, /<loc>https:\/\/visathreads.com\/guides/);
+    assert.match(sitemap, /<loc>https:\/\/visathreads.com\/us\/en\/guides/);
     assert(!/<loc>[^<]*\/(questions|experiences|admin|owner|account|messages)\//.test(sitemap));
+    await verifyDestinationRoutes(LIVE_SITE);
     await verifyClientAssets(probe, assets);
     await probeRolloutHealth(probe, 'end');
   },

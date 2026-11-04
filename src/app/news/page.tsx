@@ -7,7 +7,7 @@ import { isLicensedNews } from '@/lib/licensed-news-shared';
 import { LicensedNewsFeed } from '@/components/LicensedNewsFeed';
 
 export function generateMetadata() {
-  return publicPageMetadata('/news', 'U.S. Visa News & Official Resources', 'Find U.S. visa updates and links to official immigration resources.', {}, false);
+  return publicPageMetadata('/us/en/news', 'U.S. Visa News & Official Resources', 'Find U.S. visa updates and links to official immigration resources.', {}, false);
 }
 
 export default function NewsPage() {

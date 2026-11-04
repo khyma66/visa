@@ -7,7 +7,7 @@ import { publicPageMetadata, type SearchParameters } from '@/lib/search-metadata
 const title = 'U.S. Visa Guides and Official Resources';
 const description = 'Focused H-1B, F-1 and OPT, and B1/B2 checklists to help you find official instructions and ask clearer questions in the VisaThreads community.';
 export async function generateMetadata({ searchParams }: { searchParams: Promise<SearchParameters> }): Promise<Metadata> {
-  return publicPageMetadata('/guides', title, description, await searchParams);
+  return publicPageMetadata('/us/en/guides', title, description, await searchParams);
 }
 
 export default function GuidesPage() {
@@ -21,10 +21,10 @@ export default function GuidesPage() {
       <div className="divide-y divide-slate-200">
         {VISA_GUIDES.map((guide) => <article key={guide.slug} className="py-7">
           <p className="mb-2 text-sm font-semibold text-blue-700">{guide.visaType}</p>
-          <h2 className="text-thread-title font-semibold leading-snug"><Link href={`/guides/${guide.slug}`} className="text-slate-950 hover:text-blue-700 hover:underline">{guide.title}</Link></h2>
+          <h2 className="text-thread-title font-semibold leading-snug"><Link href={`/us/en/guides/${guide.slug}`} className="text-slate-950 hover:text-blue-700 hover:underline">{guide.title}</Link></h2>
           <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">{guide.description}</p>
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-3">
-            <Link href={`/guides/${guide.slug}`} className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-blue-700 hover:underline capitalize">Read the guide<ChevronRight size={16} aria-hidden="true" /></Link>
+            <Link href={`/us/en/guides/${guide.slug}`} className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-blue-700 hover:underline capitalize">Read the guide<ChevronRight size={16} aria-hidden="true" /></Link>
             <Link href={guideCommunityHref(guide)} className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-slate-700 hover:text-blue-700 hover:underline capitalize">Browse related questions<ArrowUpRight size={15} aria-hidden="true" /></Link>
           </div>
         </article>)}

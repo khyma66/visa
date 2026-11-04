@@ -139,7 +139,7 @@ test('activity distinguishes loading, empty questions, empty answers and retryab
 test('activity uses actual question/answer destinations and preserves pagination boundaries', () => {
   const item = { id: 'answer-one', question_id: 'question-one', body: 'Useful answer text', vote_score: 3, is_accepted: true, created_at: '2026-10-05T12:00:00Z' };
   const html = render(Activity, { values: { 0: 'answers', 1: 1, 2: [item], 3: true, 4: false }, refs: { 0: `${profile.id}:answers:1` } }, { userId: profile.id });
-  assert(links(html).some(link => link.href === '/questions/question-one'));
+  assert(links(html).some(link => link.href === '/us/en/questions/question-one'));
   assert.match(html, /Accepted answer/);
   assert.match(html, /3 votes/);
   assert.doesNotMatch(button(html, 'Next'), /disabled=""/);
@@ -152,7 +152,7 @@ test('settings waits for policy verification and distinguishes acceptance needed
     const html = render(AccountSettings, { values: { 0: 'Changed bio', 3: status } });
     assert.match(button(html, 'Save profile'), /disabled=""/);
     if (status === 'loading') { assert.match(html, /Checking profile editing access/); assert.doesNotMatch(html, /role="alert"/); }
-    if (status === 'required') assert(links(html).some(link => link.href === '/' && link.label === 'Review community terms to edit your profile'));
+    if (status === 'required') assert(links(html).some(link => link.href === '/us/en' && link.label === 'Review community terms to edit your profile'));
     if (status === 'error') assert(button(html, 'Try again'));
   }
   const accepted = render(AccountSettings, { values: { 0: 'Changed bio', 3: 'accepted' } });

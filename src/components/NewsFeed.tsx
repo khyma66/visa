@@ -80,7 +80,7 @@ export function NewsFeed({ initialFeed = null }: { initialFeed?: NewsFeedData | 
   }, [attempt]);
 
   return <main className="page-shell py-7 sm:py-10">
-    <Link href="/explore" className="text-sm font-semibold text-teal-800 hover:underline capitalize">← Explore Communities</Link>
+    <Link href="/us/en/explore" className="text-sm font-semibold text-teal-800 hover:underline capitalize">← Explore Communities</Link>
     <div className="mt-6 flex flex-wrap items-end justify-between gap-5 border-b border-slate-200 pb-7 capitalize">
       <div className="capitalize"><p className="text-xs font-bold tracking-[0.16em] text-teal-800 capitalize">VisaThreads · News desk</p><h1 className="mt-3 text-2xl font-semibold text-slate-950 sm:text-3xl capitalize">Your visa news brief</h1><p className="mt-3 max-w-2xl text-base leading-6 text-slate-600 capitalize">U.S. visa and immigration coverage from Google News.</p></div>
       <a href={GOOGLE_NEWS_SEARCH_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 capitalize">Open Google News <span aria-hidden="true" className="capitalize">↗</span><span className="sr-only capitalize"> (opens in a new tab)</span></a>

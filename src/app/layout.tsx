@@ -56,7 +56,7 @@ export default function RootLayout({
             <p className="mb-2 font-semibold text-slate-700 capitalize">U.S. visa questions, shared experiences, and helpful resources.</p>
             <SafetyNotice />
             <nav aria-label="Policies and support" className="mt-2 flex flex-wrap gap-x-4">
-              <Link href="/guides" className="underline capitalize">U.S. Visa Guides</Link>
+              <Link href="/us/en/guides" className="underline capitalize">U.S. Visa Guides</Link>
               <Link href="/about" className="underline capitalize">About VisaThreads</Link>
               <Link href="/privacy" className="underline capitalize">Privacy Notice</Link>
               <Link href="/terms" className="underline capitalize">Terms and Conditions</Link>

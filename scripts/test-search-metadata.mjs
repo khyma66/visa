@@ -1,3 +1,4 @@
+import { destinationModule } from './destination-test-module.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import ts from 'typescript';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 
 const moduleUrl = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
-const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
+const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText.replaceAll("'./destination-routing'", JSON.stringify(destinationModule)).replaceAll("'./lib/destination-routing'", JSON.stringify(destinationModule));
 const read = name => readFile(new URL(`../src/lib/${name}.ts`, import.meta.url), 'utf8');
 const guides = moduleUrl(compile(await read('visa-guides')));
 const { VISA_GUIDES } = await import(guides);
@@ -57,7 +58,7 @@ test('sandbox marker blocks guide indexing even with falsely approved production
   for (const path of ['/guides', ...VISA_GUIDES.map(({ slug }) => `/guides/${slug}`)]) {
     const metadata = publicPageMetadata(path, 'Guide', 'Description', {}, true, env);
     assert.deepEqual(metadata.robots, { index: false, follow: false });
-    assert.equal(metadata.alternates.canonical, `https://visathreads.com${path}`);
+    assert.equal(metadata.alternates.canonical, `https://visathreads.com/us/en${path}`);
   }
 });
 
@@ -65,7 +66,7 @@ test('native schema reflects real visible pseudonyms, answers, dates and accepta
   const schema = threadStructuredData(question, [answer], approved);
   assert.equal(schema['@type'], 'QAPage');
   assert.equal(schema.mainEntity.author.name, 'u/bluebird');
-  assert.equal(schema.mainEntity.acceptedAnswer.url, `https://visathreads.com/questions/${qid}#answer-${aid}`);
+  assert.equal(schema.mainEntity.acceptedAnswer.url, `https://visathreads.com/us/en/questions/${qid}#answer-${aid}`);
   assert.equal(schema.mainEntity.acceptedAnswer.text, answer.body);
   assert.equal(schema.mainEntity.datePublished, question.created_at);
   assert.equal(schema.mainEntity.dateModified, undefined);
@@ -203,7 +204,7 @@ test('sitemap queries only approved anonymous native public rows, excluding arch
       assert.equal(options.headers.Authorization, undefined);
       return Response.json([{ id: qid, post_kind: 'question' }, { id: aid, post_kind: 'experience' }, { id: 'apify-123' }]);
     };
-    try { assert.deepEqual(await server.publicThreadSitemap(), [{ url: `https://visathreads.com/questions/${qid}` }, { url: `https://visathreads.com/experiences/${aid}` }]); }
+    try { assert.deepEqual(await server.publicThreadSitemap(), [{ url: `https://visathreads.com/us/en/questions/${qid}` }, { url: `https://visathreads.com/us/en/experiences/${aid}` }]); }
     finally { globalThis.fetch = original; }
   });
 });

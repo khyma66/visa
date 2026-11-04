@@ -46,7 +46,7 @@ export function RelatedQuestions({ context, drafting = false }: { context: Disco
       <p aria-live="polite" className="mt-2 text-xs text-slate-500">{loading ? 'Finding related questions...' : error || `${items.length} related ${items.length === 1 ? 'post' : 'posts'}`}</p>
       {error && <button onClick={() => setRevision((value) => value + 1)} className="mt-2 text-sm font-semibold text-blue-700 underline capitalize">Retry related questions</button>}
     </div>
-    <div>{items.map((item) => <Link key={item.id} href={`/questions/${item.id}`} className="block rounded-lg px-2 py-3 hover:bg-slate-50">
+    <div>{items.map((item) => <Link key={item.id} href={`/us/en/questions/${item.id}`} className="block rounded-lg px-2 py-3 hover:bg-slate-50">
       <p className="break-words text-thread-title font-semibold text-slate-800">{item.title}</p>
       {isImportedPost(item) && <div className="mt-1"><PostOriginBadge post={item} /></div>}
       <div className="mt-2 flex flex-wrap gap-1">{item.tags.slice(0, 3).map((tag) => <span key={tag} className={`max-w-full break-words rounded px-1.5 py-0.5 text-xs font-medium ${item.matched_tags?.includes(tag) ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{topicLabel(tag)}</span>)}</div>

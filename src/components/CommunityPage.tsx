@@ -78,7 +78,7 @@ export function CommunityPage({ slug }: { slug: string }) {
 
   async function changeMembership() {
     if (!community || actionLock.current || authLoading || membershipLoading || membershipError) return;
-    if (!user) { router.push(`/login?next=${encodeURIComponent(`/c/${slug}`)}`); return; }
+    if (!user) { router.push(`/login?next=${encodeURIComponent(`/us/en/c/${slug}`)}`); return; }
     if (membership?.role === 'owner') return;
     const actor = user.id;
     const operation = Symbol();
@@ -112,11 +112,11 @@ export function CommunityPage({ slug }: { slug: string }) {
   }
 
   if (loading) return <main className="mx-auto max-w-6xl px-4 py-10"><p role="status" className="capitalize">Loading community…</p></main>;
-  if (error) return <main className="mx-auto max-w-6xl px-4 py-10"><Link href="/explore" className="text-blue-700 underline capitalize">Explore Communities</Link><div role="alert" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">{error} <button onClick={() => setRetry((n) => n + 1)} className="font-bold underline capitalize">Retry</button></div></main>;
-  if (!community) return <main className="mx-auto max-w-6xl px-4 py-10"><h1 className="text-2xl font-bold capitalize">Community unavailable</h1><p className="mt-3 text-sm text-slate-600 capitalize">This community does not exist or is not open for public browsing.</p><Link href="/explore" className="mt-5 inline-block font-bold text-blue-700 underline capitalize">Explore Communities</Link></main>;
+  if (error) return <main className="mx-auto max-w-6xl px-4 py-10"><Link href="/us/en/explore" className="text-blue-700 underline capitalize">Explore Communities</Link><div role="alert" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">{error} <button onClick={() => setRetry((n) => n + 1)} className="font-bold underline capitalize">Retry</button></div></main>;
+  if (!community) return <main className="mx-auto max-w-6xl px-4 py-10"><h1 className="text-2xl font-bold capitalize">Community unavailable</h1><p className="mt-3 text-sm text-slate-600 capitalize">This community does not exist or is not open for public browsing.</p><Link href="/us/en/explore" className="mt-5 inline-block font-bold text-blue-700 underline capitalize">Explore Communities</Link></main>;
   const askHref = `/ask?community=${community.id}`;
   return <main className="page-shell">
-    <Link href="/explore" className="text-sm font-semibold text-blue-700 hover:underline capitalize">← Explore Communities</Link>
+    <Link href="/us/en/explore" className="text-sm font-semibold text-blue-700 hover:underline capitalize">← Explore Communities</Link>
     <header className="mt-5 rounded-xl border border-slate-200 bg-white p-5 sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold tracking-wide text-blue-700">{community.category} · {community.country || 'Worldwide'}</p><h1 className="mt-2 text-3xl font-bold tracking-tight">{community.display_name}</h1><p className="mt-2 text-sm text-slate-500">c/{community.slug}</p></div><button onClick={() => void changeMembership()} disabled={busy || authLoading || membershipLoading || !!membershipError || membership?.role === 'owner'} className={`rounded-full border px-5 py-2.5 text-sm font-bold disabled:opacity-50 ${membership ? 'border-slate-300 text-slate-700' : 'border-blue-700 bg-blue-700 text-white hover:bg-blue-800'} capitalize`}>{busy ? 'Saving…' : membership?.role === 'owner' ? 'Owner' : membership ? 'Leave community' : 'Join community'}</button></div>
       <p className="mt-5 max-w-3xl whitespace-pre-line text-sm leading-6 text-slate-600">{community.description}</p><p className="mt-4 flex items-center gap-2 text-xs text-slate-500"><Users size={16} />{Number(community.member_count).toLocaleString()} {Number(community.member_count) === 1 ? 'member' : 'members'} · Public community</p>
