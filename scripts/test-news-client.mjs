@@ -11,7 +11,7 @@ const shared = url(compile(await readFile(new URL('../src/lib/official-news-shar
 const headlinesShared = url(compile(await readFile(new URL('../src/lib/immigration-headlines.ts',import.meta.url),'utf8')));
 const react = url('export const useState = (...args) => globalThis.__newsHarness.useState(...args); export const useEffect = (...args) => globalThis.__newsHarness.useEffect(...args);');
 const component = compile(await readFile(new URL('../src/components/OfficialNewsFeed.tsx',import.meta.url),'utf8')).replace(/(from\s+)(['"])([^'"]+)\2/g,(_,prefix,q,name)=>prefix+JSON.stringify(name==='react'?react:name==='@/lib/official-news-shared'?shared:name==='@/lib/immigration-headlines'?headlinesShared:pathToFileURL(require.resolve(name)).href));
-const {OfficialNewsFeed}=await import(url(component));
+const {OfficialNewsFeed,HeadlineResults}=await import(url(component));
 const edition=JSON.parse(await readFile(new URL('../src/data/official-news-snapshot.json',import.meta.url),'utf8'));
 class Harness {
   slots=[]; index=0; effects=[]; dirty=false;
@@ -31,4 +31,23 @@ for(const [name,fetcher] of [
 ]) test(`browser retains server-provided articles during refresh and ${name}`,async()=>{
   const previous=globalThis.fetch;globalThis.fetch=fetcher;const h=new Harness();
   try{h.render();assert.deepEqual(resultFeed(h.tree),edition);await h.settle();assert.deepEqual(resultFeed(h.tree),edition);}finally{h.close();globalThis.fetch=previous;}
+});
+
+function elements(node){if(Array.isArray(node))return node.flatMap(elements);if(!node||typeof node!=='object')return [];return [node,...elements(node.props?.children)];}
+function content(node){if(Array.isArray(node))return node.map(content).join(' ');if(node==null||typeof node==='boolean')return '';return typeof node==='object'?content(node.props?.children):String(node);}
+test('headline search, topic chips, reset and pagination work without additional network requests',()=>{
+  const h=new Harness();
+  const headlines={source:'GDELT Project',retrievedAt:'2026-11-03T20:12:00Z',articles:Array.from({length:15},(_,i)=>({title:i===0?'USCIS F-1 student visa update':'USCIS H-1B work visa update '+i,url:'https://example.com/'+i,publisher:'Example',publishedAt:'2026-11-03T10:00:00Z'}))};
+  const render=()=>{h.index=0;globalThis.__newsHarness=h;h.tree=HeadlineResults({headlines});};
+  const button=name=>elements(h.tree).find(n=>n.type==='button'&&content(n).includes(name));
+  try{
+    render();assert.equal(elements(h.tree).filter(n=>n.type==='article').length,12);
+    button('Show more').props.onClick();render();assert.equal(elements(h.tree).filter(n=>n.type==='article').length,15);
+    button('Students').props.onClick();render();assert.equal(elements(h.tree).filter(n=>n.type==='article').length,1);
+    elements(h.tree).find(n=>n.type==='input').props.onChange({target:{value:'no-matching-story'}});render();
+    assert.match(content(h.tree),/No headlines match/);
+    button('Clear filters').props.onClick();render();assert.equal(elements(h.tree).filter(n=>n.type==='article').length,12);
+    assert.match(content(h.tree),/Indexed/);assert.equal(elements(h.tree).filter(n=>n.type==='img').length,0);
+    for(const a of elements(h.tree).filter(n=>n.type==='a'&&n.props.target==='_blank'))assert.match(a.props.rel,/noopener/);
+  }finally{h.close();}
 });

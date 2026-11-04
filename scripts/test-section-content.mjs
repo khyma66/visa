@@ -205,7 +205,7 @@ test('server-rendered news includes the saved articles before JavaScript or netw
   const html = renderToStaticMarkup(createElement(OfficialNewsFeed, {initialFeed: snapshot}));
   assert.equal((html.match(/<article\b/g) ?? []).length, snapshot.articles.length);
   assert.doesNotMatch(html, /Try Again|Loading recent/);
-  assert.match(html, /News topics/); assert.match(html, /Last successful check/);
+  assert.match(html, /News topics/); assert.match(html, /Updated/);
 });
 test('successful service data survives a later timeout or empty upstream response', async () => {
   let clock = now, calls = 0;
