@@ -222,8 +222,6 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
           <span className="auth-community-label capitalize">The VisaThreads Community</span>
           <h2 className="capitalize">{signup ? <>Your Next Chapter<br />Starts Here.</> : <>Welcome<br />Back.</>}</h2>
           <p className="capitalize">{signup ? 'Ask Questions, Share Experiences, And Find People On A Journey Like Yours.' : 'Pick Up Your Conversations And Find Fresh Perspectives For Your Visa Journey.'}</p>
-          <span className="auth-welcome-rule" aria-hidden="true" />
-          <p className="auth-welcome-note capitalize">A Little Guidance. A Shared Journey.</p>
         </div>
       </aside>
       </div>
