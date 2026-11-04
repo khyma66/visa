@@ -87,14 +87,14 @@ test('compiled phone form floor wins against small utilities and the desktop hea
   assert.equal(property(floor, 'font-size'), 'max(1rem, 16px)');
 });
 
-test('post reading text use the shared body size with readable line spacing', async () => {
+test('post detail uses larger shared reading sizes while feed cards remain compact', async () => {
   const card = await readFile(new URL('src/components/QuestionCard.tsx', root), 'utf8');
   assert.match(card, /text-thread-title[^\n]+\n\s*\{question\.title\}/);
   assert.match(card, /text-base leading-6[^\n]+\{question\.body\}/);
   const detail = await readFile(new URL('src/components/QuestionDetail.tsx', root), 'utf8');
-  assert.match(detail, /text-2xl font-semibold text-slate-950 sm:text-3xl">\{question.title\}/);
+  assert.match(detail, /text-4xl font-semibold leading-tight text-slate-950">\{question.title\}/);
   assert.doesNotMatch(detail, /<h2 className="text-(?:2xl|xl) font-black/);
-  for (const field of ['question', 'answer']) assert(detail.includes(`text-base leading-relaxed text-slate-800">{${field}.body}`));
+  for (const field of ['question', 'answer']) assert(detail.includes(`text-lg leading-relaxed text-slate-800">{${field}.body}`));
 });
 
 test('component text never reintroduces unreadable arbitrary sizes below the 12px metadata floor', async () => {
