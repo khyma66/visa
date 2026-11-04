@@ -41,14 +41,22 @@ jobs:
         run: |
           git config user.name 'VisaThreads News'
           git config user.email 'news-bot@users.noreply.github.com'
+          parent=$(git rev-parse --verify refs/remotes/origin/news-data 2>/dev/null || true)
+          indexdir=$(mktemp -d)
+          export GIT_INDEX_FILE="$indexdir/index"
+          if [ -n "$parent" ]; then
+            git read-tree "$parent"
+          else
+            git read-tree --empty
+          fi
           blob=$(git hash-object -w /tmp/official-news.json)
+          git update-index --add --cacheinfo "100644,$blob,official-news.json"
           if [ -s /tmp/immigration-headlines.json ]; then
             headlines_blob=$(git hash-object -w /tmp/immigration-headlines.json)
-            tree=$(printf '100644 blob %s\timmigration-headlines.json\n100644 blob %s\tofficial-news.json\n' "$headlines_blob" "$blob" | git mktree)
-          else
-            tree=$(printf '100644 blob %s\tofficial-news.json\n' "$blob" | git mktree)
+            git update-index --add --cacheinfo "100644,$headlines_blob,immigration-headlines.json"
           fi
-          parent=$(git rev-parse --verify refs/remotes/origin/news-data 2>/dev/null || true)
+          # Preserve the independently refreshed, permission-checked publisher edition.
+          tree=$(git write-tree)
           if [ -n "$parent" ]; then
             commit=$(printf 'Refresh verified public visa notices\n' | git commit-tree "$tree" -p "$parent")
           else

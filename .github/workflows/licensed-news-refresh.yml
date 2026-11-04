@@ -1,0 +1,41 @@
+name: Refresh permitted immigration reporting
+on:
+  schedule:
+    - cron: '37 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/licensed-news-refresh.yml]
+permissions:
+  contents: write
+concurrency:
+  group: public-visa-news-edition
+  cancel-in-progress: false
+jobs:
+  refresh:
+    if: github.repository == 'khyma66/visa' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify publisher permission and fetch original previews and photo credits
+        run: node scripts/refresh-licensed-news.mjs /tmp/licensed-news.json
+      - name: Publish verified reporting without replacing existing public editions
+        run: |
+          git fetch origin refs/heads/news-data:refs/remotes/origin/news-data
+          parent=$(git rev-parse refs/remotes/origin/news-data)
+          indexdir=$(mktemp -d)
+          export GIT_INDEX_FILE="$indexdir/index"
+          git read-tree "$parent"
+          blob=$(git hash-object -w /tmp/licensed-news.json)
+          git update-index --add --cacheinfo "100644,$blob,licensed-news.json"
+          tree=$(git write-tree)
+          git config user.name 'VisaThreads News'
+          git config user.email 'news-bot@users.noreply.github.com'
+          commit=$(printf 'Refresh permission-checked immigration reporting\n' | git commit-tree "$tree" -p "$parent")
+          git push origin "$commit:refs/heads/news-data"

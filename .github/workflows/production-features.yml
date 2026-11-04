@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# News desk: searchable publisher headlines, accurate edition timestamps; chatbot stays removed.
+# News desk: permission-checked reporting with credited article photography; chatbot stays removed.
 
 on:
   workflow_dispatch:
