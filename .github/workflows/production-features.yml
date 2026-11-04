@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# News desk: permission-checked reporting with credited article photography; chatbot stays removed.
+# News desk: workerd-verified feed and photo requests with permission-checked reporting; chatbot stays removed.
 
 on:
   workflow_dispatch:

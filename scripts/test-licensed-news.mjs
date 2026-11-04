@@ -75,7 +75,7 @@ test('cards include credited photo, dimensions, accessible context and full-stor
 });
 test('photo route accepts only edition-listed image identifiers and validates image bytes', async () => {
   const old=globalThis.fetch;let calls=[];
-  globalThis.fetch=async(url,options)=>{calls.push(String(url));assert.equal(options.redirect,'error');assert.equal(options.credentials,'omit');return String(url).includes('raw.githubusercontent')?Response.json(snapshot):new Response(new Uint8Array([255,216,255,224,0,1]));};
+  globalThis.fetch=async(url,options)=>{calls.push(String(url));assert.equal(options.redirect,'manual');assert.equal(options.credentials,'omit');return String(url).includes('raw.githubusercontent')?Response.json(snapshot):new Response(new Uint8Array([255,216,255,224,0,1]));};
   try{
     let r=await photoRoute.GET(new Request('https://visathreads.com/api/news-photo/bad'),{params:Promise.resolve({id:'https://localhost/'})});assert.equal(r.status,404);assert.equal(calls.length,0);
     const id=snapshot.articles[0].photo.id;
