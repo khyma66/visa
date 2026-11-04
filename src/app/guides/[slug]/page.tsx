@@ -65,7 +65,7 @@ export default async function VisaGuidePage({ params }: Props) {
           <Link href={guideCommunityHref(guide)} className="inline-flex min-h-11 items-center rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">Browse {guide.visaType} Questions</Link>
           <Link href={guideCommunityHref(guide, true)} className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize">Read Related Experiences</Link>
         </div>
-        <p className="mt-4 text-sm leading-6 text-slate-500">Do not share identity documents, receipt numbers or verification codes. This guide and community replies cannot establish your eligibility or work authorization.</p>
+        <p className="mt-4 text-sm leading-6 text-slate-500 capitalize">Do not share identity documents, receipt numbers or verification codes. This guide and community replies cannot establish your eligibility or work authorization.</p>
       </section>
 
       <section aria-labelledby="official-references" className="mt-8 border-t border-slate-200 pt-6">
@@ -81,7 +81,7 @@ export default async function VisaGuidePage({ params }: Props) {
             <p className="mt-1 text-sm leading-6 text-slate-600">{reference.publisher} · {reference.purpose}</p>
           </li>)}</ul>
         </div>}
-        <p className="mt-6 text-sm leading-6 text-slate-500">VisaThreads is an independent community, not a government service or law firm. The reference-check date describes this editorial check, not an agency update date or a guarantee that rules remain unchanged. <Link href="/contact" className="text-blue-700 underline capitalize">Report a correction</Link>.</p>
+        <p className="mt-6 text-sm leading-6 text-slate-500 capitalize">VisaThreads is an independent community, not a government service or law firm. The reference-check date describes this editorial check, not an agency update date or a guarantee that rules remain unchanged. <Link href="/contact" className="text-blue-700 underline capitalize">Report a correction</Link>.</p>
       </section>
     </article>
   </main>;

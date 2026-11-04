@@ -22,8 +22,8 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
             {!imported && <Avatar seed={question.author_avatar_seed} size="sm" />}
             <span className="break-all font-semibold text-slate-700">{imported ? publicImportedUsername(question) : `u/${question.author_username}`}</span>
             <PostOriginBadge post={question} />
-            <span aria-hidden="true">·</span>
-            <time dateTime={question.created_at} title={new Date(question.created_at).toLocaleString()}>{formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</time>
+            <span aria-hidden="true" className="capitalize">·</span>
+            <time className="capitalize" dateTime={question.created_at} title={new Date(question.created_at).toLocaleString()}>{formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</time>
             <span className="ml-auto rounded bg-blue-50 px-2 py-1 font-semibold text-blue-800">{question.visa_type}</span>
           </div>
           <Link href={path} className="block break-words text-thread-title font-semibold text-slate-950 decoration-1 underline-offset-4 hover:text-blue-700 hover:underline">
@@ -35,11 +35,11 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
             {question.tags.map((tag) => <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} onClick={onTagSelect ? (event) => { event.preventDefault(); onTagSelect(tag); } : undefined} className="max-w-full break-words rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}
             {question.destination_country !== 'Global' && <span className="ml-auto text-xs text-slate-500">{question.destination_country}</span>}
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
-            <span title={imported ? "reactions" : "votes"} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-2"><ArrowUp size={14} aria-hidden="true" />{compact(question.vote_score)}<span className="sr-only"> {imported ? "reactions" : "votes"}</span></span>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600 capitalize">
+            <span title={imported ? "reactions" : "votes"} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-2"><ArrowUp size={14} aria-hidden="true" />{compact(question.vote_score)}<span className="sr-only capitalize"> {imported ? "reactions" : "votes"}</span></span>
             <Link href={path} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 hover:bg-slate-200 ${question.accepted_answer_id ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100'}`}>
               {question.accepted_answer_id ? <CheckCircle2 size={14} aria-hidden="true" /> : <MessageCircle size={14} aria-hidden="true" />}
-              {question.answer_count} replies{question.accepted_answer_id && <span className="sr-only">, accepted answer</span>}
+              {question.answer_count} replies{question.accepted_answer_id && <span className="sr-only capitalize">, accepted answer</span>}
             </Link>
             {onRelated && <button onClick={() => onRelated(question)} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 hover:bg-slate-200 capitalize"><GitFork size={14} aria-hidden="true" />Related</button>}
             {/* Views are not instrumented. A legacy zero or share count is not a measured view total. */}

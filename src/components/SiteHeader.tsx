@@ -12,7 +12,6 @@ import { FeedbackLauncher, OwnerFeedbackLink } from './FeedbackLauncher';
 export function SiteHeader() {
   const pathname = usePathname();
   const router = useRouter();
-  const accountAccess = ['/login', '/signup', '/account/recovery', '/account/update-password'].includes(pathname);
   const { profile, user, loading, profileLoading, demoMode, signOut, refreshProfile } = useAuth();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,10 +36,10 @@ export function SiteHeader() {
   useEffect(() => { if (mobileMenu.current) mobileMenu.current.open = false; }, [pathname]);
 
   return (
-    <header className={`site-header${accountAccess ? ' site-header-account' : ''}`}>
+    <header className="site-header">
       <a href="#main-content" className="skip-link capitalize">Skip to content</a>
       <div className="header-content">
-        {!accountAccess && <details ref={mobileMenu} className="mobile-menu" onKeyDown={(event) => {
+        <details ref={mobileMenu} className="mobile-menu" onKeyDown={(event) => {
           if (event.key === 'Escape' && mobileMenu.current) {
             mobileMenu.current.open = false;
             mobileMenu.current.querySelector('summary')?.focus();
@@ -48,7 +47,7 @@ export function SiteHeader() {
         }}>
           <summary className="icon-control" aria-label="Open navigation" title="Navigation"><Menu size={22}/></summary>
           <div className="mobile-menu-panel"><CommunityNavigation mobile onNavigate={() => { if (mobileMenu.current) mobileMenu.current.open = false; }}/></div>
-        </details>}
+        </details>
         <Link href="/" className="site-brand" aria-label="VisaThreads home">
           {/* Local brand asset: no remote request or image-processing service. */}
           <span className="integrated-brand-logo-frame">
@@ -56,21 +55,21 @@ export function SiteHeader() {
             <img src="/assets/brand/visathreads-integrated-logo.png" width={172} height={60} alt="VisaThreads" className="integrated-brand-logo" decoding="async" />
           </span>
         </Link>
-        {!accountAccess && <form action="/" method="get" role="search" className="header-search">
+        <form action="/" method="get" role="search" className="header-search">
           <Search size={19} aria-hidden="true"/>
           <label className="sr-only capitalize" htmlFor="site-search">Search VisaThreads</label>
           <input id="site-search" name="q" type="search" placeholder="Search visa questions" maxLength={200}/>
           <button type="submit" className="icon-control" aria-label="Search" title="Search"><Search size={18}/></button>
-        </form>}
+        </form>
         {demoMode && (
-          <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 sm:flex">
+          <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 sm:flex capitalize">
             <ShieldCheck size={13} /> Local profile
           </span>
         )}
-        {!accountAccess && <FeedbackLauncher />}
-        {!accountAccess && <Link href={user ? '/ask' : '/login?next=%2Fask#sign-in'} aria-label="Ask a Question" title="Ask a Question" className="header-secondary-action header-ask capitalize">
-          <Plus size={16} /> <span className="hidden sm:inline">Ask</span>
-        </Link>}
+        <FeedbackLauncher />
+        <Link href={user ? '/ask' : '/login?next=%2Fask#sign-in'} aria-label="Ask a Question" title="Ask a Question" className="header-secondary-action header-ask capitalize">
+          <Plus size={16} /> <span className="hidden sm:inline capitalize">Ask</span>
+        </Link>
         {loading ? <span role="status" aria-label="Checking account" className="header-account h-10 w-10 animate-pulse rounded-full bg-slate-100" /> : user ? (
           <div ref={accountRef} className="header-account relative">
             <button ref={accountButton} onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="account-panel" className="flex min-h-10 items-center gap-2 rounded-full p-1 hover:bg-slate-100" aria-label={`Account: ${profile?.username ?? 'Signed in'}`}>
@@ -78,11 +77,11 @@ export function SiteHeader() {
               <ChevronDown size={14} aria-hidden="true" className="mr-1 text-slate-500" />
             </button>
             {open && <div id="account-panel" className="absolute right-0 top-12 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-              <p className="text-xs font-semibold tracking-wide text-slate-500">Your Account</p>
+              <p className="text-xs font-semibold tracking-wide text-slate-500 capitalize">Your Account</p>
               <p className="mt-1 break-words font-bold text-slate-900">{profile ? `u/${profile.username}` : 'Signed in'}</p>
-              <p className="text-xs text-slate-500">{profile ? `${profile.reputation} reputation` : 'Private account menu'}</p>
-              {user.email && <p className="mt-2 break-all text-xs text-slate-600">{user.email}<span className="mt-1 block text-slate-400">Sign-in email · visible only to you</span></p>}
-              {!profile && (profileLoading ? <p role="status" className="mt-2 text-xs text-slate-500">Loading profile…</p> : <button className="mt-2 text-xs text-blue-700 underline capitalize" onClick={() => { void refreshProfile().catch(() => setError('Couldn’t load your profile. Try again.')); }}>Reload profile</button>)}
+              <p className="text-xs text-slate-500 capitalize">{profile ? `${profile.reputation} reputation` : 'Private account menu'}</p>
+              {user.email && <p className="mt-2 break-all text-xs text-slate-600">{user.email}<span className="mt-1 block text-slate-400 capitalize">Sign-in email · visible only to you</span></p>}
+              {!profile && (profileLoading ? <p role="status" className="mt-2 text-xs text-slate-500 capitalize">Loading profile…</p> : <button className="mt-2 text-xs text-blue-700 underline capitalize" onClick={() => { void refreshProfile().catch(() => setError('Couldn’t load your profile. Try again.')); }}>Reload profile</button>)}
               <nav aria-label="Account options" className="mt-3 border-y border-slate-100 py-2 capitalize" onClick={() => setOpen(false)}>
                 <OwnerFeedbackLink />
                 {[
