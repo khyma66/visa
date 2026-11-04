@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Community reputation and spam safety: deploy only after matching schema is present.
+# Owner security evidence: deploy only after matching restricted schema is present.
 
 on:
   workflow_dispatch:

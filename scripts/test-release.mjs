@@ -30,7 +30,9 @@ const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source)
 const compile = (source) => ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replaceAll("'./destination-routing'", JSON.stringify(destinationModule)).replaceAll("'./lib/destination-routing'", JSON.stringify(destinationModule));
 const guideModule = moduleUrl(compile(await readFile(new URL('../src/lib/visa-guides.ts',import.meta.url),'utf8')));
 const searchModule = moduleUrl(compile(await readFile(new URL('../src/lib/search-visibility.ts',import.meta.url),'utf8')).replace("'./visa-guides'",JSON.stringify(guideModule)));
-const transpile = source => compile(source).replace("'./lib/search-visibility'",JSON.stringify(searchModule));
+// Header/launch tests isolate traffic controls; test-security-edge exercises them separately.
+const trafficStub = moduleUrl('export async function protectTraffic() { return null; }');
+const transpile = source => compile(source).replace("'./lib/search-visibility'",JSON.stringify(searchModule)).replace("'./lib/security-runtime'",JSON.stringify(trafficStub));
 
 test('editorial crawl headers match metadata while dev, filters and private routes stay excluded', async () => {
   const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } }');
@@ -41,13 +43,13 @@ test('editorial crawl headers match metadata while dev, filters and private rout
   try {
     Object.assign(process.env,env);
     for (const path of ['/', '/about', '/guides', '/robots.txt', '/sitemap.xml']) {
-      const response = middleware({ nextUrl: new URL(path,env.NEXT_PUBLIC_SITE_URL) });
+      const response = await middleware({ nextUrl: new URL(path,env.NEXT_PUBLIC_SITE_URL) });
       assert.equal(response.status,200);
       assert.equal(response.headers.get('x-robots-tag'),null);
       assert.equal(response.headers.get('x-visathreads-search'),'editorial');
     }
     for (const url of ['https://visa-central.com/', 'https://visathreads.com/?sort=unanswered', 'https://visathreads.com/admin/analytics', 'https://visathreads.com/questions/apify-123', 'https://visathreads.com/guides/not-a-guide']) {
-      assert.match(middleware({ nextUrl:new URL(url) }).headers.get('x-robots-tag'),/noindex/);
+      assert.match((await middleware({ nextUrl:new URL(url) })).headers.get('x-robots-tag'),/noindex/);
     }
   } finally {
     for (const [key,value] of Object.entries(previous)) value === undefined ? delete process.env[key] : process.env[key] = value;
@@ -127,11 +129,11 @@ test('production stays closed unless approved; private pages remain uncached and
   const oldEnv=process.env.APP_ENV, oldApproval=process.env.PUBLIC_LAUNCH_APPROVED;
   try {
     process.env.APP_ENV='production'; process.env.PUBLIC_LAUNCH_APPROVED='false';
-    let response=middleware({nextUrl:new URL('https://visaflow.example.org/login')});
+    let response=await middleware({nextUrl:new URL('https://visaflow.example.org/login')});
     assert.equal(response.status,503);
     assert.equal(response.headers.get('x-frame-options'),'DENY');
     process.env.PUBLIC_LAUNCH_APPROVED='true';
-    response=middleware({nextUrl:new URL('https://visaflow.example.org/messages')});
+    response=await middleware({nextUrl:new URL('https://visaflow.example.org/messages')});
     assert.equal(response.status,200);
     assert(response.headers.get('cache-control').includes('no-store'));
     assert(response.headers.get('x-robots-tag').includes('noindex'));
@@ -149,7 +151,7 @@ test('www canonicalization preserves the destination on the owned VisaThreads do
   const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } }');
   const source = transpile(await readFile(new URL('../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub));
   const { middleware } = await import(moduleUrl(source));
-  const response = middleware({nextUrl:new URL('https://www.visathreads.com/login?next=%2Fmessages')});
+  const response = await middleware({nextUrl:new URL('https://www.visathreads.com/login?next=%2Fmessages')});
   assert.equal(response.status,308);
   assert.equal(response.headers.get('location'),'https://visathreads.com/login?next=%2Fmessages');
 });
@@ -207,14 +209,14 @@ test('Turnstile adds only its exact script and frame origin when configured and 
   const source = transpile(await readFile(new URL('../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub));
   const { middleware } = await import(moduleUrl(source));
   const previous = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-  const policy = () => middleware({ nextUrl: new URL('https://visathreads.com/') }).headers.get('content-security-policy');
+  const policy = async () => (await middleware({ nextUrl: new URL('https://visathreads.com/') })).headers.get('content-security-policy');
   try {
     delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-    const disabled = policy();
+    const disabled = await policy();
     assert(!disabled.includes('challenges.cloudflare.com'));
     assert(disabled.includes("frame-src 'none'"));
     process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = 'public-fixture';
-    const enabled = policy();
+    const enabled = await policy();
     assert.equal(enabled.match(/https:\/\/challenges.cloudflare.com/g)?.length, 2);
     assert(enabled.includes('frame-src https://challenges.cloudflare.com;'));
     const connect = csp => csp.split(';').find(d => d.trim().startsWith('connect-src'));

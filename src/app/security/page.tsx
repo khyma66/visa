@@ -21,6 +21,12 @@ export default function SecurityPage() {
       <p className="capitalize">Do not retain, copy, change, or publicly disclose information you were not authorized to access. This page does not grant permission to violate law, disrupt the service, or access another person’s account or data.</p>
     </section>
     <section className="space-y-2">
+      <h2 className="text-xl font-bold">Abuse monitoring and report evidence</h2>
+      <p>We limit rapid public reads and record sampled traffic signals to investigate abuse. The application evidence log uses a daily rotating, keyed network reference, a route category, timestamps and an optional Cloudflare request reference—not raw IP addresses, search text, cookies or login tokens. Our infrastructure providers may keep their own security logs.</p>
+      <p>A reported item may be preserved as a restricted evidence snapshot even if the original is edited or removed. For messages, this includes only the specific reported message, not the whole conversation. Multiple reports flag a case for human review; a report count alone does not automatically suspend an account. The owner security console requires a current owner session.</p>
+      <p>Application traffic evidence is retained for 30 days, report snapshots for 90 days and review notes for 365 days, with daily cleanup. Provider logs, backups and other records have separate settings. Public content can still be copied; these measures do not guarantee that scraping or abuse will be prevented. See the <Link href="/privacy" className="text-blue-700 underline">privacy notice</Link> for other processing and request information.</p>
+    </section>
+    <section className="space-y-2">
       <h2 className="text-xl font-bold capitalize">What happens after a report</h2>
       <p className="capitalize">We will review reports in good faith and may ask for clarification. Response and remediation times depend on severity and available evidence; we do not promise a particular timeline or monetary reward. Please allow a reasonable opportunity to investigate and address a confirmed issue before considering disclosure.</p>
       <p className="capitalize">For account support, privacy requests, content reports, or copyright concerns, use <Link href="/contact" className="text-blue-700 underline capitalize">Reporting and Privacy Requests</Link> instead.</p>

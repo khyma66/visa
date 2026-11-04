@@ -346,13 +346,13 @@ test('feedback and owner pages stay uncached and unindexed even after public lau
   const stub = moduleUrl('export class NextResponse extends Response { static next(){return new NextResponse(null);} }');
   const guides = moduleUrl(transpile(await readFile(new URL('../../src/lib/visa-guides.ts',import.meta.url),'utf8')));
   const search = moduleUrl(transpile(await readFile(new URL('../../src/lib/search-visibility.ts',import.meta.url),'utf8')).replace("'./visa-guides'",JSON.stringify(guides)).replace("'./destination-routing'",JSON.stringify(destinationModule)));
-  const source = transpile(await readFile(new URL('../../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub)).replace("'./lib/search-visibility'",JSON.stringify(search)).replace("'./lib/destination-routing'",JSON.stringify(destinationModule));
+  const source = transpile(await readFile(new URL('../../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub)).replace("'./lib/search-visibility'",JSON.stringify(search)).replace("'./lib/destination-routing'",JSON.stringify(destinationModule)).replace("'./lib/security-runtime'",JSON.stringify(moduleUrl('export async function protectTraffic(){return null;}')));
   const {middleware} = await import(moduleUrl(source));
   const saved = { APP_ENV:process.env.APP_ENV, PUBLIC_LAUNCH_APPROVED:process.env.PUBLIC_LAUNCH_APPROVED };
   try {
     process.env.APP_ENV='production';process.env.PUBLIC_LAUNCH_APPROVED='true';
     for(const path of ['/feedback','/feedback/privacy','/owner/feedback']) {
-      const response=middleware({nextUrl:new URL(`https://visathreads.com${path}`)});
+      const response=await middleware({nextUrl:new URL(`https://visathreads.com${path}`)});
       assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'private, no-store');
       assert.equal(response.headers.get('x-robots-tag'),'noindex, nofollow');
     }

@@ -84,6 +84,12 @@ export function verifyDevelopmentSyncWorker(config) {
   const populated = value => value != null && (Array.isArray(value) ? value.length > 0 : typeof value === 'object' ? Object.values(value).some(populated) : true);
   for (const name of ['services', 'd1_databases', 'kv_namespaces', 'r2_buckets', 'hyperdrive', 'queues', 'durable_objects', 'ai', 'workflows', 'vectorize', 'secrets_store_secrets', 'dispatch_namespaces', 'send_email', 'pipelines', 'unsafe', 'browser', 'images', 'analytics_engine_datasets', 'mtls_certificates', 'logfwdr', 'cloudchamber', 'ai_search_namespaces', 'ai_search', 'agent_memory', 'k2', 'artifacts', 'flagship', 'worker_loaders', 'vpc_services', 'vpc_networks']) assert(!populated(config[name]), 'Unreviewed resource binding in dev sync.');
 }
+const securityDevLimits = {
+  SECURITY_READ_LIMIT: { namespace_id:'6501431', simple:{limit:300,period:60} },
+  SECURITY_ARCHIVE_LIMIT: { namespace_id:'6501432', simple:{limit:12,period:60} },
+  SECURITY_EVENT_SAMPLE: { namespace_id:'6501433', simple:{limit:1,period:60} },
+  SECURITY_EVENT_BUDGET: { namespace_id:'6501434', simple:{limit:60,period:60} },
+};
 export function verifyDevelopmentSyncSettings(settings) {
   const stored = Object.fromEntries((settings.bindings ?? []).filter(row => row.type === 'plain_text').map(row => [row.name, row.text]));
   const fixed = { APP_ENV: 'development', NEXT_PUBLIC_APP_ENV: 'development', NEXT_PUBLIC_DEPLOYMENT_TARGET: 'development-sandbox',
@@ -103,6 +109,8 @@ export function verifyDevelopmentSyncSettings(settings) {
     if (binding.type === 'plain_text') {
       assert(allowedPublic.includes(binding.name) || retiredDevSettings.includes(binding.name) || Object.hasOwn(fixed, binding.name), 'Unrecognized dev variable requires review before sync.');
       if (Object.hasOwn(fixed, binding.name) && !(legacy && binding.name === 'NEXT_PUBLIC_DEPLOYMENT_TARGET')) assert.equal(binding.text, fixed[binding.name], 'Existing dev setting differs from the reviewed isolated configuration.');
+    } else if (binding.type === 'ratelimit') {
+      assert.deepEqual({namespace_id:String(binding.namespace_id),simple:binding.simple},securityDevLimits[binding.name], 'Only reviewed isolated dev security limits may be retained.');
     } else assert(binding.type === 'secret_text' || (binding.type === 'assets' && binding.name === 'ASSETS') || (binding.type === 'version_metadata' && binding.name === 'CF_VERSION_METADATA'), 'Existing dev resource binding requires review before sync.');
   }
   assert.equal(stored.NEXT_PUBLIC_SITE_URL, DEV_SITE);

@@ -9,6 +9,7 @@ const compile = source => ts.transpileModule(source, { compilerOptions: { target
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const flow = await import(dataUrl(compile(await read('src/lib/auth-flow.ts'))));
 const source = compile(await read('src/middleware.ts'))
+  .replace("'./lib/security-runtime'", JSON.stringify(dataUrl('export async function protectTraffic(){return null;}')))
   .replace("'./lib/destination-routing'", JSON.stringify(destinationModule))
   .replace("'./lib/search-visibility'", JSON.stringify(dataUrl('export const discoveryOrigin=()=>null; export const discoveryPath=()=>false;')))
   .replace("'next/server'", JSON.stringify(dataUrl(`export class NextResponse extends Response {
@@ -41,28 +42,28 @@ test('canonical URLs are idempotent and unsupported countries/languages never al
   assert.equal(destinationPath(destinationPath('/news?q=test')), '/us/en/news?q=test');
 });
 
-test('GET and HEAD legacy links preserve every query parameter on the same environment', () => {
+test('GET and HEAD legacy links preserve every query parameter on the same environment', async () => {
   const before = process.env.APP_ENV; process.env.APP_ENV = 'development';
   try {
     for (const origin of ['https://visathreads.com','https://visa-central.com','http://localhost:3000']) {
       for (const method of ['GET','HEAD']) {
-        const response = middleware(request('/questions/abc?view=all&tag=h1b&tag=f1',method,origin));
+        const response = await middleware(request('/questions/abc?view=all&tag=h1b&tag=f1',method,origin));
         assert.equal(response.status,308);
         assert.equal(response.headers.get('location'),origin+'/us/en/questions/abc?view=all&tag=h1b&tag=f1');
         assert.equal(response.headers.get('cache-control'),'private, no-store');
       }
     }
-    assert.equal(middleware(request('/news','POST')).headers.get('location'),null);
+    assert.equal((await middleware(request('/news','POST'))).headers.get('location'),null);
     for (const path of ['/login?auth=callback&code=fixture&next=%2Fus%2Fen%2Fnews','/account/update-password?code=fixture','/api/community','/us/en/news']) {
-      assert.equal(middleware(request(path)).headers.get('location'),null);
+      assert.equal((await middleware(request(path))).headers.get('location'),null);
     }
   } finally { if(before===undefined) delete process.env.APP_ENV; else process.env.APP_ENV=before; }
 });
 
-test('country routing cannot bypass the existing public launch gate', () => {
+test('country routing cannot bypass the existing public launch gate', async () => {
   const before = { app:process.env.APP_ENV, approved:process.env.PUBLIC_LAUNCH_APPROVED };
   process.env.APP_ENV='production';process.env.PUBLIC_LAUNCH_APPROVED='false';
-  try { for(const path of ['/news','/us/en/news','/us/en']) assert.equal(middleware(request(path)).status,503); }
+  try { for(const path of ['/news','/us/en/news','/us/en']) assert.equal((await middleware(request(path))).status,503); }
   finally { for(const [key,value] of [['APP_ENV',before.app],['PUBLIC_LAUNCH_APPROVED',before.approved]]) if(value===undefined) delete process.env[key];else process.env[key]=value; }
 });
 

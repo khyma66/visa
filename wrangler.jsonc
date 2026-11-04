@@ -32,12 +32,24 @@
   "cache": {
     "enabled": true
   },
+  "ratelimits": [
+    {"name":"SECURITY_READ_LIMIT","namespace_id":"6501401","simple":{"limit":300,"period":60}},
+    {"name":"SECURITY_ARCHIVE_LIMIT","namespace_id":"6501402","simple":{"limit":12,"period":60}},
+    {"name":"SECURITY_EVENT_SAMPLE","namespace_id":"6501403","simple":{"limit":1,"period":60}},
+    {"name":"SECURITY_EVENT_BUDGET","namespace_id":"6501404","simple":{"limit":60,"period":60}}
+  ],
   "version_metadata": {
     "binding": "CF_VERSION_METADATA"
   },
   "env": {
     "development": {
       "name": "visaflow-dev",
+      "ratelimits": [
+        {"name":"SECURITY_READ_LIMIT","namespace_id":"6501411","simple":{"limit":300,"period":60}},
+        {"name":"SECURITY_ARCHIVE_LIMIT","namespace_id":"6501412","simple":{"limit":12,"period":60}},
+        {"name":"SECURITY_EVENT_SAMPLE","namespace_id":"6501413","simple":{"limit":1,"period":60}},
+        {"name":"SECURITY_EVENT_BUDGET","namespace_id":"6501414","simple":{"limit":60,"period":60}}
+      ],
       "workers_dev": true,
       "routes": [
         {
@@ -63,6 +75,12 @@
     },
     "production": {
       "name": "visaflow",
+      "ratelimits": [
+        {"name":"SECURITY_READ_LIMIT","namespace_id":"6501421","simple":{"limit":300,"period":60}},
+        {"name":"SECURITY_ARCHIVE_LIMIT","namespace_id":"6501422","simple":{"limit":12,"period":60}},
+        {"name":"SECURITY_EVENT_SAMPLE","namespace_id":"6501423","simple":{"limit":1,"period":60}},
+        {"name":"SECURITY_EVENT_BUDGET","namespace_id":"6501424","simple":{"limit":60,"period":60}}
+      ],
       "workers_dev": true,
       "vars": {
         "APP_ENV": "production",
@@ -75,6 +93,12 @@
     },
     "sandbox": {
       "name": "visathreads-sandbox",
+      "ratelimits": [
+        {"name":"SECURITY_READ_LIMIT","namespace_id":"6501431","simple":{"limit":300,"period":60}},
+        {"name":"SECURITY_ARCHIVE_LIMIT","namespace_id":"6501432","simple":{"limit":12,"period":60}},
+        {"name":"SECURITY_EVENT_SAMPLE","namespace_id":"6501433","simple":{"limit":1,"period":60}},
+        {"name":"SECURITY_EVENT_BUDGET","namespace_id":"6501434","simple":{"limit":60,"period":60}}
+      ],
       "workers_dev": false,
       "routes": [
         {

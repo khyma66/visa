@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, type NextFetchEvent } from 'next/server';
 import { legacyDestinationRedirect } from './lib/destination-routing';
 import { discoveryOrigin, discoveryPath } from './lib/search-visibility';
+import { protectTraffic } from './lib/security-runtime';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // Canonicalize before a login starts so PKCE state stays on the same origin.
   if (request.nextUrl.hostname === 'www.visathreads.com') {
     const destination = new URL(request.nextUrl.toString());
@@ -56,10 +57,11 @@ export function middleware(request: NextRequest) {
   // Overwrite untrusted incoming CSP/nonce headers before the renderer reads them.
   requestHeaders.set('Content-Security-Policy', csp);
   requestHeaders.set('x-nonce', nonce);
-  const response = production && !approved && request.nextUrl.pathname !== '/api/health'
+  const blocked = await protectTraffic(request, task => event.waitUntil(task));
+  const response = blocked ?? (production && !approved && request.nextUrl.pathname !== '/api/health'
     ? new NextResponse('VisaThreads is completing its public-launch checks. Please check back later.', {
       status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '3600', 'Cache-Control': 'no-store' },
-    }) : NextResponse.next({ request: { headers: requestHeaders } });
+    }) : NextResponse.next({ request: { headers: requestHeaders } }));
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('Referrer-Policy', 'no-referrer');
