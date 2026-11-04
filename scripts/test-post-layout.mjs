@@ -95,8 +95,8 @@ test('both question and experience pages share the layout; mobile hides resizing
   const root=new URL('../',import.meta.url);
   for(const page of ['src/app/questions/[id]/page.tsx','src/app/experiences/[id]/page.tsx']) assert.match(await readFile(new URL(page,root),'utf8'),/QuestionDetail/);
   const css=await readFile(new URL('src/components/ResizablePostLayout.module.css',root),'utf8');
-  assert.match(css,/\.divider \{ display: none; \}/);
-  assert.match(css,/@media \(min-width: 1024px\)/);
+  assert.match(css,/\.divider, \.reset \{ display: none; \}/);
+  assert.match(css,/@container post-layout \(min-width: 800px\)/);
   assert.match(css,/minmax\(0, var\(--post-split\)\) 32px minmax\(0, var\(--related-split\)\)/);
 });
 
@@ -115,11 +115,32 @@ test('pointer movement is coalesced per animation frame and cancelled before com
   }finally{h.close();}assert.equal(h.frames.size,0);
 });
 
-test('splitter has no visible instructions, percentage toolbar, buttons or grip', () => {
+test('splitter keeps instructions and percentages off-screen; icon reset restores the saved default', () => {
   const h=setup();try {
-    assert.equal(nodes(h.tree).filter(n=>n.type==='button').length,0);
+    const reset = () => nodes(h.tree).find(n=>n.type==='button').props;
+    assert.equal(nodes(h.tree).filter(n=>n.type==='button').length,1);
+    assert.equal(reset()['aria-label'],'Reset panel widths');
+    assert.equal(reset().disabled,true);
+    h.key('ArrowRight',true);assert.equal(reset().disabled,false);
+    reset().onClick();h.render();
+    assert.equal(h.separator()['aria-valuenow'],60);assert.equal(h.stored,'60');
+    assert.equal(reset().disabled,true);
     assert.equal(nodes(h.tree).filter(n=>n.type==='span').length,0);
     assert.equal(h.separator().children,undefined);
     assert.doesNotMatch(source,/Drag divider to resize|Reset 60\/40|styles\.(?:controls|ratio|grip)/);
+  }finally{h.close();}
+});
+
+
+test('related scrolling is keyboard reachable only when there is room for two columns', () => {
+  const h=setup({width:1200});try {
+    const aside=()=>nodes(h.tree).find(n=>n.type==='aside').props;
+    assert.equal(aside().tabIndex,0);
+    h.width=700;h.measure();h.render();assert.equal(aside().tabIndex,undefined);
+    h.width=800;h.measure();h.render();
+    assert.equal(aside().tabIndex,0);
+    assert.equal(h.separator()['aria-valuenow'],60);
+    h.key('Home');assert(h.separator()['aria-valuenow']/100*(800-32)>=440);
+    h.key('End');assert((1-h.separator()['aria-valuenow']/100)*(800-32)>=280);
   }finally{h.close();}
 });

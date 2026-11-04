@@ -60,7 +60,7 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
 
-  return <div>
+  return <div className={styles.container}>
     <div ref={container} className={`${styles.layout} ${dragging ? styles.dragging : ''}`} style={{ '--post-split': `${split}fr`, '--related-split': `${100 - split}fr` } as CSSProperties}>
       <div id={`${id}-post`} className={styles.post}>{children}</div>
       <div role="separator" tabIndex={0} aria-label="Post" aria-orientation="vertical"
@@ -107,7 +107,13 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
             : event.key === 'Home' ? min : event.key === 'End' ? max : event.key === 'Enter' ? DEFAULT_SPLIT : null;
           if (next !== null) { event.preventDefault(); save(clamp(next, min, max)); }
         }} />
-      <aside aria-label="Related questions panel" className={styles.related}>{related}</aside>
+      <button type="button" className={styles.reset} title="Reset panel widths" aria-label="Reset panel widths"
+        disabled={preference === DEFAULT_SPLIT || dragging} onClick={() => save(DEFAULT_SPLIT)}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 10a9 9 0 1 1 2.6 8.4M3 4v6h6" />
+        </svg>
+      </button>
+      <aside aria-label="Related questions panel" tabIndex={width >= 800 ? 0 : undefined} className={styles.related}>{related}</aside>
     </div>
     <p id={`${id}-keys`} className="sr-only">Use left and right arrow keys to resize, Shift for larger steps, Home or End for the limits. Double-click or press Enter to restore the default widths. Press Escape to cancel a drag.</p>
   </div>;

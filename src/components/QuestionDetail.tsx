@@ -157,19 +157,19 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
     <main className="page-shell mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <ResizablePostLayout related={<RelatedQuestions drafting={Boolean(answerBody.trim())} context={{ ...question, draftText: answerBody, commentText: discussionContext }} />}>
         <div>
-          <section className="border-b border-slate-200 pb-6">
+          <section className="border-b border-slate-200 pb-8">
             {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/experiences" className="underline">Experience</Link> · {question.experience_category}</p>}
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span>{question.destination_country !== 'Global' && <span className="text-slate-400">{question.destination_country}</span>}<PostOriginBadge post={question} /></div>
-            <h1 className="mt-4 text-2xl font-semibold text-slate-950 sm:text-3xl">{question.title}</h1>
+            <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-950">{question.title}</h1>
             <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : experience ? 'replies' : 'answers'}</span></div>
           </section>
-          <article className="flex gap-4 py-7">
+          <article className="flex gap-3 py-8 sm:gap-5">
             {imported ? <ImportedScore score={question.vote_score} /> : <VoteRail score={question.vote_score} onVote={(value) => {
               if (!user) { window.location.href = `/login?next=${threadPath}`; return; }
               void voteQuestion(id, user.id, value).then((score) => setQuestion((current) => current ? { ...current, vote_score: score } : current)).catch((reason: Error) => setError(reason.message));
             }} />}
             <div className="min-w-0 flex-1">
-              <div className="whitespace-pre-wrap text-base leading-relaxed text-slate-800">{question.body}</div>
+              <div className="max-w-prose whitespace-pre-wrap text-lg leading-relaxed text-slate-800">{question.body}</div>
               <div className="mt-6 flex flex-wrap gap-2">{question.tags.map((tag) => <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}</div>
               <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
                 <div className="flex gap-2">
@@ -193,7 +193,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                 const sourceOnly = isImportedPost(answer);
                 const messageHref = getMemberMessageHref(answer, user?.id);
                 return (
-                <article key={answer.id} id={`answer-${answer.id}`} className={`flex scroll-mt-24 gap-4 py-7 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
+                <article key={answer.id} id={`answer-${answer.id}`} className={`flex scroll-mt-24 gap-3 py-8 sm:gap-5 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
                   {sourceOnly ? <ImportedScore score={answer.vote_score} /> : imported ? <MessageCircle className="w-11 shrink-0 text-blue-600" size={22} /> : <VoteRail score={answer.vote_score} accepted={answer.is_accepted} onVote={(value) => {
                     if (!user) { window.location.href = `/login?next=${threadPath}`; return; }
                     void voteAnswer(answer.id, user.id, value).then(load).catch((reason: Error) => setError(reason.message));
@@ -201,7 +201,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                   <div className="min-w-0 flex-1">
                     {sourceOnly && <div className="mb-3"><PostOriginBadge post={answer} /></div>}
                     {answer.is_accepted && <p className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-700"><CheckCircle2 size={17} /> Accepted by the question author</p>}
-                    <div className="whitespace-pre-wrap text-base leading-relaxed text-slate-800">{answer.body}</div>
+                    <div className="max-w-prose whitespace-pre-wrap text-lg leading-relaxed text-slate-800">{answer.body}</div>
                     {!sourceOnly && <ReportButton kind={imported ? 'imported_answer' : 'answer'} target={answer.id} />}
                     <div className="mt-6 flex items-end justify-between gap-4">
                       {!imported && !experience && owner && canAnswer && !sourceOnly && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline"><Check size={16} /> Accept this answer</button> : <span />}
