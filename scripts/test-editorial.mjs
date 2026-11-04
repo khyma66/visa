@@ -57,6 +57,7 @@ test('collector fails on partial pagination instead of silently exporting a trun
 test('known personal identifiers are removed before inference',()=>{
   const result=redact('Email example@example.invalid receipt IOE1234567890 telephone 9876543210 passport X1234567');
   assert(!result.includes('example@'));assert(!result.includes('IOE123'));assert(!result.includes('9876543210'));assert(!result.includes('X1234567'));
+  for(const text of ['Venezuelan passport traveled outside the US','passport holders recently traveled','passport validity expires next month'])assert.equal(redact(text),text);
 });
 test('numerical changes are flagged and I-94 is not mistaken for first person',()=>{
   const draft={...review,body:'A member asks whether the I-94 expiration changes a 60-day period.',review_flags:[]};

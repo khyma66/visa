@@ -13,7 +13,7 @@ export function redact(text) {
     .replace(/\b(?:IOE|EAC|WAC|LIN|SRC|MSC|NBC)\d{10}\b/gi, '[receipt number removed]')
     .replace(/https?:\/\/[^\s<>]+/gi, '[link removed]')
     .replace(/(?:\+\d{1,3}[ .()-]*)?(?:\(\d{3}\)[ .-]*\d{3}[ .-]*\d{4}|\b\d{10}\b)/g, '[phone or identifier removed]')
-    .replace(/\b(passport|SSN|A-number|alien number)\s*(?:number|no\.?|#|:)?\s*[:#]?\s*[A-Z0-9-]{6,}\b/gi, '$1 [identifier removed]');
+    .replace(/\b(passport|SSN|A-number|alien number)\s*(?:number|no\.?|#|:)?\s*[:#]?\s*\b(?=[A-Z0-9-]*\d)[A-Z0-9-]{6,}\b/gi, '$1 [identifier removed]');
 }
 const schema = { type: 'object', additionalProperties: false, required: ['title','body','visa_type','post_kind','experience_category','tags','review_flags'], properties: {
   title: { type: 'string' }, body: { type: 'string' }, visa_type: { type: 'string', enum: VISA_TYPES },
@@ -28,7 +28,7 @@ const numbers = text => {
   const normalized=text.replace(/(^|\n)\s*\d+[.)]\s+/g,'$1').replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/gi,value=>words[value.toLowerCase()]);
   return new Set((normalized.match(/\d+(?:[.,]\d+)*/g) ?? []).map(n => n.replace(/,/g,'')));
 };
-const computedFlag = /^(Check (?:added numbers:|omitted numbers:|first- or second-person wording$|omitted source details$|omitted visa details:)|Possible personal information in draft$)/;
+const computedFlag = /^(Check (?:added numbers:|omitted numbers:|first- or second-person wording$|omitted source details$|omitted visa details:|question preserved as a question$|question versus experience category$)|Possible personal information in draft$)/;
 export function validateRewrite(source, draft) {
   const flags = [];
   assert(draft && typeof draft.title === 'string' && typeof draft.body === 'string', 'Missing draft text');
@@ -51,6 +51,8 @@ export function validateRewrite(source, draft) {
     ...['H1B','H4','F1','F2','L1','L2','B1','B2','EAD','I539','I129','I140','I485','I765','I797A','I797B','I94'].map(term=>[term,new RegExp(`\\b${term.replace(/^([A-Z])([0-9])/,'$1[- ]?$2')}\\b`,'i')])];
   const missingConcepts=concepts.filter(([,pattern])=>pattern.test(source)&&!pattern.test(draft.body)).map(([name])=>name);
   if(missingConcepts.length)flags.push(`Check omitted visa details: ${missingConcepts.join(', ')}`);
+  if(/^\s*(?:is|are|has|have|does|do|can|could|would|should|will)\b/i.test(source)&&source.includes('?')&&!/\b(?:asks?|inquir\w*|wonders?|seeks?)\b/i.test(draft.body))flags.push('Check question preserved as a question');
+  if(source.includes('?')&&draft.post_kind==='experience')flags.push('Check question versus experience category');
   // Recalculate our own checks after edits; retain independent model/reviewer flags.
   return [...new Set([...draft.review_flags.filter(flag=>!computedFlag.test(flag)),...flags])];
 }
