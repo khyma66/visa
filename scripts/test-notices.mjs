@@ -73,7 +73,7 @@ test('safety and professional community description appear once in the footer in
   }
 });
 test('policy pages clearly disclose missing operator processes rather than pretending compliance',async()=>{
-  for(const [page,phrase] of Object.entries({privacy:'not a finalized production policy',terms:'not finalized production Terms',contact:'does not submit a request'})) {
+  for(const [page,phrase] of Object.entries({privacy:'not a finalized production policy',terms:'not finalized production Terms',contact:'Each email link opens your email app'})) {
     const {default:Page}=await component(`../src/app/${page}/page.tsx`, { '@/lib/search-metadata': searchMetadata.moduleUrl });
     const html=renderToStaticMarkup(createElement(Page));
     assert(html.includes(phrase),page);
@@ -89,4 +89,18 @@ test('public community pages use clear copy without stale launch labels', async 
     assert.doesNotMatch(html, /early.access|not open|general public signup|This preview/i, page);
     assert.match(html, /href="\//, `${page} keeps working navigation`);
   }
+});
+
+
+test('Help offers all three established email routes with clear purposes', async () => {
+  const { default: Contact } = await component('../src/app/contact/page.tsx', { '@/lib/search-metadata': searchMetadata.moduleUrl });
+  const html = renderToStaticMarkup(createElement(Contact));
+  for(const alias of ['support','privacy','security']) {
+    assert.match(html,new RegExp(`href="mailto:${alias}@visathreads\\.com(?:\\?[^"<>]*)?"`));
+    assert(html.includes(`${alias}@visathreads.com</a>`));
+  }
+  for(const purpose of ['General support','Privacy requests','Security reports']) assert(html.includes(purpose));
+  assert(html.includes('href="/privacy-choices"'));
+  assert(html.includes('href="/security"'));
+  assert(!html.includes('<form'), 'Email links must not imply an unsent request was submitted');
 });

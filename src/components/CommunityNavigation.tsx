@@ -47,7 +47,7 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
         <Link href="/about" onClick={onNavigate}>About</Link>
         <Link href="/privacy" onClick={onNavigate}>Privacy</Link>
         <Link href="/terms" onClick={onNavigate}>Rules</Link>
-        <Link href="/contact" onClick={onNavigate}>Help & Reporting</Link>
+        <Link href="/contact" onClick={onNavigate}>Help & Contact</Link>
       </div>
     </div>
   </nav>;
