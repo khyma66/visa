@@ -79,3 +79,12 @@ test('material visa details are checked and computed flags refresh after correct
   draft.body+=' The question concerns change of status and premium processing.';
   assert.deepEqual(validateRewrite('H1B COS and I-94; PREMIUM processing',{...draft,review_flags:flags}),['Specific source ambiguity']);
 });
+test('questions cannot silently become claims and absent source images are flagged',()=>{
+  const source='Hello, is this employer hiring? Please see the screenshot.';
+  const draft={...review,body:'A member reports that this employer is currently hiring.',review_flags:[]};
+  const flags=validateRewrite(source,draft);
+  assert(flags.includes('Check question preserved as a question'));
+  assert(flags.includes('Source references an image not included in this text-only review'));
+  draft.body='A member is asking whether this employer is currently hiring.';
+  assert(!validateRewrite(source,draft).includes('Check question preserved as a question'));
+});
