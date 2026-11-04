@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 
-export const smokeRoutes = ['/account', '/cookies', '/privacy-choices', '/countries', '/us/en', '/us/en/experiences', '/experiences/new', '/', '/login', '/signup', '/account/recovery', '/account/update-password', '/messages', '/moderation', '/admin/reports', '/admin/security', '/community-safety', '/privacy', '/terms', '/contact', '/security', '/us/en/tags', '/us/en/explore', '/my-communities', '/communities/new', '/us/en/news', '/api/health'];
+export const smokeRoutes = ['/account', '/cookies', '/privacy-choices', '/countries', '/us/en', '/us/en/experiences', '/experiences/new', '/', '/login', '/signup', '/account/recovery', '/account/update-password', '/messages', '/notifications', '/moderation', '/admin/reports', '/admin/security', '/community-safety', '/privacy', '/terms', '/contact', '/security', '/us/en/tags', '/us/en/explore', '/my-communities', '/communities/new', '/us/en/news', '/api/health'];
 
 export function assertHealthProvenance(health, expected) {
   assert.match(expected?.gitSha ?? '', /^[a-f0-9]{40}$/, 'Expected manifest must identify an exact Git commit');
@@ -60,7 +60,7 @@ for (const path of smokeRoutes) {
   assert.equal(response.headers.get('x-content-type-options'),'nosniff',`${path}: missing nosniff`);
   assert.equal(response.headers.get('x-frame-options'),'DENY',`${path}: framing allowed`);
   assert.equal(response.headers.get('referrer-policy'),'no-referrer',`${path}: referrer policy missing`);
-  if (/^\/(login|signup|account|messages|moderation|admin)/.test(path)) {
+  if (/^\/(login|signup|account|messages|notifications|moderation|admin)/.test(path)) {
     assert(response.headers.get('cache-control')?.includes('no-store'),`${path}: must not cache private pages`);
     assert(response.headers.get('x-robots-tag')?.includes('noindex'),`${path}: must not index private pages`);
   }

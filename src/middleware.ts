@@ -23,7 +23,7 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     redirect.headers.set('Referrer-Policy', 'no-referrer');
     return redirect;
   }
-  const sensitive = /^\/(login|signup|account|messages|moderation|ask|owner|feedback|assistant|admin)(\/|$)/.test(request.nextUrl.pathname);
+  const sensitive = /^\/(login|signup|account|messages|notifications|moderation|ask|owner|feedback|assistant|admin)(\/|$)/.test(request.nextUrl.pathname);
   const discovery = discoveryOrigin() === request.nextUrl.origin
     && !request.nextUrl.search
     && (discoveryPath(request.nextUrl.pathname) || ['/robots.txt', '/sitemap.xml'].includes(request.nextUrl.pathname));

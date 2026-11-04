@@ -74,7 +74,7 @@ test('approved robots excludes all private areas and points at the canonical sit
   for (const crawler of ['Googlebot', 'Bingbot', 'OAI-SearchBot', 'Claude-SearchBot', 'PerplexityBot']) {
     assert(!MODEL_USE_CRAWLERS.includes(crawler));
   }
-  for (const path of ['/account', '/admin', '/owner', '/login', '/signup', '/messages', '/moderation', '/api/', '/ask', '/assistant', '/feedback', '/my-communities', '/communities/new', '/experiences/new']) {
+  for (const path of ['/account', '/admin', '/owner', '/login', '/signup', '/messages', '/notifications', '/moderation', '/api/', '/ask', '/assistant', '/feedback', '/my-communities', '/communities/new', '/experiences/new']) {
     assert(robots.rules[0].disallow.includes(path), path);
     assert(!PUBLIC_SITEMAP_PATHS.includes(path), path);
   }

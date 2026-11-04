@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import '../styles/globals.css';
+import { NotificationProvider } from '@/components/NotificationProvider';
 import { AuthProvider } from '@/components/AuthProvider';
 import { SiteHeader } from '@/components/SiteHeader';
 import { CommunityAddonsNavigation } from '@/components/CommunityAddonsNavigation';
@@ -46,6 +47,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="min-h-screen bg-white text-slate-900 antialiased">
         <AuthProvider>
+          <NotificationProvider>
           <Suspense><SiteHeader /></Suspense>
           <div className="app-layout">
           <aside className="desktop-sidebar"><Suspense><CommunityNavigation /></Suspense></aside>
@@ -69,6 +71,7 @@ export default function RootLayout({
           </footer>
           </div>
           </div>
+        </NotificationProvider>
         </AuthProvider>
       </body>
     </html>

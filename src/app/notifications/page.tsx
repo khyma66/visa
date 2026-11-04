@@ -1,0 +1,4 @@
+import type { Metadata } from 'next';
+import { NotificationsClient } from '@/components/NotificationsClient';
+export const metadata: Metadata = { title: 'Notifications', robots: { index: false, follow: false } };
+export default function NotificationsPage() { return <NotificationsClient />; }

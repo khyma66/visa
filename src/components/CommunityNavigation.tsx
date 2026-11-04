@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { BookOpen, Compass, Home, MessageCircle, Newspaper, NotebookPen, Plus, ShieldCheck, Tags, TrendingUp, Users } from 'lucide-react';
+import { Bell, BookOpen, Compass, Home, MessageCircle, Newspaper, NotebookPen, Plus, ShieldCheck, Tags, TrendingUp, Users } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 
 export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
@@ -25,6 +25,7 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
     ] },
     { name: 'Your Communities', links: [
       { href: '/my-communities', label: 'My Communities', icon: Users },
+      { href: '/notifications', label: 'Notifications', icon: Bell },
       { href: '/messages', label: 'Messages', icon: MessageCircle },
       { href: '/communities/new', label: 'Start a Community', icon: Plus },
     ] },

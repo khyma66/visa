@@ -8,6 +8,8 @@ import ts from 'typescript';
 const asModule = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 const reactUrl = import.meta.resolve('react');
 const dependencies = {
+  './NotificationLinks': asModule('export const NotificationLinks=()=>null;'),
+  './NotificationSettings': asModule('export const NotificationSettings=()=>null;'),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'),
   react: asModule(`export function useState(initial){const s=globalThis.__accountPresentation;const index=s.index++;return [Object.hasOwn(s.values,index)?s.values[index]:(typeof initial==='function'?initial():initial),value=>s.updates.push([index,value])];}
     export function useRef(initial){const s=globalThis.__accountPresentation;const index=s.refIndex++;return {current:Object.hasOwn(s.refs,index)?s.refs[index]:initial};}
