@@ -30,12 +30,12 @@ function Author({ id, username, seed, createdAt, sourceOnly = false }: { id: str
   );
 }
 
-function VoteRail({ score, onVote, accepted }: { score: number; onVote: (value: -1 | 1) => void; accepted?: boolean }) {
+function VoteRail({ score, onVote, accepted, own = false }: { score: number; onVote: (value: -1 | 1) => void; accepted?: boolean; own?: boolean }) {
   return (
     <div className="flex w-11 shrink-0 flex-col items-center gap-2">
-      <button onClick={() => onVote(1)} className="grid h-9 w-9 place-items-center rounded-full border border-slate-300 text-slate-500 hover:border-blue-600 hover:bg-blue-50 hover:text-blue-700" aria-label="Upvote"><ArrowUp size={19} /></button>
+      <button disabled={own} title={own ? 'You cannot vote on your own contribution' : 'Helpful contribution'} onClick={() => onVote(1)} className="grid h-9 w-9 place-items-center rounded-full border border-slate-300 text-slate-500 hover:border-blue-600 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Upvote"><ArrowUp size={19} /></button>
       <b className="text-lg text-slate-800">{score}</b>
-      <button onClick={() => onVote(-1)} className="grid h-9 w-9 place-items-center rounded-full border border-slate-300 text-slate-500 hover:border-rose-500 hover:bg-rose-50 hover:text-rose-600" aria-label="Downvote"><ArrowDown size={19} /></button>
+      <button disabled={own} title={own ? 'You cannot vote on your own contribution' : 'Not helpful'} onClick={() => onVote(-1)} className="grid h-9 w-9 place-items-center rounded-full border border-slate-300 text-slate-500 hover:border-rose-500 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Downvote"><ArrowDown size={19} /></button>
       {accepted && <CheckCircle2 className="mt-2 text-emerald-600" size={28} aria-label="Accepted answer" />}
     </div>
   );
@@ -164,7 +164,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : experience ? 'replies' : 'answers'}</span></div>
           </section>
           <article className="flex gap-3 py-8 sm:gap-5">
-            {imported ? <ImportedScore score={question.vote_score} /> : <VoteRail score={question.vote_score} onVote={(value) => {
+            {imported ? <ImportedScore score={question.vote_score} /> : <VoteRail score={question.vote_score} own={question.author_id === user?.id} onVote={(value) => {
               if (!user) { window.location.href = `/login?next=${threadPath}`; return; }
               void voteQuestion(id, user.id, value).then((score) => setQuestion((current) => current ? { ...current, vote_score: score } : current)).catch((reason: Error) => setError(reason.message));
             }} />}
@@ -194,7 +194,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                 const messageHref = getMemberMessageHref(answer, user?.id);
                 return (
                 <article key={answer.id} id={`answer-${answer.id}`} className={`flex scroll-mt-24 gap-3 py-8 sm:gap-5 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
-                  {sourceOnly ? <ImportedScore score={answer.vote_score} /> : imported ? <MessageCircle className="w-11 shrink-0 text-blue-600" size={22} /> : <VoteRail score={answer.vote_score} accepted={answer.is_accepted} onVote={(value) => {
+                  {sourceOnly ? <ImportedScore score={answer.vote_score} /> : imported ? <MessageCircle className="w-11 shrink-0 text-blue-600" size={22} /> : <VoteRail score={answer.vote_score} own={answer.author_id === user?.id} accepted={answer.is_accepted} onVote={(value) => {
                     if (!user) { window.location.href = `/login?next=${threadPath}`; return; }
                     void voteAnswer(answer.id, user.id, value).then(load).catch((reason: Error) => setError(reason.message));
                   }} />}

@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# News desk: workerd-verified feed and photo requests with permission-checked reporting; chatbot stays removed.
+# Community reputation and spam safety: deploy only after matching schema is present.
 
 on:
   workflow_dispatch:
@@ -44,6 +44,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
+      - name: Require reputation and moderation schema with anonymous access denied
+        run: node scripts/check-community-safety-schema.mjs .cache/visaflow/live-preview/public-build-values.json
       - name: Build candidate preserving current launch state and existing content
         run: node scripts/production-feature-release.mjs build
       - name: Verify chatbot removal through the fully built application router
@@ -123,7 +125,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DEV_SUPABASE_PUBLISHABLE_KEY: sb_publishable_iTiFgVvvFA6h9cYqMivsFA_3qnCzmX7
       - name: Build the same source for the isolated development database
-        run: node scripts/development-sync.mjs build
+        # Dev remains untouched until its separate backend has the same safeguards.
+        run: |
+          node scripts/check-community-safety-schema.mjs .cache/visaflow/development-sync/public-build-values.json
+          node scripts/development-sync.mjs build
       - name: Recheck production source and unchanged dev archive before deployment
         run: node scripts/development-sync.mjs deploy-check
         env:

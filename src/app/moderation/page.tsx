@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
+import { SpamDomainControls } from '@/components/SpamDomainControls';
 
-type Report = { id: string; target_kind: string; reason: string; details: string; content: string; created_at: string };
+type Report = { id: string; target_kind: string; reason: string; details: string; source?: string; content: string; created_at: string };
 export default function ModerationPage() {
   const { user, demoMode, loading } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
@@ -34,10 +35,12 @@ export default function ModerationPage() {
     <h1 className="text-3xl font-black capitalize">Moderation queue</h1>
     <p className="mt-3 text-sm text-slate-600 capitalize">Restricted to operator-approved moderators. Review reports individually; reporting does not automatically remove content.</p>
     {loading ? <p className="capitalize">Loading…</p> : !user || demoMode ? <p className="mt-5 capitalize">Log In with an approved moderator account.</p> : allowed && <>
+      <SpamDomainControls />
       <button disabled={busy} onClick={() => void load().catch(() => setError('Could not refresh reports.'))} className="my-5 rounded border px-4 py-2 capitalize">Refresh reports</button>
       {!reports.length && <p className="capitalize">No pending reports.</p>}
       {reports.map((report) => <article key={report.id} className="mb-5 rounded-xl border bg-white p-5">
-        <h2 className="font-bold">{report.target_kind} · {report.reason}</h2>
+        <h2 className="font-bold">{report.target_kind === 'imported_answer' ? 'Archive reply' : report.target_kind} · {report.reason}</h2>
+        <p className="mt-1 text-xs text-slate-500">{report.source === 'automatic' ? 'Automatic screening — review the context' : 'Member report'}</p>
         <p className="mt-1 text-xs text-slate-500">{new Date(report.created_at).toLocaleString()}</p>
         <p className="my-4 whitespace-pre-wrap break-words rounded bg-slate-50 p-3">{report.content ?? 'Content no longer available.'}</p>
         <p className="mb-4 whitespace-pre-wrap text-sm">Reporter details: {report.details || 'None'}</p>

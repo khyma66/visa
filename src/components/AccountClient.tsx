@@ -14,8 +14,44 @@ const control = 'rounded-lg border border-slate-300 px-4 py-2 text-sm font-semib
 const tabs = [
   { id: 'profile', label: 'Profile', Icon: UserRound },
   { id: 'activity', label: 'Activity', Icon: CircleHelp },
+  { id: 'reputation', label: 'Reputation', Icon: CheckCircle2 },
   { id: 'settings', label: 'Settings', Icon: Settings },
 ] as const;
+
+type ReputationEvent = { id: number; kind: string; delta: number; reason: string; created_at: string };
+function Reputation() {
+  const { user, demoMode, refreshProfile } = useAuth();
+  const [data, setData] = useState<{ total: number; events: ReputationEvent[] } | null>(null);
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!user || demoMode) return;
+    let active = true;
+    setLoading(true); setError('');
+    void Promise.resolve(getSupabase().rpc('my_reputation', { before_event: cursor }).abortSignal(AbortSignal.timeout(8000)))
+      .then(({ data: result, error: failure }) => {
+        if (!active) return;
+        if (failure || !result || !Array.isArray(result.events)) { setError('Reputation history is unavailable. Please try again.'); return; }
+        setData(result);
+        void refreshProfile().catch(() => {});
+      }).catch(() => { if (active) setError('Reputation history is unavailable. Please try again.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [user?.id, demoMode, cursor, retry]);
+  return <section aria-label="Your reputation" className="p-5 sm:p-7">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">Your reputation</h2><button type="button" disabled={loading && !demoMode} className={control} onClick={() => { setCursor(null); setRetry(v => v + 1); }}>Refresh</button></div>
+    <p className="mt-2 text-sm leading-6 text-slate-600">Earn recognition when other members find your contributions helpful. Posting itself does not earn points.</p>
+    <dl className="mt-5 grid grid-cols-3 gap-3 text-center"><div className="rounded-xl bg-teal-50 p-3"><dt className="text-xs text-teal-900">Question upvote</dt><dd className="mt-1 text-xl font-bold text-teal-800">+2</dd></div><div className="rounded-xl bg-blue-50 p-3"><dt className="text-xs text-blue-900">Answer upvote</dt><dd className="mt-1 text-xl font-bold text-blue-800">+5</dd></div><div className="rounded-xl bg-amber-50 p-3"><dt className="text-xs text-amber-900">Accepted answer</dt><dd className="mt-1 text-xl font-bold text-amber-800">+10</dd></div></dl>
+    <p className="mt-4 text-xs leading-5 text-slate-500">Qualifying votes and acceptances come from verified accounts at least 24 hours old. Up to 100 new points per UTC day, with at most 20 from one member. Self-votes do not count. Withdrawn votes, removed content and account moderation can reverse awards. Reputation does not certify legal expertise or have monetary value.</p>
+    {demoMode ? <p className="mt-6 text-slate-500">Reputation history is available after signing in to the connected community.</p> : error ? <p role="alert" className="mt-6 text-rose-700">{error}</p> : loading ? <p role="status" className="mt-6 text-slate-500">Loading reputation…</p> : data && <>
+      <p className="mt-6 text-lg font-semibold">{data.total} reputation <span className="text-sm font-normal text-slate-500">including your starting point</span></p>
+      {data.events.length ? <ol className="mt-4 divide-y divide-slate-100">{data.events.slice(0,20).map(event => <li key={event.id} className="flex items-start gap-4 py-4"><span className={`min-w-10 font-bold ${event.delta > 0 ? 'text-teal-700' : 'text-slate-600'}`}>{event.delta > 0 ? '+' : ''}{event.delta}</span><div><p className="text-sm font-semibold">{event.kind === 'question_upvote' ? 'Helpful question' : event.kind === 'answer_upvote' ? 'Helpful answer' : 'Accepted answer'}</p><p className="mt-1 text-xs text-slate-500">{event.reason} · <time dateTime={event.created_at}>{new Date(event.created_at).toLocaleString()}</time></p></div></li>)}</ol> : <p className="mt-4 text-sm text-slate-500">No reputation changes yet. Your questions and answers are listed in Activity.</p>}
+      {(cursor !== null || data.events.length > 20) && <div className="mt-4 flex justify-between gap-3"><button className={control} disabled={cursor === null} onClick={() => setCursor(null)}>Latest</button><button className={control} disabled={data.events.length <= 20} onClick={() => setCursor(data.events[19].id)}>Older activity</button></div>}
+    </>}
+  </section>;
+}
 
 function Activity({ userId }: { userId: string }) {
   const [kind, setKind] = useState<ActivityKind>('questions');
@@ -125,7 +161,7 @@ export function AccountClient() {
     <nav aria-label="Account sections" className="mb-6 mt-8 flex gap-1 overflow-x-auto border-b border-slate-200 capitalize">{tabs.map(({ id, label, Icon }) => <Link key={id} href={`/account?tab=${id}`} aria-current={tab === id ? 'page' : undefined} className={`inline-flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold ${tab === id ? 'border-orange-500 text-slate-950' : 'border-transparent text-slate-500 hover:text-slate-950'}`}><Icon size={17} />{label}</Link>)}</nav>
     {!profile && <div role="status" className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="capitalize">{profileLoading ? 'Loading your community profile…' : 'Your sign-in is active, but your community profile could not be loaded.'}</p>{!profileLoading && <button type="button" disabled={retrying} onClick={() => void retryProfile()} className={`${control} mt-3 capitalize`}>{retrying ? 'Loading…' : 'Retry profile'}</button>}{profileError && <p role="alert" className="mt-2">{profileError}</p>}</div>}
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      {tab === 'settings' ? <AccountSettings /> : tab === 'activity' ? demoMode ? <div className="p-7 capitalize"><h2 className="text-xl font-bold capitalize">Your contributions</h2><p className="mt-3 text-sm text-slate-500 capitalize">Account activity is available when real sign-in is connected.</p></div> : <Activity userId={user.id} /> : <section className="p-5 sm:p-7"><div className="flex flex-wrap items-start justify-between gap-4 capitalize"><div className="capitalize"><h2 className="text-xl font-bold capitalize">Profile</h2><p className="mt-2 text-sm text-slate-500 capitalize">This is how other members recognize you. Your avatar uses your first-name initial. Your full name stays private.</p></div><Link href="/account?tab=settings" className={`${control} capitalize`}>Edit profile</Link></div><dl className="mt-7 grid gap-6 sm:grid-cols-2"><div><dt className="text-sm font-semibold text-slate-500 capitalize">Community username</dt><dd className="mt-2 font-semibold">{profile?.username ?? (profileLoading ? 'Loading…' : 'Unavailable')}</dd></div><div><dt className="text-sm font-semibold text-slate-500 capitalize">Reputation</dt><dd className="mt-2 font-semibold">{profile?.reputation ?? '—'}</dd></div></dl><h3 className="mt-7 text-sm font-semibold text-slate-500 capitalize">About you</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-700">{profile ? profile.bio || 'You have not added a bio yet.' : profileLoading ? 'Loading your bio…' : 'Your bio could not be loaded.'}</p><div className="mt-7 flex flex-wrap gap-5 border-t border-slate-100 pt-5 text-sm font-semibold text-blue-700"><Link href="/account?tab=activity" className="underline capitalize">View your activity</Link><Link href="/messages" className="inline-flex items-center gap-2 underline capitalize"><MessageCircle size={16} />Messages</Link></div></section>}
+      {tab === 'reputation' ? <Reputation /> : tab === 'settings' ? <AccountSettings /> : tab === 'activity' ? demoMode ? <div className="p-7 capitalize"><h2 className="text-xl font-bold capitalize">Your contributions</h2><p className="mt-3 text-sm text-slate-500 capitalize">Account activity is available when real sign-in is connected.</p></div> : <Activity userId={user.id} /> : <section className="p-5 sm:p-7"><div className="flex flex-wrap items-start justify-between gap-4 capitalize"><div className="capitalize"><h2 className="text-xl font-bold capitalize">Profile</h2><p className="mt-2 text-sm text-slate-500 capitalize">This is how other members recognize you. Your avatar uses your first-name initial. Your full name stays private.</p></div><Link href="/account?tab=settings" className={`${control} capitalize`}>Edit profile</Link></div><dl className="mt-7 grid gap-6 sm:grid-cols-2"><div><dt className="text-sm font-semibold text-slate-500 capitalize">Community username</dt><dd className="mt-2 font-semibold">{profile?.username ?? (profileLoading ? 'Loading…' : 'Unavailable')}</dd></div><div><dt className="text-sm font-semibold text-slate-500 capitalize">Reputation</dt><dd className="mt-2 font-semibold">{profile?.reputation ?? '—'}</dd></div></dl><h3 className="mt-7 text-sm font-semibold text-slate-500 capitalize">About you</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-700">{profile ? profile.bio || 'You have not added a bio yet.' : profileLoading ? 'Loading your bio…' : 'Your bio could not be loaded.'}</p><div className="mt-7 flex flex-wrap gap-5 border-t border-slate-100 pt-5 text-sm font-semibold text-blue-700"><Link href="/account?tab=activity" className="underline capitalize">View your activity</Link><Link href="/messages" className="inline-flex items-center gap-2 underline capitalize"><MessageCircle size={16} />Messages</Link></div></section>}
     </div>
   </main>;
 }
