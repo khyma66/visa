@@ -5,7 +5,7 @@ import { SaxesParser } from 'saxes';
 import ts from 'typescript';
 
 const code = ts.transpileModule(await readFile(new URL('../src/lib/licensed-news-shared.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
-const { LICENSED_NEWS_POLICY, licensedStoryUrl, licensedPhotoUrl, licensedPhotoCredit, isLicensedNews } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const { LICENSED_NEWS_POLICY, LICENSED_NEWS_LIMIT, LICENSED_NEWS_MAX_AGE_MS, licensedStoryUrl, licensedPhotoUrl, licensedPhotoCredit, isLicensedNews } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 export const FEED_URL = 'https://www.texastribune.org/topics/immigration/feed/';
 // Deliberate policy review gate: changing publisher terms halts ingestion, not automatic approval.
 export const REVIEWED_POLICY_DIGEST = '83e8cafce5e3cba8d74297f86204f3a50ff06a6f6cd84ed93dac0bc33fc2d1d5';
@@ -57,7 +57,7 @@ export function articleFrom(row, html, now = Date.now()) {
     || !html.includes(`id="post-${row['post-id']}"`) || !html.includes('id="republication-tracker-tool-plain-text-content"')
     || /\b(?:Associated Press|Reuters|ProPublica|El Paso Matters|New York Times|Washington Post|Houston Landing)\b/i.test(author)) return null;
   const time = Date.parse(row.pubDate);
-  if (!Number.isFinite(time) || time > now + 300_000 || time < now - 45 * 86_400_000) return null;
+  if (!Number.isFinite(time) || time > now + 300_000 || time < now - LICENSED_NEWS_MAX_AGE_MS) return null;
   const description = row.description ?? '';
   // Use the publisher's supplied teaser unchanged, never generate an immigration summary.
   const excerptHtml = description.replace(/<figure\b[\s\S]*?<\/figure>/gi, '').match(/<p\b[^>]*>([\s\S]*?)<\/p>/i)?.[1];
@@ -81,14 +81,30 @@ export function articleFrom(row, html, now = Date.now()) {
 export async function refreshLicensedNews(previous, fetcher = fetch, now = Date.now) {
   const get = async url => bounded(await fetcher(url, { signal: AbortSignal.timeout(12_000), redirect: 'error', credentials: 'omit', headers: { 'User-Agent': 'VisaThreads-News/1.0 (+https://visathreads.com/news)', Accept: 'application/rss+xml, text/html;q=0.9' } }));
   if (policyDigest(await get(LICENSED_NEWS_POLICY)) !== REVIEWED_POLICY_DIGEST) throw new Error('Publisher terms changed; review required before republication');
-  const rows = parseFeed(await get(FEED_URL));
-  if (!rows.length) throw new Error('Empty feed; saved edition unchanged');
   const articles = [];
-  for (const row of rows.slice(0, 12)) {
-    if (!licensedStoryUrl(row.link?.trim())) continue;
-    // Any source outage aborts publication; do not erase valid stories on a partial failure.
-    const article = articleFrom(row, await get(row.link.trim()), now());
-    if (article && !articles.some(a => a.url === article.url)) articles.push(article);
+  const seen = new Set();
+  // The publisher serves ten stories per RSS page. Read a bounded rolling
+  // edition; recheck permissions on every included article each day.
+  for (let page = 1; page <= 6 && articles.length < LICENSED_NEWS_LIMIT; page++) {
+    const rows = parseFeed(await get(page === 1 ? FEED_URL : `${FEED_URL}?paged=${page}`));
+    if (!rows.length) {
+      if (page === 1) throw new Error('Empty feed; saved edition unchanged');
+      break;
+    }
+    let newRows = 0;
+    for (const row of rows) {
+      const url = row.link?.trim();
+      const time = Date.parse(row.pubDate);
+      if (!licensedStoryUrl(url) || seen.has(url) || !Number.isFinite(time)
+        || time < now() - LICENSED_NEWS_MAX_AGE_MS || time > now() + 300_000) continue;
+      seen.add(url); newRows++;
+      // Sequential, spaced requests keep the daily crawl small and polite.
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const article = articleFrom(row, await get(url), now());
+      if (article && !articles.some(a => a.id === article.id)) articles.push(article);
+      if (articles.length === LICENSED_NEWS_LIMIT) break;
+    }
+    if (!newRows) break;
   }
   const stamp = new Date(now()).toISOString();
   const next = { source: 'The Texas Tribune', retrievedAt: stamp, policyCheckedAt: stamp, policyDigest: REVIEWED_POLICY_DIGEST, articles: articles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)) };

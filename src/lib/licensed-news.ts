@@ -1,5 +1,5 @@
 import snapshot from '@/data/licensed-news-snapshot.json';
-import { isLicensedNews, type LicensedNewsEdition } from './licensed-news-shared';
+import { isLicensedNews, LICENSED_NEWS_STALE_MS, type LicensedNewsEdition } from './licensed-news-shared';
 
 const EDITION_URL = 'https://raw.githubusercontent.com/khyma66/visa/news-data/licensed-news.json';
 export async function boundedNewsBytes(response: Response, maximum: number): Promise<Uint8Array<ArrayBuffer>> {
@@ -21,7 +21,7 @@ export async function loadLicensedNews(): Promise<{ edition: LicensedNewsEdition
   const key = new Request('https://visathreads.com/__news-cache/edition-v1');
   const savedKey = new Request('https://visathreads.com/__news-cache/last-good-edition-v1');
   const cached = await cache?.match(key).catch(() => undefined);
-  if (cached) { const value: unknown = await cached.json(); if (isLicensedNews(value)) return { edition: value, stale: Date.now() - Date.parse(value.retrievedAt) > 3 * 3600_000 }; }
+  if (cached) { const value: unknown = await cached.json(); if (isLicensedNews(value)) return { edition: value, stale: Date.now() - Date.parse(value.retrievedAt) > LICENSED_NEWS_STALE_MS }; }
   try {
     // workerd supports manual/follow, not redirect:error. boundedNewsBytes rejects 3xx.
     const response = await fetch(EDITION_URL, { signal: AbortSignal.timeout(5000), redirect: 'manual', credentials: 'omit' });
@@ -29,7 +29,7 @@ export async function loadLicensedNews(): Promise<{ edition: LicensedNewsEdition
     if (!isLicensedNews(value)) throw new Error('Invalid licensed news edition');
     await cache?.put(key, Response.json(value, { headers: { 'Cache-Control': 'public, max-age=300' } })).catch(() => {});
     await cache?.put(savedKey, Response.json(value, { headers: { 'Cache-Control': 'public, max-age=86400' } })).catch(() => {});
-    return { edition: value, stale: Date.now() - Date.parse(value.retrievedAt) > 3 * 3600_000 };
+    return { edition: value, stale: Date.now() - Date.parse(value.retrievedAt) > LICENSED_NEWS_STALE_MS };
   } catch {
     const saved = await cache?.match(savedKey).catch(() => undefined);
     if (saved) { const value: unknown = await saved.json(); if (isLicensedNews(value)) return { edition: value, stale: true }; }

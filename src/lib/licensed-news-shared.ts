@@ -1,5 +1,7 @@
 export const LICENSED_NEWS_POLICY = 'https://www.texastribune.org/republishing-guidelines/';
-export const LICENSED_NEWS_LIMIT = 12;
+export const LICENSED_NEWS_LIMIT = 30;
+export const LICENSED_NEWS_MAX_AGE_MS = 90 * 86_400_000;
+export const LICENSED_NEWS_STALE_MS = 36 * 60 * 60_000;
 export const LICENSED_NEWS_REFRESH_MS = 60 * 60_000;
 export type LicensedNewsPhoto = { id: string; url: string; caption: string; credit: string; width: number; height: number };
 export type LicensedNewsArticle = {
