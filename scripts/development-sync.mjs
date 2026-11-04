@@ -1,3 +1,4 @@
+import { verifyDestinationRoutes } from './smoke-destination-routing.mjs';
 // Production-first feature sync. Copies reviewed code, never production accounts,
 // database credentials, or production content. No deploy is performed by this helper.
 import assert from 'node:assert/strict';
@@ -238,6 +239,7 @@ async function verify() {
       const page = await probe.request('dev-home', '/'); assert.match(page.headers.get('x-robots-tag') ?? '', /noindex/);
       assert(!(await page.text()).includes('aria-label="Ask VisaThreads assistant"'));
       await smokeSite(DEV_SITE, expected, { fetchImpl: probe.siteFetch, skipHealthWait: true });
+      await verifyDestinationRoutes(DEV_SITE);
       await verifyClientAssets(probe, assets); await probeRolloutHealth(probe, 'end');
     },
   });

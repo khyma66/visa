@@ -29,7 +29,7 @@
     "test:groups": "node --test --test-timeout=60000 scripts/test-community-groups.mjs",
     "test:community-ui": "node --test scripts/test-community-ui.mjs",
     "test:scale": "node --test --test-timeout=120000 scripts/test-community-scale.mjs",
-    "test": "npm run test:isolation && npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:messaging && npm run test:message-entry && npm run test:presentation && npm run test:tags && npm run test:news && npm run test:groups && npm run test:community-ui && npm run test:scale && npm run test:feed-ui && npm run test:chatbot-removed && npm run test:dependencies && npm run test:analytics",
+    "test": "npm run test:isolation && npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:messaging && npm run test:message-entry && npm run test:presentation && npm run test:tags && npm run test:news && npm run test:groups && npm run test:community-ui && npm run test:scale && npm run test:feed-ui && npm run test:chatbot-removed && npm run test:dependencies && npm run test:analytics && npm run test:destinations",
     "check:bundle": "node scripts/check-bundle.mjs",
     "check:archive-bundle": "node scripts/check-archive-bundle.mjs",
     "check:private-experiences": "node scripts/check-private-experiences.mjs",
@@ -51,7 +51,8 @@
     "deploy:devsite": "node scripts/development-site.mjs --deploy",
     "test:dependencies": "node --test scripts/test-braces-security.mjs vendor/braces/test/*.js",
     "test:analytics": "node --test scripts/test-analytics.mjs scripts/test-search-visibility.mjs scripts/test-search-metadata.mjs scripts/test-launch-workspace.mjs scripts/test-launch-ui.mjs scripts/test-visa-guides.mjs scripts/test-members.mjs",
-    "test:chatbot-removed": "node --test scripts/test-chatbot-removed.mjs"
+    "test:chatbot-removed": "node --test scripts/test-chatbot-removed.mjs",
+    "test:destinations": "node --test scripts/test-destination-routing.mjs"
   },
   "keywords": [
     "visa",

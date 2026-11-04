@@ -171,7 +171,7 @@ test('saved edition survives edge eviction, source failure and poisoned cache li
 });
 test('topic cards show only actual positive counts and link to valid tag filters', () => {
   const topics = topicCollections({ tags: [{ tag: 'h1b', count: 42 }, { tag: 'h4', count: 0 }, { tag: 'ead', count: -1 }, { tag: 'f1', count: '100' }, { tag: 'stamping', count: 3 }] });
-  assert.equal(topics.length, 2); assert.equal(topics[0].href, '/?tag=h1b'); assert.equal(topics[0].count, 42);
+  assert.equal(topics.length, 2); assert.equal(topics[0].href, '/us/en?tag=h1b'); assert.equal(topics[0].count, 42);
   const html = renderToStaticMarkup(createElement(TopicCollectionCards, { topics })); assert.match(html, /42 existing discussions/); assert.doesNotMatch(html, /members|Join/);
   assert.throws(() => topicCollections({ tags: 'bad' })); assert.deepEqual(topicCollections({ tags: [] }), []);
 });

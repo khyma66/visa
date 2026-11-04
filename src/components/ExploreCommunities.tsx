@@ -76,7 +76,7 @@ export function ExploreCommunities({ initialTab = 'all' }: { initialTab?: 'all' 
 
   const memberMap = useMemo(() => new Map(memberships.map((row) => [row.community_id, row])), [memberships]);
   async function changeMembership(community: Community) {
-    if (!user) { router.push(`/login?next=${encodeURIComponent(`/c/${community.slug}`)}`); return; }
+    if (!user) { router.push(`/login?next=${encodeURIComponent(`/us/en/c/${community.slug}`)}`); return; }
     if (authLoading || loading || membershipLoading || membershipError || actionLocks.current.has(community.id)) return;
     const membership = memberMap.get(community.id);
     if (membership?.role === 'owner') return;
@@ -120,8 +120,8 @@ export function ExploreCommunities({ initialTab = 'all' }: { initialTab?: 'all' 
     <nav aria-label="Explore sections" className="mt-5 flex flex-wrap items-center gap-1 border-b border-slate-200 pb-3">
       <button onClick={() => changeTab('all')} aria-pressed={tab === 'all'} className={`rounded-full px-4 py-2 text-sm font-semibold ${tab === 'all' ? 'bg-slate-200 text-slate-950' : 'text-slate-600 hover:bg-slate-100'} capitalize`}>All Communities</button>
       <button onClick={() => changeTab('mine')} aria-pressed={tab === 'mine'} className={`rounded-full px-4 py-2 text-sm font-semibold ${tab === 'mine' ? 'bg-slate-200 text-slate-950' : 'text-slate-600 hover:bg-slate-100'} capitalize`}>My Communities</button>
-      <Link href="/news" className="ml-auto rounded-full px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 capitalize">U.S. Visa News</Link>
-      <Link href="/tags" className="rounded-full px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 capitalize">Browse Tags</Link>
+      <Link href="/us/en/news" className="ml-auto rounded-full px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 capitalize">U.S. Visa News</Link>
+      <Link href="/us/en/tags" className="rounded-full px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 capitalize">Browse Tags</Link>
     </nav>
     {tab === 'all' && <><TopicCollections /><h2 className="mt-8 text-thread-title font-semibold text-slate-950 capitalize">Member Communities</h2><p className="mt-1 text-sm text-slate-600 capitalize">Create or join a dedicated group. Member counts reflect actual memberships.</p></>}
     <div aria-label="Browse community categories" className="mt-5 flex flex-wrap gap-2">
@@ -141,7 +141,7 @@ export function ExploreCommunities({ initialTab = 'all' }: { initialTab?: 'all' 
         const membership = memberMap.get(community.id);
         const Icon = CATEGORY_ICONS[community.category] ?? MessagesSquare;
         return <article key={community.id} className="flex min-w-0 flex-col rounded-lg border border-slate-200 bg-white p-4 transition hover:border-slate-300">
-          <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700"><Icon size={21} aria-hidden="true" /></span><div className="min-w-0 flex-1"><Link href={`/c/${community.slug}`} className="break-words text-thread-title font-semibold text-slate-900 hover:text-blue-700">{community.display_name}</Link><p className="mt-0.5 break-all text-xs text-slate-500">c/{community.slug}</p></div><Link href={`/c/${community.slug}`} aria-label={`Open ${community.display_name}`} title={`Open ${community.display_name}`} className="shrink-0 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-700"><ArrowUpRight size={17} /></Link></div>
+          <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700"><Icon size={21} aria-hidden="true" /></span><div className="min-w-0 flex-1"><Link href={`/us/en/c/${community.slug}`} className="break-words text-thread-title font-semibold text-slate-900 hover:text-blue-700">{community.display_name}</Link><p className="mt-0.5 break-all text-xs text-slate-500">c/{community.slug}</p></div><Link href={`/us/en/c/${community.slug}`} aria-label={`Open ${community.display_name}`} title={`Open ${community.display_name}`} className="shrink-0 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-700"><ArrowUpRight size={17} /></Link></div>
           <p className="mb-4 mt-3 line-clamp-2 break-words text-base leading-6 text-slate-600">{community.description}</p>
           <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500"><span className="rounded bg-slate-100 px-2 py-1">{community.category === 'Work visas' ? 'Work Visas' : community.category}</span><span className="flex min-w-0 items-center gap-1 break-words"><MapPin size={13} className="shrink-0" aria-hidden="true" />{community.country}</span></div>
           <div className="mt-auto flex flex-wrap items-center justify-between gap-3"><span className="flex items-center gap-1.5 text-xs text-slate-500"><Users size={14} aria-hidden="true" />{Number(community.member_count).toLocaleString()} {Number(community.member_count) === 1 ? 'member' : 'members'}</span><button disabled={authLoading || loading || membershipLoading || !!membershipError || busy.has(community.id) || membership?.role === 'owner'} onClick={() => void changeMembership(community)} aria-label={`${membership ? 'Leave' : 'Join'} ${community.display_name}`} className={`rounded-full border px-5 py-2 text-sm font-semibold disabled:cursor-default disabled:opacity-60 ${membership ? 'border-slate-300 text-slate-700 hover:bg-slate-50' : 'border-blue-700 bg-blue-700 text-white hover:bg-blue-800'} capitalize`}>{busy.has(community.id) ? 'Saving...' : membership?.role === 'owner' ? 'Owner' : membership ? 'Leave' : 'Join'}</button></div>

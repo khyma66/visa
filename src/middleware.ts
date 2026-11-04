@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { legacyDestinationRedirect } from './lib/destination-routing';
 import { discoveryOrigin, discoveryPath } from './lib/search-visibility';
 
 export function middleware(request: NextRequest) {
@@ -12,6 +13,15 @@ export function middleware(request: NextRequest) {
   }
   const production = process.env.APP_ENV === 'production';
   const approved = process.env.PUBLIC_LAUNCH_APPROVED === 'true';
+  const migratedPath = legacyDestinationRedirect(request.nextUrl.pathname);
+  if ((!production || approved) && migratedPath && ['GET', 'HEAD'].includes(request.method)) {
+    const destination = new URL(request.nextUrl.toString());
+    destination.pathname = migratedPath;
+    const redirect = NextResponse.redirect(destination, 308);
+    redirect.headers.set('Cache-Control', 'private, no-store');
+    redirect.headers.set('Referrer-Policy', 'no-referrer');
+    return redirect;
+  }
   const sensitive = /^\/(login|signup|account|messages|moderation|ask|owner|feedback|assistant|admin)(\/|$)/.test(request.nextUrl.pathname);
   const discovery = discoveryOrigin() === request.nextUrl.origin
     && !request.nextUrl.search

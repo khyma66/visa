@@ -184,12 +184,12 @@ const escapeHtml = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;
 function playbookDocuments() {
   const document = (path, title, body) => `<html><head><title>${escapeHtml(title)} · VisaThreads</title><link rel="canonical" href="${origin}${path}"><meta name="robots" content="noindex, nofollow"></head><body>${body}</body></html>`;
   const pages = new Map([
-    ['/guides?sort=unanswered', document('/guides', 'U.S. Visa Guides and Official Resources', `<h1>U.S. Visa Guides</h1>${PLAYBOOK_GUIDE_CHECKS.map(guide => `<a href="/guides/${guide.slug}">${escapeHtml(guide.title)}</a>`).join('')}`)],
-    ['/about', document('/about', 'About VisaThreads', '<main>An independent community<a href="/guides">Guides</a><a href="/contact">Contact</a></main>')],
+    ['/us/en/guides?sort=unanswered', document('/us/en/guides', 'U.S. Visa Guides and Official Resources', `<h1>U.S. Visa Guides</h1>${PLAYBOOK_GUIDE_CHECKS.map(guide => `<a href="/us/en/guides/${guide.slug}">${escapeHtml(guide.title)}</a>`).join('')}`)],
+    ['/about', document('/about', 'About VisaThreads', '<main>An independent community<a href="/us/en/guides">Guides</a><a href="/contact">Contact</a></main>')],
     ['/admin/launch', document('/admin/launch', 'Owner workspace', '<main>Private to the designated owner<p>Checking your account…</p></main>')],
-    [`/questions/${playbookPost.id}`, document(`/questions/${playbookPost.id}`, playbookPost.title, `<h1>${escapeHtml(playbookPost.title)}</h1><div>${escapeHtml(playbookPost.body)}</div>`) ],
+    [`/us/en/questions/${playbookPost.id}`, document(`/us/en/questions/${playbookPost.id}`, playbookPost.title, `<h1>${escapeHtml(playbookPost.title)}</h1><div>${escapeHtml(playbookPost.body)}</div>`) ],
   ]);
-  for (const guide of PLAYBOOK_GUIDE_CHECKS) pages.set(`/guides/${guide.slug}`, document(`/guides/${guide.slug}`, guide.title, `<main><h1>${escapeHtml(guide.title)}</h1><h2>Your preparation checklist</h2><h2>Official references</h2><a href="${guide.source}">Official agency</a><a href="/contact">Report a correction</a></main>`));
+  for (const guide of PLAYBOOK_GUIDE_CHECKS) pages.set(`/us/en/guides/${guide.slug}`, document(`/us/en/guides/${guide.slug}`, guide.title, `<main><h1>${escapeHtml(guide.title)}</h1><h2>Your preparation checklist</h2><h2>Official references</h2><a href="${guide.source}">Official agency</a><a href="/contact">Report a correction</a></main>`));
   return pages;
 }
 function playbookProbe(pages) {
@@ -207,15 +207,15 @@ test('playbook smoke uses exactly seven provenance-aware anonymous requests with
   await verifyPlaybookPages(p, { questions: [{ ...playbookPost, id: 'apify-experience', post_kind: 'experience' }, playbookPost] });
   assert.equal(p.paths.length, 7); assert.equal(p.records.length, 7);
   assert(p.records.every(row => row.build === expected.gitSha && row.check.startsWith('playbook:')));
-  assert(p.paths.includes('/guides?sort=unanswered'));
-  assert.equal(p.paths.at(-1), `/questions/${playbookPost.id}`);
+  assert(p.paths.includes('/us/en/guides?sort=unanswered'));
+  assert.equal(p.paths.at(-1), `/us/en/questions/${playbookPost.id}`);
 });
 test('playbook smoke rejects script-only content, wrong canonical/source and owner payloads without logging values', async () => {
   const ownerSecret = 'private-owner-evidence-example';
   const mutations = [
-    [`/questions/${playbookPost.id}`, html => html.replace(`<div>${playbookPost.body}</div>`, `<script>${JSON.stringify({ body: playbookPost.body })}</script>`), 'imported-server-content'],
-    ['/guides?sort=unanswered', html => html.replace(`${origin}/guides"`, `${origin}/guides?sort=unanswered"`), 'guides-canonical'],
-    [`/guides/${PLAYBOOK_GUIDE_CHECKS[0].slug}`, html => html.replace(PLAYBOOK_GUIDE_CHECKS[0].source, 'https://untrusted.example/'), 'guide-source-and-correction'],
+    [`/us/en/questions/${playbookPost.id}`, html => html.replace(`<div>${playbookPost.body}</div>`, `<script>${JSON.stringify({ body: playbookPost.body })}</script>`), 'imported-server-content'],
+    ['/us/en/guides?sort=unanswered', html => html.replace(`${origin}/us/en/guides"`, `${origin}/us/en/guides?sort=unanswered"`), 'guides-canonical'],
+    [`/us/en/guides/${PLAYBOOK_GUIDE_CHECKS[0].slug}`, html => html.replace(PLAYBOOK_GUIDE_CHECKS[0].source, 'https://untrusted.example/'), 'guide-source-and-correction'],
     ['/admin/launch', html => html.replace('</body>', `<script>{"tasks":[{"evidence":"${ownerSecret}"}]}</script></body>`), 'owner-no-record-payload'],
     ['/admin/launch', html => html.replace('</body>', `<script>self.__next_f.push([1,"{\\"assigned_to\\":\\"${ownerSecret}\\"}"])</script></body>`), 'owner-no-record-payload'],
   ];

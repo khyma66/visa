@@ -1,3 +1,4 @@
+import { unprefixedDestinationPath } from './destination-routing';
 import type { MetadataRoute } from 'next';
 import { VISA_GUIDES } from './visa-guides';
 
@@ -6,8 +7,8 @@ export type SearchEnvironment = Partial<Record<
 
 // Imported content, member profiles and private areas are never enumerated here.
 export const PUBLIC_SITEMAP_PATHS = [
-  '/', '/us', '/countries', '/community-safety', '/contact',
-  '/privacy', '/privacy-choices', '/terms', '/cookies', '/guides', '/about', '/security',
+  '/', '/us/en', '/countries', '/community-safety', '/contact',
+  '/privacy', '/privacy-choices', '/terms', '/cookies', '/us/en/guides', '/about', '/security',
 ] as const;
 
 export const PRIVATE_CRAWL_PATHS = [
@@ -28,8 +29,9 @@ export function discoveryOrigin(env: SearchEnvironment = process.env): string | 
 }
 
 export function discoveryPath(path: string): boolean {
-  return (PUBLIC_SITEMAP_PATHS as readonly string[]).includes(path)
-    || VISA_GUIDES.some(guide => path === `/guides/${guide.slug}`);
+  const legacy = unprefixedDestinationPath(path);
+  return (PUBLIC_SITEMAP_PATHS as readonly string[]).includes(path) || path === '/guides' || path === '/us'
+    || VISA_GUIDES.some(guide => legacy === `/guides/${guide.slug}`);
 }
 
 /** Fail closed when the release gate or canonical origin is not configured. */
@@ -57,7 +59,7 @@ export function publicSitemap(env: SearchEnvironment = process.env): MetadataRou
   const origin = publicSearchOrigin(env) ?? discoveryOrigin(env);
   if (!origin) return [];
   // Do not invent lastModified dates from the request or deployment time.
-  return [...PUBLIC_SITEMAP_PATHS, ...VISA_GUIDES.map(guide => `/guides/${guide.slug}`)]
+  return [...PUBLIC_SITEMAP_PATHS, ...VISA_GUIDES.map(guide => `/us/en/guides/${guide.slug}`)]
     .map((path) => ({ url: new URL(path, origin).href }));
 }
 

@@ -8,9 +8,9 @@ import { Compass, Newspaper, Plus, Users } from 'lucide-react';
 export function CommunityAddonsNavigation() {
   const pathname = usePathname();
   const links = [
-    ['/explore', 'Explore Communities', Compass],
+    ['/us/en/explore', 'Explore Communities', Compass],
     ['/my-communities', 'My Communities', Users],
-    ['/news', 'News', Newspaper],
+    ['/us/en/news', 'News', Newspaper],
     ['/communities/new', 'Start a Community', Plus],
   ] as const;
   return <div className="community-shortcuts">

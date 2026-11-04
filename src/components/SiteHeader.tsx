@@ -55,7 +55,7 @@ export function SiteHeader() {
             <img src="/assets/brand/visathreads-integrated-logo.png" width={172} height={60} alt="VisaThreads" className="integrated-brand-logo" decoding="async" />
           </span>
         </Link>
-        <form action="/" method="get" role="search" className="header-search">
+        <form action="/us/en" method="get" role="search" className="header-search">
           <Search size={19} aria-hidden="true"/>
           <label className="sr-only capitalize" htmlFor="site-search">Search VisaThreads</label>
           <input id="site-search" name="q" type="search" placeholder="Search visa questions" maxLength={200}/>

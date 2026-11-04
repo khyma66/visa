@@ -1,3 +1,4 @@
+import { destinationPath } from './destination-routing';
 import type { Metadata } from 'next';
 import type { Answer, Question } from './types';
 import { publicSearchOrigin, discoveryOrigin, discoveryPath, type SearchEnvironment } from './search-visibility';
@@ -8,7 +9,7 @@ const SITE_ORIGIN = 'https://visathreads.com';
 export const NATIVE_THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function threadPath(question: Pick<Question, 'id' | 'post_kind'>): string {
-  return `/${question.post_kind === 'experience' ? 'experiences' : 'questions'}/${encodeURIComponent(question.id)}`;
+  return `/us/en/${question.post_kind === 'experience' ? 'experiences' : 'questions'}/${encodeURIComponent(question.id)}`;
 }
 
 export function eligibleNativeThread(question: Question): boolean {
@@ -20,12 +21,13 @@ export function eligibleNativeThread(question: Question): boolean {
 /** Parameters select alternate views, not independent search landing pages. */
 export function publicPageMetadata(path: string, title: string, description: string,
   searchParams: SearchParameters = {}, eligible = true, env: SearchEnvironment = process.env): Metadata {
-  const canonical = new URL(path, SITE_ORIGIN).href;
+  const canonicalPath = path === '/' ? '/' : destinationPath(path);
+  const canonical = new URL(canonicalPath, SITE_ORIGIN).href;
   const approved = Boolean(publicSearchOrigin(env) || (discoveryOrigin(env) && discoveryPath(path)));
   const filtered = Object.values(searchParams).some(value => value !== undefined);
   return {
     title: path === '/' ? { absolute: `${title} · VisaThreads` } : title,
-    description, alternates: { canonical },
+    description, alternates: { canonical, ...(canonicalPath.startsWith('/us/en') ? { languages: { en: canonical } } : {}) },
     robots: { index: approved && eligible && !filtered, follow: approved },
     openGraph: { type: 'website', siteName: 'VisaThreads', title, description, url: canonical },
     twitter: { card: 'summary', title, description },

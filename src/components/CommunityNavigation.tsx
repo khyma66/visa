@@ -10,18 +10,18 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
   const params = useSearchParams();
   const { user } = useAuth();
   const askHref = user ? '/ask' : '/login?next=%2Fask#sign-in';
-  const popular = pathname === '/' && params.get('sort') === 'score';
+  const popular = (pathname === '/us/en' || pathname === '/') && params.get('sort') === 'score';
   const sections = [
     ...(mobile ? [{ name: 'Create & Ask', links: [
       { href: askHref, label: 'Ask a Question', icon: Plus },
     ] }] : []),
     { name: 'Discover', links: [
-      { href: '/', label: 'Home', icon: Home, active: pathname === '/' && !popular },
-      { href: '/?sort=score', label: 'Popular', icon: TrendingUp, active: popular },
-      { href: '/explore', label: 'Explore Communities', icon: Compass },
-      { href: '/news', label: 'News', icon: Newspaper },
-      { href: '/experiences', label: 'Experience', icon: NotebookPen },
-      { href: '/tags', label: 'Tags', icon: Tags },
+      { href: '/us/en', label: 'Home', icon: Home, active: (pathname === '/us/en' || pathname === '/') && !popular },
+      { href: '/us/en?sort=score', label: 'Popular', icon: TrendingUp, active: popular },
+      { href: '/us/en/explore', label: 'Explore Communities', icon: Compass },
+      { href: '/us/en/news', label: 'News', icon: Newspaper },
+      { href: '/us/en/experiences', label: 'Experience', icon: NotebookPen },
+      { href: '/us/en/tags', label: 'Tags', icon: Tags },
     ] },
     { name: 'Your Communities', links: [
       { href: '/my-communities', label: 'My Communities', icon: Users },
@@ -41,7 +41,8 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
     </div>)}
     <div className="nav-section">
       <p className="nav-section-title capitalize">Resources</p>
-      <Link href="/guides" onClick={onNavigate} aria-current={pathname.startsWith('/guides') ? 'page' : undefined} className={`nav-item ${pathname.startsWith('/guides') ? 'nav-item-active' : ''} capitalize`}><BookOpen size={20} strokeWidth={1.7} aria-hidden="true"/>Visa Guides</Link>
+      <Link href="/countries" onClick={onNavigate} className="nav-item capitalize"><Compass size={20} aria-hidden="true"/>Visa Destinations</Link>
+      <Link href="/us/en/guides" onClick={onNavigate} aria-current={pathname.startsWith('/us/en/guides') ? 'page' : undefined} className={`nav-item ${pathname.startsWith('/us/en/guides') ? 'nav-item-active' : ''} capitalize`}><BookOpen size={20} strokeWidth={1.7} aria-hidden="true"/>Visa Guides</Link>
       <Link href="/community-safety" onClick={onNavigate} className="nav-item capitalize"><ShieldCheck size={20} strokeWidth={1.7} aria-hidden="true"/>Community Safety</Link>
       <div className="nav-policy-links capitalize">
         <Link href="/about" onClick={onNavigate} className="capitalize">About</Link>

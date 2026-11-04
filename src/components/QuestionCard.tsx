@@ -15,7 +15,7 @@ function compact(value: number) {
 
 export function QuestionCard({ question, onTagSelect, onRelated }: { question: Question; onTagSelect?: (tag: string) => void; onRelated?: (question: Question) => void }) {
   const imported = isImportedPost(question);
-  const path = `/${question.post_kind === 'experience' && !imported ? 'experiences' : 'questions'}/${question.id}`;
+  const path = `/us/en/${question.post_kind === 'experience' && !imported ? 'experiences' : 'questions'}/${question.id}`;
   return (
     <article className="feed-card group min-w-0 border-b border-slate-200 bg-white px-3 py-4 transition hover:bg-slate-50/70 sm:px-4">
       <div className="min-w-0">
@@ -33,7 +33,7 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
           {question.post_kind && question.post_kind !== 'question' && <p className="mt-2 text-xs font-semibold text-slate-600">{question.post_kind === 'experience' ? `Experience · ${question.experience_category}` : question.post_kind === 'promotion' ? 'Promotional post' : 'Discussion'}</p>}
           <p className="mt-2 line-clamp-2 break-words text-base leading-6 text-slate-600">{question.body}</p>
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {question.tags.map((tag) => <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} onClick={onTagSelect ? (event) => { event.preventDefault(); onTagSelect(tag); } : undefined} className="max-w-full break-words rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}
+            {question.tags.map((tag) => <Link key={tag} href={`/us/en?tag=${encodeURIComponent(tag)}`} onClick={onTagSelect ? (event) => { event.preventDefault(); onTagSelect(tag); } : undefined} className="max-w-full break-words rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}
             {question.destination_country !== 'Global' && <span className="ml-auto text-xs text-slate-500">{question.destination_country}</span>}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600 capitalize">

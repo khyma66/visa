@@ -278,7 +278,7 @@ test('question form preserves the selected community, real actor and suggested t
     assert.equal(call.args[1].community_id, group.id);
     assert.equal(call.args[1].title, 'What documents for my H1B transfer?');
     assert(call.args[1].tags.includes('h1b'));
-    assert.deepEqual(h.pushes, ['/questions/created-question']);
+    assert.deepEqual(h.pushes, ['/us/en/questions/created-question']);
   } finally { h.close(); }
 });
 test('General Questions omit community_id and are available without membership', async () => {
@@ -287,7 +287,7 @@ test('General Questions omit community_id and are available without membership',
     h.render(AskQuestionForm); await h.settle(); fillQuestion(h); await publish(h);
     const input = h.calls.find((c) => c.name === 'createQuestion').args[1];
     assert.equal(Object.hasOwn(input, 'community_id'), false);
-    assert.deepEqual(h.pushes, ['/questions/created-question']);
+    assert.deepEqual(h.pushes, ['/us/en/questions/created-question']);
   } finally { h.close(); }
 });
 test('a selected community without membership cannot be published, even by invoking submit directly', async () => {
@@ -333,7 +333,7 @@ test('question submit rejects a duplicate click while pending and permits retry 
     h.handlers.createQuestion = async () => 'retry-question';
     await publish(h);
     assert.equal(h.calls.filter((c) => c.name === 'createQuestion').length, 2);
-    assert.deepEqual(h.pushes, ['/questions/retry-question']);
+    assert.deepEqual(h.pushes, ['/us/en/questions/retry-question']);
   } finally { h.close(); }
 });
 test('question submission stays locked after success until navigation unmounts the form', async () => {
@@ -343,7 +343,7 @@ test('question submission stays locked after success until navigation unmounts t
     await publish(h); h.render(); await publish(h);
     assert.equal(h.calls.filter((c) => c.name === 'createQuestion').length, 1);
     assert.equal(byText(h, 'button', 'Publishing').props.disabled, true);
-    assert.deepEqual(h.pushes, ['/questions/created-question']);
+    assert.deepEqual(h.pushes, ['/us/en/questions/created-question']);
   } finally { h.close(); }
 });
 test('an old account membership response cannot authorize a newly signed-in account', async () => {
@@ -536,9 +536,9 @@ test('Explore guest can browse groups and Join leads to login with the correct r
     assert.match(textOf(h.tree), /H1B careers/);
     const destinations = nodes(h.tree).map((n) => n.props?.href).filter(Boolean);
     assert(destinations.includes('/communities/new') || destinations.includes('/login?next=%2Fcommunities%2Fnew'));
-    assert(destinations.includes('/news')); assert(destinations.includes('/tags')); assert(destinations.includes('/c/h1b-careers'));
+    assert(destinations.includes('/us/en/news')); assert(destinations.includes('/us/en/tags')); assert(destinations.includes('/us/en/c/h1b-careers'));
     buttonLabel(h, 'Join H1B careers').props.onClick();
-    assert.deepEqual(h.pushes, ['/login?next=%2Fc%2Fh1b-careers']);
+    assert.deepEqual(h.pushes, ['/login?next=%2Fus%2Fen%2Fc%2Fh1b-careers']);
     assert.equal(h.calls.filter((c) => ['joinCommunity', 'leaveCommunity', 'getMembershipsForCommunities'].includes(c.name)).length, 0);
   } finally { h.close(); }
 });
@@ -665,7 +665,7 @@ test('Start a Community normalizes the address, preserves rules and navigates af
     assert.equal(creation.args[0].display_name, 'CanadaStudyPermits');
     assert.equal(creation.args[0].country, 'United States');
     assert.equal(creation.args[0].rules.length, 2);
-    assert.deepEqual(h.pushes, ['/c/canadastudypermits']);
+    assert.deepEqual(h.pushes, ['/us/en/c/canadastudypermits']);
   } finally { h.close(); }
 });
 test('an existing exact community address exposes the join destination and never creates a duplicate', async () => {
@@ -674,7 +674,7 @@ test('an existing exact community address exposes the join destination and never
     h.render(CreateCommunity); await h.settle(); fillCommunity(h); await publish(h); h.render();
     assert.equal(h.calls.filter((c) => c.name === 'createCommunity').length, 0);
     assert.match(textOf(h.tree), /address already exists/);
-    assert(nodes(h.tree).some((n) => n.props?.href === '/c/canadastudypermits'));
+    assert(nodes(h.tree).some((n) => n.props?.href === '/us/en/c/canadastudypermits'));
     assert.equal(byText(h, 'button', 'Create Community').props.disabled, false);
   } finally { h.close(); }
 });
@@ -696,7 +696,7 @@ test('community create suppresses duplicate submissions during the address looku
     assert.equal(h.calls.filter((c) => c.name === 'getCommunityBySlug').length, 1);
     preflight.resolve(null); await Promise.all([first, second]); await h.settle();
     assert.equal(h.calls.filter((c) => c.name === 'createCommunity').length, 1);
-    assert.deepEqual(h.pushes, ['/c/canadastudypermits']);
+    assert.deepEqual(h.pushes, ['/us/en/c/canadastudypermits']);
   } finally { h.close(); }
 });
 test('community creation preserves the guest return URL without writing', async () => {
@@ -727,7 +727,7 @@ test('failed community creation preserves the draft and permits retry', async ()
     assert.equal(byText(h, 'button', 'Create Community').props.disabled, false);
     h.handlers.createCommunity = async () => realId; await publish(h);
     assert.equal(h.calls.filter((c) => c.name === 'createCommunity').length, 2);
-    assert.deepEqual(h.pushes, ['/c/canadastudypermits']);
+    assert.deepEqual(h.pushes, ['/us/en/c/canadastudypermits']);
   } finally { h.close(); }
 });
 test('an unconfigured environment disables community creation and rejects direct service writes', async () => {

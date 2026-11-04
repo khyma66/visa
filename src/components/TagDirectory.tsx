@@ -89,7 +89,7 @@ export function TagDirectory() {
   }
 
   return <main className="page-shell">
-    <Link href="/" className="text-sm text-blue-700 hover:underline capitalize">← All questions</Link>
+    <Link href="/us/en" className="text-sm text-blue-700 hover:underline capitalize">← All questions</Link>
     <div className="mt-5 flex items-center gap-3"><Tags className="text-orange-600" /><h1 className="text-2xl font-semibold sm:text-3xl capitalize">Tags</h1></div>
     <p className="mt-3 max-w-2xl text-base leading-6 text-slate-600 capitalize">Find your topic, explore similar experiences, and join the discussion. Choose a tag to see matching questions and posts.</p>
     <div className="my-6 flex flex-wrap items-center gap-3">
@@ -101,7 +101,7 @@ export function TagDirectory() {
     {archiveWarning && <p className="mb-4 rounded bg-amber-50 p-3 text-sm text-amber-900">{archiveWarning}</p>}
     {error && <p role="alert" className="mb-4 rounded bg-amber-50 p-4 text-amber-900">{error}</p>}
     {loading ? <p className="capitalize">Loading community tags…</p> : <>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{tags.map((row) => <Link key={row.tag} href={`/?tag=${encodeURIComponent(row.tag)}`} className="flex min-h-44 flex-col rounded border border-slate-200 bg-white p-5 hover:border-blue-400">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{tags.map((row) => <Link key={row.tag} href={`/us/en?tag=${encodeURIComponent(row.tag)}`} className="flex min-h-44 flex-col rounded border border-slate-200 bg-white p-5 hover:border-blue-400">
         <span className="w-fit rounded bg-blue-50 px-2 py-1 text-sm font-semibold text-blue-700">{topicLabel(row.tag)}</span>
         <p className="my-3 line-clamp-3 text-base leading-6 text-slate-600">{row.example_title}</p>
         <span className="mt-auto text-xs font-semibold text-slate-500">{row.question_count} {row.question_count === 1 ? 'post' : 'posts'}</span>

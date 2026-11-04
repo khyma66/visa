@@ -225,7 +225,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
         </div>
       </aside>
       </div>
-      <Link href="/" className="mt-5 rounded text-sm font-medium text-slate-600 underline underline-offset-4 hover:text-teal-800 capitalize">Back to discussions</Link>
+      <Link href="/us/en" className="mt-5 rounded text-sm font-medium text-slate-600 underline underline-offset-4 hover:text-teal-800 capitalize">Back to discussions</Link>
     </main>
   );
 }

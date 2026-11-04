@@ -179,7 +179,7 @@ test('partial feed failures remain visible without exposing ingestion diagnostic
 });
 test('tag directory presents combined discussion counts without splitting people into imported and native sources',()=>{
   const html=render(TagDirectory,{}, {values:{0:[{tag:'h1b',question_count:12,native_count:2,archive_count:10,example_title:'Transfer timelines'}],5:false}});
-  noPipelineLabels(html);assert(html.includes('12 posts'));assert(html.includes('/?tag=h1b'));assert(html.includes('Transfer timelines'));
+  noPipelineLabels(html);assert(html.includes('12 posts'));assert(html.includes('/us/en?tag=h1b'));assert(html.includes('Transfer timelines'));
   assert(!html.includes('member-created'));
 });
 test('related questions keep internal provenance out of the UI and show exact reply counts',()=>{

@@ -95,7 +95,7 @@ test('smoke checks require exact immutable build provenance, not just a healthy 
   assert.throws(() => assertHealthProvenance({ ...health, build: undefined }, build), /no supported provenance/);
   assert.throws(() => assertHealthProvenance(health, { ...build, dirty: true }), /clean reviewed build/);
   assert.throws(() => assertHealthProvenance({ ...health, releaseStatus: 'not-ready' }, build), /approval is missing/);
-  for (const path of ['/explore', '/my-communities', '/communities/new', '/news']) assert(smokeRoutes.includes(path));
+  for (const path of ['/us/en/explore', '/my-communities', '/communities/new', '/us/en/news']) assert(smokeRoutes.includes(path));
 });
 
 function healthProbe(rounds) {

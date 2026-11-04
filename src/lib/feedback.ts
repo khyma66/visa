@@ -18,7 +18,7 @@ export const FEEDBACK_PAGE_SIZE = 20;
 // tokens, browser logs, email addresses, or the contents of a page.
 export function feedbackSection(pathname: string): string {
   if (!pathname.startsWith('/') || pathname.startsWith('//')) return 'general';
-  const root = pathname.split(/[?#]/)[0].split('/')[1];
+  const root = pathname.replace(/^\/us\/en(?=\/|$)/, '').split(/[?#]/)[0].split('/')[1];
   if (!root) return 'home';
   if (['explore', 'communities', 'questions', 'experiences', 'news', 'tags', 'messages', 'account', 'login'].includes(root)) return root;
   if (['privacy', 'terms', 'cookies', 'privacy-choices', 'community-safety'].includes(root)) return 'policies';

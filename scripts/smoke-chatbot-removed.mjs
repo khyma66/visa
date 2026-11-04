@@ -1,3 +1,4 @@
+import { verifyDestinationRoutes } from './smoke-destination-routing.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -35,6 +36,7 @@ try {
     assert.equal(response.status, 200, path);
     assert(!/href="\/assistant"|Ask VisaThreads|VisaThreads AI/.test(await response.text()), path);
   }
+  await verifyDestinationRoutes(origin);
   console.log('PASS built router: chatbot page absent, API permanently retired, normal pages available.');
 } finally {
   if (!exited) server.kill('SIGTERM');

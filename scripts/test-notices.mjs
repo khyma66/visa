@@ -1,3 +1,4 @@
+import { destinationModule } from './destination-test-module.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -19,10 +20,10 @@ async function component(path, dependencies = {}) {
   return { ...await import(url(code)), moduleUrl: url(code) };
 }
 const guides = await component('../src/lib/visa-guides.ts');
-const visibility = await component('../src/lib/search-visibility.ts', { './visa-guides': guides.moduleUrl });
+const visibility = await component('../src/lib/search-visibility.ts', { './visa-guides': guides.moduleUrl, './destination-routing': destinationModule });
 const presentation = await component('../src/lib/post-presentation.ts');
 const searchMetadata = await component('../src/lib/search-metadata.ts', {
-  './search-visibility': visibility.moduleUrl, './post-presentation': presentation.moduleUrl,
+  './destination-routing': destinationModule, './search-visibility': visibility.moduleUrl, './post-presentation': presentation.moduleUrl,
 });
 test('one compact footer reminder preserves essential safety facts without a warning banner',async()=>{
   const { SafetyNotice } = await component('../src/components/SafetyNotice.tsx');
@@ -74,7 +75,7 @@ test('safety and professional community description appear once in the footer in
 });
 test('policy pages clearly disclose missing operator processes rather than pretending compliance',async()=>{
   for(const [page,phrase] of Object.entries({privacy:'not a finalized production policy',terms:'not finalized production Terms',contact:'Each email link opens your email app'})) {
-    const {default:Page}=await component(`../src/app/${page}/page.tsx`, { '@/lib/search-metadata': searchMetadata.moduleUrl });
+    const {default:Page}=await component(`../src/app/${page}/page.tsx`, { '@/lib/search-metadata': searchMetadata.moduleUrl, '@/lib/destination-routing': destinationModule });
     const html=renderToStaticMarkup(createElement(Page));
     assert(html.includes(phrase),page);
     if (page === 'contact') assert(html.includes('href="mailto:support@visathreads.com"'), 'Use the verified support route');
@@ -84,7 +85,7 @@ test('policy pages clearly disclose missing operator processes rather than prete
 
 test('public community pages use clear copy without stale launch labels', async () => {
   for (const page of ['us', 'countries', 'community-safety', 'contact']) {
-    const { default: Page } = await component(`../src/app/${page}/page.tsx`, { '@/lib/search-metadata': searchMetadata.moduleUrl });
+    const { default: Page } = await component(`../src/app/${page}/page.tsx`, { '@/lib/search-metadata': searchMetadata.moduleUrl, '@/lib/destination-routing': destinationModule });
     const html = renderToStaticMarkup(createElement(Page));
     assert.doesNotMatch(html, /early.access|not open|general public signup|This preview/i, page);
     assert.match(html, /href="\//, `${page} keeps working navigation`);
@@ -93,7 +94,7 @@ test('public community pages use clear copy without stale launch labels', async 
 
 
 test('Help offers all three established email routes with clear purposes', async () => {
-  const { default: Contact } = await component('../src/app/contact/page.tsx', { '@/lib/search-metadata': searchMetadata.moduleUrl });
+  const { default: Contact } = await component('../src/app/contact/page.tsx', { '@/lib/search-metadata': searchMetadata.moduleUrl, '@/lib/destination-routing': destinationModule });
   const html = renderToStaticMarkup(createElement(Contact));
   for(const alias of ['support','privacy','security']) {
     assert.match(html,new RegExp(`href="mailto:${alias}@visathreads\\.com(?:\\?[^"<>]*)?"`));

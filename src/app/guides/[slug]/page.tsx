@@ -11,8 +11,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const { slug } = await params;
   const guide = visaGuide(slug);
   return guide
-    ? publicPageMetadata(`/guides/${guide.slug}`, guide.title, guide.description, await searchParams)
-    : publicPageMetadata(`/guides/${encodeURIComponent(slug)}`, 'Guide not found', 'This VisaThreads guide could not be found.', await searchParams, false);
+    ? publicPageMetadata(`/us/en/guides/${guide.slug}`, guide.title, guide.description, await searchParams)
+    : publicPageMetadata(`/us/en/guides/${encodeURIComponent(slug)}`, 'Guide not found', 'This VisaThreads guide could not be found.', await searchParams, false);
 }
 
 export function generateStaticParams() {
@@ -25,7 +25,7 @@ export default async function VisaGuidePage({ params }: Props) {
 
   return <main className="page-shell">
     <article className="mx-auto max-w-3xl">
-      <Link href="/guides" className="mb-5 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-blue-700 hover:underline capitalize"><ChevronLeft size={16} aria-hidden="true" />All Visa Guides</Link>
+      <Link href="/us/en/guides" className="mb-5 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-blue-700 hover:underline capitalize"><ChevronLeft size={16} aria-hidden="true" />All Visa Guides</Link>
       <header className="border-b border-slate-200 pb-6">
         <p className="mb-2 text-sm font-semibold text-blue-700">{guide.visaType} · Resource Guide</p>
         <h1 className="text-2xl font-semibold leading-tight text-slate-950 sm:text-3xl">{guide.title}</h1>
