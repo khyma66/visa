@@ -299,3 +299,21 @@
 /* Consistent news presentation, including loaded headlines and topic controls. */
 .news-desk { text-transform: capitalize; }
 .news-desk :is(button, a, summary) { text-transform: inherit; }
+/* Shared compact editors: grow naturally, then scroll without losing draft text. */
+.compact-composer { min-height: 3rem; max-height: min(20rem, 50dvh); resize: none; overflow-y: auto; }
+.post-actions { display: flex; align-items: center; gap: .25rem; flex-wrap: nowrap; min-width: 0; }
+.post-action { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; gap: .375rem; border-radius: 9999px; padding: .5rem .625rem; white-space: nowrap; font-size: .75rem; font-weight: 600; color: #475569; }
+.post-action:hover { background: #f1f5f9; }
+.post-action:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+.post-action[aria-pressed="true"] { color: #0f766e; background: #f0fdfa; }
+.post-action:disabled { opacity: .5; cursor: wait; }
+@media (max-width: 480px) {
+  .post-actions { gap: 0; justify-content: space-between; }
+  .post-action { padding-inline: .125rem; gap: .25rem; font-size: .6875rem; }
+  .post-action svg { width: 14px; height: 14px; flex-shrink: 0; }
+}
+.post-action-status { position: absolute; top: 100%; left: 0; z-index: 25; max-width: 100%; border: 1px solid #e2e8f0; border-radius: .5rem; background: white; padding: .5rem .75rem; box-shadow: 0 3px 10px #0f172a12; font-size: .75rem; line-height: 1.5; }
+@media (max-width: 360px) {
+  .post-action { padding-inline: 0; }
+  .post-action svg { width: 13px; height: 13px; }
+}

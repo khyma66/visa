@@ -15,7 +15,7 @@ const fileModule = (name) => pathToFileURL(require.resolve(name)).href;
 const jsx = fileModule('react/jsx-runtime');
 const link = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)}; export default function Link(props) { return jsx('a',{...props}); }`);
 const auth = moduleUrl(`let user=null; export function setUser(value){user=value;} export function useAuth(){return {user,demoMode:false};}`);
-const icons = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)}; function Icon({size,...props}){return jsx('svg',props);} export {Icon as ArrowDown,Icon as ArrowUp,Icon as Award,Icon as Check,Icon as CheckCircle2,Icon as ExternalLink,Icon as Eye,Icon as GitFork,Icon as MessageCircle,Icon as Share2,Icon as ThumbsUp};`);
+const icons = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)}; function Icon({size,...props}){return jsx('svg',props);} export {Icon as ArrowDown,Icon as ArrowUp,Icon as Award,Icon as Bell,Icon as Bookmark,Icon as Check,Icon as CheckCircle2,Icon as ExternalLink,Icon as Eye,Icon as GitFork,Icon as MessageCircle,Icon as Share2,Icon as ThumbsUp};`);
 const dependencies = {
   'react/jsx-runtime': jsx,
   react: fileModule('react'),
@@ -50,6 +50,9 @@ dependencies['./ResizablePostLayout.module.css'] = moduleUrl('export default {};
 dependencies['./ResizablePostLayout'] = await compile('../src/components/ResizablePostLayout.tsx');
 dependencies['./SafetyNotice'] = await compile('../src/components/SafetyNotice.tsx');
 dependencies['./PostShare'] = await compile('../src/components/PostShare.tsx');
+dependencies['@/lib/post-library'] = moduleUrl('export const emptyLibraryEntry=id=>({entry:{post_id:id,saved:false,followed:false},loading:true,error:false}),libraryStore=()=>({}),watchLibrary=()=>()=>{},changeLibraryEntry=()=>{},retryLibrary=()=>{};');
+dependencies['./CompactTextarea'] = await compile('../src/components/CompactTextarea.tsx');
+dependencies['./PostActions'] = await compile('../src/components/PostActions.tsx');
 dependencies['./PostAward'] = await compile('../src/components/PostAward.tsx');
 const { QuestionCard } = await import(await compile('../src/components/QuestionCard.tsx'));
 const { QuestionDetail } = await import(await compile('../src/components/QuestionDetail.tsx'));

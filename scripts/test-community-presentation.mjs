@@ -13,7 +13,7 @@ const reactUrl = import.meta.resolve('react');
 const link = moduleUrl(`import React from ${JSON.stringify(reactUrl)}; export default function Link(props){return React.createElement('a',props,props.children);}`);
 // Render loaded states without running effects, opening a browser or contacting a backend.
 const hooks = moduleUrl(`import * as React from ${JSON.stringify(reactUrl)};
-  export const {useCallback,useEffect,useMemo,useRef,useId}=React;
+  export const {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useId,useSyncExternalStore}=React;
   export function useState(initial){const state=globalThis.__presentation;
     const index=state.index++; return React.useState(Object.hasOwn(state.values,index)?state.values[index]:initial);}`);
 const dependencies = {
@@ -45,6 +45,9 @@ dependencies['./ResizablePostLayout.module.css'] = moduleUrl('export default {};
 dependencies['./ResizablePostLayout'] = (await component('ResizablePostLayout')).url;
 dependencies['./PostOriginBadge'] = (await component('PostOriginBadge')).url;
 dependencies['./PostShare'] = (await component('PostShare')).url;
+dependencies['@/lib/post-library'] = moduleUrl('export const emptyLibraryEntry=id=>({entry:{post_id:id,saved:false,followed:false},loading:true,error:false}),libraryStore=()=>({}),watchLibrary=()=>()=>{},changeLibraryEntry=()=>{},retryLibrary=()=>{};');
+dependencies['./CompactTextarea'] = (await component('CompactTextarea')).url;
+dependencies['./PostActions'] = (await component('PostActions')).url;
 dependencies['./PostAward'] = (await component('PostAward')).url;
 const {value:{QuestionCard},url:cardUrl} = await component('QuestionCard');
 dependencies['./QuestionCard']=cardUrl;
