@@ -63,6 +63,11 @@ test('member reports, owner review and community names enforce server boundaries
     await db.query("insert into direct_messages(conversation_id,sender_id,body) values($1,$2,'PRIVATE UNREPORTED MESSAGE')",[conversation,spammer]);
     legacy=await scalar("insert into communities(name,display_name,slug) values('h1b-visa','H-1B Visa Holders','h1b-visa') returning id");
     await apply('20261104042956_member_reports_and_community_names');
+    // Exercise the new reputation and automatic-spam queue with member reports,
+    // not just each migration in isolation. Private conversation text stays private.
+    await db.exec('alter table auth.users add column email_confirmed_at timestamptz default now(), add column phone_confirmed_at timestamptz');
+    await apply('20261102054340_community_spam_protection');
+    await apply('20261104043337_community_reputation');
     await t.test('migration preserves IDs and URLs while normalizing existing names',async()=>{
       assert.deepEqual((await db.query('select id,slug,display_name from communities where id=$1',[legacy])).rows[0],{id:legacy,slug:'h1b-visa',display_name:'H1BVisaHolders'});
     });
@@ -101,7 +106,7 @@ test('member reports, owner review and community names enforce server boundaries
       await actor(member);const id=await report();await assert.rejects(()=>db.query("select moderate_community_report($1,'dismissed')",[id]),/Moderator access/);
     }));
     for(const reviewer of [owner,moderator])await t.test('owner and approved moderator see account, reason and details without conversation text',()=>isolated(async()=>{
-      await actor(member);const id=await report();await actor(reviewer);const rows=await queue();assert.equal(rows[0].id,id);assert.equal(rows[0].content,'u/reported-member');assert.equal(rows[0].reason,'spam');assert.equal(rows[0].details,'Suspicious payment requests');assert(!JSON.stringify(rows).includes('PRIVATE UNREPORTED MESSAGE'));
+      await actor(member);const id=await report();await actor(reviewer);const rows=await queue();assert.equal(rows[0].id,id);assert.equal(rows[0].content,'u/reported-member');assert.equal(rows[0].source,'member');assert.equal(rows[0].reason,'spam');assert.equal(rows[0].details,'Suspicious payment requests');assert(!JSON.stringify(rows).includes('PRIVATE UNREPORTED MESSAGE'));
     }));
     for (const decision of ['dismissed','suspended']) await t.test(`owner can mark member report ${decision}`,()=>isolated(async()=>{
       await actor(member);const id=await report();await actor(owner);await db.query('select moderate_community_report($1,$2)',[id,decision]);assert.equal((await queue()).length,0);

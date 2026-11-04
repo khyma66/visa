@@ -30,7 +30,7 @@ async function load(relativePath, extra = '') {
   for (const [specifier, replacement] of Object.entries(dependencies)) code = code.replaceAll(`from '${specifier}'`, `from ${JSON.stringify(replacement)}`).replaceAll(`from "${specifier}"`, `from ${JSON.stringify(replacement)}`);
   return import(asModule(code));
 }
-const { AccountClient, Activity, AccountSettings } = await load('../src/components/AccountClient.tsx', '\nexport { Activity, AccountSettings };');
+const { AccountClient, Activity, AccountSettings, Reputation } = await load('../src/components/AccountClient.tsx', '\nexport { Activity, AccountSettings, Reputation };');
 const { SiteHeader } = await load('../src/components/SiteHeader.tsx');
 const profile = { id: 'member-one', username: 'calm-heron', avatar_seed: 'private-uuid-seed', bio: null, reputation: 7 };
 function setup({ values = {}, refs = {}, query = '', auth = {} } = {}) {
@@ -68,7 +68,7 @@ test('Ask a Question header action stays visible and routes signed-out members t
 });
 
 test('signed-out account tabs require login and preserve only a recognized return destination', () => {
-  for (const tab of ['profile', 'activity', 'settings', '//evil.invalid']) {
+  for (const tab of ['profile', 'activity', 'settings', 'reputation', '//evil.invalid']) {
     const html = render(AccountClient, { query: `tab=${tab}`, auth: { user: null, profile: null } });
     const login = links(html).find(link => link.label === 'Log In');
     assert.equal(new URL(login.href, 'https://visathreads.com').searchParams.get('next'), `/account?tab=${tab.startsWith('//') ? 'profile' : tab}`);
@@ -88,6 +88,26 @@ test('profile shows only public fields, real reputation and correctly escaped te
   assert.match(render(AccountClient, { auth: { profile: { ...profile, bio: '<script>alert("test")</script>' } } }), /&lt;script&gt;/);
   assert(links(html).some(link => link.label === 'Edit profile' && link.href === '/account?tab=settings'));
   assert(links(html).some(link => link.label === 'Messages' && link.href === '/messages'));
+});
+
+test('reputation explains scoring, caps, eligibility and non-financial status', () => {
+  const html=render(Reputation);
+  for(const text of ['+2','+5','+10','24 hours','100 new points','20 from one member','monetary value','Loading reputation']) assert(html.includes(text),text);
+  assert(links(render()).some(link=>link.href==='/account?tab=reputation'));
+});
+test('reputation history shows real totals, signed adjustments and bounded older-page controls', () => {
+  const events=Array.from({length:21},(_,i)=>({id:30-i,kind:'answer_upvote',delta:i===0?-5:5,reason:'Helpful vote updated',created_at:'2026-11-04T01:00:00Z'}));
+  const html=render(Reputation,{values:{0:{total:91,events},2:false}});
+  assert.match(html,/91 reputation/); assert.match(html,/>-5</); assert.match(html,/>\+5</);
+  assert.equal((html.match(/<li /g)||[]).length,20);
+  assert.doesNotMatch(button(html,'Older activity'),/disabled=""/);
+  assert.match(button(html,'Latest'),/disabled=""/);
+});
+test('reputation distinguishes no awards, demo and recoverable failure without exposing stale history', () => {
+  assert.match(render(Reputation,{values:{0:{total:1,events:[]},2:false}}),/No reputation changes yet/);
+  assert.match(render(Reputation,{auth:{demoMode:true}}),/connected community/);
+  const html=render(Reputation,{values:{0:{total:99,events:[]},2:false,3:'Reputation history is unavailable. Please try again.'}});
+  assert.match(html,/role="alert"/); assert.doesNotMatch(html,/99 reputation/); assert(button(html,'Refresh'));
 });
 
 test('failed profile reads offer retry instead of endless loading or a false empty bio', () => {

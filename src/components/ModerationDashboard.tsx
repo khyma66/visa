@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
+import { SpamDomainControls } from './SpamDomainControls';
 
-type Report = { id: string; target_kind: string; reason: string; details: string; content: string | null; created_at: string };
+type Report = { id: string; target_kind: string; reason: string; details: string; source?: string; content: string | null; created_at: string };
 const button = 'rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold disabled:opacity-50';
 
 function ReportQueue() {
@@ -46,9 +47,11 @@ function ReportQueue() {
     <div className="my-6 flex flex-wrap items-center justify-between gap-3"><p role="status" className="text-sm font-semibold text-slate-600">{busy ? 'Checking Access And Loading Reports…' : allowed ? `${reports.length}${reports.length === 50 ? '+' : ''} Pending Reports` : 'Restricted Access'}</p><button disabled={busy} onClick={() => void load()} className={button}>Refresh Reports</button></div>
     {error && <p role="alert" className="mb-5 rounded-lg bg-rose-50 p-4 text-sm text-rose-800">{error}</p>}
     {allowed && <>
+      <SpamDomainControls />
       {!reports.length && <div className="rounded-xl border bg-white p-8 text-center text-slate-600">No Pending Reports.</div>}
       {reports.map(report => <article key={report.id} className="mb-5 rounded-xl border border-slate-200 bg-white p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold capitalize">{report.target_kind === 'member' ? 'Member Report' : `${report.target_kind.replaceAll('_', ' ')} Report`} · {report.reason.replaceAll('-', ' ')}</h2><time dateTime={report.created_at} className="text-xs text-slate-500">{new Date(report.created_at).toLocaleString()}</time></div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold capitalize">{report.target_kind === 'member' ? 'Member Report' : report.target_kind === 'imported_answer' ? 'Archive Reply Report' : `${report.target_kind.replaceAll('_', ' ')} Report`} · {report.reason.replaceAll('-', ' ')}</h2><time dateTime={report.created_at} className="text-xs text-slate-500">{new Date(report.created_at).toLocaleString()}</time></div>
+        <p className="mt-2 text-xs text-slate-500">{report.source === 'automatic' ? 'Automatic Screening — Review The Context' : 'Member Report'}</p>
         <p className="my-4 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-4">{report.content ?? 'Account Or Content No Longer Available.'}</p>
         {report.target_kind === 'member' && <p className="mb-3 text-xs text-slate-500">Account Report Only. Private Conversation History Is Not Included.</p>}
         <p className="mb-4 whitespace-pre-wrap break-words text-sm"><strong>Reporter Details: </strong>{report.details || 'None Provided.'}</p>
