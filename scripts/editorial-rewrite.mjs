@@ -13,6 +13,7 @@ export function redact(text) {
     .replace(/\b(?:IOE|EAC|WAC|LIN|SRC|MSC|NBC)\d{10}\b/gi, '[receipt number removed]')
     .replace(/https?:\/\/[^\s<>]+/gi, '[link removed]')
     .replace(/(?:\+\d{1,3}[ .()-]*)?(?:\(\d{3}\)[ .-]*\d{3}[ .-]*\d{4}|\b\d{10}\b)/g, '[phone or identifier removed]')
+    .replace(/\b(?:Mr|Mrs|Ms|Dr)\.?\s+[A-Z][a-zA-Z'-]+\b/g, '[person removed]')
     .replace(/\b(passport|SSN|A-number|alien number)\s*(?:number|no\.?|#|:)?\s*[:#]?\s*\b(?=[A-Z0-9-]*\d)[A-Z0-9-]{6,}\b/gi, '$1 [identifier removed]');
 }
 const schema = { type: 'object', additionalProperties: false, required: ['title','body','visa_type','post_kind','experience_category','tags','review_flags'], properties: {
