@@ -61,6 +61,23 @@ test('sort controls match the reading font and respond without animation delay',
   assert.equal(property(rules.find(rule => rule.selector === '.nav-item-active'), 'font-weight'), '600');
 });
 
+test('page, section, card and introductory labels have a consistent responsive hierarchy', () => {
+  const page = rules.find(rule => rule.selector === '#main-content main h1:not(.text-4xl)' && rule.parent.type === 'root');
+  const section = rules.find(rule => rule.selector === '#main-content main :not(.auth-welcome-copy) > h2');
+  const card = rules.find(rule => rule.selector === '#main-content main h3');
+  const label = rules.find(rule => rule.selector === '#main-content main p:has(+ h1)');
+  assert.equal(property(page, 'font-size'), 'var(--type-title)');
+  assert.equal(property(section, 'font-size'), 'var(--type-subheading)');
+  assert.equal(property(card, 'font-size'), 'var(--type-body-large)');
+  assert.equal(property(label, 'font-size'), 'var(--type-ui)');
+  for (const rule of [page, section, card, label]) {
+    assert.equal(property(rule, 'font-weight'), '600');
+    assert.equal(property(rule, 'letter-spacing'), 'normal');
+  }
+  const desktopPage = rules.find(rule => rule.selector === '#main-content main h1:not(.text-4xl)' && rule.parent.params === '(min-width: 640px)');
+  assert.equal(property(desktopPage, 'font-size'), 'var(--type-headline)');
+});
+
 test('home uses a community heading and the same title scale in the discovery rail', async () => {
   const home = await readFile(new URL('src/components/CommunityHome.tsx', root), 'utf8');
   assert.match(home, /'U\.S\. Visa Community'/);

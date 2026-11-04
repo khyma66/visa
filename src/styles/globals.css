@@ -296,3 +296,35 @@
   .news-story { padding: 1.5rem; }
   .news-story-layout { grid-template-columns: minmax(0, 1fr) minmax(140px, 26%); gap: 1.5rem; }
 }
+
+/* A single hierarchy for page headings, sections and cards. Keep the larger
+   discussion title and the decorative sign-in welcome panel intentional. */
+#main-content main h1:not(.text-4xl) {
+  font-size: var(--type-title);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: normal;
+}
+#main-content main :not(.auth-welcome-copy) > h2 {
+  font-size: var(--type-subheading);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: normal;
+}
+#main-content main h3 {
+  font-size: var(--type-body-large);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: normal;
+}
+/* A short label immediately above a page title is supporting context, not
+   another title; use the same readable scale as the home-page label. */
+#main-content main p:has(+ h1) {
+  font-size: var(--type-ui);
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: normal;
+}
+@media (min-width: 640px) {
+  #main-content main h1:not(.text-4xl) { font-size: var(--type-headline); }
+}
