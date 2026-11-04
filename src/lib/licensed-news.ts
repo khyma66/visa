@@ -23,7 +23,8 @@ export async function loadLicensedNews(): Promise<{ edition: LicensedNewsEdition
   const cached = await cache?.match(key).catch(() => undefined);
   if (cached) { const value: unknown = await cached.json(); if (isLicensedNews(value)) return { edition: value, stale: Date.now() - Date.parse(value.retrievedAt) > 3 * 3600_000 }; }
   try {
-    const response = await fetch(EDITION_URL, { signal: AbortSignal.timeout(5000), redirect: 'error', credentials: 'omit' });
+    // workerd supports manual/follow, not redirect:error. boundedNewsBytes rejects 3xx.
+    const response = await fetch(EDITION_URL, { signal: AbortSignal.timeout(5000), redirect: 'manual', credentials: 'omit' });
     const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await boundedNewsBytes(response, 100_000)));
     if (!isLicensedNews(value)) throw new Error('Invalid licensed news edition');
     await cache?.put(key, Response.json(value, { headers: { 'Cache-Control': 'public, max-age=300' } })).catch(() => {});

@@ -11,7 +11,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     if (!photo) return missing();
     const cache = await newsCache(); const key = new Request(`https://visathreads.com/__news-cache/photo/${id}`);
     const cached = await cache?.match(key).catch(() => undefined); if (cached) return cached;
-    const upstream = await fetch(photo.url, { signal: AbortSignal.timeout(8000), redirect: 'error', credentials: 'omit', headers: { Accept: 'image/jpeg,image/png,image/webp' } });
+    const upstream = await fetch(photo.url, { signal: AbortSignal.timeout(8000), redirect: 'manual', credentials: 'omit', headers: { Accept: 'image/jpeg,image/png,image/webp' } });
     const bytes = await boundedNewsBytes(upstream, 768_000);
     const type = newsImageType(bytes); if (!type) return missing();
     const response = new Response(bytes, { headers: { 'Content-Type': type, 'Cache-Control': 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff', 'Cross-Origin-Resource-Policy': 'same-origin' } });
