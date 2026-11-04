@@ -81,6 +81,9 @@
 }
 
 @layer components {
+  /* Style information pages without changing versioned policy source text. */
+  main.leading-7 :is(h1, h2, h3),
+  main.leading-7 a:not([href^="mailto:"]):not([href^="tel:"]) { text-transform: capitalize; }
   .site-shell { width: 100%; margin-inline: auto; padding-inline: var(--page-gutter); }
   /* Pages already sit beside navigation: a second centered container creates
      a large empty left rail. Keep reading widths, but share one leading edge. */
