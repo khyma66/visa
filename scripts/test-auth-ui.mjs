@@ -547,18 +547,18 @@ test('password recovery passes and clears the CAPTCHA token, while disabled conf
   } finally { h.close();if(previous===undefined)delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY=previous; }
 });
 
-test('compact signup marks every required input and associates the eight-character guidance',async()=>{
+test('compact signup marks every required input and associates the existing password guidance',async()=>{
  const h=setup({signup:true});
  try{
   await h.settle();assert.equal(nodes(h.tree).filter(node=>node.type==='section').length,1);
-  assert.equal(byText(h,'a','Sign Up').props['aria-current'],'page');assert.match(textOf(h.tree),/8–128 characters/);
-  assert.match(textOf(h.tree),/Letters, numbers, spaces and symbols are allowed/);assert.doesNotMatch(textOf(h.tree),/No required mix/);
+  assert.equal(byText(h,'a','Sign Up').props['aria-current'],'page');assert.match(textOf(h.tree),/12–128 characters/);
+  assert.doesNotMatch(textOf(h.tree),/No required mix/);
   for(const input of nodes(h.tree).filter(node=>node.type==='input'&&node.props.required)){
    const label=nodes(h.tree).find(node=>node.type==='label'&&nodes(node).includes(input));
    assert(label);assert(nodes(label).some(node=>node.type==='span'&&node.props['aria-hidden']==='true'&&node.props.className?.includes('text-red-600')&&textOf(node)==='*'));
    assert(input.props['aria-label']);
   }
-  assert.equal(field(h,'Password').props.minLength,8);assert.equal(field(h,'Confirm password').props.minLength,8);
+  assert.equal(field(h,'Password').props.minLength,12);assert.equal(field(h,'Confirm password').props.minLength,12);
   assert.equal(field(h,'Password').props['aria-describedby'],'password-guidance');
   assert(nodes(h.tree).some(node=>node.props?.id==='password-guidance'));
   const toggle=()=>nodes(h.tree).find(node=>node.type==='button'&&['Show password','Hide password'].includes(node.props['aria-label']));
@@ -578,12 +578,12 @@ test('account access header removes unrelated controls but preserves branding an
   assert.equal(byText(h,'a','LogIn/SignUp').props.href,'/login#sign-in');
  }finally{h.close();}
 });
-test('recovery uses the same eight-character rule with visible guidance and required markers',async()=>{
+test('recovery preserves the existing password rule with visible guidance and required markers',async()=>{
  const h=setup();
  try{
   h.auth.user={id:'fixture'};h.slots=[];h.effects=[];h.render(PasswordRecovery,{update:true});await h.settle();
-  assert.equal(field(h,'New password').props.minLength,8);assert.equal(field(h,'Confirm password').props.minLength,8);
-  assert.equal(field(h,'New password').props['aria-describedby'],'password-guidance');assert.match(textOf(h.tree),/8–128 characters/);
+  assert.equal(field(h,'New password').props.minLength,12);assert.equal(field(h,'Confirm password').props.minLength,12);
+  assert.equal(field(h,'New password').props['aria-describedby'],'password-guidance');assert.match(textOf(h.tree),/12–128 characters/);
   assert(nodes(h.tree).some(node=>node.props?.id==='password-guidance'));
  }finally{h.close();}
 });

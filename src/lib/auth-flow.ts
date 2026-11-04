@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export const MIN_PASSWORD_LENGTH = 8;
+export const MIN_PASSWORD_LENGTH = 12;
 export const MAX_PASSWORD_LENGTH = 128;
-export const PASSWORD_GUIDANCE = '8–128 characters. Letters, numbers, spaces and symbols are allowed.';
+export const PASSWORD_GUIDANCE = 'Use a unique password with 12–128 characters.';
 
 export type SocialProvider = 'google';
 export type AuthMethods = { google: boolean; phone: boolean };
@@ -60,7 +60,7 @@ export function authErrorMessage(reason: unknown, context: AuthErrorContext = {}
   if (error?.code === 'sms_send_failed') return 'Your text message could not be sent. Check the phone number or use email instead.';
   if (error?.code === 'email_address_not_authorized') return 'Email delivery is not available for this address right now. Try another sign-in option.';
   if (error?.code === 'email_not_confirmed') return 'Verify your email before signing in.';
-  if (['weak_password', 'invalid_password'].includes(error?.code ?? '')) return 'Use a password between 8 and 128 characters.';
+  if (['weak_password', 'invalid_password'].includes(error?.code ?? '')) return 'Use a unique password between 12 and 128 characters.';
   if (error?.code === 'password_mismatch') return 'Passwords do not match.';
   if (['captcha_failed', 'captcha_required'].includes(error?.code ?? '')) return 'Complete the security check and try again.';
   if (context.action === 'request-code') return context.channel === 'phone'

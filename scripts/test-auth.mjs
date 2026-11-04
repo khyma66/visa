@@ -226,19 +226,19 @@ test('optional CAPTCHA passes fresh tokens to every supported Auth request and f
   } finally { if (previous === undefined) delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY; else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = previous; }
 });
 
-test('signup and password changes accept eight characters without composition rules and preserve spaces', async () => {
+test('signup and password changes preserve the existing twelve-character boundary and password text', async () => {
   const calls=[];
   const client={auth:{signUp:async input=>{calls.push(input.password);return{data:{user:{id:'fixture'},session:null},error:null};},getUser:async()=>({data:{user:{email_confirmed_at:'2026-11-03T00:00:00Z'}},error:null}),updateUser:async input=>{calls.push(input.password);return{data:{user:{id:'fixture'}},error:null};}}};
-  for(const password of ['abcdefgh','12345678','with space','!?@#%^&*',' a word ','x'.repeat(128)]){
+  for(const password of ['abcdefghijkl','123456789012','with a space','!?@#%^&*()_-',' a password ','x'.repeat(128)]){
     await flow.registerWithPassword(client,'fixture@example.invalid',password,'https://visathreads.com/login',{firstName:'Ada',lastName:'Lovelace'});
     await flow.setVerifiedPassword(client,password);
     assert.deepEqual(calls.slice(-2),[password,password]);
   }
   const count=calls.length;
-  for(const password of ['', 'abcdefg','x'.repeat(129)]){
+  for(const password of ['', 'abcdefgh', 'abcdefghijk','x'.repeat(129)]){
     await assert.rejects(()=>flow.registerWithPassword(client,'fixture@example.invalid',password,'https://visathreads.com/login',{firstName:'Ada',lastName:'Lovelace'}),error=>error.code==='invalid_password');
     await assert.rejects(()=>flow.setVerifiedPassword(client,password),error=>error.code==='invalid_password');
   }
   assert.equal(calls.length,count,'Rejected passwords never reach Auth');
-  assert.equal(flow.MIN_PASSWORD_LENGTH,8);assert.equal(flow.MAX_PASSWORD_LENGTH,128);
+  assert.equal(flow.MIN_PASSWORD_LENGTH,12);assert.equal(flow.MAX_PASSWORD_LENGTH,128);
 });

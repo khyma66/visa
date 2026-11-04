@@ -6,8 +6,6 @@ jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 enable_signup = true
-minimum_password_length = 8
-password_requirements = ""
 
 [auth.mfa]
 max_enrolled_factors = 10
