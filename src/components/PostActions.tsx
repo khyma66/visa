@@ -38,7 +38,7 @@ export function PostActions({ postId, path, imported = false, onReply }: { postI
   const { user, demoMode } = useAuth();
   const login = `/login?next=${encodeURIComponent(path)}`;
   // Changing accounts remounts all private state, including pending confirmations.
-  return <div className="relative pb-1">
+  return <div className="post-action-container relative pb-1">
     <div className="post-actions" aria-label="Post actions">
       <Link className="post-action" href={`${path}#reply`} onClick={onReply}><MessageCircle size={16} aria-hidden="true"/>Reply</Link>
       <PostShare path={path}/>

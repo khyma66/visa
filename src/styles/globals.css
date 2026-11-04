@@ -317,3 +317,10 @@
   .post-action { padding-inline: 0; }
   .post-action svg { width: 13px; height: 13px; }
 }
+
+/* Narrow cards retain one action row with readable labels and generous height. */
+.post-action-container { container: post-actions / inline-size; }
+@container post-actions (max-width: 280px) {
+  .post-actions { justify-content: space-between; gap: 0; }
+  .post-action { flex-direction: column; gap: .125rem; padding: .25rem .125rem; min-height: 44px; font-size: .6875rem; }
+}
