@@ -45,6 +45,7 @@ export function OwnerFeedbackLink() {
   return allowed ? <>
     <Link href="/admin/members" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize"><Inbox size={16} aria-hidden="true"/>Members</Link>
     <Link href="/admin/analytics" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize"><BarChart3 size={16} aria-hidden="true"/>Community Dashboard</Link>
+    <Link href="/admin/reports" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize"><Inbox size={16} aria-hidden="true"/>Reports</Link>
     <Link href="/admin/launch" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize"><ClipboardList size={16} aria-hidden="true"/>Launch & Experiments</Link>
     <Link href="/owner/feedback" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize"><Inbox size={16} aria-hidden="true"/>Feedback Inbox</Link>
   </> : null;

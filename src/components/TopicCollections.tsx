@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 const TOPICS = [
-  { tag: 'h1b', title: 'H-1B Work Visas', description: 'Petitions, employer changes, and extensions.' },
-  { tag: 'h4', title: 'H-4 & Dependents', description: 'Family status, applications, and renewals.' },
-  { tag: 'f1', title: 'F-1 & Student Life', description: 'Student status and the transition to work.' },
-  { tag: 'ead', title: 'Employment Authorization', description: 'EAD applications and work authorization.' },
-  { tag: 'stamping', title: 'Visa Stamping', description: 'Appointments, interviews, and passport return.' },
-  { tag: 'timeline', title: 'Application Timelines', description: 'Community-reported processing experiences.' },
+  { tag: 'h1b', title: 'H1BWorkVisas', description: 'Petitions, employer changes, and extensions.' },
+  { tag: 'h4', title: 'H4Dependents', description: 'Family status, applications, and renewals.' },
+  { tag: 'f1', title: 'F1StudentLife', description: 'Student status and the transition to work.' },
+  { tag: 'ead', title: 'EmploymentAuthorization', description: 'EAD applications and work authorization.' },
+  { tag: 'stamping', title: 'VisaStamping', description: 'Appointments, interviews, and passport return.' },
+  { tag: 'timeline', title: 'ApplicationTimelines', description: 'Community-reported processing experiences.' },
 ];
 export function topicCollections(value: unknown) {
   const tags = value && typeof value === 'object' && 'tags' in value ? value.tags : null;
@@ -24,7 +24,7 @@ export function topicCollections(value: unknown) {
 export function TopicCollectionCards({ topics }: { topics: ReturnType<typeof topicCollections> }) {
   return <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{topics.map(topic => <Link key={topic.tag} href={topic.href} className="group rounded-xl border border-slate-200 bg-white p-4 transition hover:border-blue-300 hover:bg-blue-50/40">
     <span className="text-xs font-semibold text-blue-700">{topic.count.toLocaleString('en-US')} existing discussions</span>
-    <h3 className="mt-2 text-thread-title font-semibold text-slate-950 group-hover:text-blue-800">{topic.title}</h3>
+    <h3 className="mt-2 break-words text-thread-title font-semibold text-slate-950 group-hover:text-blue-800">{topic.title}</h3>
     <p className="mt-1 text-base leading-6 text-slate-600">{topic.description}</p>
     <span className="mt-3 block text-sm font-semibold text-blue-700 capitalize">Browse Discussions →</span>
   </Link>)}</div>;

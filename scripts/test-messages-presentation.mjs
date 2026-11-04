@@ -32,7 +32,7 @@ const dependencies = {
   '@/lib/messaging-state': moduleUrl(transpile(await readFile(new URL('../src/lib/messaging-state.ts', import.meta.url), 'utf8'))),
   './AuthProvider': moduleUrl('export const useAuth=()=>globalThis.__messagesPresentation.auth;'),
   './Avatar': moduleUrl(`import React from ${JSON.stringify(reactUrl)};export const Avatar=()=>React.createElement('span',{'data-avatar':true});`),
-  './ReportButton': moduleUrl(`import React from ${JSON.stringify(reactUrl)};export const ReportButton=props=>React.createElement('button',{'data-report-target':props.target},'Report');`),
+  './ReportButton': moduleUrl(`import React from ${JSON.stringify(reactUrl)};export const ReportButton=props=>React.createElement('button',{'data-report-target':props.kind==='message'?props.target:undefined,'data-member-report':props.kind==='member'?props.target:undefined},'Report');`),
   '@/lib/realtime': moduleUrl('export const subscribeLive=(topics,callback)=>{const fixture=globalThis.__messagesPresentation;fixture.subscriptions.push({topics,callback});return ()=>{};};'),
 };
 let code = transpile(source);
@@ -443,6 +443,7 @@ test('read receipts remain while reporting moves out of message bubbles into con
   assert.match(html, /· Sent/);
   assert.match(html, /· Read/);
   assert.match(html, /Conversation options/);
+  assert.match(html, /data-member-report="accepted"/);
   assert.doesNotMatch(html, /data-report-target/);
   const select = nodes(tree, node => node.type === 'select')[0];
   select.props.onChange({ target: { value: 'received' } });

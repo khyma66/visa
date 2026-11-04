@@ -1,5 +1,6 @@
 import { getSupabase, isSupabaseConfigured } from './supabase/client';
 import type { Question } from './types';
+import { communityName } from './community-names';
 
 export const COMMUNITY_CATEGORIES = ['Work visas', 'Study', 'Family', 'Travel', 'Settlement', 'General'] as const;
 export type CommunityCategory = typeof COMMUNITY_CATEGORIES[number];
@@ -36,7 +37,7 @@ function requireId(id: string) {
 }
 
 function apiError(error: { code?: string; message?: string }, fallback: string): Error {
-  if (error.code === '23505') return new Error('That community address is already taken. Join the existing community or choose another address.');
+  if (error.code === '23505') return new Error('That community name or address is already taken. Join the existing community or choose another address.');
   if (error.code === '42501' || error.code === 'PGRST301') return new Error('Your account cannot perform this action. Log in again and check your community membership.');
   if (error.message?.includes('owner')) return new Error('Community owners cannot leave their community.');
   if (error.code === 'PGRST202' || error.code === 'PGRST205' || error.code === '42P01') return new Error('Communities are not available on this environment yet. Please try again later.');
@@ -44,9 +45,9 @@ function apiError(error: { code?: string; message?: string }, fallback: string):
 }
 
 export function validateCommunity(input: NewCommunity): NewCommunity {
-  const value = { ...input, slug: input.slug.trim().toLowerCase(), display_name: input.display_name.trim(), description: input.description.trim(), country: input.country.trim(), rules: input.rules.map((rule) => rule.trim()).filter(Boolean) };
+  const value = { ...input, slug: input.slug.trim().toLowerCase(), display_name: communityName(input.display_name), description: input.description.trim(), country: input.country.trim(), rules: input.rules.map((rule) => rule.trim()).filter(Boolean) };
   if (!SLUG.test(value.slug) || value.slug.includes('--')) throw new Error('Use 3–40 lowercase letters, numbers or single hyphens for the community address.');
-  if (value.display_name.length < 3 || value.display_name.length > 80) throw new Error('The community name must be 3–80 characters.');
+  if (!/^[A-Z0-9][A-Za-z0-9]{2,79}$/.test(value.display_name)) throw new Error('Use 3–80 letters or numbers for the community name, like H1BVisaHolders.');
   if (value.description.length < 20 || value.description.length > 500) throw new Error('The description must be 20–500 characters.');
   if (!value.country.length || value.country.length > 80) throw new Error('Enter a country or Worldwide, using 80 characters or fewer.');
   if (!COMMUNITY_CATEGORIES.includes(value.category)) throw new Error('Choose a community category.');
@@ -66,7 +67,7 @@ export async function listCommunities(options: CommunityPageOptions = {}): Promi
   const search = normalizeCommunitySearch(options.search);
   const limit = boundedLimit(options.limit);
   let query = client().from('community_directory').select(FIELDS).order('slug', { ascending: true }).limit(limit + 1);
-  if (search) query = query.or(`display_name.ilike.%${search}%,slug.ilike.%${search}%`);
+  if (search) query = query.or(`display_name.ilike.%${search.replace(/[\s-]+/g, '')}%,slug.ilike.%${search}%`);
   if (options.category) {
     if (!COMMUNITY_CATEGORIES.includes(options.category as CommunityCategory)) throw new Error('Choose a community category.');
     query = query.eq('category', options.category);

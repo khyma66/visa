@@ -66,10 +66,12 @@ export function SiteHeader() {
             <ShieldCheck size={13} /> Local profile
           </span>
         )}
+        <div className="header-action-group">
         <FeedbackLauncher />
         <Link href={user ? '/ask' : '/login?next=%2Fask#sign-in'} aria-label="Ask a Question" title="Ask a Question" className="header-secondary-action header-ask capitalize">
           <Plus size={16} /> <span className="hidden sm:inline capitalize">Ask</span>
         </Link>
+        </div>
         {loading ? <span role="status" aria-label="Checking account" className="header-account h-10 w-10 animate-pulse rounded-full bg-slate-100" /> : user ? (
           <div ref={accountRef} className="header-account relative">
             <button ref={accountButton} onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="account-panel" className="flex min-h-10 items-center gap-2 rounded-full p-1 hover:bg-slate-100" aria-label={`Account: ${profile?.username ?? 'Signed in'}`}>
