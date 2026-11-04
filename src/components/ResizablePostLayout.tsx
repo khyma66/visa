@@ -101,7 +101,6 @@ export function ResizablePostLayout({ children, related, mainLabel = 'Post', rel
         onLostPointerCapture={() => {
           if (drag.current) { cancelFrame(); setPreference(drag.current.preference); drag.current = null; setDragging(false); }
         }}
-        onDoubleClick={() => save(DEFAULT_SPLIT)}
         onKeyDown={event => {
           if (event.key === 'Escape' && drag.current) {
             const active = drag.current;
@@ -113,17 +112,11 @@ export function ResizablePostLayout({ children, related, mainLabel = 'Post', rel
           if (drag.current) return;
           const step = event.shiftKey ? 5 : 1;
           const next = event.key === 'ArrowLeft' ? split - step : event.key === 'ArrowRight' ? split + step
-            : event.key === 'Home' ? min : event.key === 'End' ? max : event.key === 'Enter' ? DEFAULT_SPLIT : null;
+            : event.key === 'Home' ? min : event.key === 'End' ? max : null;
           if (next !== null) { event.preventDefault(); save(clamp(next, min, max)); }
         }} />
-      <button type="button" className={styles.reset} title="Reset panel widths" aria-label="Reset panel widths"
-        disabled={preference === DEFAULT_SPLIT || dragging} onClick={() => save(DEFAULT_SPLIT)}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M3 10a9 9 0 1 1 2.6 8.4M3 4v6h6" />
-        </svg>
-      </button>
       <aside aria-label={relatedLabel} tabIndex={width >= MIN_SPLIT_WIDTH ? 0 : undefined} className={styles.related}>{related}</aside>
     </div>
-    <p id={`${id}-keys`} className="sr-only capitalize">Use left and right arrow keys to resize, Shift for larger steps, Home or End for the limits. Double-click or press Enter to restore the default widths. Press Escape to cancel a drag.</p>
+    <p id={`${id}-keys`} className="sr-only capitalize">Use left and right arrow keys to resize, Shift for larger steps, Home or End for the limits. Press Escape to cancel a drag.</p>
   </div>;
 }

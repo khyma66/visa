@@ -16,6 +16,7 @@ const hooks = dataUrl(`
   export function useEffect(fn, deps) { return globalThis.__communityHarness.useEffect(fn, deps); }
   export function useMemo(fn, deps) { return globalThis.__communityHarness.useMemo(fn, deps); }
   export function useCallback(fn, deps) { return useMemo(() => fn, deps); }
+  export function useId() { return useRef('report-test-id').current; }
 `);
 const jsx = realModule('react/jsx-runtime');
 const links = dataUrl(`import {jsx} from ${JSON.stringify(jsx)}; export default function Link(props){ return jsx('a',props); }`);
@@ -374,6 +375,8 @@ test('an old account publishing result cannot redirect the newly signed-in accou
 });
 
 const supabaseStub = dataUrl('export const isSupabaseConfigured=true; export const getSupabase=()=>globalThis.__communityClient;');
+dependencies['./community-names'] = await compile('../src/lib/community-names.ts');
+dependencies['@/lib/community-names'] = dependencies['./community-names'];
 const groups = await import(await compile('../src/lib/groups.ts', { './supabase/client': supabaseStub }));
 const realId = '11111111-1111-4111-8111-111111111111';
 const otherId = '22222222-2222-4222-8222-222222222222';
@@ -396,7 +399,7 @@ function fakeClient(respond = () => ({ data: [], error: null })) {
 }
 
 test('community validation normalizes names and rules and rejects invalid boundaries', () => {
-  assert.deepEqual(groups.validateCommunity(draft), { slug: 'h1b-careers', display_name: 'H1B Careers', description: 'Shared information on H1B work visa cases.', country: 'United States', category: 'Work visas', rules: ['Be respectful.'] });
+  assert.deepEqual(groups.validateCommunity(draft), { slug: 'h1b-careers', display_name: 'H1BCareers', description: 'Shared information on H1B work visa cases.', country: 'United States', category: 'Work visas', rules: ['Be respectful.'] });
   for (const patch of [
     { slug: 'ab' }, { slug: 'x'.repeat(41) }, { slug: 'bad--address' }, { slug: 'bad/address' },
     { display_name: 'ab' }, { display_name: 'x'.repeat(81) }, { description: 'too short' },
@@ -413,7 +416,7 @@ test('directory query is bounded, ordered, cancellable and uses the last returne
   assert.equal(requests[0].table, 'community_directory');
   assert(requests[0].operations.some((op) => op.name === 'limit' && op.args[0] === 25));
   assert(requests[0].operations.some((op) => op.name === 'gt' && op.args[0] === 'slug' && op.args[1] === 'community-aaa'));
-  assert(requests[0].operations.some((op) => op.name === 'or' && op.args[0] === 'display_name.ilike.%H1B Careers%,slug.ilike.%H1B Careers%'));
+  assert(requests[0].operations.some((op) => op.name === 'or' && op.args[0] === 'display_name.ilike.%H1BCareers%,slug.ilike.%H1B Careers%'));
   assert(requests[0].operations.some((op) => op.name === 'abortSignal' && op.args[0] === signal));
 });
 test('directory search rejects PostgREST operators supplied by the user', async () => {
@@ -444,7 +447,7 @@ test('create/join/leave RPCs send no browser-selected owner, role or account ide
   assert.equal(await groups.createCommunity(draft), realId);
   await groups.joinCommunity(realId); await groups.leaveCommunity(realId);
   assert.deepEqual(requests.map((r) => r.rpc), ['create_public_community', 'join_public_community', 'leave_public_community']);
-  assert.deepEqual(requests[0].args, { community_slug: 'h1b-careers', community_name: 'H1B Careers', community_description: 'Shared information on H1B work visa cases.', community_country: 'United States', community_category: 'Work visas', community_rules: ['Be respectful.'] });
+  assert.deepEqual(requests[0].args, { community_slug: 'h1b-careers', community_name: 'H1BCareers', community_description: 'Shared information on H1B work visa cases.', community_country: 'United States', community_category: 'Work visas', community_rules: ['Be respectful.'] });
   assert.deepEqual(requests[1].args, { target_community: realId }); assert.deepEqual(requests[2].args, { target_community: realId });
 });
 test('duplicate creation and unavailable migrations expose useful errors without database internals', async () => {
@@ -626,23 +629,23 @@ test('Start a Community normalizes the address, preserves rules and navigates af
   const h = newCommunityHarness();
   try {
     h.render(CreateCommunity); await h.settle(); fillCommunity(h);
-    assert.equal(field(h, 'Community Address').props.value, 'canada-study-permits');
+    assert.equal(field(h, 'Community Address').props.value, 'canadastudypermits');
     await publish(h); await h.settle();
     const creation = h.calls.find((c) => c.name === 'createCommunity');
-    assert.equal(creation.args[0].slug, 'canada-study-permits');
-    assert.equal(creation.args[0].display_name, 'Canada study permits');
+    assert.equal(creation.args[0].slug, 'canadastudypermits');
+    assert.equal(creation.args[0].display_name, 'CanadaStudyPermits');
     assert.equal(creation.args[0].country, 'United States');
     assert.equal(creation.args[0].rules.length, 2);
-    assert.deepEqual(h.pushes, ['/c/canada-study-permits']);
+    assert.deepEqual(h.pushes, ['/c/canadastudypermits']);
   } finally { h.close(); }
 });
 test('an existing exact community address exposes the join destination and never creates a duplicate', async () => {
-  const h = newCommunityHarness(); h.handlers.getCommunityBySlug = async () => ({ ...group, slug: 'canada-study-permits' });
+  const h = newCommunityHarness(); h.handlers.getCommunityBySlug = async () => ({ ...group, slug: 'canadastudypermits' });
   try {
     h.render(CreateCommunity); await h.settle(); fillCommunity(h); await publish(h); h.render();
     assert.equal(h.calls.filter((c) => c.name === 'createCommunity').length, 0);
     assert.match(textOf(h.tree), /address already exists/);
-    assert(nodes(h.tree).some((n) => n.props?.href === '/c/canada-study-permits'));
+    assert(nodes(h.tree).some((n) => n.props?.href === '/c/canadastudypermits'));
     assert.equal(byText(h, 'button', 'Create Community').props.disabled, false);
   } finally { h.close(); }
 });
@@ -664,7 +667,7 @@ test('community create suppresses duplicate submissions during the address looku
     assert.equal(h.calls.filter((c) => c.name === 'getCommunityBySlug').length, 1);
     preflight.resolve(null); await Promise.all([first, second]); await h.settle();
     assert.equal(h.calls.filter((c) => c.name === 'createCommunity').length, 1);
-    assert.deepEqual(h.pushes, ['/c/canada-study-permits']);
+    assert.deepEqual(h.pushes, ['/c/canadastudypermits']);
   } finally { h.close(); }
 });
 test('community creation preserves the guest return URL without writing', async () => {
@@ -695,7 +698,7 @@ test('failed community creation preserves the draft and permits retry', async ()
     assert.equal(byText(h, 'button', 'Create Community').props.disabled, false);
     h.handlers.createCommunity = async () => realId; await publish(h);
     assert.equal(h.calls.filter((c) => c.name === 'createCommunity').length, 2);
-    assert.deepEqual(h.pushes, ['/c/canada-study-permits']);
+    assert.deepEqual(h.pushes, ['/c/canadastudypermits']);
   } finally { h.close(); }
 });
 test('an unconfigured environment disables community creation and rejects direct service writes', async () => {
@@ -810,4 +813,35 @@ test('My Communities guest entry preserves its login destination and makes no me
     assert(nodes(h.tree).some((n) => n.props?.href === '/login?next=%2Fmy-communities'));
     assert.equal(h.calls.filter((c) => ['listMyCommunitiesPage', 'getMembershipsForCommunities'].includes(c.name)).length, 0);
   } finally { h.close(); }
+});
+
+const { ReportButton } = await import(await compile('../src/components/ReportButton.tsx', { '@/lib/supabase/client': supabaseStub }));
+test('member report submits the selected conversation and never supplies an arbitrary account', async () => {
+  const h = new Harness();
+  const calls = fakeClient(() => ({data:'saved-report',error:null}));
+  try {
+    h.render(ReportButton,{kind:'member',target:'selected-conversation',username:'reported-member'}); await h.settle();
+    nodes(h.tree).find(node=>node.type==='button' && node.props.children==='Report').props.onClick(); h.render(); await h.settle();
+    const form=nodes(h.tree).find(node=>node.type==='form');
+    await form.props.onSubmit({preventDefault(){}}); h.render();
+    assert.deepEqual(calls[0].args,{conversation_id:'selected-conversation',report_reason:'spam',report_details:''});
+    assert.equal(calls[0].rpc,'report_community_member');
+    assert.match(textOf(h.tree),/Report Submitted For Review/);
+  } finally { h.close(); }
+});
+
+test('member report prevents double submits and ignores late results after conversation changes', async () => {
+  const h = new Harness(); const pending=deferred();
+  const calls=fakeClient(()=>pending.promise);
+  try {
+    h.render(ReportButton,{kind:'member',target:'first-chat',username:'first-member'});await h.settle();
+    nodes(h.tree).find(n=>n.type==='button' && n.props.children==='Report').props.onClick();h.render();await h.settle();
+    const form=nodes(h.tree).find(n=>n.type==='form');
+    const sending=form.props.onSubmit(event());await Promise.resolve();await Promise.resolve();
+    await form.props.onSubmit(event());assert.equal(calls.length,1);
+    h.render(ReportButton,{kind:'member',target:'second-chat',username:'second-member'});await h.settle();
+    pending.resolve({data:'saved-report',error:null});await sending;h.render();
+    assert.doesNotMatch(textOf(h.tree),/Report Submitted For Review/);
+    assert(!nodes(h.tree).some(n=>n.type==='form'));
+  } finally {h.close();}
 });

@@ -51,3 +51,69 @@ test('headline search, topic chips, reset and pagination work without additional
     for(const a of elements(h.tree).filter(n=>n.type==='a'&&n.props.target==='_blank'))assert.match(a.props.rel,/noopener/);
   }finally{h.close();}
 });
+
+test('news tabs expose one panel, support keyboard navigation and retain mounted editions without refetching', () => {
+  const h=new Harness();
+  const reporting={type:'section',props:{children:'Saved reporting fixture'}};
+  const render=()=>{h.index=0;globalThis.__newsHarness=h;h.tree=OfficialNewsFeed({initialFeed:edition,children:reporting});};
+  const tabs=()=>elements(h.tree).filter(n=>n.props.role==='tab');
+  const panels=()=>elements(h.tree).filter(n=>n.props.role==='tabpanel');
+  const active=()=>tabs().find(n=>n.props['aria-selected']);
+  const check=id=>{
+    assert.equal(active().props.id,`news-tab-${id}`);
+    assert.equal(tabs().filter(n=>n.props.tabIndex===0).length,1);
+    assert.equal(panels().filter(n=>!n.props.hidden).length,1);
+    assert.equal(panels().find(n=>!n.props.hidden).props.id,active().props['aria-controls']);
+    for(const panel of panels())assert(tabs().some(n=>n.props.id===panel.props['aria-labelledby']));
+    assert.equal(panels().find(n=>n.props.id==='news-panel-reporting').props.children,reporting);
+    assert.deepEqual(resultFeed(h.tree),edition);
+  };
+  let focused=-1;
+  const key=value=>{
+    let prevented=false;
+    active().props.onKeyDown({key:value,preventDefault(){prevented=true;},currentTarget:{parentElement:{querySelectorAll:()=>tabs().map((_,i)=>({focus(){focused=i;}}))}}});
+    render();return prevented;
+  };
+  try {
+    render();check('reporting');const effects=h.effects.length;
+    assert.equal(key('ArrowRight'),true);check('headlines');assert.equal(focused,1);
+    key('End');check('official');assert.equal(focused,2);
+    key('ArrowRight');check('reporting');
+    key('ArrowLeft');check('official');
+    key('Home');check('reporting');
+    assert.equal(key('Tab'),false);check('reporting');
+    tabs()[2].props.onClick();render();check('official');
+    tabs()[0].props.onClick();render();check('reporting');
+    assert.equal(h.effects.length,effects,'Changing sections must not restart feed requests');
+    assert.equal(elements(h.tree).filter(n=>n.props.relatedLabel==='Official visa resources').length,1);
+  } finally {h.close();}
+});
+
+test('without licensed reporting, news opens an available official edition and does not leave an empty tab',()=>{
+  const h=new Harness();try{
+    h.render();
+    const tabs=elements(h.tree).filter(n=>n.props.role==='tab');
+    assert.equal(tabs.length,2);
+    assert.equal(tabs.find(n=>n.props['aria-selected']).props.id,'news-tab-official');
+    assert.equal(elements(h.tree).filter(n=>n.props.role==='tabpanel'&&!n.props.hidden).length,1);
+    assert(!elements(h.tree).some(n=>n.props.id==='news-panel-reporting'));
+  }finally{h.close();}
+});
+
+test('publisher coverage stays newest first within topic and search filters without changing source dates',()=>{
+  const h=new Harness();
+  const headlines={source:'USCIS Newsroom',retrievedAt:'2026-11-04T00:00:00Z',articles:[
+    {title:'H-1B older update',url:'https://example.com/older',publisher:'USCIS',publishedAt:'2026-11-01T09:00:00Z'},
+    {title:'F-1 latest update',url:'https://example.com/latest',publisher:'USCIS',publishedAt:'2026-11-03T09:00:00Z'},
+    {title:'H-1B newer update',url:'https://example.com/newer',publisher:'USCIS',publishedAt:'2026-11-02T09:00:00Z'},
+  ]};
+  const render=()=>{h.index=0;globalThis.__newsHarness=h;h.tree=HeadlineResults({headlines});};
+  const dates=()=>elements(h.tree).filter(n=>n.type==='time').map(n=>n.props.dateTime);
+  try{
+    render();assert.deepEqual(dates(),[headlines.articles[1].publishedAt,headlines.articles[2].publishedAt,headlines.articles[0].publishedAt]);
+    elements(h.tree).find(n=>n.type==='button'&&content(n).trim()==='Work visas').props.onClick();render();
+    assert.deepEqual(dates(),[headlines.articles[2].publishedAt,headlines.articles[0].publishedAt]);
+    assert.doesNotMatch(content(h.tree),/Indexed/);
+    assert.equal(headlines.articles[0].title,'H-1B older update','Do not reorder cached source data');
+  }finally{h.close();}
+});
