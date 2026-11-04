@@ -66,3 +66,15 @@ test('owner API refuses unrecognized databases and redirect credential forwardin
   await assert.rejects(()=>ownerRpc('stage',{}, {origin:'https://attacker.invalid',key:'key',token:'token'}),/verified/);
   await ownerRpc('list',{}, {origin:'https://cycnichledvqbxevrwnt.supabase.co',key:'synthetic',token:'synthetic',fetcher:async(url,options)=>{assert.equal(options.redirect,'error');return Response.json({items:[]});}});
 });
+test('number words and list markers do not create spurious numeric warnings',()=>{
+  const draft={...review,title:'A member asks about processing timelines',body:'A member asks about a six-month timeline and a two-year extension.',review_flags:[]};
+  assert.deepEqual(validateRewrite('1. Ask about 6 months.\n2. Ask about 2 years.',draft),[]);
+});
+test('material visa details are checked and computed flags refresh after correction',()=>{
+  const draft={...review,body:'A member asks about an H-1B petition and I-94.',review_flags:['Check first- or second-person wording','Specific source ambiguity']};
+  const flags=validateRewrite('H1B COS and I-94; PREMIUM processing',draft);
+  assert(flags.some(f=>f.includes('change of status, premium processing')));
+  assert(!flags.some(f=>f.includes('first-')));assert(flags.includes('Specific source ambiguity'));
+  draft.body+=' The question concerns change of status and premium processing.';
+  assert.deepEqual(validateRewrite('H1B COS and I-94; PREMIUM processing',{...draft,review_flags:flags}),['Specific source ambiguity']);
+});
