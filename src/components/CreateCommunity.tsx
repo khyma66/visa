@@ -1,5 +1,7 @@
 'use client';
 
+import { ResizablePostLayout } from './ResizablePostLayout';
+
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
@@ -69,13 +71,13 @@ export function CreateCommunity() {
   }
 
   const inputClass = 'mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100';
-  return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+  return <main className="page-shell">
     <Link href="/explore" className="text-sm font-semibold text-blue-700 hover:underline capitalize">← Explore Communities</Link>
     <h1 className="mt-5 text-3xl font-bold tracking-tight capitalize">Start a Community</h1>
     <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 capitalize">Create a place for a specific U.S. visa or shared experience. Check for an existing community first so people can find each other.</p>
     {!isSupabaseConfigured && <p role="alert" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900 capitalize">Shared communities are unavailable until the community service is connected. Community creation is disabled here.</p>}
     {!loading && !user && <p className="mt-5 rounded-lg border bg-white p-4 text-sm capitalize"><Link href="/login?next=%2Fcommunities%2Fnew" className="font-bold text-blue-700 underline capitalize">Log In</Link> to create a community and become its owner.</p>}
-    <div className="mt-7 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <ResizablePostLayout mainLabel="Create a community" relatedLabel="Similar communities" className="mt-7" related={<div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold capitalize">Check Existing Communities</h2><p className="mt-2 text-sm leading-6 text-slate-600 capitalize">As you name your community, close matches appear here. Joining an existing group keeps helpful answers together.</p>{searching && <p role="status" className="mt-4 text-sm text-slate-500 capitalize">Searching communities…</p>}{similarError && <p role="alert" className="mt-4 text-sm text-amber-800">{similarError} <button onClick={() => setRetry((n) => n + 1)} className="font-bold underline capitalize">Retry</button></p>}<ul className="mt-4 space-y-4">{similar.map((row) => <li key={row.id}><Link href={`/c/${row.slug}`} className="font-semibold text-blue-700 hover:underline">{row.display_name}</Link><p className="mt-1 text-xs text-slate-500">c/{row.slug} · {Number(row.member_count).toLocaleString()} members</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">{row.description}</p></li>)}</ul>{!searching && !similarError && name.trim().length >= 3 && !similar.length && isSupabaseConfigured && <p className="mt-4 text-sm text-slate-500 capitalize">No close name matches found. The address is checked when you create.</p>}<Link href="/explore" className="mt-5 inline-block text-sm font-bold text-blue-700 underline capitalize">Browse All Communities</Link></div>}>
       <form onSubmit={submit} className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 sm:p-7">
         <fieldset disabled={submitting || loading || !isSupabaseConfigured} className="space-y-5 disabled:opacity-70">
           <label className="block text-sm font-semibold capitalize">Community Name<input required minLength={3} maxLength={80} value={name} onChange={(event) => { setName(event.target.value); if (!slugEdited) setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)); }} placeholder="Example: H-1B Visa Holders" className={inputClass} /></label>
@@ -88,7 +90,7 @@ export function CreateCommunity() {
           <button formNoValidate={!user} disabled={submitting || loading || !isSupabaseConfigured} className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50 capitalize">{submitting ? 'Creating…' : user ? 'Create Community' : 'Log In to create'}</button>
         </fieldset>
       </form>
-      <aside className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold capitalize">Check Existing Communities</h2><p className="mt-2 text-sm leading-6 text-slate-600 capitalize">As you name your community, close matches appear here. Joining an existing group keeps helpful answers together.</p>{searching && <p role="status" className="mt-4 text-sm text-slate-500 capitalize">Searching communities…</p>}{similarError && <p role="alert" className="mt-4 text-sm text-amber-800">{similarError} <button onClick={() => setRetry((n) => n + 1)} className="font-bold underline capitalize">Retry</button></p>}<ul className="mt-4 space-y-4">{similar.map((row) => <li key={row.id}><Link href={`/c/${row.slug}`} className="font-semibold text-blue-700 hover:underline">{row.display_name}</Link><p className="mt-1 text-xs text-slate-500">c/{row.slug} · {Number(row.member_count).toLocaleString()} members</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">{row.description}</p></li>)}</ul>{!searching && !similarError && name.trim().length >= 3 && !similar.length && isSupabaseConfigured && <p className="mt-4 text-sm text-slate-500 capitalize">No close name matches found. The address is checked when you create.</p>}<Link href="/explore" className="mt-5 inline-block text-sm font-bold text-blue-700 underline capitalize">Browse All Communities</Link></aside>
-    </div>
+
+    </ResizablePostLayout>
   </main>;
 }

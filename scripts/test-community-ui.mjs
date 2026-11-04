@@ -26,6 +26,7 @@ const navigation = dataUrl(`
 `);
 const auth = dataUrl('export function useAuth(){return globalThis.__communityHarness.auth;}');
 const dependencies = {
+  './ResizablePostLayout': dataUrl('export function ResizablePostLayout(){return null;}'),
   'react/jsx-runtime': jsx, react: hooks, 'next/link': links, 'next/navigation': navigation,
   './AuthProvider': auth, '@/components/AuthProvider': auth,
   './RelatedQuestions': dataUrl('export function RelatedQuestions(){return null;}'),
@@ -100,13 +101,13 @@ function same(a, b) { return a && b && a.length === b.length && a.every((value, 
 function nodes(node) {
   if (Array.isArray(node)) return node.flatMap(nodes);
   if (!node || typeof node !== 'object') return [];
-  return [node, ...nodes(node.props?.children)];
+  return [node, ...nodes([node.props?.children,node.props?.related])];
 }
 function textOf(node) {
   if (Array.isArray(node)) return node.map(textOf).join(' ');
   if (node == null || typeof node === 'boolean') return '';
   if (typeof node !== 'object') return String(node);
-  return textOf(node.props?.children);
+  return (textOf(node.props?.children) + (node.props?.related ? ' ' + textOf(node.props.related) : ''));
 }
 function byText(h, type, text) {
   const matches = nodes(h.tree).filter((node) => node.type === type && textOf(node).includes(text));

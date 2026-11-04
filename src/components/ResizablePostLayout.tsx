@@ -3,13 +3,16 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import styles from './ResizablePostLayout.module.css';
 
-const DEFAULT_SPLIT = 60;
-const STORAGE_KEY = 'visathreads.post-layout.v1';
+const DEFAULT_SPLIT = 70;
+const STORAGE_KEY = 'visathreads.content-layout.v2';
 const DIVIDER_WIDTH = 32;
+const MIN_SPLIT_WIDTH = 1000;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-/** Shared by questions and experiences. Preferences contain only a panel width. */
-export function ResizablePostLayout({ children, related }: { children: ReactNode; related: ReactNode }) {
+/** One ratio and resize preference for every content page with a supporting panel. */
+export function ResizablePostLayout({ children, related, mainLabel = 'Post', relatedLabel = 'Related questions panel', className = '' }: {
+  children: ReactNode; related: ReactNode; mainLabel?: string; relatedLabel?: string; className?: string;
+}) {
   const id = useId();
   const container = useRef<HTMLDivElement>(null);
   const drag = useRef<{ pointerId: number; startX: number; startSplit: number; width: number; preference: number } | null>(null);
@@ -20,8 +23,8 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
   const [dragging, setDragging] = useState(false);
   const available = Math.max(1, width - DIVIDER_WIDTH);
   // At the desktop breakpoint both panels remain readable, even at either limit.
-  const min = width >= 800 ? Math.max(40, Math.ceil(440 / available * 100)) : 40;
-  const max = width >= 800 ? Math.min(75, Math.floor((1 - 280 / available) * 100)) : 75;
+  const min = width >= MIN_SPLIT_WIDTH ? Math.max(40, Math.ceil(440 / available * 100)) : 40;
+  const max = width >= MIN_SPLIT_WIDTH ? Math.min(75, Math.floor((1 - 280 / available) * 100)) : 75;
   const split = clamp(preference, min, max);
 
   useEffect(() => {
@@ -30,13 +33,19 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
       const value = stored === null ? NaN : Number(stored);
       if (Number.isFinite(value) && value >= 40 && value <= 75) setPreference(value);
     } catch { /* Resizing still works when browser storage is unavailable. */ }
+    const syncPreference = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY && event.key !== null) return;
+      const value = event.newValue === null ? DEFAULT_SPLIT : Number(event.newValue);
+      if (!drag.current && Number.isFinite(value) && value >= 40 && value <= 75) setPreference(value);
+    };
+    window.addEventListener('storage', syncPreference);
     const element = container.current;
-    if (!element) return;
+    if (!element) return () => window.removeEventListener('storage', syncPreference);
     const measure = () => setWidth(element.getBoundingClientRect().width);
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    return () => { observer.disconnect(); cancelFrame(); };
+    return () => { observer.disconnect(); window.removeEventListener('storage', syncPreference); cancelFrame(); };
   }, []);
 
   function cancelFrame() {
@@ -60,13 +69,13 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
 
-  return <div className={styles.container}>
+  return <div className={`${styles.container} ${className}`}>
     <div ref={container} className={`${styles.layout} ${dragging ? styles.dragging : ''}`} style={{ '--post-split': `${split}fr`, '--related-split': `${100 - split}fr` } as CSSProperties}>
       <div id={`${id}-post`} className={styles.post}>{children}</div>
-      <div role="separator" tabIndex={0} aria-label="Post" aria-orientation="vertical"
+      <div role="separator" tabIndex={0} aria-label={mainLabel} aria-orientation="vertical"
         aria-controls={`${id}-post`} aria-describedby={`${id}-keys`}
         aria-valuemin={min} aria-valuemax={max} aria-valuenow={Math.round(split)}
-        aria-valuetext={`${Math.round(split)} percent post, ${Math.round(100 - split)} percent related questions`}
+        aria-valuetext={`${Math.round(split)} percent ${mainLabel.toLowerCase()}, ${Math.round(100 - split)} percent ${relatedLabel.toLowerCase()}`}
         className={styles.divider} title="Resize panels"
         onPointerDown={event => {
           if (!event.isPrimary || event.button !== 0 || !container.current || drag.current) return;
@@ -113,7 +122,7 @@ export function ResizablePostLayout({ children, related }: { children: ReactNode
           <path d="M3 10a9 9 0 1 1 2.6 8.4M3 4v6h6" />
         </svg>
       </button>
-      <aside aria-label="Related questions panel" tabIndex={width >= 800 ? 0 : undefined} className={styles.related}>{related}</aside>
+      <aside aria-label={relatedLabel} tabIndex={width >= MIN_SPLIT_WIDTH ? 0 : undefined} className={styles.related}>{related}</aside>
     </div>
     <p id={`${id}-keys`} className="sr-only capitalize">Use left and right arrow keys to resize, Shift for larger steps, Home or End for the limits. Double-click or press Enter to restore the default widths. Press Escape to cancel a drag.</p>
   </div>;

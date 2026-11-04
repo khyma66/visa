@@ -2,23 +2,21 @@
 
 import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowUpRight, Compass, GripVertical, MessageSquare, Plus, Search, SlidersHorizontal, Tags, X } from 'lucide-react';
+import { ArrowUpRight, Compass, MessageSquare, Plus, Search, SlidersHorizontal, Tags, X } from 'lucide-react';
 import { getCommunitySource, getQuestionPage } from '@/lib/community';
 import type { Question } from '@/lib/types';
 import { subscribeLive } from '@/lib/realtime';
 import { QuestionCard } from './QuestionCard';
 import { useAuth } from './AuthProvider';
 import { RelatedQuestions } from './RelatedQuestions';
+import { ResizablePostLayout } from './ResizablePostLayout';
 
 import { EXPERIENCE_CATEGORIES, VISA_TYPES } from '@/lib/post-categories';
 
 const PAGE_SIZE = 20;
-const PANEL_WIDTH_KEY = 'visathreads:discovery-panel-width:v1';
-const MIN_PANEL_WIDTH = 240;
-const MAX_PANEL_WIDTH = 640;
 const SORTS = [['newest', 'New'], ['activity', 'Active'], ['score', 'Top'], ['unanswered', 'Unanswered']] as const;
 type SortMode = typeof SORTS[number][0];
 type PostKind = '' | 'question' | 'discussion' | 'promotion';
@@ -46,70 +44,9 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const [origin, setOrigin] = useState<'' | 'member' | 'earlier'>('');
   const [loadedFilterKey, setLoadedFilterKey] = useState<string | null>(null);
   const olderLock = useRef<symbol | null>(null);
-  const layoutRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ pointerId: number; x: number; width: number; current: number } | null>(null);
   const alive = useRef(true);
-  const [panelWidth, setPanelWidth] = useState(300);
-  const [layoutWidth, setLayoutWidth] = useState(1000);
-  const maxPanelWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, layoutWidth - 440));
-  const visiblePanelWidth = Math.min(panelWidth, maxPanelWidth);
   const askHref = user ? '/ask' : '/login?next=%2Fask#sign-in';
 
-  useEffect(() => {
-    try {
-      const saved = Number(window.localStorage.getItem(PANEL_WIDTH_KEY));
-      if (Number.isFinite(saved) && saved >= MIN_PANEL_WIDTH && saved <= MAX_PANEL_WIDTH) setPanelWidth(saved);
-    } catch { /* The layout remains usable when storage is unavailable. */ }
-    const layout = layoutRef.current;
-    if (!layout) return;
-    const measure = () => setLayoutWidth(layout.clientWidth);
-    measure();
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(measure);
-      observer.observe(layout);
-      return () => observer.disconnect();
-    }
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, []);
-
-  function savePanelWidth(width: number) {
-    const bounded = Math.max(MIN_PANEL_WIDTH, Math.min(maxPanelWidth, width));
-    setPanelWidth(bounded);
-    try { window.localStorage.setItem(PANEL_WIDTH_KEY, String(bounded)); } catch { /* Browser storage is optional. */ }
-  }
-
-  function startResize(event: PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    dragRef.current = { pointerId: event.pointerId, x: event.clientX, width: visiblePanelWidth, current: visiblePanelWidth };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function moveResize(event: PointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    drag.current = Math.max(MIN_PANEL_WIDTH, Math.min(maxPanelWidth, drag.width + drag.x - event.clientX));
-    setPanelWidth(drag.current);
-  }
-
-  function stopResize(event: PointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current;
-    if (drag?.pointerId !== event.pointerId) return;
-    dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    savePanelWidth(drag.current);
-  }
-
-  function resizeWithKeyboard(event: KeyboardEvent<HTMLDivElement>) {
-    const next = event.key === 'ArrowLeft' ? visiblePanelWidth + 24
-      : event.key === 'ArrowRight' ? visiblePanelWidth - 24
-      : event.key === 'Home' ? MIN_PANEL_WIDTH
-      : event.key === 'End' ? maxPanelWidth : null;
-    if (next === null) return;
-    event.preventDefault();
-    savePanelWidth(next);
-  }
   // Sort immediately over the already loaded rows while the fresh server page
   // arrives, but never present rows from a different search/filter as results.
   const contentFilterKey = JSON.stringify([search, tag, visaType, experience, category, origin]);
@@ -245,7 +182,16 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
 
   return (
     <main className="page-shell">
-      <div ref={layoutRef} className="home-feed-layout" style={{ '--discovery-width': `${visiblePanelWidth}px` } as CSSProperties}>
+      <ResizablePostLayout mainLabel="Posts" relatedLabel="Community discovery" related={<div id="home-feed-aside" className="feed-discovery min-w-0 space-y-5">
+          <section className="rounded-xl bg-teal-50 p-4">
+            <h2 className="text-thread-title font-semibold text-slate-900 capitalize">Find Your Community</h2><p className="mt-2 text-base leading-6 text-slate-600 capitalize">Connect around a U.S. visa or stage of your journey.</p>
+            <Link href="/explore" className="mt-3 flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 capitalize"><span className="inline-flex items-center gap-2 capitalize"><Compass size={17} aria-hidden="true" />Explore Communities</span><ArrowUpRight size={16} aria-hidden="true" /></Link>
+            <Link href="/communities/new" className="mt-2 flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:text-blue-700 capitalize"><Plus size={17} aria-hidden="true" />Start a Community</Link>
+          </section>
+          <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4"><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Member Discussions</h2><p className="mt-2 text-sm leading-6 text-slate-600 capitalize">See questions and experiences shared directly by VisaThreads members.</p><button onClick={() => { setOrigin(origin === 'member' ? '' : 'member'); updateQuery({ origin: origin === 'member' ? '' : 'member' }); }} className="mt-3 text-sm font-semibold text-teal-800 hover:underline capitalize">{origin === 'member' ? 'Show all posts' : 'See member posts'} <ArrowUpRight className="inline" size={13} aria-hidden="true" /></button></section>
+          {popularTags.length > 0 && <section className="border-b border-slate-200 px-2 pb-5"><div className="flex items-center gap-2"><Tags size={17} className="shrink-0 text-slate-500" aria-hidden="true" /><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Topics in This Feed</h2></div><div className="mt-3 flex flex-wrap gap-2">{popularTags.map(([name, count]) => <button key={name} onClick={() => selectTag(name)} className="max-w-full break-words rounded bg-blue-50 px-2 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">{topicLabel(name)}<span className="ml-1.5 text-xs text-blue-500">{count}</span></button>)}</div><Link href="/tags" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-blue-700 capitalize">All Tags<ArrowUpRight size={13} aria-hidden="true" /></Link></section>}
+          {(related || search || tag || pageQuestions[0]) && <div id="feed-related" className="scroll-mt-24">{related && <div className="mb-2 flex items-start justify-between gap-2 px-2 text-xs text-slate-500"><span className="line-clamp-2">Similar to: {related.title}</span><button onClick={() => setRelated(null)} title="Clear related question selection" aria-label="Clear related question selection" className="shrink-0 rounded p-1 hover:bg-slate-100"><X size={14} /></button></div>}<RelatedQuestions context={related ?? (search || tag ? { title: search, tags: tag ? [tag] : [] } : pageQuestions[0])} /></div>}
+        </div>}>
         <div id="home-feed-main" className="min-w-0">
           <header className="feed-heading flex flex-wrap items-center justify-between gap-4">
             <div className="capitalize"><p className="mb-2 text-sm font-semibold text-teal-800 capitalize">Your visa journey, together</p><h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl capitalize">{experience ? 'U.S. Visa Experiences' : initialKind === 'discussion' ? 'U.S. Visa Discussions' : 'U.S. Visa Community'}</h1><p className="mt-2 max-w-2xl text-base leading-6 text-slate-600 capitalize">{experience ? 'First-hand stories selected from existing discussions, alongside experiences shared here. Original dates and replies are preserved. Personal accounts are not verified outcomes or legal advice.' : 'Questions, shared experiences, and practical discussions about U.S. visas.'}</p></div>
@@ -284,18 +230,8 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
           </section>
         </div>
 
-        <div role="separator" tabIndex={0} aria-label="Resize posts and discovery panels" aria-orientation="vertical" aria-controls="home-feed-main home-feed-aside" aria-valuemin={MIN_PANEL_WIDTH} aria-valuemax={maxPanelWidth} aria-valuenow={visiblePanelWidth} title="Drag to resize panels. Use arrow keys when focused; double-click to reset." className="home-feed-resizer" onPointerDown={startResize} onPointerMove={moveResize} onPointerUp={stopResize} onPointerCancel={stopResize} onKeyDown={resizeWithKeyboard} onDoubleClick={() => savePanelWidth(300)}><GripVertical size={16} aria-hidden="true" /></div>
-        <aside id="home-feed-aside" aria-label="Community discovery" className="feed-discovery min-w-0 space-y-5">
-          <section className="rounded-xl bg-teal-50 p-4">
-            <h2 className="text-thread-title font-semibold text-slate-900 capitalize">Find Your Community</h2><p className="mt-2 text-base leading-6 text-slate-600 capitalize">Connect around a U.S. visa or stage of your journey.</p>
-            <Link href="/explore" className="mt-3 flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 capitalize"><span className="inline-flex items-center gap-2 capitalize"><Compass size={17} aria-hidden="true" />Explore Communities</span><ArrowUpRight size={16} aria-hidden="true" /></Link>
-            <Link href="/communities/new" className="mt-2 flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:text-blue-700 capitalize"><Plus size={17} aria-hidden="true" />Start a Community</Link>
-          </section>
-          <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4"><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Member Discussions</h2><p className="mt-2 text-sm leading-6 text-slate-600 capitalize">See questions and experiences shared directly by VisaThreads members.</p><button onClick={() => { setOrigin(origin === 'member' ? '' : 'member'); updateQuery({ origin: origin === 'member' ? '' : 'member' }); }} className="mt-3 text-sm font-semibold text-teal-800 hover:underline capitalize">{origin === 'member' ? 'Show all posts' : 'See member posts'} <ArrowUpRight className="inline" size={13} aria-hidden="true" /></button></section>
-          {popularTags.length > 0 && <section className="border-b border-slate-200 px-2 pb-5"><div className="flex items-center gap-2"><Tags size={17} className="shrink-0 text-slate-500" aria-hidden="true" /><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Topics in This Feed</h2></div><div className="mt-3 flex flex-wrap gap-2">{popularTags.map(([name, count]) => <button key={name} onClick={() => selectTag(name)} className="max-w-full break-words rounded bg-blue-50 px-2 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">{topicLabel(name)}<span className="ml-1.5 text-xs text-blue-500">{count}</span></button>)}</div><Link href="/tags" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-blue-700 capitalize">All Tags<ArrowUpRight size={13} aria-hidden="true" /></Link></section>}
-          {(related || search || tag || pageQuestions[0]) && <div id="feed-related" className="scroll-mt-24">{related && <div className="mb-2 flex items-start justify-between gap-2 px-2 text-xs text-slate-500"><span className="line-clamp-2">Similar to: {related.title}</span><button onClick={() => setRelated(null)} title="Clear related question selection" aria-label="Clear related question selection" className="shrink-0 rounded p-1 hover:bg-slate-100"><X size={14} /></button></div>}<RelatedQuestions context={related ?? (search || tag ? { title: search, tags: tag ? [tag] : [] } : pageQuestions[0])} /></div>}
-        </aside>
-      </div>
+
+      </ResizablePostLayout>
     </main>
   );
 }
