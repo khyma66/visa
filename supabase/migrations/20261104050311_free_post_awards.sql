@@ -9,6 +9,7 @@ create table private.post_awards (
   created_at timestamptz not null default now(),
   primary key (post_id,user_id)
 );
+create index post_awards_user_id_idx on private.post_awards(user_id);
 alter table private.post_awards enable row level security;
 revoke all on private.post_awards from public,anon,authenticated,service_role;
 
