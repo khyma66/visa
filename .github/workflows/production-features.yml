@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# News desk: searchable publisher headlines, accurate edition timestamps; chatbot stays removed.
+# News desk: permission-checked reporting with credited article photography; chatbot stays removed.
 
 on:
   workflow_dispatch:
@@ -70,6 +70,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Verify exact source, unchanged archive, feature availability and auth denials
         run: node scripts/smoke-production-features.mjs
+      - name: Verify live permitted reporting and every credited news photo
+        run: node scripts/smoke-licensed-news.mjs https://visathreads.com
       - name: Restore captured version if this deployment fails verification
         if: failure() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')
         env:
@@ -145,6 +147,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify the same permitted reporting and credited photos on development
+        run: node scripts/smoke-licensed-news.mjs https://visa-central.com
       - name: Restore captured dev version only if this exact uploaded version is still active
         id: rollback
         if: failure() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')

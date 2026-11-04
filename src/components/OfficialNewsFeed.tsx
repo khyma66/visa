@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { isOfficialNews, NEWS_TOPICS, newsTopic, OFFICIAL_NEWS_TTL, OFFICIAL_NEWS_STALE_MS, type OfficialArticle, type OfficialNews } from '@/lib/official-news-shared';
 import { isImmigrationHeadlines, type ImmigrationHeadlines } from '@/lib/immigration-headlines';
 
@@ -87,7 +87,7 @@ export function HeadlineResults({ headlines }: { headlines: ImmigrationHeadlines
   </div>;
 }
 
-export function OfficialNewsFeed({ initialFeed = null }: { initialFeed?: OfficialNews | null }) {
+export function OfficialNewsFeed({ initialFeed = null, children }: { initialFeed?: OfficialNews | null; children?: ReactNode }) {
   const [feed, setFeed] = useState<OfficialNews | null>(initialFeed);
   const [headlines, setHeadlines] = useState<ImmigrationHeadlines | null>(null);
   const [headlinesFailed, setHeadlinesFailed] = useState(false);
@@ -130,12 +130,16 @@ export function OfficialNewsFeed({ initialFeed = null }: { initialFeed?: Officia
       <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-orange-700">VisaThreads · News desk</p><h1 className="mt-3 font-serif text-2xl font-semibold text-slate-950 sm:text-3xl">The Visa Brief</h1><p className="mt-3 max-w-2xl text-base leading-6 text-slate-600">U.S. immigration and visa headlines alongside official government notices. Follow each link to its original publisher or agency.</p></div>
       <a href="#visa-official-resources" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-teal-200 bg-white px-4 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">Find official tools <span aria-hidden="true">↓</span></a>
     </header>
-    <section aria-labelledby="headline-section-title" className="border-b border-slate-200 py-7">
+    {children}
+    <details className="border-b border-slate-200 py-5">
+      <summary className="cursor-pointer text-thread-title font-semibold text-slate-800">More headlines &amp; agency announcements</summary>
+    <section aria-labelledby="headline-section-title" className="pt-5">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-800">Your daily reading list</p><h2 id="headline-section-title" className="mt-1 text-thread-title font-semibold text-slate-950">U.S. Immigration &amp; Visa Headlines</h2></div>{headlines && <p className="text-xs text-slate-500">Updated <time dateTime={headlines.retrievedAt}>{new Date(headlines.retrievedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</time></p>}</div>
       {headlines && (headlinesFailed || Date.now() - Date.parse(headlines.retrievedAt) > OFFICIAL_NEWS_STALE_MS) && <p role="status" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">A newer headline edition is not available yet. Your saved headlines remain readable with their original dates.</p>}
       {headlines ? <HeadlineResults headlines={headlines} /> : <div role="status" className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600"><p>{headlinesFailed ? 'Publisher headlines are temporarily unavailable. Official notices remain below.' : 'Gathering publisher headlines…'}</p>{headlinesFailed && <button type="button" onClick={() => setAttempt(value => value + 1)} className="mt-3 min-h-10 rounded-lg border border-slate-300 px-3 py-1.5 font-semibold text-blue-800">Try again</button>}</div>}
       <p className="mt-4 text-xs leading-5 text-slate-500">Daily edition · Headlines from {headlines?.source === 'USCIS Newsroom' ? <a href="https://www.uscis.gov/newsroom/all-news" target="_blank" rel="noopener noreferrer" className="underline">USCIS Newsroom</a> : <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener noreferrer" className="underline">the GDELT Project</a>}. Updated is the edition retrieval time, not the article publication time. Full reporting is available at each source.</p>
     </section>
+    </details>
     <div className="grid items-start gap-7 pt-6 xl:grid-cols-[minmax(0,1fr)_290px]">
       <section id="government-notices" aria-label="Visa-related Federal Register notices" className="min-w-0 scroll-mt-28">
         <div className="mb-5"><p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-800">Official record</p><h2 className="mt-1 font-serif text-thread-title font-semibold text-slate-950">Government Notices</h2></div>
