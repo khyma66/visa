@@ -34,7 +34,7 @@ export function PostAward({ postId, authorId, path }: { postId: string; authorId
     finally { if (!controller.signal.aborted) { pending.current=false; setBusy(false); } }
   }
   return <div className="relative text-xs font-semibold text-slate-600">
-    <button type="button" aria-expanded={open} onClick={() => { const next=!open; setOpen(next); if (next) void run(); }} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-2 hover:bg-slate-200"><Award size={14} aria-hidden="true"/>Award</button>
+    <button type="button" aria-expanded={open} onClick={() => { const next=!open; setOpen(next); if (next && user) void run(); }} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-2 hover:bg-slate-200"><Award size={14} aria-hidden="true"/>Award</button>
     {open && <div className="absolute left-0 z-20 mt-1 w-64 space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
       <p className="font-normal leading-5">Free recognition, with no payment or monetary value. Choose one badge; select it again to remove it.</p>
       {busy && <p role="status">Loading awards…</p>}

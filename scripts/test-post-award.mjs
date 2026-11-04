@@ -26,3 +26,10 @@ test('award menu loads real counts and submits a selected free badge',async()=>{
   assert.equal(h.calls[1].name,'set_post_award');assert.equal(h.calls[1].args.selected_badge,'helpful');
   delete globalThis.__award;
 });
+test('a signed-out visitor can open the menu without making a forbidden database call',()=>{
+  const h=globalThis.__award={index:0,slots:[],calls:[],auth:{user:null,demoMode:false},result:null};
+  const render=()=>{h.index=0;return PostAward({postId:'post',authorId:'author',path:'/questions/post'});};
+  let tree=render();nodes(tree).find(n=>n.type==='button').props.onClick();tree=render();
+  assert.equal(h.calls.length,0);assert.match(text(tree),/Log in to give an award/);
+  delete globalThis.__award;
+});

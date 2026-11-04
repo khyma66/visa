@@ -8,6 +8,7 @@ const db=new PGlite();
 const author='11111111-1111-4111-8111-111111111111', member='22222222-2222-4222-8222-222222222222';
 const post='33333333-3333-4333-8333-333333333333', hidden='44444444-4444-4444-8444-444444444444';
 const migration=await readFile(new URL('../../supabase/migrations/20261104050311_free_post_awards.sql',import.meta.url),'utf8');
+const restriction=await readFile(new URL('../../supabase/migrations/20261104052154_restrict_award_summary_to_members.sql',import.meta.url),'utf8');
 before(async()=>{
   await db.exec(`create role anon;create role authenticated;create role service_role;
     create schema auth;create schema private;
@@ -18,11 +19,13 @@ before(async()=>{
     create table public.questions(id uuid primary key,author_id uuid,status text,community_id uuid);
     create table private.community_suspensions(user_id uuid);
     create function private.community_consume(text,integer,integer) returns void language plpgsql security definer as $$begin if exists(select 1 from private.community_suspensions where user_id=auth.uid()) then raise exception 'suspended'; end if; end$$;
-    grant usage on schema public,private,auth to anon,authenticated,service_role;
+    grant usage on schema public,auth to anon,authenticated,service_role;
+    grant usage on schema private to authenticated;
     insert into auth.users(id) values('${author}'),('${member}');
     insert into public.questions values('${post}','${author}','open',null),('${hidden}','${author}','archived',null);
     insert into public.policy_acceptances values('${member}','2026-11-02-preview-v3'),('${author}','2026-11-02-preview-v3');`);
   await db.exec(migration);
+  await db.exec(restriction);
 });
 after(()=>db.close());
 async function as(user,role,fn){
@@ -32,8 +35,8 @@ async function as(user,role,fn){
 }
 const summary=id=>db.query('select public.post_award_summary($1) as value',[id]).then(r=>r.rows[0].value);
 const award=(id,badge)=>db.query('select public.set_post_award($1,$2) as value',[id,badge]).then(r=>r.rows[0].value);
-test('anonymous visitors see counts but cannot award or read private rows',async()=>{
-  await as(null,'anon',async()=>{assert.deepEqual(await summary(post),{helpful:0,support:0,insightful:0,mine:null});});
+test('anonymous visitors cannot read counts, award or read private rows',async()=>{
+  await as(null,'anon',()=>assert.rejects(()=>summary(post),/permission denied/));
   await as(null,'anon',()=>assert.rejects(()=>award(post,'helpful'),/permission denied/));
   await as(null,'anon',()=>assert.rejects(()=>db.query('select * from private.post_awards'),/permission denied/));
 });
