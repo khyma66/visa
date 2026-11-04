@@ -21,6 +21,7 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   const [activeId, setActiveId] = useState('');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
+  const [reportSelection, setReportSelection] = useState({ conversation: '', message: '' });
   const [recipient, setRecipient] = useState(recipientUsername);
   const [linkedRecipientId, setLinkedRecipientId] = useState(recipientMemberId);
   const [resolvedRecipient, setResolvedRecipient] = useState<MessageRecipient | null>(null);
@@ -334,6 +335,8 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
   // Distinct conversation IDs are never merged: their histories are separate.
   const visible = sortConversations(conversations).filter((c) => tab === 'requests' ? incoming(c) : tab === 'closed' ? closed(c) : !incoming(c) && !closed(c));
   const canSend = canSendToConversation(active, user.id, messages, messagesLoading);
+  const reportableMessages = messages.filter(message => message.conversation_id === activeId && message.sender_id !== user.id);
+  const reportTarget = reportSelection.conversation === activeId && reportableMessages.some(message => message.id === reportSelection.message) ? reportSelection.message : '';
   const emptyFolder = {
     chats: { title: 'No chats yet', description: 'Start a request using a member’s public username.' },
     requests: { title: 'No message requests', description: 'New Chat Requests from other members appear here.' },
@@ -372,6 +375,21 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
         <section aria-label="Selected conversation" className={`${mobileThread ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-col`}>
           {active ? <>
             <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-4"><button type="button" onClick={() => { mobileThreadRef.current = false; setMobileThread(false); }} aria-label="Back to inbox" className="rounded-full p-2 text-slate-600 hover:bg-slate-100 md:hidden"><ArrowLeft size={20} /></button><Avatar seed={active.other_avatar_seed} /><div className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-900">u/{active.other_username}</b><p role="status" className="text-xs text-slate-500">{demoMode ? 'Browser preview' : live === 'live' ? 'Connected' : 'Reconnecting…'}</p></div>{!closed(active) && <button disabled={acting} onClick={() => void respond('blocked')} className="rounded-full px-3 py-2 text-xs text-slate-500 hover:bg-rose-50 hover:text-rose-700">Block</button>}</div>
+            {!demoMode && <details key={active.id} className="shrink-0 border-b border-slate-100 px-5 py-2 text-sm text-slate-600">
+              <summary className="cursor-pointer rounded py-1 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700">Conversation options</summary>
+              <div className="max-h-64 space-y-3 overflow-y-auto py-3">
+                <p>Report a message from this conversation. Only the selected message is shared with authorized moderators.</p>
+                <label className="block font-semibold">Message to report
+                  <select value={reportTarget} disabled={messagesLoading} onChange={event => setReportSelection({ conversation: active.id, message: event.target.value })} className="mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white p-2 font-normal">
+                    <option value="">Select a received message</option>
+                    {reportableMessages.map(message => <option key={message.id} value={message.id}>{new Date(message.created_at).toLocaleString()} — {message.body.slice(0,100)}{message.body.length > 100 ? '…' : ''}</option>)}
+                  </select>
+                </label>
+                {!messagesLoading && !reportableMessages.length && <p className="text-xs">No received messages are loaded.</p>}
+                {hasOlder && <p className="text-xs">To report an older message, load earlier messages below first.</p>}
+                {!messagesLoading && reportTarget && <ReportButton key={`${active.id}:${reportTarget}`} kind="message" target={reportTarget} />}
+              </div>
+            </details>}
             {!messagesLoading && <p role="status" className="border-b border-slate-100 px-5 py-2 text-xs text-slate-500">{messages.length} of {messageTotal ?? '—'} messages shown{hasOlder ? ' · Earlier messages available' : ''}</p>}
             {messageError && <div role="alert" className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700"><p>{messageError}</p><button type="button" disabled={messagesLoading} onClick={() => void retryMessages.current?.()} className="mt-2 font-semibold underline disabled:opacity-50">Retry conversation</button></div>}
             <div aria-label="Conversation messages" className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50/60 p-5">
@@ -382,7 +400,6 @@ export function MessagesClient({ recipientUsername = '', recipientMemberId = '' 
               const mine = message.sender_id === user.id;
               return <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}><div className="max-w-[78%]">
                 <div className={`rounded-2xl px-4 py-3 text-base leading-normal shadow-sm ${mine ? 'rounded-br-md bg-blue-700 text-white' : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'}`}><p className="whitespace-pre-wrap break-words">{message.body}</p><p className={`mt-1 text-xs ${mine ? 'text-blue-100' : 'text-slate-500'}`}>{formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}{mine ? ` · ${message.read_at ? 'Read' : 'Sent'}` : ''}</p></div>
-                {!mine && <ReportButton kind="message" target={message.id} />}
               </div></div>;
             })}<div ref={endRef} /></div>
             {incoming(active) && <div className="border-t bg-amber-50 p-4"><p className="text-sm text-amber-950">Accept this request to reply.</p><div className="mt-3 flex gap-3"><button disabled={acting} onClick={() => void respond('accepted')} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Accept request</button><button disabled={acting} onClick={() => void respond('declined')} className="rounded-lg border border-amber-300 px-4 py-2 text-sm">Decline</button></div></div>}
