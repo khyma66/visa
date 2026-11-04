@@ -227,7 +227,7 @@
 .auth-layout-signup .auth-input { min-height: 40px; height: 40px; margin-top: 4px; padding-block: 7px; }
 .auth-layout-signup .auth-password-toggle { height: 40px; }
 .auth-card .auth-title { color: #134e4a; letter-spacing: -.025em; }
-.auth-card .auth-input { border-color: #9bbab5; background: #fbfefd; }
+.auth-card .auth-input { border-color: #648780; background: #fbfefd; }
 .auth-card .auth-input:focus { border-color: #0f766e; background: #fff; box-shadow: 0 0 0 3px #ccfbf1; }
 .auth-card .auth-primary {
   background: #0f766e;
