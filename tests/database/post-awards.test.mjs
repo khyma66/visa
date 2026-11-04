@@ -54,3 +54,12 @@ test('suspended accounts cannot give awards',async()=>{
   try {await as(member,'authenticated',()=>assert.rejects(()=>award(post,'helpful'),/suspended/));}
   finally {await db.query('delete from private.community_suspensions where user_id=$1',[member]);}
 });
+test('unaccepted policy, anonymous identities and server role cannot give awards',async()=>{
+  await db.query('delete from public.policy_acceptances where user_id=$1',[member]);
+  await as(member,'authenticated',()=>assert.rejects(()=>award(post,'helpful'),/policies/));
+  await db.query("insert into public.policy_acceptances values($1,'2026-11-02-preview-v3')",[member]);
+  await db.query('update auth.users set is_anonymous=true where id=$1',[member]);
+  try {await as(member,'authenticated',()=>assert.rejects(()=>award(post,'helpful'),/Authentication required/));}
+  finally {await db.query('update auth.users set is_anonymous=false where id=$1',[member]);}
+  await as(member,'service_role',()=>assert.rejects(()=>award(post,'helpful'),/permission denied/));
+});
