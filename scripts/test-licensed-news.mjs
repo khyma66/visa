@@ -21,7 +21,7 @@ deps['@/lib/licensed-news'] = await compile('../src/lib/licensed-news.ts');
 const service = await import(deps['@/lib/licensed-news']);
 const photoRoute = await import(await compile('../src/app/api/news-photo/[id]/route.ts'));
 const { LicensedStory, LicensedNewsFeed } = await import(await compile('../src/components/LicensedNewsFeed.tsx'));
-const now = Date.parse('2026-11-04T04:00:00Z');
+const now = Math.max(Date.parse('2026-11-04T04:00:00Z'), Date.parse(snapshot.retrievedAt));
 const image = 'https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/10/story.jpg?fit=1024%2C683&ssl=1';
 const row = { title: 'Immigration court ruling', link: 'https://www.texastribune.org/2026/10/30/immigration-court/', 'dc:creator': 'Reporter Name', pubDate: 'Fri, 30 Oct 2026 15:36:39 +0000', 'post-id': '123', description: `<figure><img src="${image}" width="1024" height="683" /></figure><p>Publisher-provided short excerpt.</p>` };
 const html = '<article id="post-123"><figure class="post-thumbnail"><img src="story.jpg"/><figcaption><span>A courthouse on October 30.<span class="image-credit">Photographer Name for The Texas Tribune</span></span></figcaption></figure><textarea id="republication-tracker-tool-plain-text-content"></textarea></article>';
@@ -91,10 +91,10 @@ test('news response bodies are bounded and outage fallback never fabricates a ne
   const old=globalThis.fetch;globalThis.fetch=async()=>{throw Error('offline');};
   try{const result=await service.loadLicensedNews();assert.equal(result.stale,true);assert.equal(result.edition.retrievedAt,snapshot.retrievedAt);}finally{globalThis.fetch=old;}
 });
-test('hourly publication and daily publication share a lock and preserve each other’s edition files', async () => {
+test('daily reporting and notices share a lock and preserve each other’s edition files', async () => {
   const hourly=await readFile(new URL('../.github/workflows/licensed-news-refresh.yml',import.meta.url),'utf8');
   const daily=await readFile(new URL('../.github/workflows/news-refresh.yml',import.meta.url),'utf8');
-  assert.match(hourly,/cron: '37 \* \* \* \*'/);
+  assert.match(hourly,/cron: '37 13 \* \* \*'/);
   for(const source of [hourly,daily]){assert.match(source,/group: public-visa-news-edition/);assert.match(source,/git read-tree "\$parent"/);assert.match(source,/git write-tree/);assert.doesNotMatch(source,/--force|git mktree/);}
 });
 
@@ -111,12 +111,11 @@ class Harness {
 }
 function elements(node){if(Array.isArray(node))return node.flatMap(elements);if(!node||typeof node!=='object')return [];return [node,...elements(node.props?.children)];}
 function content(node){if(Array.isArray(node))return node.map(content).join(' ');if(node==null||typeof node==='boolean')return '';return typeof node==='object'?content(node.props?.children):String(node);}
-test('news pagination and image-error removal work without search controls',()=>{
+test('the full news edition and image-error removal work without search controls',()=>{
   const h=new Harness();
   const stories=()=>elements(h.tree).filter(n=>n.type===interactive.LicensedStory);
   try{
-    h.render();assert.equal(stories().length,5);assert(!elements(h.tree).some(n=>n.type==='input'));
-    elements(h.tree).find(n=>n.type==='button').props.onClick();h.render();assert.equal(stories().length,6);
+    h.render();assert.equal(stories().length,snapshot.articles.length);assert(!elements(h.tree).some(n=>n.type==='input'));
   }finally{h.close();}
   const imageHarness=new Harness();const props={article:snapshot.articles[0],lead:true};
   try{
@@ -127,8 +126,8 @@ test('news pagination and image-error removal work without search controls',()=>
   }finally{imageHarness.close();}
 });
 for(const [label,fetcher,expected] of [
-  ['outage',async()=>{throw Error('offline');},6],
-  ['older edition',async()=>Response.json({...snapshot,retrievedAt:'2026-01-01T00:00:00Z',articles:[]}),6],
+  ['outage',async()=>{throw Error('offline');},snapshot.articles.length],
+  ['older edition',async()=>Response.json({...snapshot,retrievedAt:'2026-01-01T00:00:00Z',articles:[]}),snapshot.articles.length],
   ['withdrawn edition',async()=>Response.json({...snapshot,articles:[]}),0],
 ]) test(`client handles ${label} without fabricated updates or resurfacing withdrawn stories`,async()=>{
   const previous=globalThis.fetch, previousDocument=globalThis.document;const h=new Harness();

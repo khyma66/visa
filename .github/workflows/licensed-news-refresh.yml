@@ -1,11 +1,12 @@
 name: Refresh permitted immigration reporting
 on:
   schedule:
-    - cron: '37 * * * *'
+    # Daily at 07:37 CST / 08:37 CDT (13:37 UTC).
+    - cron: '37 13 * * *'
   workflow_dispatch:
   push:
     branches: [main]
-    paths: [.github/workflows/licensed-news-refresh.yml]
+    paths: [.github/workflows/licensed-news-refresh.yml, scripts/refresh-licensed-news.mjs, src/lib/licensed-news-shared.ts]
 permissions:
   contents: write
 concurrency:
@@ -15,7 +16,7 @@ jobs:
   refresh:
     if: github.repository == 'khyma66/visa' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

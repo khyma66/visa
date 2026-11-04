@@ -1,7 +1,7 @@
 {
   "source": "The Texas Tribune",
-  "retrievedAt": "2026-11-04T01:05:25.958Z",
-  "policyCheckedAt": "2026-11-04T01:05:25.958Z",
+  "retrievedAt": "2026-11-04T06:59:51.774Z",
+  "policyCheckedAt": "2026-11-04T06:59:51.774Z",
   "policyDigest": "83e8cafce5e3cba8d74297f86204f3a50ff06a6f6cd84ed93dac0bc33fc2d1d5",
   "articles": [
     {
@@ -100,6 +100,406 @@
         "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/10/20260822-Bluebonnet-Detention-Center-RE-01.jpg?fit=1024%2C683&ssl=1",
         "caption": "The entrance to the Bluebonnet Detention Center in Anson on Aug. 22, 2026. The privately run immigration detention center is operated by Management & Training Corporation, under contract with U.S. Immigration and Customs Enforcement.",
         "credit": "Ronald W. Erdrich for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-247701",
+      "title": "Guatemalan man gets 30 years for role in San Antonio smuggling deaths of 53 migrants",
+      "url": "https://www.texastribune.org/2026/10/21/immigrant-deaths-san-antonio-texas-criminal-case-sentencing/",
+      "author": "Uriel J. García",
+      "publishedAt": "2026-10-21T20:11:03.000Z",
+      "excerpt": "Rigoberto Ramon Miranda-Orozco received a 30-year prison sentence in a San Antonio migrant smuggling case that left 53 people dead.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-247701-83261b3c192c21cd",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/10/0627-Migrant-Truck-NW-10.jpg?fit=1024%2C683&ssl=1",
+        "caption": "53 migrants died in an abandoned tractor-trailer found near Lackland Air Force Base in San Antonio on June 27, 2022.",
+        "credit": "Nick Wagner for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-247225",
+      "title": "Dallas man who died in Laredo ICE facility was lawful permanent resident",
+      "url": "https://www.texastribune.org/2026/10/19/texas-permanent-resident-ice-death-laredo-green-card/",
+      "author": "Colleen DeGuzman, Alex Nguyen, and Uriel J. García",
+      "publishedAt": "2026-10-19T22:57:40.000Z",
+      "excerpt": "ICE said Emiliano Andrade-Covarrubias obtained his legal status fraudulently because he failed to disclose a 2004 arrest for theft. His daughter disputes that.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-247225-cf3083c9cc30bf24",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/04/0401-ICE-Raid-Minor-EG-37-.jpg?fit=1024%2C683&ssl=1",
+        "caption": "A U.S. Immigration and Customs Enforcement agent’s badge is seen in front of the J.J. Pickle Federal Building in Austin on April 1, 2025.",
+        "credit": "Eddie Gaspar/The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-247101",
+      "title": "Migrant found dead at Laredo ICE facility",
+      "url": "https://www.texastribune.org/2026/10/18/migrant-found-dead-ice-laredo/",
+      "author": "Colleen DeGuzman and Alex Nguyen",
+      "publishedAt": "2026-10-18T16:47:28.000Z",
+      "excerpt": "The death was confirmed by U.S. Rep. Henry Cuellar, who said the 56-year-old Mexican national was found unresponsive in his cell. He’s the seventh person in Texas to die while detained by ICE this year.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/"
+    },
+    {
+      "id": "tt-246284",
+      "title": "Harris County prosecutor to investigate ICE striking Houston man with vehicle",
+      "url": "https://www.texastribune.org/2026/10/13/ice-houston-hit-pedestrian-car-criminal-investigation/",
+      "author": "Uriel J. García",
+      "publishedAt": "2026-10-13T22:44:17.000Z",
+      "excerpt": "District Attorney Sean Teare said his office is investigating whether an ICE agent in an SUV intentionally struck Miguel Parra-Hernandez as he fled.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-246284-4efe7810ff994e33",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/10/20260724_SAN_ICEShooting_hearing_19_1.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Harris Co. District Attorney Sean Teare speaks during an oversight hearing about the July 7 fatal shooting of Lorenzo Salgado Araujo, in Houston on July 24, 2026.",
+        "credit": "Jon Shapley for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-246194",
+      "title": "San Antonio sues to block plans to convert warehouse into an ICE detention center",
+      "url": "https://www.texastribune.org/2026/10/13/dhs-ice-warehouse-san-antonio-lawsuit-environmental-impact/",
+      "author": "Alex Nguyen",
+      "publishedAt": "2026-10-13T19:18:33.000Z",
+      "excerpt": "The city argued that federal officials failed to review the environmental impact of a proposed facility that could hold 1,500 people a day.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-246194-57e0a4776ab1ab1b",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/10/20261002-Castro-Migrants-and-Detention-Hearing-CL-37.jpg?fit=1024%2C683&ssl=1",
+        "caption": "A sign reading “ICE Out of SATX” is seen at a field hearing with elected officials hearing testimony about a proposed ICE facility and immigration enforcement efforts by the federal government, in San Antonio on Oct. 2, 2026.",
+        "credit": "Christopher Lee for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-245163",
+      "title": "Judge halts border barrier construction in Big Bend",
+      "url": "https://www.texastribune.org/2026/10/02/texas-big-bend-border-wall-court-ruling-injunction/",
+      "author": "Sam Karas, Big Bend Sentinel",
+      "publishedAt": "2026-10-02T20:40:06.000Z",
+      "excerpt": "U.S. District Judge Kathleen Cardone’s ruling means federal contractors can’t continue construction in the national park or surrounding areas until a lawsuit opposing the work is resolved.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-245163-38011bdbb747e1c3",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/10/20260813-Big-Bend-Clearing-KG-12.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Southwest Valley employees survey an area in the parking lot of a river access area off of Ross Maxwell Scenic Drive in Big Bend National Park on Aug. 13, 2026.",
+        "credit": "Kaylee Greenlee for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-245116",
+      "title": "Austin man has surgery 11 days after being shot by ICE agent",
+      "url": "https://www.texastribune.org/2026/10/01/texas-wilber-rafael-garces-perez-ice-shooting-surgery/",
+      "author": "Zach Leggio",
+      "publishedAt": "2026-10-02T01:45:01.000Z",
+      "excerpt": "The surgery on the Venezuelan national, who has been in custody since his Sept. 20 run-in with an immigration officer, removed the bullet lodged in his back.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-245116-2db0d40c29114a45",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260922-ICE-PRESSER-009.jpg?fit=1024%2C683&ssl=1",
+        "caption": "A video of Wilber Rafael Garces Perez after he was shot by an ICE officer is shown during a news conference conducted by Austin Mayor Kirk Watson and Austin PD Chief Lisa Davis on Sept. 22, 2026, regarding the Sept. 20 shooting.",
+        "credit": "Jacob Lujan/The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-244931",
+      "title": "Texas schools reported losing 14,200 immigrant kids last year. The true number is likely higher.",
+      "url": "https://www.texastribune.org/2026/09/30/immigrant-students-enrollment-texas-schools/",
+      "author": "Megan Menchaca",
+      "publishedAt": "2026-09-30T21:58:12.000Z",
+      "excerpt": "The actual enrollment loss amid increased deportation efforts is much higher as the federal definition that identifies immigrant students is limited, experts said.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-244931-6cefbb6e9d74b69e",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/0913-Odessa-School-Tours-EH-18.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Nimitz Middle School students take part in a class activity on Sept. 13, 2023 in Odessa.",
+        "credit": "Eli Hartman/The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-244758",
+      "title": "Austin man shot by ICE agent charged with assault, resisting arrest",
+      "url": "https://www.texastribune.org/2026/09/29/ice-texas-shooting-wilber-rafael-garces-perez-criminal-complaint/",
+      "author": "Zach Leggio",
+      "publishedAt": "2026-09-29T16:28:57.000Z",
+      "excerpt": "In a federal criminal complaint, DHS says Wilber Rafael Garces Perez knew he was fleeing federal agents and his car’s sideview mirror struck an officer. A judge ordered him to remain in detention.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-244758-92b838fbf43222e7",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260920-ICE-SHOOTING-JL-54.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Immigration and Customs Enforcement agents at the scene where Wilber Rafael Garces Perez, a Venezuelan man, was shot and injured in Austin on Sept. 20, 2026.",
+        "credit": "Jacob Lujan/The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-244636",
+      "title": "ICE agent who shot Lorenzo Salgado Araujo in Houston identified",
+      "url": "https://www.texastribune.org/2026/09/28/houston-ice-lorenzo-salgado-araujo-shooter-identified/",
+      "author": "Lomi Kriel and Eddie Gaspar",
+      "publishedAt": "2026-09-28T21:27:39.000Z",
+      "excerpt": "The federal government has withheld his identification, even as major state and local law enforcement agencies across the country typically identify officers involved in shootings on the job soon after the incident.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/"
+    },
+    {
+      "id": "tt-244425",
+      "title": "Cuellar and progressives form tenuous alliance amid Trump’s immigration crackdown",
+      "url": "https://www.texastribune.org/2026/09/28/cuellar-south-texas-democrat-endorsement/",
+      "author": "Berenice Garcia",
+      "publishedAt": "2026-09-28T10:00:00.000Z",
+      "excerpt": "U.S. Rep. Henry Cuellar is known as one of the most conservative Democrats in Congress who often diverges from the party on issues like immigration, abortion and gun rights.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-244425-7bae5af1c1e327de",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260829-LUPE-Cumbre-GVC-36.jpg?fit=1024%2C683&ssl=1",
+        "caption": "U.S. Rep. Henry Cuéllar, D-Laredo, second from left, takes a photo with people during the LUPE Votes five year anniversary celebration at the Pharr Development and Research Center in Pharr on Aug. 29, 2026.",
+        "credit": "Gabriel V. Cárdenas for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-244130",
+      "title": "Watch: Joaquin Castro, Sigrid Gonzalez and Rochelle Garza discuss Texas’ ICE detention centers",
+      "url": "https://www.texastribune.org/2026/09/26/texas-ice-detention-centers-joaquin-castro-tribfest-2026/",
+      "author": "Texas Tribune Events Staff",
+      "publishedAt": "2026-09-26T19:05:00.000Z",
+      "excerpt": "People who have been inside Texas’ ICE detention centers describe what’s happening, who's being held and what it means for communities, families and the rule of law at 2:15 p.m. Saturday.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/"
+    },
+    {
+      "id": "tt-244454",
+      "title": "Catholic Charities leader says feds have lifted a ban on funding for the nonprofit",
+      "url": "https://www.texastribune.org/2026/09/25/catholic-charities-rio-grande-valley-sister-norma-pimentel-ban-lifted/",
+      "author": "Uriel J. García",
+      "publishedAt": "2026-09-25T19:55:44.000Z",
+      "excerpt": "Sister Norma Pimentel told a Texas Tribune Festival audience that the Rio Grande nonprofit met with government officials to clear up accusations of “major grant violations.”",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-244454-fafb8fb624dd9ef6",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260925-Sister-Norma-Peminte-TTF26-EH-05.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Sister Norma Pimentel, executive director of Catholic Charities of the Rio Grande Valley, speaks during a one-on-one conversation with Niala Boodhoo, journalist and podcast host of “Oh God Now What,” at The Texas Tribune Festival on Sept. 25, 2026.",
+        "credit": "Eli Hartman for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-244138",
+      "title": "ICE shootings prompt different reactions from longtime Democrats leading Austin, Houston",
+      "url": "https://www.texastribune.org/2026/09/23/texas-ice-shooting-mayor-whitmire-watson/",
+      "author": "Colleen DeGuzman",
+      "publishedAt": "2026-09-23T22:40:31.000Z",
+      "excerpt": "Mayor Kirk Watson ordered Austin police to investigate, saying he didn’t trust the feds. Mayor John Whitmire initially said Houston lacked jurisdiction.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-244138-80a2f255e908f2b7",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/Kirk-Watson-and-John-Whitmire-1.jpg?fit=1024%2C683&ssl=1",
+        "caption": "From left: Austin Mayor Kirk Watson and Houston Mayor John Whitmire.",
+        "credit": "Joel Angel Juarez and Jon Shapley for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-244036",
+      "title": "Venezuelan man shot by ICE officer needs surgery to remove the bullet, U.S. Rep. Greg Casar says",
+      "url": "https://www.texastribune.org/2026/09/23/texas-austin-shooting-ice-officer-no-body-cam-reports/",
+      "author": "Zach Leggio and Alex Nguyen",
+      "publishedAt": "2026-09-23T17:35:49.000Z",
+      "excerpt": "The man was shot by a recent ICE recruit who was not wearing a body camera, according to news reports.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-244036-7165ec9a89fcd3f0",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260920-Austin-ICE-Shooting-JL-14.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Law enforcement agents at the scene of a shooting of Wilber Rafael Garces Perez in North Austin on Sunday.",
+        "credit": "Jacob Lujan/The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-243976",
+      "title": "After ICE shooting, Venezuelan man’s quick release from Austin hospital raises questions",
+      "url": "https://www.texastribune.org/2026/09/22/texas-austin-ice-shooting-medical-care/",
+      "author": "Uriel J. García, Zach Leggio, and Alex Nguyen",
+      "publishedAt": "2026-09-22T23:44:56.000Z",
+      "excerpt": "Wilber Rafael Garces Perez was discharged after four hours into ICE custody and taken 135 miles to an immigration detention center.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-243976-2db0d40c29114a45",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260922-ICE-PRESSER-009.jpg?fit=1024%2C683&ssl=1",
+        "caption": "A video of Wilber Rafael Garces Perez after he was shot by an ICE officer is shown during a news conference conducted by Austin Mayor Kirk Watson and Austin PD Chief Lisa Davis on Sept. 22, 2026, regarding the Sept. 20 shooting.",
+        "credit": "Jacob Lujan/The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-241238",
+      "title": "Migrants who planted roots in Texas are being swept up in the immigration crackdown. Here are five of their stories.",
+      "url": "https://www.texastribune.org/2026/09/22/texas-ice-detained-immigrants/",
+      "author": "Uriel J. García, Alejandra Martinez, Alejandro Santos Cid and Alex Nguyen | Illustrations by Lauren Crow | Data analysis by Alex Ford",
+      "publishedAt": "2026-09-22T10:00:00.000Z",
+      "excerpt": "Some detained Texans were pursuing pathways to stay here legally. None had criminal convictions.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-241238-529f06cd261d9859",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/Detained-Migrants-Lead-final.jpg?fit=1024%2C682&ssl=1",
+        "caption": "From left: Malena Chacón Santos, Yeferson Francisco Sequera Ruiz, Dixuan Li, Octavio Daniel Cabrera Valdez, Shahrokh Rahimi.",
+        "credit": "Lauren Crow for The Texas Tribune",
+        "width": 1024,
+        "height": 682
+      }
+    },
+    {
+      "id": "tt-243774",
+      "title": "A surge of ICE arrests and the shooting of a Venezuelan man strike fear into Austin neighborhoods",
+      "url": "https://www.texastribune.org/2026/09/21/texas-austin-ice-shooting-neighborhood/",
+      "author": "Alejandro Serrano, graphics by Alex Ford",
+      "publishedAt": "2026-09-22T01:42:24.000Z",
+      "excerpt": "People who work near the site where ICE shot Wilber Rafael Garces Perez say the agency’s presence in the area has been constant amid President Trump’s mass deportation push.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-243774-21fcb936e8ff20f6",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260920-Austin-ICE-Shooting-JL-30.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Protestors fill the intersection of West Anderson Lane and Research Boulevard in north Austin after an immigration enforcement agent shot and injured Wilber Rafael Garces Perez on Sept. 20, 2026.",
+        "credit": "Jacob Lujan/The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-243721",
+      "title": "Venezuelan man shot by ICE in Austin said he tried to pull over before officers fired at him",
+      "url": "https://www.texastribune.org/2026/09/21/texas-austin-ice-shooting-victim-wilber-rafael-garces-perez/",
+      "author": "Uriel J. García, Alex Nguyen and Zach Leggio",
+      "publishedAt": "2026-09-21T17:28:00.000Z",
+      "excerpt": "Wilber Rafael Garces Perez legally entered the country in 2024 via the CBP One app and applied for asylum, his attorneys said. But he missed a court hearing after the notice went to the wrong address.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-243721-1f0a2bdb21a9ab6c",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260921-ATX-ICE-Shooting-LULAC-Presser-LS-02.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Kate Lincoln-Goldfinch, an immigration attorney representing Wilber Rafael Garces Pérez, who was shot by an immigration officer in Austin on Sunday, listens as Garces Pérez speaks on the phone from detention at a press conference on Monday, Sept. 21, 2026.",
+        "credit": "Leila Saidane for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-243592",
+      "title": "ICE officer shoots, injures man in Austin, officials say",
+      "url": "https://www.texastribune.org/2026/09/20/austin-immigration-shooting-texas/",
+      "author": "Alex Nguyen, Uriel J. García, and Alejandro Serrano",
+      "publishedAt": "2026-09-20T19:57:25.000Z",
+      "excerpt": "The shooting in Austin, which injured Wilber Rafael Garces Perez, came more than two months after an ICE officer fatally shot a man in Houston.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-243592-666de4b21c190fbd",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260920-JL-Austin-ICE-Shooting-08.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Immigration and Customs Enforcement agents in North Austin after a person was shot earlier on Sunday, Sept. 20, 2026.",
+        "credit": "Jacob Lujan/The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
+    {
+      "id": "tt-243467",
+      "title": "Feds reimburse Texas for $7.5 billion in border spending, ending delay",
+      "url": "https://www.texastribune.org/2026/09/18/texas-border-money-reimburse-billions/",
+      "author": "Gabby Birenbaum",
+      "publishedAt": "2026-09-18T19:48:19.000Z",
+      "excerpt": "The grant program was created by the One Big Beautiful Bill Act, which became law in July 2025.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-243467-54e3a84e6c64a9be",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/0601-Clinica-Hope-Border-PR-17.jpg?fit=1024%2C680&ssl=1",
+        "caption": "Texas National Guard soldiers check concertina wire fence where migrants must cross through to turn themselves into Border Patrol in El Paso as seen from Ciudad Juarez, Chihuahua state, Mexico on June 1, 2024.",
+        "credit": "Paul Ratje for the Texas Tribune",
+        "width": 1024,
+        "height": 680
+      }
+    },
+    {
+      "id": "tt-243024",
+      "title": "More young people are getting involved with South Texas civil rights group amid Trump’s immigration crackdown",
+      "url": "https://www.texastribune.org/2026/09/17/trump-immigration-policies-lupe-increase-membership/",
+      "author": "Berenice Garcia",
+      "publishedAt": "2026-09-17T16:00:00.000Z",
+      "excerpt": "For La Union del Pueblo Entero’s biennial convention, members under 45 years old made up the largest share of participants.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-243024-cbb56b43278b40e3",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260829-LUPE-Cumbre-GVC-18.jpg?fit=1024%2C680&ssl=1",
+        "caption": "The Gámez-Cuéllar Mariachi performs during the La Unión del Pueblo Entero biennial Cumbre de Miembros 2026 at the Pharr Development and Research Center in Pharr on Aug, 29, 2026.",
+        "credit": "Gabriel V. Cárdenas for The Texas Tribune",
+        "width": 1024,
+        "height": 680
+      }
+    },
+    {
+      "id": "tt-243186",
+      "title": "Minnesota drops extradition lawsuit against Abbott after ICE officer’s arrest",
+      "url": "https://www.texastribune.org/2026/09/17/texas-minnesota-extradition-ice-christian-castro-arrest/",
+      "author": "Alex Nguyen",
+      "publishedAt": "2026-09-17T15:18:08.000Z",
+      "excerpt": "Minnesota prosecutors accused Christian Castro of injuring a Venezuelan man and lying about what led to the shooting. He also faces federal charges.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/"
+    },
+    {
+      "id": "tt-240265",
+      "title": "What to know about possible border barriers in Big Bend",
+      "url": "https://www.texastribune.org/2026/09/14/texas-big-bend-national-park-border-wall-plans-explainer/",
+      "author": "Uriel J. García, graphic by Alex Ford",
+      "publishedAt": "2026-09-14T18:49:27.000Z",
+      "excerpt": "The Trump administration has said the remote West Texas region needs measures to stop illegal immigration. But a bipartisan group of elected officials is pushing to halt that plan, especially in the national park.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-240265-c7ce5741778ad959",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/08/Greenlee-Big-Bend-Clearing-21.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Southwest Valley employees clear an area near the Santa Elena Canyon trailhead parking lot in Big Bend National Park on Aug. 13, 2026.",
+        "credit": "Kaylee Greenlee for The Texas Tribune",
         "width": 1024,
         "height": 683
       }
