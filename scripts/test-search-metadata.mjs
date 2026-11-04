@@ -18,11 +18,11 @@ const approved = { APP_ENV: 'production', PUBLIC_LAUNCH_APPROVED: 'true', NEXT_P
 
 test('editorial discovery indexes canonical resources but not filters or individual discussions', () => {
   const env = { ...approved, APP_ENV: 'development', PUBLIC_LAUNCH_APPROVED: 'false', SEARCH_DISCOVERY_ENABLED: 'true' };
-  for (const path of ['/', '/about', '/guides', `/guides/${VISA_GUIDES[0].slug}`]) {
+  for (const path of ['/us/en', '/about', '/guides', `/guides/${VISA_GUIDES[0].slug}`]) {
     assert.equal(publicPageMetadata(path, 'Title', 'Description', {}, true, env).robots.index, true);
     assert.equal(publicPageMetadata(path, 'Title', 'Description', { sort: 'unanswered' }, true, env).robots.index, false);
   }
-  for (const path of ['/questions/apify-123', '/questions/11111111-1111-4111-8111-111111111111', '/admin/analytics']) {
+  for (const path of ['/', '/questions/apify-123', '/questions/11111111-1111-4111-8111-111111111111', '/admin/analytics']) {
     assert.equal(publicPageMetadata(path, 'Title', 'Description', {}, true, env).robots.index, false);
   }
 });
