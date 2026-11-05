@@ -28,8 +28,8 @@ test('every migrated content route has an explicit implemented US English destin
   assert.equal(destinationPath('/questions/abc?view=all#answer-1'), '/us/en/questions/abc?view=all#answer-1');
 });
 
-test('shared identity, support, APIs, creation, assets and global root keep their URLs', () => {
-  for (const path of ['/', '/login', '/signup', '/account/recovery', '/account/update-password', '/messages', '/account', '/ask', '/experiences/new', '/communities/new', '/my-communities', '/contact', '/privacy', '/security', '/terms', '/countries', '/api/community', '/api/health', '/assets/brand/logo.png', '/sitemap.xml', '/robots.txt']) {
+test('shared identity, support, APIs, creation and assets keep their URLs', () => {
+  for (const path of ['/login', '/signup', '/account/recovery', '/account/update-password', '/messages', '/account', '/ask', '/experiences/new', '/communities/new', '/my-communities', '/contact', '/privacy', '/security', '/terms', '/countries', '/api/community', '/api/health', '/assets/brand/logo.png', '/sitemap.xml', '/robots.txt']) {
     assert.equal(legacyDestinationRedirect(path), null, path);
   }
 });
@@ -63,7 +63,7 @@ test('GET and HEAD legacy links preserve every query parameter on the same envir
 test('country routing cannot bypass the existing public launch gate', async () => {
   const before = { app:process.env.APP_ENV, approved:process.env.PUBLIC_LAUNCH_APPROVED };
   process.env.APP_ENV='production';process.env.PUBLIC_LAUNCH_APPROVED='false';
-  try { for(const path of ['/news','/us/en/news','/us/en']) assert.equal((await middleware(request(path))).status,503); }
+  try { for(const path of ['/','/news','/us/en/news','/us/en']) assert.equal((await middleware(request(path))).status,503); }
   finally { for(const [key,value] of [['APP_ENV',before.app],['PUBLIC_LAUNCH_APPROVED',before.approved]]) if(value===undefined) delete process.env[key];else process.env[key]=value; }
 });
 
@@ -82,4 +82,19 @@ test('published support mailboxes and recovery endpoint are preserved', async ()
   for(const mailbox of ['support','privacy','security']) assert(contact.includes(`mailto:${mailbox}@visathreads.com`));
   assert((await read('src/components/PasswordRecovery.tsx')).includes('${window.location.origin}/account/update-password'));
   assert(!(await read('src/lib/destination-routing.ts')).includes('supabase'));
+});
+
+ test('homepage default is temporary, uncached and preserves filters without affecting mutations', async () => {
+  const before=process.env.APP_ENV; process.env.APP_ENV='development';
+  try {
+    assert.equal(legacyDestinationRedirect('/'),'/us/en');
+    for(const origin of ['https://visathreads.com','https://visa-central.com']) for(const method of ['GET','HEAD']) {
+      const result=await middleware(request('/?q=h1b&tag=f1&tag=h4',method,origin));
+      assert.equal(result.status,307);
+      assert.equal(result.headers.get('location'),origin+'/us/en?q=h1b&tag=f1&tag=h4');
+      assert.equal(result.headers.get('cache-control'),'private, no-store');
+    }
+    assert.equal((await middleware(request('/','POST'))).headers.get('location'),null);
+    assert(!(await read('src/app/page.tsx')).includes('Visa destination: United States'));
+  } finally { if(before===undefined) delete process.env.APP_ENV; else process.env.APP_ENV=before; }
 });

@@ -18,7 +18,8 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   if ((!production || approved) && migratedPath && ['GET', 'HEAD'].includes(request.method)) {
     const destination = new URL(request.nextUrl.toString());
     destination.pathname = migratedPath;
-    const redirect = NextResponse.redirect(destination, 308);
+    // The homepage default may change with future destination preferences.
+    const redirect = NextResponse.redirect(destination, request.nextUrl.pathname === '/' ? 307 : 308);
     redirect.headers.set('Cache-Control', 'private, no-store');
     redirect.headers.set('Referrer-Policy', 'no-referrer');
     return redirect;

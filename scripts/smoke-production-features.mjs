@@ -30,7 +30,7 @@ await verifyStableRollout({ expected, previous: receipt.health,
     await removedPage.body?.cancel();
     await smokeSite(LIVE_SITE, expected, { fetchImpl: probe.siteFetch, skipHealthWait: true });
     await verifyPlaybookPages(probe, feed, true);
-    const home = await probe.request('search-home', '/');
+    const home = await probe.request('search-home', '/us/en');
     assert.equal(home.headers.get('x-visathreads-search'), 'editorial');
     assert(!/noindex/i.test(home.headers.get('x-robots-tag') ?? ''));
     const html = await home.text();
