@@ -25,6 +25,8 @@ before(async()=>{
     insert into public.questions values('${post}','${author}','open',null),('${hidden}','${author}','archived',null);
     insert into public.policy_acceptances values('${member}','2026-11-02-preview-v3'),('${author}','2026-11-02-preview-v3');`);
   await db.exec(migration);
+  await db.exec("alter table public.policy_acceptances enable row level security; create policy record_current_policy on public.policy_acceptances for insert to authenticated with check(user_id=auth.uid());");
+  await db.exec(await readFile(new URL('../../supabase/migrations/20261105060304_post_view_privacy_notice_v4.sql',import.meta.url),'utf8'));
   await db.exec(restriction);
 });
 after(()=>db.close());
