@@ -23,6 +23,7 @@ import { useAuth } from './AuthProvider';
 import { ReportButton } from './ReportButton';
 import { PostOriginBadge } from './PostOriginBadge';
 import { PostActions } from './PostActions';
+import { PostViews } from './PostViews';
 
 function Author({ id, username, seed, createdAt, sourceOnly = false }: { id: string; username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
   return (
@@ -163,7 +164,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/us/en/experiences" className="underline capitalize">Experience</Link> · {question.experience_category}</p>}
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span>{question.destination_country !== 'Global' && <span className="text-slate-400">{question.destination_country}</span>}<PostOriginBadge post={question} /></div>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-950">{question.title}</h1>
-            <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : experience ? 'replies' : 'answers'}</span></div>
+            <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : experience ? 'replies' : 'answers'}</span><PostViews key={question.id} postId={question.id} record/></div>
           </section>
           <article className="flex flex-wrap gap-3 py-8 sm:gap-5">
             {imported ? <ImportedScore score={question.vote_score} /> : <VoteRail score={question.vote_score} own={question.author_id === user?.id} onVote={(value) => {
