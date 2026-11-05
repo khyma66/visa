@@ -8,6 +8,7 @@ import type { Question } from '@/lib/types';
 import { Avatar } from './Avatar';
 import { PostOriginBadge } from './PostOriginBadge';
 import { PostActions } from './PostActions';
+import { PostViews } from './PostViews';
 
 function compact(value: number) {
   return Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
@@ -25,6 +26,7 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
             <PostOriginBadge post={question} />
             <span aria-hidden="true" className="capitalize">·</span>
             <time className="capitalize" dateTime={question.created_at} title={new Date(question.created_at).toLocaleString()}>{formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</time>
+            <PostViews postId={question.id}/>
             <span className="ml-auto rounded bg-blue-50 px-2 py-1 font-semibold text-blue-800">{question.visa_type}</span>
           </div>
           <Link href={path} className="block break-words text-thread-title font-semibold text-slate-950 decoration-1 underline-offset-4 hover:text-blue-700 hover:underline">
@@ -44,7 +46,6 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
             </Link>
             {onRelated && <button onClick={() => onRelated(question)} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 hover:bg-slate-200 capitalize"><GitFork size={14} aria-hidden="true" />Related</button>}
 
-            {/* Views are not instrumented. A legacy zero or share count is not a measured view total. */}
             <PostActions postId={question.id} path={path} imported={imported} author={question} showReply={false}/>
           </div>
       </div>

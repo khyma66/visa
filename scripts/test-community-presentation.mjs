@@ -48,6 +48,7 @@ dependencies['./PostOriginBadge'] = (await component('PostOriginBadge')).url;
 dependencies['./PostShare'] = (await component('PostShare')).url;
 dependencies['@/lib/post-library'] = moduleUrl('export const emptyLibraryEntry=id=>({entry:{post_id:id,saved:false,followed:false},loading:true,error:false}),libraryStore=()=>({}),watchLibrary=()=>()=>{},changeLibraryEntry=()=>{},retryLibrary=()=>{};');
 dependencies['./CompactTextarea'] = (await component('CompactTextarea')).url;
+dependencies['./PostViews'] = moduleUrl('export const PostViews=()=>null;');
 dependencies['./PostActions'] = (await component('PostActions')).url;
 dependencies['./PostAward'] = (await component('PostAward')).url;
 const {value:{QuestionCard},url:cardUrl} = await component('QuestionCard');

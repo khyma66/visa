@@ -53,6 +53,8 @@ dependencies['./SafetyNotice'] = await compile('../src/components/SafetyNotice.t
 dependencies['./PostShare'] = await compile('../src/components/PostShare.tsx');
 dependencies['@/lib/post-library'] = moduleUrl('export const emptyLibraryEntry=id=>({entry:{post_id:id,saved:false,followed:false},loading:true,error:false}),libraryStore=()=>({}),watchLibrary=()=>()=>{},changeLibraryEntry=()=>{},retryLibrary=()=>{};');
 dependencies['./CompactTextarea'] = await compile('../src/components/CompactTextarea.tsx');
+dependencies['@/lib/post-views'] = moduleUrl('export const observePostView=()=>()=>{},postViewCount=()=>null,watchPostViews=()=>()=>{};');
+dependencies['./PostViews'] = await compile('../src/components/PostViews.tsx');
 dependencies['./PostActions'] = await compile('../src/components/PostActions.tsx');
 dependencies['./PostAward'] = await compile('../src/components/PostAward.tsx');
 const { QuestionCard } = await import(await compile('../src/components/QuestionCard.tsx'));

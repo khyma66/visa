@@ -9,7 +9,7 @@ import { publicSearchOrigin } from './search-visibility';
 const IMPORTED_THREAD_ID = /^apify-[a-zA-Z0-9_-]{1,160}$/;
 
 /** Match /api/community's snapshot gate. Server rendering never starts ingestion. */
-function publicArchive() {
+export function publicArchive() {
   if (process.env.COMMUNITY_SOURCE_MODE !== 'snapshot'
     || (process.env.APP_ENV === 'production' && process.env.IMPORTED_CONTENT_APPROVED !== 'true')) return null;
   return normalizeArchiveFeed(archive as unknown as CommunityFeed);

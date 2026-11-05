@@ -1,4 +1,4 @@
-import { trafficDecision, recordTrafficSignal, type SecurityBindings } from './security-edge';
+import { trafficDecision, recordTrafficSignal, telemetryFailureDetails, type SecurityBindings } from './security-edge';
 
 export async function protectTraffic(request: Request, waitUntil: (task: Promise<unknown>) => void): Promise<Response | null> {
   let env: SecurityBindings;
@@ -7,8 +7,8 @@ export async function protectTraffic(request: Request, waitUntil: (task: Promise
   try {
     const signal = await trafficDecision(request, env);
     if (!signal) return null;
-    waitUntil(recordTrafficSignal(request, signal, env).catch(() => {
-      console.warn('security_telemetry_unavailable');
+    waitUntil(recordTrafficSignal(request, signal, env).catch((error: unknown) => {
+      console.warn('security_telemetry_unavailable', telemetryFailureDetails(error));
     }));
     const status = signal.kind === 'probe_path' ? 404 : signal.kind === 'read_rate_limit' ? 429 : 403;
     return new Response(status === 429 ? 'Too many requests from this network. Please wait a minute and retry.' : status === 404 ? 'Not found.' : 'Cross-site feed requests are not supported.', {

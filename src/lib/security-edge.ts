@@ -8,6 +8,20 @@ export type SecurityBindings = {
   SECURITY_EVENT_SAMPLE?: Limiter; SECURITY_EVENT_BUDGET?: Limiter;
   SECURITY_INGEST_KEY?: string;
 };
+type TelemetryStage = 'fingerprint' | 'sample' | 'budget' | 'delivery';
+class SecurityTelemetryError extends Error {
+  constructor(readonly stage: TelemetryStage, readonly status?: number) {
+    super('Security telemetry unavailable');
+  }
+}
+// Log only fields created here, never messages from bindings or upstream services.
+export function telemetryFailureDetails(error: unknown): {stage: TelemetryStage | 'unknown'; status?: number} {
+  return error instanceof SecurityTelemetryError ? {stage:error.stage,...(error.status ? {status:error.status} : {})} : {stage:'unknown'};
+}
+async function telemetryStep<T>(stage: TelemetryStage, task: () => Promise<T>): Promise<T> {
+  try { return await task(); }
+  catch (error) { throw error instanceof SecurityTelemetryError ? error : new SecurityTelemetryError(stage); }
+}
 export function trafficGroup(path: string): TrafficGroup | null {
   path = unprefixedDestinationPath(path);
   if (/^\/(?:\.env(?:\.|\/|$)|\.git(?:\/|$)|wp-admin(?:\/|$)|wp-login\.php$|phpmyadmin(?:\/|$))/i.test(path)) return 'probe';
@@ -47,9 +61,10 @@ export async function recordTrafficSignal(request: Request, signal: TrafficSigna
   if (!secret || !/^[a-f0-9]{64}$/.test(secret) || !ip || !env.SECURITY_EVENT_SAMPLE || !env.SECURITY_EVENT_BUDGET) return;
   // At most one observation per traffic group/minute/location, plus a global local cap.
   // Counts in the dashboard are sampled observations, never exact blocked requests.
-  const actor_hash = await trafficFingerprint(ip, secret);
-  if (!(await env.SECURITY_EVENT_SAMPLE.limit({key:`${signal.kind}:${signal.route_group}:${actor_hash}`})).success) return;
-  if (!(await env.SECURITY_EVENT_BUDGET.limit({key:'security-events'})).success) return;
+  const actor_hash = await telemetryStep('fingerprint', () => trafficFingerprint(ip, secret));
+  const sample = env.SECURITY_EVENT_SAMPLE, budget = env.SECURITY_EVENT_BUDGET;
+  if (!(await telemetryStep('sample', () => sample.limit({key:`${signal.kind}:${signal.route_group}:${actor_hash}`}))).success) return;
+  if (!(await telemetryStep('budget', () => budget.limit({key:'security-events'}))).success) return;
   const origin = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const expected = new URL(request.url).hostname;
@@ -62,12 +77,16 @@ export async function recordTrafficSignal(request: Request, signal: TrafficSigna
   if (!key || origin !== origins[expected]) return;
   const ray = request.headers.get('cf-ray');
   const ray_id = ray && /^[a-fA-F0-9]{16,32}(-[A-Z]{3})?$/.test(ray) ? ray : undefined;
-  const response = await fetch(`${origin}/rest/v1/rpc/record_security_event`, {
-    method:'POST', headers:{apikey:key,'Content-Type':'application/json','x-security-ingest-key':secret},
-    body:JSON.stringify({event:{...signal,actor_hash,...(ray_id ? {ray_id} : {})}}),
-    signal:AbortSignal.timeout(4000), redirect:'error',
+  await telemetryStep('delivery', async () => {
+    // workerd supports manual/follow, not redirect:error. Reject all non-2xx
+    // responses ourselves: the ingestion capability must never follow a redirect.
+    const response = await fetch(`${origin}/rest/v1/rpc/record_security_event`, {
+      method:'POST', headers:{apikey:key,'Content-Type':'application/json','x-security-ingest-key':secret},
+      body:JSON.stringify({event:{...signal,actor_hash,...(ray_id ? {ray_id} : {})}}),
+      signal:AbortSignal.timeout(4000), redirect:'manual',
+    });
+    // No request URL/query, IP, cookie, access token or private message goes to logs.
+    await response.body?.cancel();
+    if (!response.ok) throw new SecurityTelemetryError('delivery', response.status);
   });
-  // No request URL/query, IP, cookie, access token or private message goes to logs.
-  if (!response.ok) throw new Error('Security telemetry unavailable');
-  await response.body?.cancel();
 }
