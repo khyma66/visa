@@ -42,13 +42,13 @@ test('account changes reject writes and ignore late reads from the prior session
   await assert.rejects(()=>lib.changeLibraryEntry(old,'one','saved',true),/account changed/);
   finish({data:[{post_id:'one',saved:true,followed:true}],error:null});await tick();assert.equal(next.values.size,0);assert.equal(old.values.size,0);
 });
-test('post cards and details share the five actions and no longer mount Award',async()=>{
+test('post cards and details share the overflow actions and no longer mount Award',async()=>{
   for(const name of ['QuestionCard','QuestionDetail']) {
     const text=await readFile(new URL(`../src/components/${name}.tsx`,import.meta.url),'utf8');
     assert.match(text,/<PostActions /);assert.doesNotMatch(text,/<PostAward|import .*PostAward/);
   }
   const actions=await readFile(new URL('../src/components/PostActions.tsx',import.meta.url),'utf8');
-  for(const name of ['MessageCircle','Bell','Bookmark','ReportButton','PostShare']) assert(actions.includes(name));
+  for(const name of ['ActionPopover','Ellipsis','Bell','Bookmark','ReportButton','PostShare']) assert(actions.includes(name));
   const reply=await readFile(new URL('../src/components/QuestionDetail.tsx',import.meta.url),'utf8');
   const ask=await readFile(new URL('../src/components/AskQuestionForm.tsx',import.meta.url),'utf8');
   assert.match(reply,/<CompactTextarea[^>]+rows=\{1\}/);assert.match(ask,/<CompactTextarea[^>]+rows=\{3\}/);
@@ -56,7 +56,7 @@ test('post cards and details share the five actions and no longer mount Award',a
 
 test('narrow profile cards keep one action row and account tabs do not collapse',async()=>{
   const css=await readFile(new URL('../src/styles/globals.css',import.meta.url),'utf8');
-  assert.match(css,/@container post-actions \(max-width: 280px\)/);
+  assert.match(css,/\.post-options-trigger/);assert.match(css,/max-width: calc\(100vw - 16px\)/);
   const account=await readFile(new URL('../src/components/AccountClient.tsx',import.meta.url),'utf8');
   assert.match(account,/inline-flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2/);
 });

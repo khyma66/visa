@@ -49,6 +49,9 @@ dependencies['./PostShare'] = (await component('PostShare')).url;
 dependencies['@/lib/post-library'] = moduleUrl('export const emptyLibraryEntry=id=>({entry:{post_id:id,saved:false,followed:false},loading:true,error:false}),libraryStore=()=>({}),watchLibrary=()=>()=>{},changeLibraryEntry=()=>{},retryLibrary=()=>{};');
 dependencies['./CompactTextarea'] = (await component('CompactTextarea')).url;
 dependencies['./PostViews'] = moduleUrl('export const PostViews=()=>null;');
+// Expose disclosure contents in these policy/presentation fixtures; real closed behavior is tested separately.
+dependencies['./ActionPopover'] = moduleUrl(`import {jsx} from ${JSON.stringify(import.meta.resolve('react/jsx-runtime'))};export function ActionPopover({label,trigger,children}){return jsx('section',{'aria-label':label,children:jsx('div',{children})});}`);
+dependencies['./AuthorIdentity'] = (await component('AuthorIdentity')).url;
 dependencies['./PostActions'] = (await component('PostActions')).url;
 dependencies['./PostAward'] = (await component('PostAward')).url;
 const {value:{QuestionCard},url:cardUrl} = await component('QuestionCard');
@@ -149,7 +152,7 @@ test('an apify ID remains source-only even when its source flag/link are absent 
 test('native post messaging binds both public username and registered profile ID for guests and other members',()=>{
   for(const user of [null,{id:bob}]) {
     const html=render(QuestionDetail,{initialQuestion:native},{user});
-    assert(html.includes(`/messages?to=alice-test&amp;member=${alice}`));assert(html.includes('Message user'));
+    assert(html.includes(`/messages?to=alice-test&amp;member=${alice}`));assert(html.includes('aria-label="Message alice-test"'));
     assert(html.includes('aria-label="Upvote"'));assert(html.includes('u/alice-test'));
   }
   assert(!render(QuestionDetail,{initialQuestion:native},{user:{id:alice}}).includes('Message user'));
