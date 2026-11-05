@@ -41,3 +41,12 @@ test('invalid batches, signatures and stale dates cannot inflate counts',async()
  for(const args of [[[],null,null],[Array(51).fill(post),null,null],[[post],'bad',new Date().toISOString().slice(0,10)],[[post],'ab'.repeat(32),'2020-01-01'],[[post,hidden],'ab'.repeat(32),new Date().toISOString().slice(0,10)]])
  await as('ab'.repeat(32),'anon',()=>assert.rejects(()=>db.query('select public.post_views($1,$2,$3)',args),/Invalid view request/));
 });
+test('the daily retention cutoff stays below the published three-day maximum',async()=>{
+ const cleanup=await readFile(new URL('../../supabase/migrations/20261105061310_tighten_post_view_retention.sql',import.meta.url),'utf8');
+ // The cron interface is stubbed locally; exercise the exact scheduled SQL.
+ const sql=cleanup.split('$job$')[1];
+ await db.exec("insert into private.post_view_dedup values('apify-expired',repeat('ab',32),(now() at time zone 'UTC')::date-2),('apify-recent',repeat('ab',32),(now() at time zone 'UTC')::date-1)");
+ await db.exec(sql);const rows=(await db.query('select post_id from private.post_view_dedup')).rows;
+ assert.deepEqual(rows,[{post_id:'apify-recent'}]);
+ await db.exec('delete from private.post_view_dedup');
+});
