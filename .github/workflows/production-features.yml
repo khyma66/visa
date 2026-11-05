@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Owner security evidence: privacy-safe delivery diagnostics; restricted schema required.
+# Owner security evidence: workerd-compatible delivery with redacted diagnostics.
 
 on:
   workflow_dispatch:

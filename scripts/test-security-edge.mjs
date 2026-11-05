@@ -37,7 +37,7 @@ test('telemetry is minimal, secret server-side, no redirects, private requests n
   process.env.NEXT_PUBLIC_SUPABASE_URL='https://cycnichledvqbxevrwnt.supabase.co';process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='public-test-key';
   let calls=0;
   t.mock.method(globalThis,'fetch',async(url,init)=>{
-    calls++;assert.equal(url,process.env.NEXT_PUBLIC_SUPABASE_URL+'/rest/v1/rpc/record_security_event');assert.equal(init.redirect,'error');
+    calls++;assert.equal(url,process.env.NEXT_PUBLIC_SUPABASE_URL+'/rest/v1/rpc/record_security_event');assert.equal(init.redirect,'manual');
     const payload=JSON.parse(init.body).event;assert.deepEqual(Object.keys(payload).sort(),['actor_hash','decision','kind','route_group']);
     assert(!init.body.includes('192.0.2'));assert(!init.body.includes('my-secret'));assert.equal(init.headers['x-security-ingest-key'],'ef'.repeat(32));
     return new Response(null,{status:204});

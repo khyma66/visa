@@ -78,13 +78,15 @@ export async function recordTrafficSignal(request: Request, signal: TrafficSigna
   const ray = request.headers.get('cf-ray');
   const ray_id = ray && /^[a-fA-F0-9]{16,32}(-[A-Z]{3})?$/.test(ray) ? ray : undefined;
   await telemetryStep('delivery', async () => {
-  const response = await fetch(`${origin}/rest/v1/rpc/record_security_event`, {
-    method:'POST', headers:{apikey:key,'Content-Type':'application/json','x-security-ingest-key':secret},
-    body:JSON.stringify({event:{...signal,actor_hash,...(ray_id ? {ray_id} : {})}}),
-    signal:AbortSignal.timeout(4000), redirect:'error',
-  });
-  // No request URL/query, IP, cookie, access token or private message goes to logs.
-  await response.body?.cancel();
-  if (!response.ok) throw new SecurityTelemetryError('delivery', response.status);
+    // workerd supports manual/follow, not redirect:error. Reject all non-2xx
+    // responses ourselves: the ingestion capability must never follow a redirect.
+    const response = await fetch(`${origin}/rest/v1/rpc/record_security_event`, {
+      method:'POST', headers:{apikey:key,'Content-Type':'application/json','x-security-ingest-key':secret},
+      body:JSON.stringify({event:{...signal,actor_hash,...(ray_id ? {ray_id} : {})}}),
+      signal:AbortSignal.timeout(4000), redirect:'manual',
+    });
+    // No request URL/query, IP, cookie, access token or private message goes to logs.
+    await response.body?.cancel();
+    if (!response.ok) throw new SecurityTelemetryError('delivery', response.status);
   });
 }
