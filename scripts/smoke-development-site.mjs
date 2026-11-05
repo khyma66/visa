@@ -1,3 +1,4 @@
+import { verifySecureTransport } from './smoke-transport.mjs';
 import assert from 'node:assert/strict';
 import { setTimeout } from 'node:timers/promises';
 
@@ -17,6 +18,7 @@ assert.equal(health.build.siteOrigin, origin);
 if (process.env.GITHUB_SHA) assert.equal(health.build.gitSha, process.env.GITHUB_SHA, 'Hosted source matches checked commit');
 assert.equal(health.build.dirty, false, 'Deployment uses committed source');
 assert.equal(health.releaseStatus, 'configured');
+await verifySecureTransport(origin);
 for (const path of ['/', '/login', '/signup', '/ask', '/experiences', '/experiences/new', '/explore', '/tags', '/news']) {
   const response = await request(path);
   assert.equal(response.status, 200, path);

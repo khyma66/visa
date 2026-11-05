@@ -1,3 +1,4 @@
+import { verifySecureTransport } from './smoke-transport.mjs';
 import { verifyDestinationRoutes } from './smoke-destination-routing.mjs';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -43,6 +44,7 @@ await verifyStableRollout({ expected, previous: receipt.health,
     assert.match(sitemap, /<loc>https:\/\/visathreads.com\/us\/en\/guides/);
     assert(!/<loc>[^<]*\/(questions|experiences|admin|owner|account|messages)\//.test(sitemap));
     await verifyDestinationRoutes(LIVE_SITE);
+    await verifySecureTransport(LIVE_SITE);
     await verifyClientAssets(probe, assets);
     await probeRolloutHealth(probe, 'end');
   },
