@@ -16,6 +16,7 @@ import {
 import type { Answer, Question } from '@/lib/types';
 import { subscribeLive, type LiveStatus } from '@/lib/realtime';
 import { getMemberMessageHref, isMemberId } from '@/lib/messaging-state';
+import { featureAccess } from '@/lib/feature-access';
 import { RelatedQuestions } from './RelatedQuestions';
 import { ResizablePostLayout } from './ResizablePostLayout';
 import { Avatar } from './Avatar';
@@ -154,7 +155,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
   const imported = isImportedPost(question);
   const experience = question.post_kind === 'experience';
   const threadPath = `/us/en/${experience ? 'experiences' : 'questions'}/${id}`;
-  const authorMessageHref = getMemberMessageHref(question, user?.id);
+  const authorMessageHref = featureAccess.directMessaging ? getMemberMessageHref(question, user?.id) : null;
   const canAnswer = question.status === 'open';
   return (
     <main className="page-shell mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -177,7 +178,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
               <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
                 <div className="flex gap-2">
 
-                  {authorMessageHref && <Link href={authorMessageHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 capitalize"><MessageCircle size={15} /> Message author</Link>}
+                  {authorMessageHref && <Link href={authorMessageHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 capitalize"><MessageCircle size={15} /> Message user</Link>}
                 </div>
                 <Author id={question.id} username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
               </div>
@@ -195,7 +196,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             <div className="divide-y divide-slate-200">
               {answers.map((answer) => {
                 const sourceOnly = isImportedPost(answer);
-                const messageHref = getMemberMessageHref(answer, user?.id);
+                const messageHref = featureAccess.directMessaging ? getMemberMessageHref(answer, user?.id) : null;
                 return (
                 <article key={answer.id} id={`answer-${answer.id}`} className={`flex scroll-mt-24 gap-3 py-8 sm:gap-5 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
                   {sourceOnly ? <ImportedScore score={answer.vote_score} /> : imported ? <MessageCircle className="w-11 shrink-0 text-blue-600" size={22} /> : <VoteRail score={answer.vote_score} own={answer.author_id === user?.id} accepted={answer.is_accepted} onVote={(value) => {

@@ -6,7 +6,7 @@ export const PASSWORD_GUIDANCE = 'Use a unique password with 12–128 characters
 
 export type SocialProvider = 'google';
 export type AuthMethods = { google: boolean; phone: boolean };
-export type SignupNames = { firstName: string; lastName: string };
+export type SignupNames = { firstName: string; lastName: string; contactPhone?: string };
 export type AuthErrorContext = {
   action?: 'request-code' | 'verify-code' | 'password' | 'signup' | 'oauth' | 'sign-out';
   createAccount?: boolean;
@@ -77,7 +77,40 @@ function signupNameData(names?: SignupNames) {
   const last_name = (names?.lastName ?? '').trim().normalize('NFC');
   if (!/^\p{L}/u.test(first_name) || first_name.includes('@') || [...first_name].length > 80 || /[\u0000-\u001f\u007f]/.test(first_name)) throw { code: 'invalid_first_name' };
   if (!/^\p{L}/u.test(last_name) || last_name.includes('@') || [...last_name].length > 80 || /[\u0000-\u001f\u007f]/.test(last_name)) throw { code: 'invalid_last_name' };
-  return { first_name, last_name };
+  return { first_name, last_name, ...(names?.contactPhone?.trim() ? { contact_phone: normalizePhone(names.contactPhone) } : {}) };
+}
+
+/** Local feedback only; the auth service still validates every request. */
+export function authFieldError(name: string, value: string, signup: boolean, password = ''): string {
+  try {
+    if (name === 'email') normalizeEmail(value);
+    if (name === 'phone' || (name === 'contactPhone' && value.trim())) normalizePhone(value);
+    if (signup && (name === 'firstName' || name === 'lastName')) {
+      signupNameData({ firstName: name === 'firstName' ? value : 'Valid', lastName: name === 'lastName' ? value : 'Valid' });
+    }
+    if (signup && name === 'password' && (value.length < MIN_PASSWORD_LENGTH || value.length > MAX_PASSWORD_LENGTH)) throw { code: 'invalid_password' };
+    if (signup && name === 'passwordConfirmation' && value !== password) throw { code: 'password_mismatch' };
+    return '';
+  } catch (error) { return authErrorMessage(error); }
+}
+
+/** Contact metadata is private account data, never an entitlement or verified SMS identity. */
+export async function getPrivateContactPhone(client: SupabaseClient, userId: string): Promise<string> {
+  const { data, error } = await client.auth.getUser();
+  if (error || !data.user || data.user.id !== userId) throw new Error('Your contact details could not be loaded. Please try again.');
+  const phone = data.user.user_metadata?.contact_phone;
+  if (typeof phone !== 'string') return '';
+  try { return normalizePhone(phone); } catch { return ''; }
+}
+
+export async function savePrivateContactPhone(client: SupabaseClient, userId: string, value: string): Promise<string> {
+  const phone = value.trim() ? normalizePhone(value) : '';
+  await getPrivateContactPhone(client, userId);
+  const { data, error } = await client.auth.updateUser({ data: { contact_phone: phone || null } });
+  if (error || data.user?.id !== userId) throw new Error('Your phone number could not be saved. Please try again.');
+  const saved = await getPrivateContactPhone(client, userId);
+  if (saved !== phone) throw new Error('Your phone number was not confirmed. Please try again.');
+  return saved;
 }
 
 export async function requestEmailCode(client: SupabaseClient, email: string, redirectTo: string, createAccount = false, names?: SignupNames, captchaToken?: string) {

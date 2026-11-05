@@ -27,6 +27,7 @@ const navigation = dataUrl(`
 `);
 const auth = dataUrl('export function useAuth(){return globalThis.__authHarness.auth;}');
 const dependencies = {
+  './PrivateContactPhone': dataUrl('export const PrivateContactPhone=()=>null;'),
   './NotificationLinks': dataUrl('export const NotificationLinks=()=>null;'),
   './NotificationSettings': dataUrl('export const NotificationSettings=()=>null;'),
   './TurnstileCheck': dataUrl('export function TurnstileCheck(){return null;}'),
@@ -130,6 +131,9 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 dependencies['@/lib/auth-flow'] = await compile('../src/lib/auth-flow.ts');
 dependencies['@/lib/supabase/client'] = dataUrl('export function getAuthMethods(...args){return globalThis.__authHarness.invoke("getAuthMethods", args);} export function getSupabase(){return {auth:{resetPasswordForEmail:(...args)=>globalThis.__authHarness.invoke("resetPasswordForEmail",args)}};}');
 const { AuthForm } = await import(await compile('../src/components/AuthForm.tsx'));
+const { PrivateContactPhone } = await import(await compile('../src/components/PrivateContactPhone.tsx', {
+  '@/lib/supabase/client': dataUrl('export const getSupabase=()=>({auth:{getUser:(...args)=>globalThis.__authHarness.invoke("getUser",args),updateUser:(...args)=>globalThis.__authHarness.invoke("updateUser",args)}});'),
+}));
 const { PasswordRecovery } = await import(await compile('../src/components/PasswordRecovery.tsx'));
 dependencies['./FeedbackLauncher'] = dataUrl('export const FeedbackLauncher=()=>null,OwnerFeedbackLink=()=>null;');
 dependencies['./CommunityNavigation'] = await compile('../src/components/CommunityNavigation.tsx');
@@ -152,6 +156,24 @@ function setup({ loading = false, user = null, search = '', signup = false } = {
   h.render(AuthForm, { signup });
   return h;
 }
+
+test('profile contact editor loads, validates, saves and clears only private contact metadata', async () => {
+  const h = new Harness();
+  let user = { id: 'member', user_metadata: { contact_phone: '+15551234567' } };
+  h.handlers.getUser = async () => ({ data: { user }, error: null });
+  h.handlers.updateUser = async ({ data }) => { user = { ...user, user_metadata: { ...user.user_metadata, ...data } }; return { data: { user }, error: null }; };
+  try {
+    h.render(PrivateContactPhone, { userId: 'member', demoMode: false }); await h.settle();
+    const input = () => nodes(h.tree).find(n => n.type === 'input');
+    const submit = async value => { input().props.onChange({ target: { value } }); h.render(); nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle(); };
+    assert.equal(input().props.value, '+15551234567');
+    await submit('invalid'); assert.equal(h.calls.filter(c => c.name === 'updateUser').length, 0);
+    await submit('+44 7700 900123'); assert.match(textOf(h.tree), /Phone number saved/);
+    assert.deepEqual(h.calls.find(c => c.name === 'updateUser').args[0], { data: { contact_phone: '+447700900123' } });
+    await submit(''); assert.match(textOf(h.tree), /Phone number removed/);
+    assert.equal(user.user_metadata.contact_phone, null);
+  } finally { h.close(); }
+});
 
 test('header uses one login and signup entry point before authentication', async () => {
   const h = setup();
@@ -431,6 +453,25 @@ test('email signup requires matching passwords and handles confirmed versus pend
       }
     } finally { h.close(); }
   }
+});
+
+test('signup validates optional phone before sending a request and passes it only when supplied', async () => {
+  const h = setup({ signup: true });
+  h.handlers.register = async () => false;
+  try {
+    await h.settle();
+    change(h, 'First Name', 'Ada'); change(h, 'Last Name', 'Lovelace');
+    change(h, 'Email Address', 'ada@example.invalid');
+    change(h, 'Password', 'correct-horse-battery-staple');
+    change(h, 'Confirm password', 'correct-horse-battery-staple');
+    change(h, 'Phone number', '5551234567');
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    assert.equal(h.calls.filter(c => c.name === 'register').length, 0);
+    assert.match(textOf(h.tree), /country code/);
+    change(h, 'Phone number', '+1 555 123 4567');
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    assert.deepEqual(h.calls.find(c => c.name === 'register').args[3], { firstName: 'Ada', lastName: 'Lovelace', contactPhone: '+1 555 123 4567' });
+  } finally { h.close(); }
 });
 
 test('verification failures mention the code rather than a password and retain the code form', async () => {

@@ -209,6 +209,7 @@ test('native latest discussion requests only twelve public rows and propagates f
 let detailSource = transpile(await readFile(new URL('../../src/components/QuestionDetail.tsx', import.meta.url),'utf8'));
 const link = moduleUrl(`import React from ${JSON.stringify(import.meta.resolve('react'))}; export default function Link(props){return React.createElement('a',props,props.children);}`);
 const dependencies = {
+  '@/lib/feature-access':moduleUrl(transpile(await readFile(new URL('../../src/lib/feature-access.ts', import.meta.url), 'utf8'))),
   './ResizablePostLayout':moduleUrl('export const ResizablePostLayout=({children})=>children;'),
   '@/lib/post-presentation':moduleUrl(transpile(await readFile(new URL('../../src/lib/post-presentation.ts', import.meta.url), 'utf8'))),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'), react:import.meta.resolve('react'),
@@ -254,9 +255,9 @@ test('answer UI exposes total count and load-more instead of silently truncating
   const html = renderQuestion();
   assert(html.includes('125 answers')); assert(html.includes('1 shown')); assert(html.includes('Load more answers'));
 });
-test('imported questions never show Message author or acceptance even without a source URL', () => {
+test('imported questions never show Message user or acceptance even without a source URL', () => {
   const html = renderQuestion({id:'apify-fixture',source:'apify',source_url:null,author_id:'source-not-an-account'});
-  assert(!html.includes('Message author')); assert(!html.includes('Accept this answer'));
+  assert(!html.includes('Message user')); assert(!html.includes('Accept this answer'));
   assert(html.includes('Load more replies'));
 });
 test('public SSR uses the same bounded ranking and stable tie breaker', async () => {

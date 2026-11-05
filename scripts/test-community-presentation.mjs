@@ -17,6 +17,7 @@ const hooks = moduleUrl(`import * as React from ${JSON.stringify(reactUrl)};
   export function useState(initial){const state=globalThis.__presentation;
     const index=state.index++; return React.useState(Object.hasOwn(state.values,index)?state.values[index]:initial);}`);
 const dependencies = {
+  '@/lib/feature-access': moduleUrl(transpile(await readFile(new URL('../src/lib/feature-access.ts',import.meta.url),'utf8'))),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'), react: hooks,
   'next/link': link, 'next/navigation': moduleUrl('export const useSearchParams=()=>new URLSearchParams();export const useParams=()=>({id:globalThis.__presentation.question?.id});'),
   'lucide-react': import.meta.resolve('lucide-react'), 'date-fns': import.meta.resolve('date-fns'),
@@ -136,7 +137,7 @@ test('source detail uses neutral presentation with no source-author messaging or
   noPipelineLabels(html);assert(!html.includes('Originally shared in'));
   assert(!html.includes(source.source_url));assert.match(html,/user-\d{4}/);
   assert(html.includes('Join the discussion'));assert(!html.includes('Original discussion'));
-  assert(!html.includes('Message author'));assert(!html.includes('/messages?'));assert(!html.includes('aria-label="Upvote"'));
+  assert(!html.includes('Message user'));assert(!html.includes('/messages?'));assert(!html.includes('aria-label="Upvote"'));
   assert(!html.includes(source.author_username));assert(!html.includes('Peer experiences, not legal advice'));
 });
 test('an apify ID remains source-only even when its source flag/link are absent and author fields resemble a member',()=>{
@@ -148,10 +149,10 @@ test('an apify ID remains source-only even when its source flag/link are absent 
 test('native post messaging binds both public username and registered profile ID for guests and other members',()=>{
   for(const user of [null,{id:bob}]) {
     const html=render(QuestionDetail,{initialQuestion:native},{user});
-    assert(html.includes(`/messages?to=alice-test&amp;member=${alice}`));assert(html.includes('Message author'));
+    assert(html.includes(`/messages?to=alice-test&amp;member=${alice}`));assert(html.includes('Message user'));
     assert(html.includes('aria-label="Upvote"'));assert(html.includes('u/alice-test'));
   }
-  assert(!render(QuestionDetail,{initialQuestion:native},{user:{id:alice}}).includes('Message author'));
+  assert(!render(QuestionDetail,{initialQuestion:native},{user:{id:alice}}).includes('Message user'));
 });
 test('source comments cannot become member identities or message targets through missing provenance or matching handles',()=>{
   const comment={...reply,id:'apify-comment-fixture',source:undefined,author_username:'bob-test',source_url:source.source_url};
@@ -162,7 +163,7 @@ test('source comments cannot become member identities or message targets through
 test('registered member replies on source discussions retain their own message action',()=>{
   const html=render(QuestionDetail,{initialQuestion:source,initialAnswers:[reply]},{user:{id:alice}});
   assert(html.includes('u/bob-test'));assert(html.includes(`/messages?to=bob-test&amp;member=${bob}`));
-  assert(!html.includes('Message author'));assert(html.includes('aria-label="Message bob-test"'));
+  assert(!html.includes('Message user'));assert(html.includes('aria-label="Message bob-test"'));
   assert(!html.includes('Accept this answer'));
 });
 test('home renders community-first copy and sends signed-out Ask clicks through sign-in',()=>{

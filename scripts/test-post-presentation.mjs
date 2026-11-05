@@ -21,7 +21,7 @@ const dependencies = {
   react: fileModule('react'),
   'next/link': link,
   'next/navigation': moduleUrl(`export function useParams(){return {id:'fixture-question'};}`),
-  'lucide-react': icons,
+  'lucide-react': fileModule('lucide-react'),
   'date-fns': moduleUrl(`export function formatDistanceToNow(){return '2 days ago';}`),
   '@/lib/community': moduleUrl(`const unused=()=>{throw new Error('Unexpected network call during render');}; export {unused as acceptAnswer,unused as createAnswer,unused as getQuestion,unused as listAnswers,unused as getAnswerPage,unused as getDiscussionContext,unused as sortAnswers,unused as voteAnswer,unused as voteQuestion};`),
   '@/lib/realtime': moduleUrl(`export function subscribeLive(){throw new Error('Unexpected subscription during render');}`),
@@ -43,6 +43,7 @@ async function compile(relativePath) {
   return moduleUrl(code);
 }
 dependencies['@/lib/messaging-state'] = await compile('../src/lib/messaging-state.ts');
+dependencies['@/lib/feature-access'] = await compile('../src/lib/feature-access.ts');
 dependencies['@/lib/post-categories'] = await compile('../src/lib/post-categories.ts');
 dependencies['@/lib/post-presentation'] = await compile('../src/lib/post-presentation.ts');
 dependencies['./PostOriginBadge'] = await compile('../src/components/PostOriginBadge.tsx');
@@ -64,6 +65,10 @@ test('post sharing links to a community composer with the original post path', (
   const post = { id:'33333333-3333-4333-8333-333333333333',author_id:null,author_username:'member',author_avatar_seed:'m',title:'Visa question',body:'Visa details',destination_country:'United States',visa_type:'H-1B',tags:[],status:'open',vote_score:0,answer_count:0,accepted_answer_id:null,created_at:'2026-10-03T12:00:00Z',updated_at:'2026-10-03T12:00:00Z' };
   const html=renderToStaticMarkup(createElement(QuestionCard,{question:post}));
   assert.match(html,/Copy link/);
+  for (const label of ['WhatsApp','Telegram','Reddit','Email','Share to a community']) assert(html.includes(label));
+  assert.match(html,/https:\/\/wa.me\/\?text=https%3A%2F%2Fvisathreads.com/);
+  assert.match(html,/rel="noopener noreferrer"/);
+  assert.doesNotMatch(html,/>Reply<|>Message user</);
   assert.match(html,/\/ask\?shared=%2Fus%2Fen%2Fquestions%2F33333333-3333-4333-8333-333333333333/);
 });
 
@@ -101,13 +106,25 @@ function assertImportedPresentation(html) {
   assert.doesNotMatch(html, /href="\/?\?tag=(?:community-archive|archive|imported)/);
 }
 function assertQuestionMessage(html, expected) {
-  assert.equal(visibleText(html).includes('Message author'), expected);
+  assert.equal(visibleText(html).includes('Message user'), expected);
   assert.equal(html.includes(`/messages?to=visa-tester&amp;member=${question.author_id}`), expected);
 }
 function assertReplyMessage(html, expected) {
   assert.equal(accessibleLabels(html).includes('Message reply-tester'), expected);
   assert.equal(html.includes(`/messages?to=reply-tester&amp;member=${answer.author_id}`), expected);
 }
+
+test('feed separates private messaging from public replies and never messages self or imported authors', () => {
+  for (const viewer of [null, '22222222-2222-4222-8222-222222222222', question.author_id]) {
+    setUser(viewer ? { id: viewer } : null);
+    const html = renderToStaticMarkup(createElement(QuestionCard, { question }));
+    assertQuestionMessage(html, viewer !== question.author_id);
+    assert.doesNotMatch(html, />Reply</);
+    assert.match(html, /replies/);
+  }
+  setUser(null);
+  assertQuestionMessage(renderToStaticMarkup(createElement(QuestionCard, { question: imported })), false);
+});
 
 for (const sourceUrl of [imported.source_url, null, undefined]) {
 test(`imported question with source URL ${String(sourceUrl)} has a stable neutral alias and no message action`, () => {

@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
-import { Bell, Bookmark, MessageCircle } from 'lucide-react';
+import { Bell, Bookmark, MessageCircle, Mail } from 'lucide-react';
+import { getMemberMessageHref } from '@/lib/messaging-state';
+import { featureAccess } from '@/lib/feature-access';
 import { useAuth } from './AuthProvider';
 import { PostShare } from './PostShare';
 import { ReportButton } from './ReportButton';
@@ -34,18 +36,20 @@ function MemberActions({ postId, userId }: { postId: string; userId: string }) {
   </>;
 }
 
-export function PostActions({ postId, path, imported = false, onReply }: { postId: string; path: string; imported?: boolean; onReply?: () => void }) {
+export function PostActions({ postId, path, imported = false, onReply, author, showReply = true }: { postId: string; path: string; imported?: boolean; onReply?: () => void; author?: { id: string; author_id: string | null; author_username: string; source?: string }; showReply?: boolean }) {
   const { user, demoMode } = useAuth();
+  const messageHref = author && !imported ? getMemberMessageHref(author, user?.id) : null;
   const login = `/login?next=${encodeURIComponent(path)}`;
   // Changing accounts remounts all private state, including pending confirmations.
   return <div className="post-action-container relative pb-1">
     <div className="post-actions" aria-label="Post actions">
-      <Link className="post-action" href={`${path}#reply`} onClick={onReply}><MessageCircle size={16} aria-hidden="true"/>Reply</Link>
-      <PostShare path={path}/>
-      {user && !demoMode ? <MemberActions key={`${user.id}:${postId}`} userId={user.id} postId={postId}/> : <>
+      {showReply && <Link className="post-action" href={`${path}#reply`} onClick={onReply}><MessageCircle size={16} aria-hidden="true"/>Reply</Link>}
+      {featureAccess.directMessaging && messageHref && <Link className="post-action" href={messageHref}><Mail size={16} aria-hidden="true"/>Message user</Link>}
+      {featureAccess.postSharing && <PostShare path={path}/>}
+      {featureAccess.postLibrary && (user && !demoMode ? <MemberActions key={`${user.id}:${postId}`} userId={user.id} postId={postId}/> : <>
         <Link className="post-action" href={login}><Bell size={16} aria-hidden="true"/>Follow</Link>
         <Link className="post-action" href={login}><Bookmark size={16} aria-hidden="true"/>Save</Link>
-      </>}
+      </>)}
       <ReportButton compact kind={imported ? 'source_question' : 'question'} target={postId}/>
     </div>
   </div>;
