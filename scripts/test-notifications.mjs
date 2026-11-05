@@ -27,6 +27,7 @@ test('red dots are conditional and each icon announces its own unread count',()=
   setup({data:{unreadNotifications:3,unreadMessages:2}});const html=render(NotificationLinks);
   assert.equal((html.match(/class="notification-dot"/g)||[]).length,2);
   assert.match(html,/aria-label="Notifications, 3 unread"/);assert.match(html,/aria-label="Messages, 2 unread"/);
+  assert.match(html,/lucide-bell/);assert.match(html,/lucide-mail/);
   setup({data:{unreadNotifications:0,unreadMessages:2}});assert.equal((render(NotificationLinks).match(/class="notification-dot"/g)||[]).length,1);
   setup({auth:{user:null}});assert.equal(render(NotificationLinks),'');
 });
