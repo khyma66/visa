@@ -339,3 +339,17 @@
   .header-notifications + .header-account { margin-left: 0; }
   .header-content:has(.header-notifications) .site-brand { flex-basis: 110px; min-width: 100px; }
 }
+
+/* Respect system display preferences, including controls whose focus uses shadows. */
+@media (prefers-reduced-motion: reduce) {
+  html, *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+@media (forced-colors: active) {
+  :focus-visible { outline: 2px solid Highlight !important; outline-offset: 3px !important; }
+  .notification-dot { background: Highlight; border: 1px solid CanvasText; box-shadow: none; }
+}

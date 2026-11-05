@@ -4,13 +4,20 @@ import { discoveryOrigin, discoveryPath } from './lib/search-visibility';
 import { protectTraffic } from './lib/security-runtime';
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
-  // Canonicalize before a login starts so PKCE state stays on the same origin.
-  if (request.nextUrl.hostname === 'www.visathreads.com') {
+  // Upgrade known hosted origins before serving login or any application route.
+  // Local preview HTTP remains available; proxy headers never choose the destination.
+  const hosted = ['visathreads.com', 'www.visathreads.com', 'visa-central.com', 'www.visa-central.com'].includes(request.nextUrl.hostname);
+  const canonicalHost = request.nextUrl.hostname === 'www.visathreads.com' ? 'visathreads.com' : request.nextUrl.hostname;
+  if (hosted && (request.nextUrl.protocol === 'http:' || canonicalHost !== request.nextUrl.hostname)) {
     const destination = new URL(request.nextUrl.toString());
     destination.protocol = 'https:';
-    destination.hostname = 'visathreads.com';
+    destination.hostname = canonicalHost;
     destination.port = '';
-    return NextResponse.redirect(destination, 308);
+    const redirect = NextResponse.redirect(destination, 308);
+    redirect.headers.set('Cache-Control', 'private, no-store');
+    redirect.headers.set('Referrer-Policy', 'no-referrer');
+    if (request.nextUrl.protocol === 'https:') redirect.headers.set('Strict-Transport-Security', 'max-age=31536000');
+    return redirect;
   }
   const production = process.env.APP_ENV === 'production';
   const approved = process.env.PUBLIC_LAUNCH_APPROVED === 'true';

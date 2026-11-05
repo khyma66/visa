@@ -35,7 +35,7 @@ const trafficStub = moduleUrl('export async function protectTraffic() { return n
 const transpile = source => compile(source).replace("'./lib/search-visibility'",JSON.stringify(searchModule)).replace("'./lib/security-runtime'",JSON.stringify(trafficStub));
 
 test('editorial crawl headers match metadata while dev, filters and private routes stay excluded', async () => {
-  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } }');
+  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } static redirect(url, status = 307) { return new NextResponse(null, { status, headers: { Location: String(url) } }); } }');
   const source = transpile(await readFile(new URL('../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub));
   const { middleware } = await import(moduleUrl(source));
   const env = { APP_ENV: 'development', PUBLIC_LAUNCH_APPROVED: 'false', SEARCH_DISCOVERY_ENABLED: 'true', NEXT_PUBLIC_SITE_URL: 'https://visathreads.com' };
@@ -123,7 +123,7 @@ test('public HTML reads never forward sessions and fail on backend errors', asyn
 });
 
 test('production stays closed unless approved; private pages remain uncached and unindexed', async () => {
-  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } }');
+  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } static redirect(url, status = 307) { return new NextResponse(null, { status, headers: { Location: String(url) } }); } }');
   const source = transpile(await readFile(new URL('../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub));
   const { middleware } = await import(moduleUrl(source));
   const oldEnv=process.env.APP_ENV, oldApproval=process.env.PUBLIC_LAUNCH_APPROVED;
@@ -148,7 +148,7 @@ test('production stays closed unless approved; private pages remain uncached and
 });
 
 test('www canonicalization preserves the destination on the owned VisaThreads domain', async () => {
-  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } }');
+  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } static redirect(url, status = 307) { return new NextResponse(null, { status, headers: { Location: String(url) } }); } }');
   const source = transpile(await readFile(new URL('../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub));
   const { middleware } = await import(moduleUrl(source));
   const response = await middleware({nextUrl:new URL('https://www.visathreads.com/login?next=%2Fmessages')});
@@ -205,7 +205,7 @@ test('import source selects only successful runs and stays disabled in productio
 });
 
 test('Turnstile adds only its exact script and frame origin when configured and leaves connect policy unchanged', async () => {
-  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } }');
+  const stub = moduleUrl('export class NextResponse extends Response { static next() { return new NextResponse(null); } static redirect(url, status = 307) { return new NextResponse(null, { status, headers: { Location: String(url) } }); } }');
   const source = transpile(await readFile(new URL('../src/middleware.ts',import.meta.url),'utf8')).replace("'next/server'",JSON.stringify(stub));
   const { middleware } = await import(moduleUrl(source));
   const previous = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;

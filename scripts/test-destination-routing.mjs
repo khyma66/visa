@@ -98,3 +98,23 @@ test('published support mailboxes and recovery endpoint are preserved', async ()
     assert(!(await read('src/app/page.tsx')).includes('Visa destination: United States'));
   } finally { if(before===undefined) delete process.env.APP_ENV; else process.env.APP_ENV=before; }
 });
+
+test('hosted HTTP routes upgrade before auth, APIs and legacy routing; query parameters are preserved', async () => {
+  for (const host of ['visathreads.com','www.visathreads.com','visa-central.com','www.visa-central.com']) {
+    for (const method of ['GET','HEAD','POST']) {
+      for (const path of ['/login?next=%2Fnotifications&code=fixture','/api/community','/news?tag=h1b&tag=f1']) {
+        const response=await middleware(request(path,method,'http://'+host));
+        assert.equal(response.status,308);
+        assert.equal(response.headers.get('location'),'https://'+(host==='www.visathreads.com'?'visathreads.com':host)+path);
+        assert.equal(response.headers.get('cache-control'),'private, no-store');
+        assert.equal(response.headers.get('referrer-policy'),'no-referrer');
+      }
+    }
+  }
+});
+test('HTTPS upgrade never trusts forwarded host/protocol headers and leaves local HTTP usable',async()=>{
+  const req=request('/notifications','GET','http://visathreads.com');req.headers.set('x-forwarded-host','evil.invalid');req.headers.set('x-forwarded-proto','https');
+  assert.equal((await middleware(req)).headers.get('location'),'https://visathreads.com/notifications');
+  for(const origin of ['http://localhost:3000','http://127.0.0.1:8787','http://visathreads.com.evil.invalid'])assert.equal((await middleware(request('/login','GET',origin))).headers.get('location'),null);
+  for(const origin of ['https://visathreads.com','https://visa-central.com'])assert.equal((await middleware(request('/login','GET',origin))).headers.get('location'),null);
+});
