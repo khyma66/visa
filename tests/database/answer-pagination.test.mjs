@@ -255,9 +255,9 @@ test('answer UI exposes total count and load-more instead of silently truncating
   const html = renderQuestion();
   assert(html.includes('125 answers')); assert(html.includes('1 shown')); assert(html.includes('Load more answers'));
 });
-test('imported questions never show Message author or acceptance even without a source URL', () => {
+test('imported questions never show Message user or acceptance even without a source URL', () => {
   const html = renderQuestion({id:'apify-fixture',source:'apify',source_url:null,author_id:'source-not-an-account'});
-  assert(!html.includes('Message author')); assert(!html.includes('Accept this answer'));
+  assert(!html.includes('Message user')); assert(!html.includes('Accept this answer'));
   assert(html.includes('Load more replies'));
 });
 test('public SSR uses the same bounded ranking and stable tie breaker', async () => {
