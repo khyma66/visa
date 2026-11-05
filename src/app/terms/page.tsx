@@ -5,7 +5,7 @@ export const metadata = { title: 'Terms and conditions — early access' };
 export default function TermsPage() {
   return <main className="mx-auto max-w-3xl space-y-6 px-4 py-12 leading-7">
     <h1 className="text-3xl font-bold">Terms and conditions — early access</h1>
-    <p>Updated November 2, 2026 · Version 2026-11-02-preview-v3</p>
+    <p>Updated November 5, 2026 · Version 2026-11-05-preview-v4</p>
     <p className="rounded border border-amber-200 bg-amber-50 p-4">These govern the early-access community only and are not finalized production Terms of Service. VisaThreads is the service name; the legal operator, business address and jurisdiction-specific contract review remain unresolved. No agreement to future charges, advertising or a future contract is implied.</p>
     <section><h2 className="text-xl font-bold">Eligibility and your account</h2><p>You must be at least 18 and legally able to agree where you live. Keep credentials and verification codes private, use an email you control, and do not impersonate others or evade restrictions. A verified email does not verify professional qualifications. Review these terms and the privacy notice before affirmatively agreeing.</p></section>
     <section><h2 className="text-xl font-bold">Share experiences responsibly</h2><p>VisaThreads is an independent peer community, not a government website, law firm or verified legal referral service. Do not present guesses as official rules. Cite official sources and dates when possible; accepted answers and topic matches are not legal verification.</p></section>
