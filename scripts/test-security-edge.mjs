@@ -5,7 +5,7 @@ import ts from 'typescript';
 import {destinationModule} from './destination-test-module.mjs';
 const source=await readFile(new URL('../src/lib/security-edge.ts',import.meta.url),'utf8');
 const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace("'./destination-routing'",JSON.stringify(destinationModule));
-const {trafficGroup,trafficDecision,trafficFingerprint,recordTrafficSignal}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const {trafficGroup,trafficDecision,trafficFingerprint,recordTrafficSignal,telemetryFailureDetails}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
 const request=(path,headers={},method='GET')=>new Request('https://visathreads.com'+path,{method,headers:{'cf-connecting-ip':'192.0.2.2',...headers}});
 const pass={limit:async()=>({success:true})},deny={limit:async()=>({success:false})};
 const moduleUrl=source=>'data:text/javascript;base64,'+Buffer.from(source).toString('base64');
@@ -59,6 +59,26 @@ test('telemetry is minimal, secret server-side, no redirects, private requests n
 test('dashboard resets between accounts, escapes evidence and never claims emails are sent',async()=>{
   const ui=await readFile(new URL('../src/components/OwnerSecurityDashboard.tsx',import.meta.url),'utf8');
   assert.match(ui,/<Console key=\{user.id\}/);assert.match(ui,/No email has been sent/);assert.doesNotMatch(ui,/dangerouslySetInnerHTML|service_role|localStorage/);assert.match(ui,/AbortSignal.timeout/);
+});
+test('delivery diagnostics name the failing stage without exposing upstream errors or credentials',async t=>{
+  const prior={url:process.env.NEXT_PUBLIC_SUPABASE_URL,key:process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY};
+  process.env.NEXT_PUBLIC_SUPABASE_URL='https://cycnichledvqbxevrwnt.supabase.co';process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='public-test-key';
+  const env={SECURITY_INGEST_KEY:'ef'.repeat(32),SECURITY_EVENT_SAMPLE:pass,SECURITY_EVENT_BUDGET:pass};
+  const signal={kind:'read_rate_limit',route_group:'archive',decision:'limited'};
+  const fail={limit:async()=>{throw new Error('private request and secret must not reach logs');}};
+  const check=expected=>error=>{assert.deepEqual(telemetryFailureDetails(error),expected);assert.equal(error.message,'Security telemetry unavailable');return true;};
+  try{
+    await assert.rejects(recordTrafficSignal(request('/api/community'),signal,{...env,SECURITY_EVENT_SAMPLE:fail}),check({stage:'sample'}));
+    await assert.rejects(recordTrafficSignal(request('/api/community'),signal,{...env,SECURITY_EVENT_BUDGET:fail}),check({stage:'budget'}));
+    t.mock.method(globalThis,'fetch',async()=>new Response('private upstream details',{status:401}));
+    await assert.rejects(recordTrafficSignal(request('/api/community'),signal,env),check({stage:'delivery',status:401}));
+    t.mock.method(globalThis,'fetch',async()=>{throw new Error('private network failure');});
+    await assert.rejects(recordTrafficSignal(request('/api/community'),signal,env),check({stage:'delivery'}));
+    assert.deepEqual(telemetryFailureDetails(new Error('sensitive details')),{stage:'unknown'});
+  }finally{
+    if(prior.url===undefined)delete process.env.NEXT_PUBLIC_SUPABASE_URL;else process.env.NEXT_PUBLIC_SUPABASE_URL=prior.url;
+    if(prior.key===undefined)delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;else process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=prior.key;
+  }
 });
 test('real middleware returns safe blocked responses, schedules evidence, and preserves auth/availability',async()=>{
   const env={SECURITY_READ_LIMIT:deny,SECURITY_ARCHIVE_LIMIT:deny};globalThis.__securityBindings=env;

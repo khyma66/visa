@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Owner security evidence: deploy only after matching restricted schema is present.
+# Owner security evidence: privacy-safe delivery diagnostics; restricted schema required.
 
 on:
   workflow_dispatch:
