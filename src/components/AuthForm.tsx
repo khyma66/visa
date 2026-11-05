@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useAuth } from './AuthProvider';
 import { TurnstileCheck } from './TurnstileCheck';
 import { getAuthMethods } from '@/lib/supabase/client';
-import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH, PASSWORD_GUIDANCE, authCallbackUrl, authErrorMessage, authCaptchaOptions, safeAuthNext, type AuthErrorContext, type AuthMethods, type SocialProvider } from '@/lib/auth-flow';
+import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH, PASSWORD_GUIDANCE, authFieldError, authCallbackUrl, authErrorMessage, authCaptchaOptions, safeAuthNext, type AuthErrorContext, type AuthMethods, type SocialProvider } from '@/lib/auth-flow';
 
 const inputClass = 'auth-input mt-1.5 min-h-11 w-full rounded-xl border px-3 py-2.5 font-normal text-slate-950 outline-none disabled:bg-slate-50';
 const buttonClass = 'auth-primary flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-semibold text-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
@@ -41,6 +41,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
   const [returnTo, setReturnTo] = useState('/');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [contactPhone, setContactPhone] = useState('');
   const captchaSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? '';
   const resetCaptcha = () => { setCaptchaToken(''); setCaptchaReset(value => value + 1); };
   useEffect(() => {
@@ -111,6 +112,13 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (step === 'email') {
+      const fields = codeChannel === 'phone' ? { phone } : { email, ...(signup ? { firstName, lastName, password, passwordConfirmation, contactPhone } : {}) };
+      for (const [name, value] of Object.entries(fields)) {
+        const feedback = authFieldError(name, value, signup, password);
+        if (feedback) { setError(feedback); return; }
+      }
+    }
     void run(async () => {
       if (step === 'confirmation') {
         const token = authCaptchaOptions(captchaToken).captchaToken;
@@ -122,7 +130,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
         if (password !== passwordConfirmation) throw { code: 'password_mismatch' };
         const token = authCaptchaOptions(captchaToken).captchaToken;
         try {
-          const signedIn = await register(email, password, callback(), { firstName, lastName }, token);
+          const signedIn = await register(email, password, callback(), { firstName, lastName, ...(contactPhone.trim() ? { contactPhone } : {}) }, token);
           setPassword(''); setPasswordConfirmation('');
           if (signedIn) router.replace(safeAuthNext(new URLSearchParams(window.location.search).get('next')));
           else setStep('confirmation');
@@ -181,7 +189,16 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             <div className="my-4 flex items-center gap-3 text-xs text-slate-500 capitalize"><span className="h-px flex-1 bg-slate-200" />or use email<span className="h-px flex-1 bg-slate-200" /></div>
           </>}
           {step !== 'confirmation' && <p className="text-xs text-slate-500 capitalize"><span className="font-semibold text-red-600 capitalize" aria-hidden="true">*</span> Required fields</p>}
-          {step !== 'confirmation' && <form onSubmit={submit} className={`mt-3 ${signup ? 'space-y-2.5' : 'space-y-3'}`}>
+          {step !== 'confirmation' && <form onSubmit={submit} onBlur={event => {
+            if (!(event.target instanceof HTMLInputElement)) return;
+            const feedback = authFieldError(event.target.name, event.target.value, signup, password);
+            event.target.setCustomValidity(feedback);
+            setError(feedback);
+          }} onInput={event => {
+            // Clear stale mismatch errors when either password is edited.
+            for (const input of event.currentTarget.querySelectorAll('input')) input.setCustomValidity('');
+            setError('');
+          }} className={`mt-3 ${signup ? 'space-y-2.5' : 'space-y-3'}`}>
             {signup && step === 'email' && codeChannel === 'email' && <>
               <div className="grid grid-cols-2 gap-3 capitalize">
                 <label className="block text-sm font-semibold text-slate-700 capitalize">First Name <span aria-hidden="true" className="text-red-600 capitalize">*</span><input type="text" name="firstName" aria-label="First Name" autoComplete="given-name" required maxLength={80} disabled={busy || loading} value={firstName} onChange={event => setFirstName(event.target.value)} className={inputClass} /></label>
@@ -199,6 +216,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
               {signup && <p id="password-guidance" className="mt-1.5 text-xs leading-5 text-slate-500">{PASSWORD_GUIDANCE}</p>}
             </div>}
             {signup && step === 'email' && codeChannel === 'email' && <label className="block text-sm font-semibold text-slate-700 capitalize">Confirm password <span aria-hidden="true" className="text-red-600 capitalize">*</span><input type={passwordVisible ? 'text' : 'password'} name="passwordConfirmation" aria-label="Confirm password" required autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} maxLength={MAX_PASSWORD_LENGTH} disabled={busy || loading} value={passwordConfirmation} onChange={event => setPasswordConfirmation(event.target.value)} className={inputClass} /></label>}
+            {signup && step === 'email' && codeChannel === 'email' && <div><label className="block text-sm font-semibold text-slate-700">Phone number <span className="font-normal text-slate-500">(optional)</span><input type="tel" name="contactPhone" aria-label="Optional phone number" autoComplete="tel" maxLength={30} placeholder="+1 555 123 4567" disabled={busy || loading} value={contactPhone} onChange={event => setContactPhone(event.target.value)} aria-describedby="contact-phone-help" className={inputClass} /></label><p id="contact-phone-help" className="mt-1 text-xs leading-5 text-slate-500">Include your country code. Private to your account; this does not enable SMS sign-in. <Link href="/privacy/contact-phone" target="_blank" rel="noopener" className="underline">Contact number privacy (opens a new tab)</Link></p></div>}
             {captchaSiteKey && <TurnstileCheck siteKey={captchaSiteKey} resetKey={captchaReset} onToken={setCaptchaToken} />}
             {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
             {message && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}

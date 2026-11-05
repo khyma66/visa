@@ -8,6 +8,7 @@ import ts from 'typescript';
 const asModule = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 const reactUrl = import.meta.resolve('react');
 const dependencies = {
+  './PrivateContactPhone': asModule('export const PrivateContactPhone=()=>null;'),
   './NotificationLinks': asModule('export const NotificationLinks=()=>null;'),
   './NotificationSettings': asModule('export const NotificationSettings=()=>null;'),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'),

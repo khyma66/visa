@@ -209,6 +209,7 @@ test('native latest discussion requests only twelve public rows and propagates f
 let detailSource = transpile(await readFile(new URL('../../src/components/QuestionDetail.tsx', import.meta.url),'utf8'));
 const link = moduleUrl(`import React from ${JSON.stringify(import.meta.resolve('react'))}; export default function Link(props){return React.createElement('a',props,props.children);}`);
 const dependencies = {
+  '@/lib/feature-access':moduleUrl(transpile(await readFile(new URL('../../src/lib/feature-access.ts', import.meta.url), 'utf8'))),
   './ResizablePostLayout':moduleUrl('export const ResizablePostLayout=({children})=>children;'),
   '@/lib/post-presentation':moduleUrl(transpile(await readFile(new URL('../../src/lib/post-presentation.ts', import.meta.url), 'utf8'))),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'), react:import.meta.resolve('react'),

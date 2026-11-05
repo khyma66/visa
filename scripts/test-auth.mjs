@@ -7,6 +7,39 @@ const source = await readFile(new URL('../src/lib/auth-flow.ts', import.meta.url
 const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const flow = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 
+test('upfront validation accepts optional contact details and rejects malformed fields', () => {
+  assert.equal(flow.authFieldError('contactPhone', '', true), '');
+  assert.equal(flow.authFieldError('contactPhone', '+1 (555) 123-4567', true), '');
+  for (const [name,value] of [['email','bad'],['firstName','@name'],['lastName',''],['contactPhone','5551234567'],['password','short'],['passwordConfirmation','different']]) {
+    assert.notEqual(flow.authFieldError(name,value,true,'a-long-password'), '');
+  }
+  assert.equal(flow.authFieldError('password','legacy',false), '');
+  assert.equal(flow.authFieldError('passwordConfirmation','a-long-password',true,'a-long-password'), '');
+});
+
+test('optional contact phone is private metadata; editing never changes SMS auth or entitlements', async () => {
+  let user={id:'member',user_metadata:{contact_phone:'+15551234567'}};
+  const writes=[];
+  const client={auth:{getUser:async()=>({data:{user},error:null}),updateUser:async input=>{
+    writes.push(input); user={...user,user_metadata:{...user.user_metadata,...input.data}};return {data:{user},error:null};
+  }}};
+  assert.equal(await flow.getPrivateContactPhone(client,'member'),'+15551234567');
+  assert.equal(await flow.savePrivateContactPhone(client,'member','+44 7700 900123'),'+447700900123');
+  assert.deepEqual(writes[0],{data:{contact_phone:'+447700900123'}});
+  assert.equal(await flow.savePrivateContactPhone(client,'member',''), '');
+  assert.deepEqual(writes[1],{data:{contact_phone:null}});
+  await assert.rejects(()=>flow.savePrivateContactPhone(client,'someone-else','+15551234567'));
+  await assert.rejects(()=>flow.savePrivateContactPhone(client,'member','invalid'));
+  assert.equal(writes.length,2);
+});
+
+test('signup stores a normalized optional contact number and ignores extra privileges', async () => {
+  let request;
+  const client={auth:{signUp:async input=>{request=input;return {data:{user:{id:'member'},session:null},error:null};}}};
+  await flow.registerWithPassword(client,'test@example.com','a-long-password','https://visathreads.com/login',{firstName:'Ada',lastName:'Lovelace',contactPhone:'+1 (555) 123-4567',role:'admin',tier:'pro'});
+  assert.deepEqual(request.options.data,{first_name:'Ada',last_name:'Lovelace',contact_phone:'+15551234567'});
+});
+
 test('auth return destinations cannot redirect offsite or back into login', () => {
   for (const value of [null, '', '//evil.example', '/\\evil.example', 'https://evil.example', '/%2fevil.example', '/\nevil.example', '/login', '/login?next=/', '/account/recovery']) assert.equal(flow.safeAuthNext(value), '/');
   for (const value of ['/messages', '/ask', '/questions/123', '/?tag=h1b']) assert.equal(flow.safeAuthNext(value), value);
