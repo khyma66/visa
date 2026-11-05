@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { Share2, Link2, Users, MessageCircle, Send, Mail, Smartphone, ExternalLink } from 'lucide-react';
 
 /** Share an existing public post; the new discussion links back to its source. */
-export function PostShare({ path }: { path: string }) {
+export function PostShare({ path, inline = false }: { path: string; inline?: boolean }) {
   const [status, setStatus] = useState('');
   const [origin, setOrigin] = useState('https://visathreads.com');
   const [nativeShare, setNativeShare] = useState(false);
@@ -38,7 +38,7 @@ export function PostShare({ path }: { path: string }) {
     setStatus('');
   }} onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
     <summary className="post-action cursor-pointer list-none"><Share2 size={16} aria-hidden="true"/>Share</summary>
-    <div style={{ left: menuOffset }} className="absolute z-20 mt-1 w-56 max-w-[calc(100vw-2rem)] space-y-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+    <div style={inline ? undefined : { left: menuOffset }} className={inline ? "ml-2 space-y-1 border-l border-slate-200 pl-1" : "absolute z-20 mt-1 w-56 max-w-[calc(100vw-2rem)] space-y-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg"}>
       <button type="button" onClick={() => void copyLink()} className={itemClass}><Link2 size={16} aria-hidden="true"/>Copy link</button>
       <Link href={sharePath} className={itemClass}><Users size={16} aria-hidden="true"/>Share to a community</Link>
       {destinations.map(({ label, Icon, href }) => <a key={label} href={href} target="_blank" rel="noopener noreferrer" className={itemClass}><Icon size={16} aria-hidden="true"/>{label}<span className="sr-only"> (opens another app or tab)</span></a>)}

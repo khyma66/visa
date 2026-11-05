@@ -55,6 +55,9 @@ dependencies['@/lib/post-library'] = moduleUrl('export const emptyLibraryEntry=i
 dependencies['./CompactTextarea'] = await compile('../src/components/CompactTextarea.tsx');
 dependencies['@/lib/post-views'] = moduleUrl('export const observePostView=()=>()=>{},postViewCount=()=>null,watchPostViews=()=>()=>{};');
 dependencies['./PostViews'] = await compile('../src/components/PostViews.tsx');
+// Expose disclosure contents in these policy/presentation fixtures; real closed behavior is tested separately.
+dependencies['./ActionPopover'] = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)};export function ActionPopover({label,trigger,children}){return jsx('section',{'aria-label':label,children:jsx('div',{children})});}`);
+dependencies['./AuthorIdentity'] = await compile('../src/components/AuthorIdentity.tsx');
 dependencies['./PostActions'] = await compile('../src/components/PostActions.tsx');
 dependencies['./PostAward'] = await compile('../src/components/PostAward.tsx');
 const { QuestionCard } = await import(await compile('../src/components/QuestionCard.tsx'));
@@ -106,7 +109,7 @@ function assertImportedPresentation(html) {
   assert.doesNotMatch(html, /href="\/?\?tag=(?:community-archive|archive|imported)/);
 }
 function assertQuestionMessage(html, expected) {
-  assert.equal(visibleText(html).includes('Message user'), expected);
+  assert.equal(accessibleLabels(html).includes('Message visa-tester'), expected);
   assert.equal(html.includes(`/messages?to=visa-tester&amp;member=${question.author_id}`), expected);
 }
 function assertReplyMessage(html, expected) {
@@ -226,4 +229,19 @@ test('untracked views never appear as zero or as an inferred count on member or 
       }
     }
   }
+});
+
+dependencies['react-dom'] = fileModule('react-dom');
+const { ActionPopover: RealActionPopover } = await import(await compile('../src/components/ActionPopover.tsx'));
+test('real disclosure starts collapsed with one accessible trigger and no exposed action links', () => {
+  const html=renderToStaticMarkup(createElement(RealActionPopover,{label:'More post options',trigger:'…'},createElement('a',{href:'/private-action'},'Save')));
+  assert.match(html,/aria-label="More post options"/);
+  assert.match(html,/aria-expanded="false"/);
+  assert.equal((html.match(/<button/g)??[]).length,1);
+  assert.doesNotMatch(html,/private-action|>Save<|role="dialog"/);
+});
+test('cards keep only the replies entry outside the action disclosure', () => {
+  const html=renderToStaticMarkup(createElement(QuestionCard,{question}));
+  assert.match(html,new RegExp(`/questions/${question.id}#reply`));
+  assert.doesNotMatch(html,/>Reply<|>Message user</);
 });

@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
-import { Bell, Bookmark, MessageCircle, Mail } from 'lucide-react';
-import { getMemberMessageHref } from '@/lib/messaging-state';
+import { Bell, Bookmark, Ellipsis, GitFork } from 'lucide-react';
+import { ActionPopover } from './ActionPopover';
 import { featureAccess } from '@/lib/feature-access';
 import { useAuth } from './AuthProvider';
 import { PostShare } from './PostShare';
@@ -36,21 +36,16 @@ function MemberActions({ postId, userId }: { postId: string; userId: string }) {
   </>;
 }
 
-export function PostActions({ postId, path, imported = false, onReply, author, showReply = true }: { postId: string; path: string; imported?: boolean; onReply?: () => void; author?: { id: string; author_id: string | null; author_username: string; source?: string }; showReply?: boolean }) {
+export function PostActions({ postId, path, imported = false, onRelated }: { postId: string; path: string; imported?: boolean; onRelated?: () => void }) {
   const { user, demoMode } = useAuth();
-  const messageHref = author && !imported ? getMemberMessageHref(author, user?.id) : null;
   const login = `/login?next=${encodeURIComponent(path)}`;
-  // Changing accounts remounts all private state, including pending confirmations.
-  return <div className="post-action-container relative pb-1">
-    <div className="post-actions" aria-label="Post actions">
-      {showReply && <Link className="post-action" href={`${path}#reply`} onClick={onReply}><MessageCircle size={16} aria-hidden="true"/>Reply</Link>}
-      {featureAccess.directMessaging && messageHref && <Link className="post-action" href={messageHref}><Mail size={16} aria-hidden="true"/>Message user</Link>}
-      {featureAccess.postSharing && <PostShare path={path}/>}
-      {featureAccess.postLibrary && (user && !demoMode ? <MemberActions key={`${user.id}:${postId}`} userId={user.id} postId={postId}/> : <>
-        <Link className="post-action" href={login}><Bell size={16} aria-hidden="true"/>Follow</Link>
-        <Link className="post-action" href={login}><Bookmark size={16} aria-hidden="true"/>Save</Link>
-      </>)}
-      <ReportButton compact kind={imported ? 'source_question' : 'question'} target={postId}/>
-    </div>
-  </div>;
+  return <ActionPopover label="More post options" trigger={<Ellipsis size={20} aria-hidden="true"/>}>
+    {featureAccess.postSharing && <PostShare path={path} inline/>}
+    {featureAccess.postLibrary && (user && !demoMode ? <MemberActions key={`${user.id}:${postId}`} userId={user.id} postId={postId}/> : <>
+      <Link className="post-action" href={login}><Bell size={16} aria-hidden="true"/>Follow</Link>
+      <Link className="post-action" href={login}><Bookmark size={16} aria-hidden="true"/>Save</Link>
+    </>)}
+    {onRelated && <button type="button" className="post-action" data-close-popover onClick={onRelated}><GitFork size={16} aria-hidden="true"/>Related posts</button>}
+    <ReportButton compact kind={imported ? 'source_question' : 'question'} target={postId}/>
+  </ActionPopover>;
 }

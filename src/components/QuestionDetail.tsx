@@ -2,7 +2,7 @@
 
 import { CompactTextarea } from './CompactTextarea';
 
-import { isImportedPost, publicImportedUsername, topicLabel } from '@/lib/post-presentation';
+import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -15,8 +15,7 @@ import {
 } from '@/lib/community';
 import type { Answer, Question } from '@/lib/types';
 import { subscribeLive, type LiveStatus } from '@/lib/realtime';
-import { getMemberMessageHref, isMemberId } from '@/lib/messaging-state';
-import { featureAccess } from '@/lib/feature-access';
+import { isMemberId } from '@/lib/messaging-state';
 import { RelatedQuestions } from './RelatedQuestions';
 import { ResizablePostLayout } from './ResizablePostLayout';
 import { Avatar } from './Avatar';
@@ -25,12 +24,13 @@ import { ReportButton } from './ReportButton';
 import { PostOriginBadge } from './PostOriginBadge';
 import { PostActions } from './PostActions';
 import { PostViews } from './PostViews';
+import { AuthorIdentity } from './AuthorIdentity';
 
-function Author({ id, username, seed, createdAt, sourceOnly = false }: { id: string; username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
+function Author({ id, memberId, username, seed, createdAt, sourceOnly = false }: { id: string; memberId: string | null; username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
   return (
     <div className="flex items-center gap-2 text-xs text-slate-500">
       {!sourceOnly && <Avatar seed={seed} size="sm" />}
-      <span><b className="text-slate-700">{sourceOnly ? publicImportedUsername({ id }) : `u/${username}`}</b><br />{formatDistanceToNow(new Date(createdAt), { addSuffix: true })}</span>
+      <span><AuthorIdentity content={{id,author_id:memberId,author_username:username,source:sourceOnly ? 'apify' : undefined}}/><br />{formatDistanceToNow(new Date(createdAt), { addSuffix: true })}</span>
     </div>
   );
 }
@@ -117,6 +117,13 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
     return () => { ++loadVersion.current; stop(); };
   }, [load, id, user?.id]);
 
+  useEffect(() => {
+    const focusReply = () => { if (window.location.hash === '#reply') document.getElementById('reply-body')?.focus(); };
+    focusReply();
+    window.addEventListener('hashchange', focusReply);
+    return () => window.removeEventListener('hashchange', focusReply);
+  }, [question?.id, user?.id, loading]);
+
   async function loadMoreAnswers() {
     if (paging.current || refreshInFlight.current || !moreAnswers || !answerCursor) return;
     paging.current = true;
@@ -155,7 +162,6 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
   const imported = isImportedPost(question);
   const experience = question.post_kind === 'experience';
   const threadPath = `/us/en/${experience ? 'experiences' : 'questions'}/${id}`;
-  const authorMessageHref = featureAccess.directMessaging ? getMemberMessageHref(question, user?.id) : null;
   const canAnswer = question.status === 'open';
   return (
     <main className="page-shell mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -165,7 +171,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/us/en/experiences" className="underline capitalize">Experience</Link> · {question.experience_category}</p>}
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span>{question.destination_country !== 'Global' && <span className="text-slate-400">{question.destination_country}</span>}<PostOriginBadge post={question} /></div>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-950">{question.title}</h1>
-            <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><span>{question.answer_count} {imported ? 'comments' : experience ? 'replies' : 'answers'}</span><PostViews key={question.id} postId={question.id} record/></div>
+            <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><Link href={`${threadPath}#reply`} onClick={() => document.getElementById('reply-body')?.focus()} className="rounded hover:text-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700" title="Reply to this post">{question.answer_count} {question.answer_count === 1 ? 'reply' : 'replies'}</Link><PostViews key={question.id} postId={question.id} record/><span className="ml-auto"><PostActions postId={question.id} path={threadPath} imported={imported} /></span></div>
           </section>
           <article className="flex flex-wrap gap-3 py-8 sm:gap-5">
             {imported ? <ImportedScore score={question.vote_score} /> : <VoteRail score={question.vote_score} own={question.author_id === user?.id} onVote={(value) => {
@@ -176,15 +182,10 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
               <div className="max-w-prose whitespace-pre-wrap text-lg leading-relaxed text-slate-800">{question.body}</div>
               <div className="mt-6 flex flex-wrap gap-2">{question.tags.map((tag) => <Link key={tag} href={`/us/en?tag=${encodeURIComponent(tag)}`} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}</div>
               <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
-                <div className="flex gap-2">
-
-                  {authorMessageHref && <Link href={authorMessageHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 capitalize"><MessageCircle size={15} /> Message user</Link>}
-                </div>
-                <Author id={question.id} username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
+                <Author id={question.id} memberId={question.author_id} username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
               </div>
 
             </div>
-            <div className="mt-1 basis-full"><PostActions postId={question.id} path={threadPath} imported={imported} onReply={() => document.getElementById('reply-body')?.focus()} /></div>
           </article>
 
 
@@ -196,7 +197,6 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             <div className="divide-y divide-slate-200">
               {answers.map((answer) => {
                 const sourceOnly = isImportedPost(answer);
-                const messageHref = featureAccess.directMessaging ? getMemberMessageHref(answer, user?.id) : null;
                 return (
                 <article key={answer.id} id={`answer-${answer.id}`} className={`flex scroll-mt-24 gap-3 py-8 sm:gap-5 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
                   {sourceOnly ? <ImportedScore score={answer.vote_score} /> : imported ? <MessageCircle className="w-11 shrink-0 text-blue-600" size={22} /> : <VoteRail score={answer.vote_score} own={answer.author_id === user?.id} accepted={answer.is_accepted} onVote={(value) => {
@@ -210,7 +210,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                     {!sourceOnly && <ReportButton kind={imported ? 'imported_answer' : 'answer'} target={answer.id} />}
                     <div className="mt-6 flex items-end justify-between gap-4">
                       {!imported && !experience && owner && canAnswer && !sourceOnly && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline capitalize"><Check size={16} /> Accept this answer</button> : <span />}
-                      <div className="flex items-center gap-3"><Author id={answer.id} username={answer.author_username} seed={answer.author_avatar_seed} createdAt={answer.created_at} sourceOnly={sourceOnly} />{messageHref && <Link href={messageHref} aria-label={`Message ${answer.author_username}`} className="text-slate-400 hover:text-blue-700"><MessageCircle size={18} /></Link>}</div>
+                      <div className="flex items-center gap-3"><Author id={answer.id} memberId={answer.author_id} username={answer.author_username} seed={answer.author_avatar_seed} createdAt={answer.created_at} sourceOnly={sourceOnly} /></div>
                     </div>
                   </div>
                 </article>

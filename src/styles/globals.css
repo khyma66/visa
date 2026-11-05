@@ -301,33 +301,19 @@
 .news-desk :is(button, a, summary) { text-transform: inherit; }
 /* Shared compact editors: grow naturally, then scroll without losing draft text. */
 .compact-composer { min-height: 3rem; max-height: min(20rem, 50dvh); resize: none; overflow-y: auto; }
-.post-actions { display: flex; align-items: center; gap: .25rem; flex-wrap: nowrap; min-width: 0; }
-.post-action { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; gap: .375rem; border-radius: 9999px; padding: .5rem .625rem; white-space: nowrap; font-size: .75rem; font-weight: 600; color: #475569; }
+.post-action { display: inline-flex; min-height: 44px; align-items: center; gap: .5rem; border-radius: .5rem; padding: .625rem .75rem; white-space: nowrap; font-size: .875rem; font-weight: 500; color: #475569; }
 .post-action:hover { background: #f1f5f9; }
 .post-action:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
 .post-action[aria-pressed="true"] { color: #0f766e; background: #f0fdfa; }
 .post-action:disabled { opacity: .5; cursor: wait; }
-@media (max-width: 480px) {
-  .post-actions { gap: 0; justify-content: space-between; }
-  .post-action { padding-inline: .125rem; gap: .25rem; font-size: .6875rem; }
-  .post-action svg { width: 14px; height: 14px; flex-shrink: 0; }
-}
-.post-action-status { position: absolute; top: 100%; left: 0; z-index: 25; max-width: 100%; border: 1px solid #e2e8f0; border-radius: .5rem; background: white; padding: .5rem .75rem; box-shadow: 0 3px 10px #0f172a12; font-size: .75rem; line-height: 1.5; }
-@media (max-width: 360px) {
-  .post-action { padding-inline: 0; }
-  .post-action svg { width: 13px; height: 13px; }
-}
-
-/* Narrow cards retain one action row with readable labels and generous height. */
-.post-action-container { container: post-actions / inline-size; }
-/* Counts and actions share the card's flex row and wrap only when necessary.
-   The toolbar anchors action confirmations when these wrappers have no box. */
-.feed-post-toolbar > .post-action-container,
-.feed-post-toolbar .post-actions { display: contents; container-type: normal; }
-@container post-actions (max-width: 280px) {
-  .post-actions { justify-content: space-between; gap: 0; }
-  .post-action { flex-direction: column; gap: .125rem; padding: .25rem .125rem; min-height: 44px; font-size: .6875rem; }
-}
+.post-options-trigger { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 9999px; color: #64748b; }
+.post-options-trigger:hover, .post-options-trigger[aria-expanded="true"] { background: #f1f5f9; color: #0f172a; }
+.post-options-trigger:focus-visible, .author-identity:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+.post-options-panel { position: fixed; z-index: 80; width: 240px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid #e2e8f0; border-radius: .875rem; background: white; padding: .375rem; box-shadow: 0 8px 30px #0f172a24; outline: none; }
+.post-options-panel .post-action { display: flex; width: 100%; justify-content: flex-start; }
+.post-action-status { display: block; padding: .5rem .75rem; font-size: .75rem; line-height: 1.5; color: #475569; }
+.author-identity { text-align: left; font-weight: 600; color: #334155; overflow-wrap: anywhere; border-radius: .25rem; }
+.author-identity:hover { text-decoration: underline; text-underline-offset: 3px; color: #1d4ed8; }
 
 .header-notifications { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .notification-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; min-height: 44px; border-radius: 999px; color: #334155; }
