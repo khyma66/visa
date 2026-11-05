@@ -12,7 +12,7 @@ const event={kind:'read_rate_limit',actor_hash:'cd'.repeat(32),route_group:'arch
 before(async()=>{
   await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
     create schema auth;create schema private;grant usage on schema private to authenticated;
-    create table auth.users(id uuid primary key,email_confirmed_at timestamptz default now(),phone_confirmed_at timestamptz,created_at timestamptz default now()-interval '2 days',deleted_at timestamptz,is_anonymous boolean default false);
+    create table auth.users(id uuid primary key,email_confirmed_at timestamptz default now(),phone_confirmed_at timestamptz,created_at timestamptz default now()-interval '2 days',deleted_at timestamptz,banned_until timestamptz,is_anonymous boolean default false);
     create table auth.sessions(id uuid primary key,user_id uuid references auth.users(id),not_after timestamptz);
     create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
     create function auth.jwt() returns jsonb language sql stable as $$select jsonb_build_object('session_id',nullif(current_setting('request.jwt.session',true),''))$$;
@@ -32,6 +32,7 @@ before(async()=>{
   await db.query('insert into private.feedback_owner values($1)',[owner]);
   await db.query('insert into auth.sessions values($1,$2,null)',[session,owner]);
   await db.exec(await readFile(new URL('../../supabase/migrations/20261104070127_security_evidence_console.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../../supabase/migrations/20261105060900_security_owner_account_status.sql',import.meta.url),'utf8'));
   await db.query("insert into private.security_ingest_key(singleton,key_hash) values(true,sha256(convert_to($1,'UTF8')))",[token]);
 });
 after(()=>db.close());
@@ -55,13 +56,18 @@ for(const [name,uid,role,sid] of [['anonymous',null,'anon',null],['member',membe
 test('current owner can read bounded dashboard without member inboxes',()=>isolated(async()=>{
   await actor();const data=await dashboard();assert.deepEqual(data.traffic,[]);assert.deepEqual(data.reports,[]);assert.equal(data.ingest_key_configured,true);assert.equal(data.pending_alerts,0);
 }));
-for(const condition of ['expired','revoked','deleted','suspended','anonymous']) test(`owner ${condition} is denied`,()=>isolated(async()=>{
+for(const condition of ['expired','revoked','deleted','suspended','anonymous','banned']) test(`owner ${condition} is denied`,()=>isolated(async()=>{
   if(condition==='expired')await db.query("update auth.sessions set not_after=now()-interval '1 minute' where id=$1",[session]);
   if(condition==='revoked')await db.query('delete from auth.sessions where id=$1',[session]);
   if(condition==='deleted')await db.query('update auth.users set deleted_at=now() where id=$1',[owner]);
   if(condition==='suspended')await db.query('insert into private.community_suspensions values($1)',[owner]);
   if(condition==='anonymous')await db.query('update auth.users set is_anonymous=true where id=$1',[owner]);
+  if(condition==='banned')await db.query("update auth.users set banned_until=now()+interval '1 day' where id=$1",[owner]);
   await actor();await deny(()=>dashboard());
+}));
+test('an expired auth ban does not block a current valid owner session',()=>isolated(async()=>{
+  await db.query("update auth.users set banned_until=now()-interval '1 day' where id=$1",[owner]);
+  await actor();assert.equal((await dashboard()).ingest_key_configured,true);
 }));
 test('public ingress needs its dedicated secret and grants no private schema access',()=>isolated(async()=>{
   await actor(null,'anon',null);assert.equal(await scalar("select has_schema_privilege('anon','private','usage')"),false);await deny(()=>ingress(event));
