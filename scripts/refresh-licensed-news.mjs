@@ -41,7 +41,15 @@ export function parseFeed(xml) {
     if (++nodes > 6000 || path.length > 12) throw new Error('Feed too complex');
     path.push(tag.name);
     if (path.join('/') === 'rss/channel/item') { if (rows.length >= 50) throw new Error('Too many items'); row = {}; }
-    if (row && path.length === 4 && fields.has(tag.name)) { if (Object.hasOwn(row, tag.name)) throw new Error('Duplicate feed field'); row[tag.name] = ''; }
+    if (row && path.length === 4 && fields.has(tag.name)) {
+      if (Object.hasOwn(row, tag.name)) {
+        // Co-authored stories repeat dc:creator. Preserve every attribution so
+        // partner checks still inspect all authors; other fields stay singular.
+        if (tag.name !== 'dc:creator') throw new Error('Duplicate feed field');
+        row[tag.name] += ', ';
+        if (row[tag.name].length > 80_000) throw new Error('Field too large');
+      } else row[tag.name] = '';
+    }
     if (row && path.length > 4 && fields.has(path[3])) throw new Error('Nested feed field');
   });
   const append = t => { if (row && path.length === 4 && fields.has(path[3])) { row[path[3]] += t; if (row[path[3]].length > 80_000) throw new Error('Field too large'); } };
