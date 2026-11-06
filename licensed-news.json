@@ -1,9 +1,19 @@
 {
   "source": "The Texas Tribune",
-  "retrievedAt": "2026-11-06T08:35:24.336Z",
-  "policyCheckedAt": "2026-11-06T08:35:24.336Z",
+  "retrievedAt": "2026-11-06T20:05:07.035Z",
+  "policyCheckedAt": "2026-11-06T20:05:07.035Z",
   "policyDigest": "83e8cafce5e3cba8d74297f86204f3a50ff06a6f6cd84ed93dac0bc33fc2d1d5",
   "articles": [
+    {
+      "id": "tt-252029",
+      "title": "Texas spent billions on border security. What happens to Greg Abbott’s mission when Dems take over?",
+      "url": "https://www.texastribune.org/2026/11/06/texas-immigration-operation-lonestar-democrats-election/",
+      "author": "Uriel J. García",
+      "publishedAt": "2026-11-06T11:00:00.000Z",
+      "excerpt": "After Abbott’s defeat, Texas’ new governor faces questions about Operation Lone Star, border security and the future of immigration enforcement.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/"
+    },
     {
       "id": "tt-251553",
       "title": "After supporting Trump in 2024, Texas border counties fueled Democrats’ big night",
@@ -475,16 +485,6 @@
         "width": 1024,
         "height": 680
       }
-    },
-    {
-      "id": "tt-243186",
-      "title": "Minnesota drops extradition lawsuit against Abbott after ICE officer’s arrest",
-      "url": "https://www.texastribune.org/2026/09/17/texas-minnesota-extradition-ice-christian-castro-arrest/",
-      "author": "Alex Nguyen",
-      "publishedAt": "2026-09-17T15:18:08.000Z",
-      "excerpt": "Minnesota prosecutors accused Christian Castro of injuring a Venezuelan man and lying about what led to the shooting. He also faces federal charges.",
-      "publisher": "The Texas Tribune",
-      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/"
     },
     {
       "id": "tt-240265",
