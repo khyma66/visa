@@ -163,7 +163,7 @@
   .mobile-menu { display: block; }
   .mobile-menu summary { list-style: none; }
   .mobile-menu summary::-webkit-details-marker { display: none; }
-  .mobile-menu-panel { position: absolute; left: max(8px, env(safe-area-inset-left)); top: calc(100% + 4px); width: min(380px, calc(100vw - 16px)); max-height: calc(100dvh - 100% - 12px - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 10px 25px #0002; }
+  .mobile-menu-panel { z-index: 60; position: absolute; left: max(8px, env(safe-area-inset-left)); top: calc(100% + 4px); width: min(380px, calc(100vw - 16px)); max-height: calc(100dvh - 100% - 12px - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 10px 25px #0002; }
   .mobile-menu-panel .community-navigation { padding: 4px 8px; font-size: .875rem; }
   .mobile-menu-panel .nav-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 4px; padding: 6px 0; }
   .mobile-menu-panel .nav-section-title { grid-column: 1 / -1; margin: 2px 8px 4px; }
