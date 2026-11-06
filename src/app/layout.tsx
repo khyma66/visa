@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import '../styles/globals.css';
 import { NotificationProvider } from '@/components/NotificationProvider';
 import { AuthProvider } from '@/components/AuthProvider';
+import { OwnerAccessProvider } from '@/components/OwnerAccessProvider';
 import { SiteHeader } from '@/components/SiteHeader';
 import { CommunityAddonsNavigation } from '@/components/CommunityAddonsNavigation';
 import Link from 'next/link';
@@ -47,6 +48,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="min-h-screen bg-white text-slate-900 antialiased">
         <AuthProvider>
+          <OwnerAccessProvider>
           <NotificationProvider>
           <Suspense><SiteHeader /></Suspense>
           <div className="app-layout">
@@ -72,6 +74,7 @@ export default function RootLayout({
           </div>
           </div>
         </NotificationProvider>
+        </OwnerAccessProvider>
         </AuthProvider>
       </body>
     </html>

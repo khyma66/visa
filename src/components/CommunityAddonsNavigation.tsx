@@ -3,10 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Compass, Newspaper, Plus, Users } from 'lucide-react';
+import { useOwnerAccess } from './OwnerAccessProvider';
 
 /** Add beside the existing header; never replace the host application's navigation. */
 export function CommunityAddonsNavigation() {
   const pathname = usePathname();
+  const { status } = useOwnerAccess();
+  if (status === 'owner') return null;
   const links = [
     ['/us/en/explore', 'Explore Communities', Compass],
     ['/my-communities', 'My Communities', Users],

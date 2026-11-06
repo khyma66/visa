@@ -51,6 +51,20 @@ test('only a visible detail held open for two seconds records; leaving or hiding
  doc.visibilityState='visible';doc.dispatchEvent(new Event('visibilitychange'));t.mock.timers.tick(2000);assert.equal(recorded,1);t.mock.timers.tick(5000);assert.equal(recorded,1);stop();
  const stop2=api.observePostView('apify-other',doc);stop2();t.mock.timers.tick(2000);assert.equal(recorded,1);
 });
+test('repeat mounts reuse reads, concurrent writes coalesce, and failed measurements can retry',async t=>{
+ const api=await import(moduleUrl(await compile('../src/lib/post-views.ts'))+'#dedupe');
+ let calls=0,finish;
+ t.mock.method(globalThis,'fetch',()=>{calls++;return new Promise(resolve=>finish=resolve);});
+ const stop=api.watchPostViews(post,()=>{});await new Promise(r=>setImmediate(r));
+ const stop2=api.watchPostViews(post,()=>{});await new Promise(r=>setImmediate(r));assert.equal(calls,1);
+ finish(Response.json([{post_id:post,views:4}]));await new Promise(r=>setImmediate(r));
+ const stop3=api.watchPostViews(post,()=>{});await new Promise(r=>setImmediate(r));assert.equal(calls,1);
+ const first=api.recordPostView(post),second=api.recordPostView(post);assert.equal(first,second);assert.equal(calls,2);
+ finish(new Response(null,{status:503}));await first;
+ const retry=api.recordPostView(post);assert.equal(calls,3);finish(Response.json([{post_id:post,views:5}]));await retry;
+ await api.recordPostView(post);assert.equal(calls,3);assert.equal(api.postViewCount(post),5);
+ stop();stop2();stop3();
+});
 test('view label stays compact, accessible, singular-aware and hidden when unavailable',async()=>{
  const {createElement}=await import('react'),{renderToStaticMarkup}=await import('react-dom/server');
  const dependencies={
@@ -65,6 +79,6 @@ test('view label stays compact, accessible, singular-aware and hidden when unava
  try{
  globalThis.__testViews=1200;let html=renderToStaticMarkup(createElement(PostViews,{postId:post}));assert.match(html,/1.2K views/);assert.match(html,/1,200 views on VisaThreads/);
  globalThis.__testViews=1;html=renderToStaticMarkup(createElement(PostViews,{postId:post}));assert.match(html,/1 view on VisaThreads/);assert.doesNotMatch(html,/1 views/);
- globalThis.__testViews=null;assert.equal(renderToStaticMarkup(createElement(PostViews,{postId:post})), '');
+ globalThis.__testViews=null;html=renderToStaticMarkup(createElement(PostViews,{postId:post}));assert.match(html,/min-w-\[5rem\]/);assert.match(html,/invisible/);assert.match(html,/aria-hidden="true"/);assert.doesNotMatch(html,/0 views/);
  }finally{delete globalThis.__testViews;}
 });

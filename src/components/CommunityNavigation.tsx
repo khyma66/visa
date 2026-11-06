@@ -4,11 +4,15 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Bell, BookOpen, Compass, Home, MessageCircle, Newspaper, NotebookPen, Plus, ShieldCheck, Tags, TrendingUp, Users } from 'lucide-react';
 import { useAuth } from './AuthProvider';
+import { useOwnerAccess } from './OwnerAccessProvider';
+import { AdminNavigation } from './AdminNavigation';
 
 export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const { user } = useAuth();
+  const { status } = useOwnerAccess();
+  if (status === 'owner') return <AdminNavigation mobile={mobile} onNavigate={onNavigate}/>;
   const askHref = user ? '/ask' : '/login?next=%2Fask#sign-in';
   const popular = (pathname === '/us/en' || pathname === '/') && params.get('sort') === 'score';
   const sections = [

@@ -31,6 +31,10 @@ await verifyStableRollout({ expected, previous: receipt.health,
     await removedPage.body?.cancel();
     await smokeSite(LIVE_SITE, expected, { fetchImpl: probe.siteFetch, skipHealthWait: true });
     await verifyPlaybookPages(probe, feed, true);
+    const admin = await probe.request('unified-admin', '/admin?section=members');
+    assert.match(admin.headers.get('cache-control') ?? '', /no-store/);
+    assert.match(admin.headers.get('x-robots-tag') ?? '', /noindex/);
+    assert.match(await admin.text(), /Admin workspace|Loading admin workspace/);
     const home = await probe.request('search-home', '/us/en');
     assert.equal(home.headers.get('x-visathreads-search'), 'editorial');
     assert(!/noindex/i.test(home.headers.get('x-robots-tag') ?? ''));
