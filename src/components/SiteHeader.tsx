@@ -50,8 +50,9 @@ export function SiteHeader() {
         }}>
           <summary className="icon-control" aria-label="Open navigation" title="Navigation"><Menu size={22}/></summary>
           <div className="mobile-menu-panel">
-            <div className="mobile-menu-feedback"><FeedbackLauncher mobileNavigation /></div>
+            <button type="button" className="mobile-menu-close" onClick={() => { if (mobileMenu.current) { mobileMenu.current.open = false; mobileMenu.current.querySelector('summary')?.focus(); } }}>Close navigation</button>
             <CommunityNavigation mobile onNavigate={() => { if (mobileMenu.current) mobileMenu.current.open = false; }}/>
+            <div className="mobile-menu-feedback"><FeedbackLauncher mobileNavigation /></div>
           </div>
         </details>
         <Link href="/" className="site-brand" aria-label="VisaThreads home">

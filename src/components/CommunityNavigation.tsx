@@ -35,7 +35,7 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
     ] },
   ];
   return <nav aria-label={mobile ? 'Mobile navigation' : 'Main navigation'} className="community-navigation capitalize">
-    {sections.map((section) => <div key={section.name} className="nav-section">
+    {sections.map((section) => <div key={section.name} className={`nav-section ${section.name === 'Create & Ask' ? 'nav-create' : ''}`}>
       <p className="nav-section-title">{section.name}</p>
       {section.links.map(({ href, label, icon: Icon, ...state }) => {
         const active = 'active' in state ? state.active : pathname === href;
@@ -46,7 +46,6 @@ export function CommunityNavigation({ mobile = false, onNavigate }: { mobile?: b
     </div>)}
     <div className="nav-section">
       <p className="nav-section-title capitalize">Resources</p>
-      <Link href="/countries" onClick={onNavigate} className="nav-item capitalize"><Compass size={20} aria-hidden="true"/>Visa Destinations</Link>
       <Link href="/us/en/guides" onClick={onNavigate} aria-current={pathname.startsWith('/us/en/guides') ? 'page' : undefined} className={`nav-item ${pathname.startsWith('/us/en/guides') ? 'nav-item-active' : ''} capitalize`}><BookOpen size={20} strokeWidth={1.7} aria-hidden="true"/>Visa Guides</Link>
       <Link href="/community-safety" onClick={onNavigate} className="nav-item capitalize"><ShieldCheck size={20} strokeWidth={1.7} aria-hidden="true"/>Community Safety</Link>
       <div className="nav-policy-links capitalize">

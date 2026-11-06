@@ -151,6 +151,10 @@ test('navigation and account menus stay reachable on narrow and short viewports'
     assert.equal(property(rule, 'overscroll-behavior'), 'contain');
   }
   assert.equal(property(menu, 'top'), 'calc(100% + 4px)');
+  const landscapeMenu=rules.find(rule=>rule.selector === '.mobile-menu-panel' && rule.parent.params === '(max-height: 500px) and (max-width: 1023px)');
+  assert.equal(property(landscapeMenu,'position'),'fixed');
+  assert.match(property(landscapeMenu,'max-height'),/100dvh/);
+  assert(rules.some(rule=>rule.selector === '.mobile-menu-close' && property(rule,'position') === 'sticky' && property(rule,'min-height') === '44px'));
   assert.match(property(menu, 'max-height'), /100%/, 'Menu clearance follows actual header height, including larger text');
   assert(rules.some(rule => rule.selector === '.site-header' && rule.parent.params === '(max-height: 500px) and (max-width: 1023px)' && property(rule, 'position') === 'relative'));
   for (const selector of ['.header-auth-button', '.header-ask', '.notification-icon', '.header-account-panel :is(a, button)']) {
