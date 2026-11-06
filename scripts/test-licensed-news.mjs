@@ -44,6 +44,15 @@ test('original article with republication enabled gets the unchanged publisher t
   assert.equal(article.excerpt, 'Publisher-provided short excerpt.'); assert.equal(article.photo.credit, 'Photographer Name for The Texas Tribune');
   assert.equal(article.photo.caption, 'A courthouse on October 30.'); assert.equal(article.photo.url, image);
 });
+test('co-authored RSS stories preserve all credits and still exclude partner authors', () => {
+  const withAuthor = author => rss(row).replace('</dc:creator>', `</dc:creator><dc:creator><![CDATA[${author}]]></dc:creator>`);
+  const parsed = parseFeed(withAuthor('Second Reporter'))[0];
+  assert.equal(parsed['dc:creator'], 'Reporter Name, Second Reporter');
+  assert.equal(articleFrom(parsed, html, now).author, 'Reporter Name, Second Reporter');
+  assert.equal(articleFrom(parseFeed(withAuthor('Associated Press'))[0], html, now), null);
+  assert.throws(() => parseFeed(withAuthor('x'.repeat(80_000))), /Field too large/);
+  assert.throws(() => parseFeed(rss(row).replace('</link>', '</link><link>https://evil.test/</link>')), /Duplicate feed field/);
+});
 test('partner text, revoked republication, unsafe or dated-out stories are excluded', () => {
   for(const r of [{...row,'dc:creator':'Associated Press'},{...row,link:'https://evil.test/'},{...row,pubDate:'2100-01-01'},{...row,pubDate:'2020-01-01'}]) assert.equal(articleFrom(r,html,now),null);
   assert.equal(articleFrom(row,html.replace('republication-tracker-tool-plain-text-content','disabled'),now),null);
