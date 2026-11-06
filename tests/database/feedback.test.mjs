@@ -254,7 +254,7 @@ test('client pages twenty visible rows using a lookahead cursor', async () => {
   finally {delete globalThis.__feedbackBackend;}
 });
 const deps={
-  react:import.meta.resolve('react'),'react/jsx-runtime':import.meta.resolve('react/jsx-runtime'),'lucide-react':import.meta.resolve('lucide-react'),
+  react:import.meta.resolve('react'),'react-dom':import.meta.resolve('react-dom'),'react/jsx-runtime':import.meta.resolve('react/jsx-runtime'),'lucide-react':import.meta.resolve('lucide-react'),
   'next/link':moduleUrl(`import React from ${JSON.stringify(import.meta.resolve('react'))};export default function Link(props){return React.createElement('a',props,props.children);}`),
   'next/navigation':moduleUrl("export const usePathname=()=>'/news';"),
   './AuthProvider':moduleUrl('export const useAuth=()=>globalThis.__feedbackAuth;'),

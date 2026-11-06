@@ -11,7 +11,7 @@ const source = await readFile(new URL('src/styles/globals.css', root), 'utf8');
 // Check the real Tailwind output: layer reordering can break a rule that looks
 // correct in the source stylesheet, especially the phone input font floor.
 const output = await postcss([tailwindcss({ ...config, content: [{ extension: 'html', raw:
-  '<div class="text-xs text-sm text-base text-lg text-xl text-2xl text-3xl text-4xl text-5xl text-thread-title header-search integrated-brand-logo header-secondary-action header-account header-auth-button site-brand feed-sort-button nav-item-active"></div>',
+  '<div class="text-xs text-sm text-base text-lg text-xl text-2xl text-3xl text-4xl text-5xl text-thread-title site-header header-content header-search integrated-brand-logo header-action-group header-account header-account-panel header-auth-actions header-auth-button header-ask mobile-menu mobile-menu-panel mobile-menu-feedback community-shortcuts notification-icon site-brand feed-sort-button nav-item-active"></div>',
 }] })]).process(source, { from: new URL('src/styles/globals.css', root).pathname });
 const rules = [];
 output.root.walkRules(rule => rules.push(rule));
@@ -114,18 +114,67 @@ test('logo geometry and narrow-screen behavior remain unchanged by typography', 
   assert.match(source, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
-test('phone header keeps account controls on the first row and the complete logo proportional', async () => {
+test('phone header assigns stable rows for account, search and notifications without shrinking the logo out of its column', async () => {
   const phone = selector => rules.find(rule => rule.selector === selector && rule.parent.params === '(max-width: 639px)');
-  assert.equal(property(phone('.site-brand'), 'min-width'), '130px');
+  const tablet = selector => rules.find(rule => rule.selector === selector && rule.parent.params === '(max-width: 1023px)');
+  assert.equal(property(tablet('.header-content'), 'display'), 'grid');
+  assert.equal(property(phone('.header-content'), 'grid-template-columns'), '44px minmax(0, 1fr) auto');
+  assert.equal(property(phone('.site-brand'), 'min-width'), '0');
   assert.equal(property(phone('.site-brand'), 'max-width'), '172px');
-  assert.equal(property(phone('.site-brand'), 'flex'), '1 1 130px');
+  assert.equal(property(phone('.site-brand'), 'grid-row'), '1');
+  assert.equal(property(phone('.site-brand'), 'grid-column'), '2');
   assert.equal(property(phone('.integrated-brand-logo-frame'), 'width'), '100%');
   assert.equal(property(phone('.integrated-brand-logo-frame'), 'max-width'), '172px');
-  assert.equal(property(phone('.header-secondary-action'), 'display'), 'none');
-  assert.equal(property(phone('.header-account'), 'flex-shrink'), '0');
+  assert.equal(property(phone('.header-action-group'), 'display'), 'none');
+  assert.equal(property(phone('.mobile-menu-feedback'), 'display'), 'block');
+  assert.equal(property(tablet('.header-account, .header-auth-actions'), 'grid-row'), '1');
+  assert.equal(property(phone('.header-account, .header-auth-actions'), 'grid-column'), '3');
+  assert.equal(property(tablet('.header-search'), 'grid-column'), '1 / -1');
+  assert.equal(property(phone('.header-content:has(.header-notifications) .header-search'), 'grid-column'), '1 / 3');
+  assert.equal(property(phone('.header-notifications'), 'grid-row'), '2');
+  assert.equal(property(phone('.header-auth-button'), 'white-space'), 'normal');
+  assert.equal(property(phone('.header-auth-button'), 'max-width'), 'clamp(100px, 34vw, 160px)');
+  assert.equal(property(tablet('.header-content .header-demo-badge'), 'display'), 'none');
   assert(rules.some(rule => rule.selector === '.header-auth-button' && property(rule, 'flex-shrink') === '0'));
   const navigation = await readFile(new URL('src/components/CommunityNavigation.tsx', root), 'utf8');
   assert.match(navigation, /mobile \? \[\{ name: 'Create & Ask'/);
   assert.match(navigation, /href: askHref, label: 'Ask a Question'/);
   assert(!navigation.includes('/assistant'));
+});
+
+test('navigation and account menus stay reachable on narrow and short viewports', async () => {
+  const menu = rules.find(rule => rule.selector === '.mobile-menu-panel');
+  const account = rules.find(rule => rule.selector === '.header-account-panel');
+  for (const rule of [menu, account]) {
+    assert.match(property(rule, 'max-height'), /100dvh/);
+    assert.equal(property(rule, 'overflow-y'), 'auto');
+    assert.equal(property(rule, 'overscroll-behavior'), 'contain');
+  }
+  assert.equal(property(menu, 'top'), 'calc(100% + 4px)');
+  assert.match(property(menu, 'max-height'), /100%/, 'Menu clearance follows actual header height, including larger text');
+  assert(rules.some(rule => rule.selector === '.site-header' && rule.parent.params === '(max-height: 500px) and (max-width: 1023px)' && property(rule, 'position') === 'relative'));
+  for (const selector of ['.header-auth-button', '.header-ask', '.notification-icon', '.header-account-panel :is(a, button)']) {
+    assert(rules.some(rule => rule.selector === selector && property(rule, 'min-height') === '44px'), selector);
+  }
+  const shortcuts = rules.find(rule => rule.selector === '.community-shortcuts nav' && rule.parent.params === '(max-width: 639px)');
+  assert.equal(property(shortcuts, 'grid-template-columns'), 'repeat(2, minmax(0, 1fr))');
+  assert.equal(property(shortcuts, 'overflow-x'), undefined, 'No offscreen shortcut links');
+  const header = await readFile(new URL('src/components/SiteHeader.tsx', root), 'utf8');
+  assert.match(header, /<FeedbackLauncher mobileNavigation \/>/);
+  const feedback = await readFile(new URL('src/components/FeedbackLauncher.tsx', root), 'utf8');
+  assert.match(feedback, /mobileNavigation \? 'mobile-feedback-title' : 'feedback-title'/);
+  assert.match(feedback, /open && createPortal\(<dialog/);
+  assert.match(feedback, /<\/dialog>, document.body\)/);
+  const phone = selector => rules.find(rule => rule.selector === selector && rule.parent.params === '(max-width: 639px)');
+  assert.equal(property(phone('.news-tabs > button'), 'white-space'), 'normal');
+  assert.equal(property(phone('.account-sections'), 'grid-template-columns'), 'repeat(2, minmax(0, 1fr))');
+});
+
+test('related heading is plain Related in feed, question and draft states', async () => {
+  const related = await readFile(new URL('src/components/RelatedQuestions.tsx', root), 'utf8');
+  assert.match(related, /aria-label="Related"/);
+  assert.match(related, /<h2[^>]+>Related<\/h2>/);
+  assert.doesNotMatch(related, /GitFork|Related to your draft/);
+  assert.match(related, /Suggestions update as you type/);
+  assert.match(related, /subscribeLive/);
 });
