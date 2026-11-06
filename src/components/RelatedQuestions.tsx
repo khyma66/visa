@@ -4,7 +4,7 @@ import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Search, GitFork } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { discoverQuestions } from '@/lib/community';
 import { contextTags, type DiscoveryContext } from '@/lib/discovery';
 import { subscribeLive } from '@/lib/realtime';
@@ -39,9 +39,9 @@ export function RelatedQuestions({ context, drafting = false }: { context: Disco
     return () => { current = false; clearTimeout(timer); };
   }, [key, revision, hasContext]);
 
-  return <section aria-label="Related Questions" aria-busy={loading} className="min-w-0 border-b border-slate-200 bg-white pb-3">
+  return <section aria-label="Related" aria-busy={loading} className="min-w-0 border-b border-slate-200 bg-white pb-3">
     <div className="px-2 pb-2">
-      <div className="flex items-center gap-2"><GitFork size={17} className="text-slate-500" aria-hidden="true" /><h2 className="text-thread-title font-semibold text-slate-900 capitalize">{drafting ? 'Related to your draft' : 'Related Questions'}</h2></div>
+      <h2 className="text-thread-title font-semibold text-slate-900 capitalize">Related</h2>
       {drafting && <p className="mt-2 text-base leading-6 text-slate-500 capitalize">Suggestions update as you type. Your draft is not published.</p>}
       <p aria-live="polite" className="mt-2 text-xs text-slate-500">{loading ? 'Finding related questions...' : error || `${items.length} related ${items.length === 1 ? 'post' : 'posts'}`}</p>
       {error && <button onClick={() => setRevision((value) => value + 1)} className="mt-2 text-sm font-semibold text-blue-700 underline capitalize">Retry related questions</button>}

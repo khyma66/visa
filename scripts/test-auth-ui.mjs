@@ -179,7 +179,7 @@ test('header uses one login and signup entry point before authentication', async
   const h = setup();
   try {
     h.render(SiteHeader);
-    const link = byText(h, 'a', 'LogIn/SignUp');
+    const link = byText(h, 'a', 'Log in / Sign up');
     assert.equal(link.props.href, '/login#sign-in');
     assert.equal(link.props.onClick, undefined);
     const nav = nodes(h.tree).find(node => node.type === 'nav' && node.props['aria-label'] === 'Account access');
@@ -620,7 +620,7 @@ test('account access keeps the regular search, mobile navigation, ask action and
    assert(nodes(h.tree).some(node=>node.type==='details'&&node.props.className==='mobile-menu'));
    assert(nodes(h.tree).some(node=>node.props?.title==='Ask a Question'));
    assert(nodes(h.tree).some(node=>node.props?.['aria-label']==='VisaThreads home'));
-   assert.equal(byText(h,'a','LogIn/SignUp').props.href,'/login#sign-in');
+   assert.equal(byText(h,'a','Log in / Sign up').props.href,'/login#sign-in');
   }
  }finally{h.close();}
 });

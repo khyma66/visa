@@ -2,17 +2,19 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { BarChart3, ClipboardList, MessageSquarePlus, Inbox, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { FeedbackForm } from './FeedbackForm';
 import { useAuth } from './AuthProvider';
 import { feedbackSection, isFeedbackOwner } from '@/lib/feedback';
 
-export function FeedbackLauncher() {
+export function FeedbackLauncher({ mobileNavigation = false }: { mobileNavigation?: boolean } = {}) {
   const path = usePathname();
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const titleId = mobileNavigation ? 'mobile-feedback-title' : 'feedback-title';
   useEffect(() => { setOpen(false); dialog.current?.close(); }, [path]);
   useEffect(() => {
     if (!open) return;
@@ -21,13 +23,19 @@ export function FeedbackLauncher() {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = overflow; };
   }, [open]);
-  function close() { dialog.current?.close(); setOpen(false); trigger.current?.focus(); }
+  function close() {
+    dialog.current?.close(); setOpen(false);
+    if (trigger.current?.getClientRects().length) trigger.current.focus();
+    else document.querySelector<HTMLElement>('.site-brand')?.focus();
+  }
   return <>
-    <button ref={trigger} type="button" title="Send feedback" aria-label="Feedback" onClick={() => setOpen(true)} className="flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 capitalize"><MessageSquarePlus size={19} aria-hidden="true"/><span className="hidden lg:inline capitalize">Feedback</span></button>
-    <dialog ref={dialog} aria-labelledby="feedback-title" onCancel={event => { event.preventDefault(); close(); }} onClose={() => setOpen(false)} className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl backdrop:bg-slate-950/45 sm:p-6">
-      <div className="mb-4 flex items-center justify-between gap-3"><h1 id="feedback-title" className="text-xl font-bold capitalize">Help Improve VisaThreads</h1><button type="button" autoFocus onClick={close} aria-label="Close feedback" className="grid h-10 w-10 shrink-0 place-items-center rounded-full hover:bg-slate-100"><X size={20}/></button></div>
+    <button ref={trigger} type="button" title="Send feedback" aria-label="Feedback" onClick={() => setOpen(true)} className={mobileNavigation ? 'nav-item w-full text-left font-semibold' : 'flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 capitalize'}><MessageSquarePlus size={19} aria-hidden="true"/><span className={mobileNavigation ? 'capitalize' : 'hidden lg:inline capitalize'}>Feedback</span></button>
+    {/* Keep the modal outside responsive navigation containers: rotating the
+        screen must not hide an open dialog while leaving the page locked. */}
+    {open && createPortal(<dialog ref={dialog} aria-labelledby={titleId} onCancel={event => { event.preventDefault(); close(); }} onClose={() => setOpen(false)} className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl backdrop:bg-slate-950/45 sm:p-6">
+      <div className="mb-4 flex items-center justify-between gap-3"><h1 id={titleId} className="text-xl font-bold capitalize">Help Improve VisaThreads</h1><button type="button" autoFocus onClick={close} aria-label="Close feedback" className="grid h-11 w-11 shrink-0 place-items-center rounded-full hover:bg-slate-100"><X size={20}/></button></div>
       {open && <FeedbackForm section={feedbackSection(path)}/>}
-    </dialog>
+    </dialog>, document.body)}
   </>;
 }
 

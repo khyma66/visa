@@ -40,14 +40,19 @@ export function SiteHeader() {
     <header className="site-header">
       <a href="#main-content" className="skip-link capitalize">Skip to content</a>
       <div className="header-content">
-        <details ref={mobileMenu} className="mobile-menu" onKeyDown={(event) => {
+        <details ref={mobileMenu} className="mobile-menu" onToggle={(event) => {
+          if (event.currentTarget.open) setOpen(false);
+        }} onKeyDown={(event) => {
           if (event.key === 'Escape' && mobileMenu.current) {
             mobileMenu.current.open = false;
             mobileMenu.current.querySelector('summary')?.focus();
           }
         }}>
           <summary className="icon-control" aria-label="Open navigation" title="Navigation"><Menu size={22}/></summary>
-          <div className="mobile-menu-panel"><CommunityNavigation mobile onNavigate={() => { if (mobileMenu.current) mobileMenu.current.open = false; }}/></div>
+          <div className="mobile-menu-panel">
+            <div className="mobile-menu-feedback"><FeedbackLauncher mobileNavigation /></div>
+            <CommunityNavigation mobile onNavigate={() => { if (mobileMenu.current) mobileMenu.current.open = false; }}/>
+          </div>
         </details>
         <Link href="/" className="site-brand" aria-label="VisaThreads home">
           {/* Local brand asset: no remote request or image-processing service. */}
@@ -63,7 +68,7 @@ export function SiteHeader() {
           <button type="submit" className="icon-control" aria-label="Search" title="Search"><Search size={18}/></button>
         </form>
         {demoMode && (
-          <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 sm:flex capitalize">
+          <span className="header-demo-badge hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 sm:flex capitalize">
             <ShieldCheck size={13} /> Local profile
           </span>
         )}
@@ -76,11 +81,11 @@ export function SiteHeader() {
         <NotificationLinks />
         {loading ? <span role="status" aria-label="Checking account" className="header-account h-10 w-10 animate-pulse rounded-full bg-slate-100" /> : user ? (
           <div ref={accountRef} className="header-account relative">
-            <button ref={accountButton} onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="account-panel" className="flex min-h-10 items-center gap-2 rounded-full p-1 hover:bg-slate-100" aria-label={`Account: ${profile?.username ?? 'Signed in'}`}>
+            <button ref={accountButton} onClick={() => { if (mobileMenu.current) mobileMenu.current.open = false; setOpen(!open); }} aria-expanded={open} aria-controls="account-panel" className="flex min-h-11 items-center gap-2 rounded-full p-1 hover:bg-slate-100" aria-label={`Account: ${profile?.username ?? 'Signed in'}`}>
               <Avatar seed={profile?.avatar_seed ?? user.id} />
               <ChevronDown size={14} aria-hidden="true" className="mr-1 text-slate-500" />
             </button>
-            {open && <div id="account-panel" className="absolute right-0 top-12 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+            {open && <div id="account-panel" className="header-account-panel absolute right-0 top-12 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
               <p className="text-xs font-semibold tracking-wide text-slate-500 capitalize">Your Account</p>
               <p className="mt-1 break-words font-bold text-slate-900">{profile ? `u/${profile.username}` : 'Signed in'}</p>
               <p className="text-xs text-slate-500 capitalize">{profile ? `${profile.reputation} reputation` : 'Private account menu'}</p>
@@ -105,7 +110,7 @@ export function SiteHeader() {
           </div>
         ) : (
           <nav aria-label="Account access" className="header-auth-actions">
-            <a href="/login#sign-in" aria-label="Log In or Sign Up" className="header-auth-button capitalize">LogIn/SignUp</a>
+            <a href="/login#sign-in" aria-label="Log In or Sign Up" className="header-auth-button capitalize">Log in / Sign up</a>
           </nav>
         )}
       </div>
