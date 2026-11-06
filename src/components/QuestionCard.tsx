@@ -37,7 +37,6 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
           <p className="mt-2 line-clamp-2 break-words text-base leading-6 text-slate-600">{question.body}</p>
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {question.tags.map((tag) => <Link key={tag} href={`/us/en?tag=${encodeURIComponent(tag)}`} onClick={onTagSelect ? (event) => { event.preventDefault(); onTagSelect(tag); } : undefined} className="max-w-full break-words rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}
-            {question.destination_country !== 'Global' && <span className="ml-auto text-xs text-slate-500">{question.destination_country}</span>}
           </div>
           <div className="feed-post-toolbar relative mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600 capitalize">
             <span title={imported ? "reactions" : "votes"} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-2"><ArrowUp size={14} aria-hidden="true" />{compact(question.vote_score)}<span className="sr-only capitalize"> {imported ? "reactions" : "votes"}</span></span>

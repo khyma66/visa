@@ -222,6 +222,25 @@ test('query-only navigation within account closes the profile-menu disclosure', 
     }
   } finally { delete globalThis.__accountPresentation; }
 });
+test('mobile navigation and account disclosures do not remain open over one another', () => {
+  const find = (element, predicate) => {
+    if (!element) return null;
+    if (Array.isArray(element)) return element.map(child => find(child, predicate)).find(Boolean);
+    if (predicate(element)) return element;
+    return find(element.props?.children, predicate);
+  };
+  try {
+    const menu = { open: true };
+    const state = setup({ refs: { 2: menu } });
+    const tree = SiteHeader();
+    const account = find(tree, element => element.type === 'button' && element.props?.['aria-controls'] === 'account-panel');
+    account.props.onClick();
+    assert.equal(menu.open, false);
+    assert(state.updates.some(([index, value]) => index === 0 && value === true));
+    find(tree, element => element.type === 'details').props.onToggle({ currentTarget: { open: true } });
+    assert(state.updates.some(([index, value]) => index === 0 && value === false));
+  } finally { delete globalThis.__accountPresentation; }
+});
 test('switch-account and logout await successful sign-out before redirecting', async () => {
   try {
     for (const [label, path] of [['Use a different account', '/login'], ['Sign out', '/']]) {
