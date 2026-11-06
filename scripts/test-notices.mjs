@@ -48,6 +48,7 @@ test('safety and professional community description appear once in the footer in
     '@/components/PolicyAcceptance': url('export const PolicyAcceptance=({children})=>children;'),
     '@/components/CommunityAddonsNavigation': url('export const CommunityAddonsNavigation=()=>null;'),
     '@/components/CommunityNavigation': url('export const CommunityNavigation=()=>null;'),
+    '@/components/OwnerAccessProvider': url('export const OwnerAccessProvider=({children})=>children;'),
     '@/components/SiteHeader': url(`import {jsx} from ${JSON.stringify(jsx)};export const SiteHeader=()=>jsx('header',{children:'Header'});`),
   });
   const originalEnvironment = process.env.NEXT_PUBLIC_APP_ENV;

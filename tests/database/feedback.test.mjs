@@ -318,7 +318,8 @@ for (const file of feedbackUiFiles) {
       if (ts.isJsxText(node) || ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
         // Routes/imports and authorization identifiers are implementation, not
         // display copy. AST traversal also excludes explanatory code comments.
-        if (!/^(?:\/|\.|@)/.test(node.text)) visibleCopy.push(node.text);
+        const authorizationComparison = ts.isBinaryExpression(node.parent) && node.parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken;
+        if (!authorizationComparison && !/^(?:\/|\.|@)/.test(node.text)) visibleCopy.push(node.text);
       }
       ts.forEachChild(node, visit);
     }
@@ -329,7 +330,7 @@ for (const file of feedbackUiFiles) {
 test('feedback launcher tooltip and signed-out inbox render neutral labels', async () => {
   const launcherSource = await readFile(new URL('../../src/components/FeedbackLauncher.tsx', import.meta.url), 'utf8');
   const inboxSource = await readFile(new URL('../../src/components/FeedbackInbox.tsx', import.meta.url), 'utf8');
-  const { FeedbackLauncher } = await import(componentModule(launcherSource, { ...deps, './FeedbackForm': formUrl }));
+  const { FeedbackLauncher } = await import(componentModule(launcherSource, { ...deps, './FeedbackForm': formUrl, './OwnerAccessProvider': moduleUrl('export const useOwnerAccess=()=>({status:"denied"});') }));
   const { FeedbackInbox } = await import(componentModule(inboxSource));
   globalThis.__feedbackAuth = { user: null, loading: false, demoMode: false };
   try {

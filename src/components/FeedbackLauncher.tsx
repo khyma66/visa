@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BarChart3, ClipboardList, MessageSquarePlus, Inbox, X } from 'lucide-react';
+import { BarChart3, MessageSquarePlus, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { FeedbackForm } from './FeedbackForm';
-import { useAuth } from './AuthProvider';
-import { feedbackSection, isFeedbackOwner } from '@/lib/feedback';
+import { feedbackSection } from '@/lib/feedback';
+import { useOwnerAccess } from './OwnerAccessProvider';
 
 export function FeedbackLauncher({ mobileNavigation = false }: { mobileNavigation?: boolean } = {}) {
   const path = usePathname();
@@ -42,19 +42,6 @@ export function FeedbackLauncher({ mobileNavigation = false }: { mobileNavigatio
 // This check only controls discovery. Every inbox/read/write RPC independently
 // checks the server-maintained owner UUID, including calls made without this UI.
 export function OwnerFeedbackLink() {
-  const { user, demoMode } = useAuth();
-  const [allowed, setAllowed] = useState(false);
-  useEffect(() => {
-    let active = true;
-    setAllowed(false);
-    if (user && !demoMode) void isFeedbackOwner().then(value => { if (active) setAllowed(value === true); }).catch(() => {});
-    return () => { active = false; };
-  }, [user?.id, demoMode]);
-  return allowed ? <>
-    <Link href="/admin/members" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize"><Inbox size={16} aria-hidden="true"/>Members</Link>
-    <Link href="/admin/analytics" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize"><BarChart3 size={16} aria-hidden="true"/>Community Dashboard</Link>
-    <Link href="/admin/reports" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize"><Inbox size={16} aria-hidden="true"/>Reports</Link>
-    <Link href="/admin/launch" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize"><ClipboardList size={16} aria-hidden="true"/>Launch & Experiments</Link>
-    <Link href="/owner/feedback" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 capitalize"><Inbox size={16} aria-hidden="true"/>Feedback Inbox</Link>
-  </> : null;
+  const { status } = useOwnerAccess();
+  return status === 'owner' ? <Link href="/admin" className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><BarChart3 size={16} aria-hidden="true"/>Admin workspace</Link> : null;
 }

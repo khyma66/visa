@@ -9,6 +9,6 @@ export function PostViews({postId,record=false}:{postId:string;record?:boolean})
   const snapshot=useCallback(()=>demoMode?null:postViewCount(postId),[postId,demoMode]);
   const count=useSyncExternalStore(subscribe,snapshot,()=>null);
   useEffect(()=>{if(record&&!demoMode)return observePostView(postId);},[postId,record,demoMode]);
-  if(count===null)return null;
-  return <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-normal text-slate-500 normal-case" title="Estimated views on VisaThreads since counting began. Repeat visits from the same network and browser are limited to one per day." aria-label={`${count.toLocaleString('en-US')} ${count===1?'view':'views'} on VisaThreads`}><Eye size={14} aria-hidden="true"/>{Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(count)} {count===1?'view':'views'}</span>;
+  if(demoMode)return null;
+  return <span className="inline-flex min-w-[5rem] items-center gap-1 whitespace-nowrap text-xs font-normal tabular-nums text-slate-500 normal-case" aria-hidden={count===null ? true : undefined} title={count===null ? undefined : 'Estimated views on VisaThreads since counting began. Repeat visits from the same network and browser are limited to one per day.'} aria-label={count===null ? undefined : `${count.toLocaleString('en-US')} ${count===1?'view':'views'} on VisaThreads`}><span className={`inline-flex items-center gap-1 ${count===null?'invisible':''}`}><Eye size={14} aria-hidden="true"/>{count===null?'\u00a0':`${Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(count)} ${count===1?'view':'views'}`}</span></span>;
 }

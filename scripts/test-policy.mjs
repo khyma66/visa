@@ -109,13 +109,11 @@ function findElement(tree,type) {
   return null;
 }
 
-test('joining presents one unchecked acknowledgement covering terms, privacy and adult eligibility',t=>{
+test('joining presents one explicit button covering terms, privacy and adult eligibility without a checkbox',t=>{
   const state=context(t),{tree,html}=renderPolicy(state);
-  const checkbox=findElement(tree,'input');
-  assert.equal((html.match(/type="checkbox"/g)||[]).length,1);
-  assert.equal(checkbox.props.checked,false);
-  assert.equal(checkbox.props.required,true);
-  assert.equal(findElement(tree,'button').props.disabled,true);
+  assert.equal((html.match(/type="checkbox"/g)||[]).length,0);
+  assert.equal(findElement(tree,'button').props.disabled,false);
+  assert.equal(state.writes.length,0);
   assert.match(html,/at least 18/);
   assert.match(html,/href="\/terms"/);
   assert.match(html,/href="\/privacy"/);
@@ -123,14 +121,9 @@ test('joining presents one unchecked acknowledgement covering terms, privacy and
   assert.doesNotMatch(html,/protected-community-fixture/);
 });
 
-test('one explicit acknowledgement preserves the full receipt and cannot be submitted unchecked',async t=>{
+test('explicit agreement preserves the full receipt and duplicate submits are ignored',async t=>{
   const state=context(t);
   let view=renderPolicy(state);
-  findElement(view.tree,'form').props.onSubmit({preventDefault(){}});await tick();
-  assert.equal(state.writes.length,0,'A forged submit must not bypass the unchecked acknowledgement');
-  assert.doesNotMatch(renderPolicy(state).html,/protected-community-fixture/);
-  findElement(view.tree,'input').props.onChange({target:{checked:true}});
-  view=renderPolicy(state);
   assert.equal(findElement(view.tree,'button').props.disabled,false);
   const submit=findElement(view.tree,'form').props.onSubmit;
   submit({preventDefault(){}});submit({preventDefault(){}});await tick();
@@ -153,7 +146,6 @@ test('policy read and write failures stay blocked with retry instead of treating
   let attempts=0;
   const state=context(t,{write:async()=>({error:++attempts===1?{code:'42501'}:null})});
   let view=renderPolicy(state);
-  findElement(view.tree,'input').props.onChange({target:{checked:true}});
   view=renderPolicy(state);findElement(view.tree,'form').props.onSubmit({preventDefault(){}});await tick();
   view=renderPolicy(state);
   assert.match(view.html,/could not save your acknowledgement/);
@@ -165,7 +157,7 @@ test('policy read and write failures stay blocked with retry instead of treating
 
 test('an existing receipt bypasses the acknowledgement and login never shows the discussion gate',async t=>{
   const state=context(t,{status:'loading',read:{data:{policy_version:policy.POLICY_VERSION},error:null}});
-  renderPolicy(state);state.effects[0]();await tick();
+  assert.match(renderPolicy(state).html,/protected-community-fixture/,'Receipt checks do not blank the rendered page');state.effects[0]();await tick();
   const accepted=renderPolicy(state);
   assert.deepEqual(state.reads,[[['user_id','fixture'],['policy_version',policy.POLICY_VERSION]]]);
   assert.match(accepted.html,/protected-community-fixture/);

@@ -11,6 +11,10 @@ const require = createRequire(import.meta.url);
 const dataUrl = (code) => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
 const realModule = (name) => pathToFileURL(require.resolve(name)).href;
 const hooks = dataUrl(`
+  export const createContext = value => ({Provider: 'test-context', value});
+  export const useContext = context => context.value;
+  export const lazy = loader => { const panel = () => null; panel.testPanel = true; return panel; };
+  export const Suspense = 'test-suspense';
   export function useState(value) { return globalThis.__authHarness.useState(value); }
   export function useRef(value) { return globalThis.__authHarness.useRef(value); }
   export function useEffect(fn, deps) { return globalThis.__authHarness.useEffect(fn, deps); }
@@ -27,6 +31,8 @@ const navigation = dataUrl(`
 `);
 const auth = dataUrl('export function useAuth(){return globalThis.__authHarness.auth;}');
 const dependencies = {
+  './OwnerAccessProvider': dataUrl('export const useOwnerAccess=()=>({status:"denied",retry:()=>{}});'),
+  './AdminNavigation': dataUrl('export const AdminNavigation=()=>null;'),
   './PrivateContactPhone': dataUrl('export const PrivateContactPhone=()=>null;'),
   './NotificationLinks': dataUrl('export const NotificationLinks=()=>null;'),
   './NotificationSettings': dataUrl('export const NotificationSettings=()=>null;'),
@@ -128,7 +134,55 @@ function change(h, labelText, value) { field(h, labelText).props.onChange({ targ
 const event = () => ({ preventDefault() {} });
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
+test('owner navigation fails closed, ignores stale identity checks and preserves drafts during revalidation', async () => {
+  const {OwnerAccessProvider} = await import(await compile('../src/components/OwnerAccessProvider.tsx', {
+    '@/lib/feedback': dataUrl('export const isFeedbackOwner=()=>globalThis.__authHarness.invoke("owner",[]);'),
+  }));
+  const h=new Harness();
+  const doc=new EventTarget();doc.visibilityState='visible';
+  const previousDocument=globalThis.document;globalThis.document=doc;
+  let pending=deferred();h.handlers.owner=()=>pending.promise;
+  try {
+    h.render(OwnerAccessProvider,{children:'private dashboard'});await h.settle();
+    assert.equal(h.tree.props.value.status,'checking');
+    const stale=pending;pending=deferred();h.auth={...h.auth,user:{id:'member-b'}};
+    h.render();await h.settle();stale.resolve(true);await h.settle();
+    assert.equal(h.tree.props.value.status,'checking');
+    pending.resolve(false);await h.settle();assert.equal(h.tree.props.value.status,'denied');
+    pending=deferred();h.tree.props.value.retry();h.render();await h.settle();
+    pending.resolve(true);await h.settle();assert.equal(h.tree.props.value.status,'owner');
+    pending=deferred();doc.dispatchEvent(new Event('visibilitychange'));h.render();await h.settle();
+    assert.equal(h.tree.props.value.status,'owner');
+    pending.reject(new Error('offline'));await h.settle();assert.equal(h.tree.props.value.status,'error');
+    h.auth={...h.auth,user:null};h.render();assert.equal(h.tree.props.value.status,'denied');
+  } finally {h.close();if(previousDocument===undefined)delete globalThis.document;else globalThis.document=previousDocument;}
+});
+
 dependencies['@/lib/auth-flow'] = await compile('../src/lib/auth-flow.ts');
+test('unified workspace mounts one selected panel only after owner authorization', async () => {
+  const {AdminWorkspace}=await import(await compile('../src/components/AdminWorkspace.tsx', {
+    '@/lib/admin-navigation': await compile('../src/lib/admin-navigation.ts'),
+    './OwnerAccessProvider': dataUrl('export const useOwnerAccess=()=>globalThis.__authHarness.access;'),
+  }));
+  const h=new Harness();h.search='section=members';
+  try {
+    for(const status of ['checking','denied','error']) {
+      h.access={status,retry:()=>{}};h.render(AdminWorkspace,{});
+      assert.equal(nodes(h.tree).filter(node=>node.type?.testPanel).length,0);
+      assert.equal(nodes(h.tree).filter(node=>node.props?.['aria-label']==='Admin sections').length,0);
+    }
+    h.access={status:'owner',retry:()=>{}};h.render();
+    assert.equal(nodes(h.tree).filter(node=>node.type?.testPanel).length,1);
+    const tabs=nodes(h.tree).filter(node=>node.props?.href?.startsWith('/admin?section='));
+    assert.equal(tabs.length,6);
+    assert.equal(tabs.find(node=>node.props['aria-current']==='page').props.href,'/admin?section=members');
+    h.search='section=unknown';h.render();
+    assert.equal(nodes(h.tree).find(node=>node.props?.['aria-current']==='page').props.href,'/admin?section=analytics');
+    h.auth={...h.auth,user:null};h.access={status:'denied'};h.render();
+    assert.equal(nodes(h.tree).filter(node=>node.type?.testPanel).length,0);
+    assert.match(textOf(h.tree),/Sign in as owner/);
+  } finally {h.close();}
+});
 dependencies['@/lib/supabase/client'] = dataUrl('export function getAuthMethods(...args){return globalThis.__authHarness.invoke("getAuthMethods", args);} export function getSupabase(){return {auth:{resetPasswordForEmail:(...args)=>globalThis.__authHarness.invoke("resetPasswordForEmail",args)}};}');
 const { AuthForm } = await import(await compile('../src/components/AuthForm.tsx'));
 const { PrivateContactPhone } = await import(await compile('../src/components/PrivateContactPhone.tsx', {
