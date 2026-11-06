@@ -289,6 +289,7 @@ test('mobile navigation retains post creation without chatbot actions', () => {
       h.render(CommunityNavigation, { mobile: true, onNavigate: () => { navigated = true; } });
       const links = nodes(h.tree).filter(node => node.props?.href);
       const ask = links.find(node => new URL(node.props.href, 'https://visathreads.com').searchParams.get('next') === '/ask');
+      assert(!links.some(node => node.props.href === '/countries'), 'Visa Destinations is removed from community navigation');
       assert(ask, 'Signed-out mobile users can reach sign-in and return to the post composer');
       ask.props.onClick();
       assert(navigated, 'Selecting the composer closes the mobile menu');

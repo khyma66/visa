@@ -171,7 +171,7 @@ test('registered member replies on source discussions retain their own message a
 });
 test('home renders community-first copy and sends signed-out Ask clicks through sign-in',()=>{
   const html=render(CommunityHome,{}, {values:{0:[source,native],3:false}});
-  noPipelineLabels(html);assert(html.includes('All Post Types'));assert(html.includes('All Tags'));
+  noPipelineLabels(html);assert(!html.includes('All Post Types')); assert(!html.includes('aria-label="Post source"'));assert(html.includes('All Tags'));
   assert(html.includes(source.title));assert(html.includes('Top'));assert(html.includes('Ask a Question'));
   assert(html.includes('/login?next=%2Fask#sign-in'));
   const signedIn=render(CommunityHome,{}, {values:{0:[source,native],3:false},user:{id:alice}});
