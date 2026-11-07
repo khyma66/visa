@@ -45,7 +45,7 @@ export function PostActions({ postId, path, imported = false, onRelated }: { pos
       <Link className="post-action" href={login}><Bell size={16} aria-hidden="true"/>Follow</Link>
       <Link className="post-action" href={login}><Bookmark size={16} aria-hidden="true"/>Save</Link>
     </>)}
-    {onRelated && <button type="button" className="post-action" data-close-popover onClick={onRelated}><GitFork size={16} aria-hidden="true"/>Related posts</button>}
+    {onRelated && <button type="button" className="post-action" data-close-popover onClick={onRelated}><GitFork size={16} aria-hidden="true"/>Also asked</button>}
     <ReportButton compact kind={imported ? 'source_question' : 'question'} target={postId}/>
   </ActionPopover>;
 }

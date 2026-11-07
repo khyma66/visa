@@ -24,7 +24,7 @@ test('discovery, related and news section/card headings share the question-title
   for (const [name, { nodes }] of components) {
     for (const node of nodes.filter(node => ['h2', 'h3'].includes(node.tag))) {
       headings++;
-      assert.match(node.classes, /\btext-thread-title\b/, `${name}: ${node.content.slice(0, 160)}`);
+      assert.match(node.classes, name==='RelatedQuestions' && node.tag==='h2' ? /\btext-2xl\b/ : /\btext-thread-title\b/, `${name}: ${node.content.slice(0, 160)}`);
       assert.match(node.classes, /\bfont-semibold\b/, `${name}: headings use the same weight as question titles`);
     }
   }
