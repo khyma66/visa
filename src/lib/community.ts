@@ -655,6 +655,7 @@ export function readDemoVote(kind:string,id:string,userId:string): -1|0|1 {
 }
 export async function writeDemoVote(kind:string,id:string,userId:string,value:-1|0|1):Promise<number> {
   const state=readDemo(),key=`${userId}:${kind}:${id}`;
+  if(kind.startsWith('archive_')){state.memberVotes??={};state.memberVotes[key]=value;writeDemo(state);return value;}
   const row=(kind==='question'?state.questions:state.answers).find(item=>item.id===id);
   if(!row)throw new Error('Contribution unavailable.');
   if(row.author_id===userId)throw new Error('You cannot vote on your own contribution.');

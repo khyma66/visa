@@ -154,7 +154,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/us/en/experiences" className="underline capitalize">Experience</Link> · {question.experience_category}</p>}
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span><PostOriginBadge post={question} /></div>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-950">{question.title}</h1>
-            <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><PostViews key={question.id} postId={question.id} record/></div>
+            <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time>{imported&&<span title="Original reactions on the source site">{question.vote_score} original reactions</span>}<PostViews key={question.id} postId={question.id} record/></div>
           </section>
           <article className="flex flex-wrap gap-3 py-8 sm:gap-5">
             <div className="min-w-0 flex-1">
@@ -164,7 +164,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                 <Author id={question.id} memberId={question.author_id} username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
               </div>
               <div className="post-toolbar mt-4">
-                <VoteControls key={`${question.id}:${user?.id}`} id={question.id} kind="question" score={question.vote_score} authorId={question.author_id} path={threadPath} readOnly={imported}/>
+                <VoteControls key={`${question.id}:${user?.id}`} id={question.id} kind={imported?'archive_question':'question'} score={imported?0:question.vote_score} authorId={question.author_id} path={threadPath}/>
                 <Link href={`${threadPath}#reply`} onClick={()=>document.getElementById('reply-body')?.focus()} className="post-reply-action" title="Reply to this post"><MessageCircle size={17} aria-hidden="true"/>{question.answer_count} {question.answer_count===1?'reply':'replies'}</Link>
                 <PostActions postId={question.id} path={threadPath} imported={imported}/>
               </div>
@@ -183,7 +183,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                 return (
                 <article key={answer.id} id={`answer-${answer.id}`} className={`flex scroll-mt-24 gap-3 py-8 sm:gap-5 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
                   <div className="min-w-0 flex-1">
-                    {sourceOnly && <div className="mb-3"><PostOriginBadge post={answer} /></div>}
+                    {sourceOnly && <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500"><PostOriginBadge post={answer} /><span title="Original reactions on the source site">{answer.vote_score} original reactions</span></div>}
                     {answer.is_accepted && <p className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-700 capitalize"><CheckCircle2 size={17} /> Accepted by the question author</p>}
                     <div className="max-w-prose whitespace-pre-wrap text-lg leading-relaxed text-slate-800">{answer.body}</div>
 
@@ -192,7 +192,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                       <div className="flex items-center gap-3"><Author id={answer.id} memberId={answer.author_id} username={answer.author_username} seed={answer.author_avatar_seed} createdAt={answer.created_at} sourceOnly={sourceOnly} /></div>
                     </div>
                     <div className="post-toolbar mt-4">
-                      <VoteControls key={`${answer.id}:${user?.id}`} id={answer.id} kind={imported&&!sourceOnly?'imported_answer':'answer'} score={answer.vote_score} authorId={answer.author_id} path={`${threadPath}#answer-${answer.id}`} readOnly={sourceOnly}/>
+                      <VoteControls key={`${answer.id}:${user?.id}`} id={answer.id} kind={sourceOnly?'archive_answer':imported?'imported_answer':'answer'} score={sourceOnly?0:answer.vote_score} authorId={answer.author_id} path={`${threadPath}#answer-${answer.id}`}/>
                       <Link href={`${threadPath}#reply`} onClick={()=>document.getElementById('reply-body')?.focus()} className="post-reply-action"><MessageCircle size={17} aria-hidden="true"/>Reply</Link>
                       <ActionPopover label="More comment options" trigger={<Ellipsis size={20} aria-hidden="true"/>}>
                         <PostShare path={`${threadPath}#answer-${answer.id}`} inline/>

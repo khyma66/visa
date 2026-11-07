@@ -22,6 +22,8 @@ before(async()=>{
  const library=await readFile(new URL('../../supabase/migrations/20261104064821_private_post_library.sql',import.meta.url),'utf8');
  await db.exec(library.slice(library.indexOf('create function private.library_member'),library.indexOf('create function private.library_post_visible')));
  await db.exec(migration);
+ await db.exec("create schema security_ingress;grant usage on schema security_ingress to anon;create table private.security_ingest_key(key_hash bytea);insert into private.security_ingest_key values(sha256(convert_to(repeat('ab',32),'UTF8')));");
+ await db.exec(await readFile(new URL('../../supabase/migrations/20261107043341_archive_discussion_voting.sql',import.meta.url),'utf8'));
 });
 after(()=>db.close());
 async function as(user,role,fn){await db.exec('begin');try{await db.query("select set_config('request.jwt.claim.sub',$1,true)",[user??'']);await db.exec(`set local role ${role}`);return await fn();}finally{await db.exec('rollback');}}
@@ -66,4 +68,34 @@ test('native wrapper binds the current account before invoking existing vote fun
  await as(voter,'authenticated',async()=>assert.equal((await db.query("select public.set_native_vote('question',$1,1,$2) as score",[reply,voter])).rows[0].score,1));
  await as(voter,'authenticated',()=>assert.rejects(()=>db.query("select public.set_native_vote('answer',$1,1,$2)",[reply,other]),/Account changed/));
  await as(null,'anon',()=>assert.rejects(()=>db.query("select public.set_native_vote('question',$1,1,$2)",[reply,voter]),/permission denied/));
+});
+
+async function trusted(){await db.query("select set_config('request.headers',$1,true)",[JSON.stringify({'x-security-ingest-key':'ab'.repeat(32)})]);}
+const archivedVote=(kind,value,expected=voter)=>db.query('select public.set_archive_vote($1,$2,$3,$4) as score',[kind,'apify-original',value,expected]).then(r=>r.rows[0].score);
+const archivedRead=(kind)=>db.query('select public.archive_vote_summary($1,$2) as result',[kind,['apify-original']]).then(r=>r.rows[0].result);
+for(const kind of ['question','answer'])test(`original ${kind} votes are separate, idempotent, reversible and identity-bound`,()=>as(voter,'authenticated',async()=>{
+ await trusted();assert.equal(await archivedVote(kind,1),1);assert.equal(await archivedVote(kind,1),1);
+ assert.deepEqual(await archivedRead(kind),[{id:'apify-original',score:1,value:1}]);
+ await db.query("select set_config('request.jwt.claim.sub',$1,true)",[other]);
+ assert.deepEqual(await archivedRead(kind),[{id:'apify-original',score:1,value:0}]);
+ assert.equal(await archivedVote(kind,-1,other),0);
+ await db.query("select set_config('request.jwt.claim.sub',$1,true)",[voter]);
+ assert.equal(await archivedVote(kind,0),-1);assert.equal(await archivedVote(kind,0),-1);
+ await db.query("select set_config('request.jwt.claim.sub','',true)");await db.exec('set local role anon');
+ assert.deepEqual(await archivedRead(kind),[{id:'apify-original',score:-1,value:0}]);
+}));
+test('direct clients cannot forge archive targets by bypassing the trusted edge',async()=>{
+ for(const role of ['anon','authenticated'])await as(voter,role,()=>assert.rejects(()=>archivedRead('question'),/Trusted edge required/));
+ await as(voter,'authenticated',()=>assert.rejects(()=>archivedVote('question',1),/Trusted edge required/));
+ await as(voter,'authenticated',async()=>{await trusted();await assert.rejects(()=>archivedVote('question',1,other),/Account changed/);});
+ await as(voter,'authenticated',async()=>{await trusted();await assert.rejects(()=>archivedVote('question',2),/Invalid vote/);});
+ await as(voter,'authenticated',()=>assert.rejects(()=>db.query('select * from private.archive_votes'),/permission denied/));
+});
+test('archive vote read limits, suspension, policy acknowledgement, and cascade deletion are enforced',async()=>{
+ await as(voter,'authenticated',async()=>{await trusted();await assert.rejects(()=>db.query('select public.archive_vote_summary($1,$2)',['question',Array(51).fill('apify-original')]),/Invalid vote list/);});
+ await db.exec(`insert into private.community_suspensions values('${voter}')`);
+ try{await as(voter,'authenticated',async()=>{await trusted();await assert.rejects(()=>archivedVote('question',1),/suspended/);});}finally{await db.exec('delete from private.community_suspensions');}
+ await db.exec(`delete from public.policy_acceptances where user_id='${voter}'`);
+ try{await as(voter,'authenticated',async()=>{await trusted();await assert.rejects(()=>archivedVote('question',1),/policies/);});}finally{await db.exec(`insert into public.policy_acceptances values('${voter}','2026-11-05-preview-v4')`);}
+ await db.exec('begin');try{await db.query('insert into private.archive_votes values($1,$2,$3,1)',['question','apify-original',other]);await db.query('delete from auth.users where id=$1',[other]);assert.equal((await db.query('select count(*)::int as n from private.archive_votes')).rows[0].n,0);}finally{await db.exec('rollback');}
 });

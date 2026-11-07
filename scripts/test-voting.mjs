@@ -10,13 +10,13 @@ const {VoteControls}=await import(url(await compile('../src/components/VoteContr
  react:hooks,'react/jsx-runtime':import.meta.resolve('react/jsx-runtime'),
  'lucide-react':url('export const ArrowUp=()=>null,ArrowDown=()=>null,ThumbsUp=()=>null;'),
  './AuthProvider':url('export const useAuth=()=>globalThis.__votes.auth;'),
- '@/lib/voting':url('export const readVote=(...a)=>globalThis.__votes.read(...a),writeVote=(...a)=>globalThis.__votes.write(...a);'),
+ '@/lib/voting':url('export const readArchiveVote=(...a)=>globalThis.__votes.archiveRead(...a),readVote=(...a)=>globalThis.__votes.read(...a),writeVote=(...a)=>globalThis.__votes.write(...a);'),
 })));
 const nodes=n=>Array.isArray(n)?n.flatMap(nodes):n&&typeof n==='object'?[n,...nodes(n.props?.children)]:[];
 const button=(tree,label)=>nodes(tree).find(n=>n.type==='button'&&n.props['aria-label']===label);
 const score=tree=>nodes(tree).find(n=>n.props?.className==='vote-score').props.children;
 function setup(extra={}){
- const h=globalThis.__votes={index:0,slots:[],auth:{user:{id:'viewer'}},read:async()=>0,write:async()=>7,...extra};
+ const h=globalThis.__votes={index:0,slots:[],auth:{user:{id:'viewer'}},read:async()=>0,archiveRead:async()=>({score:2,value:0}),write:async()=>7,...extra};
  const props={id:'post',kind:'question',score:7,authorId:'author',path:'/questions/post'};
  const render=(changes={})=>{Object.assign(props,changes);h.index=0;return VoteControls(props);};return {h,render};
 }
@@ -35,10 +35,9 @@ test('account changes ignore delayed reads and writes from the previous account'
  let resolveRead,resolveWrite;const {h,render}=setup({read:()=>new Promise(r=>resolveRead=r),write:()=>new Promise(r=>resolveWrite=r)});
  let tree=render();button(tree,'Upvote').props.onClick();h.auth={user:{id:'second'}};h.read=async()=>-1;render();await flush();resolveRead(1);resolveWrite(99);await flush();tree=render();assert.equal(score(tree),'7');assert.equal(button(tree,'Downvote').props['aria-pressed'],true);assert.equal(button(tree,'Upvote').props.disabled,false);
 });
-test('own contributions are disabled, originals stay read-only, and guests return to their thread',()=>{
+test('own contributions are disabled and guests return to their thread',()=>{
  const {h,render}=setup();let tree=render({authorId:'viewer'});assert.equal(button(tree,'Upvote').props.disabled,true);assert.equal(button(tree,'Downvote').props.disabled,true);
- tree=render({readOnly:true});assert.equal(nodes(tree).filter(n=>n.type==='button').length,0);
- h.auth={user:null};globalThis.window={location:{href:''}};tree=render({readOnly:false,authorId:'author'});button(tree,'Upvote').props.onClick();assert.equal(window.location.href,'/login?next=%2Fquestions%2Fpost');delete globalThis.window;
+ h.auth={user:null};globalThis.window={location:{href:''}};tree=render({authorId:'author'});button(tree,'Upvote').props.onClick();assert.equal(window.location.href,'/login?next=%2Fquestions%2Fpost');delete globalThis.window;
 });
 const api=await import(url(await compile('../src/lib/voting.ts',{
  './supabase/client':url('export const isSupabaseConfigured=true,getSupabase=()=>globalThis.__voteClient;'),
@@ -55,4 +54,10 @@ test('writes bind expected identity, include clearing votes, and reject unconfir
  await api.writeVote('imported_answer','comment','one',-1);assert.equal(calls[1].name,'vote_imported_reply');
  await assert.rejects(()=>api.writeVote('answer','comment','two',1),/account changed/);assert.equal(calls.length,2);
  globalThis.__voteClient.rpc=async()=>({data:null});await assert.rejects(()=>api.writeVote('answer','comment','one',1),/confirmed/);
+});
+
+test('imported posts and comments show separate local votes, including for guests',async()=>{
+ for(const kind of ['archive_question','archive_answer']){
+  const {render}=setup({auth:{user:null}});let tree=render({kind,score:99});assert.equal(score(tree),'—');await flush();tree=render();assert.equal(score(tree),'2');assert.equal(nodes(tree).filter(n=>n.type==='button').length,2);
+ }
 });
