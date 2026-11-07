@@ -53,7 +53,7 @@ export function NotificationsClient() {
           </li>)}
           {!items.length && !loadError && <li className="p-8 text-center"><Bell size={28} className="mx-auto text-slate-400" /><h2 className="mt-3 font-semibold">You’re All Caught Up</h2><p className="mt-2 text-sm text-slate-500">New Replies And Message Alerts Will Appear Here.</p></li>}
         </ul>
-        <nav aria-label="Notification Pages" className="mt-4 flex justify-between gap-4"><button disabled={!page || busy} onClick={() => setPage(value => value-1)} className="min-h-11 text-sm font-semibold text-teal-800 disabled:opacity-40">Newer</button><button disabled={items.length<=20 || busy} onClick={() => setPage(value => value+1)} className="min-h-11 text-sm font-semibold text-teal-800 disabled:opacity-40">Older</button></nav>
+        <nav aria-label="Notification Pages" className="tab-row mt-4 justify-between"><button disabled={!page || busy} onClick={() => setPage(value => value-1)} className="min-h-11 text-sm font-semibold text-teal-800 disabled:opacity-40">Newer</button><button disabled={items.length<=20 || busy} onClick={() => setPage(value => value+1)} className="min-h-11 text-sm font-semibold text-teal-800 disabled:opacity-40">Older</button></nav>
       </> : <button type="button" onClick={() => { setPage(0); setPageError(''); }} className="mt-4 min-h-11 font-semibold text-teal-800 underline">Back To Latest Notifications</button>}
     </>}
   </main>;

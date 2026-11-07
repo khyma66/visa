@@ -71,7 +71,7 @@ function ReportQueue() {
 export function ModerationDashboard() {
   const { user, demoMode, loading } = useAuth();
   return <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-    <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold tracking-wide text-teal-800">Admin Workspace</p><h1 className="mt-2 text-3xl font-bold">Reports</h1></div><nav aria-label="Admin Dashboards" className="flex flex-wrap gap-2"><Link href="/admin?section=analytics" className={button}>Dashboard</Link><Link href="/admin?section=members" className={button}>Members</Link></nav></header>
+    <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold tracking-wide text-teal-800">Admin Workspace</p><h1 className="mt-2 text-3xl font-bold">Reports</h1></div><nav aria-label="Admin Dashboards" className="tab-row"><Link href="/admin?section=analytics" className={button}>Dashboard</Link><Link href="/admin?section=members" className={button}>Members</Link></nav></header>
     <p className="mt-4 rounded-xl border bg-slate-50 p-4 text-sm leading-6 text-slate-600">Private Review For The Site Owner And Approved Moderators. Reports Do Not Automatically Suspend Members Or Remove Content.</p>
     {loading ? <p role="status" className="mt-5">Checking Your Account…</p> : !user || demoMode ? <Link href="/login?next=%2Fadmin%2Freports#sign-in" className="mt-6 inline-block font-semibold text-teal-800 underline">Log In With An Approved Account</Link> : <ReportQueue key={user.id}/>}
   </main>;

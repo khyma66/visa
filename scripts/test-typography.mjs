@@ -11,7 +11,7 @@ const source = await readFile(new URL('src/styles/globals.css', root), 'utf8');
 // Check the real Tailwind output: layer reordering can break a rule that looks
 // correct in the source stylesheet, especially the phone input font floor.
 const output = await postcss([tailwindcss({ ...config, content: [{ extension: 'html', raw:
-  '<div class="text-xs text-sm text-base text-lg text-xl text-2xl text-3xl text-4xl text-5xl text-thread-title site-header header-content header-search integrated-brand-logo header-action-group header-account header-account-panel header-auth-actions header-auth-button header-ask mobile-menu mobile-menu-panel mobile-menu-feedback community-shortcuts notification-icon site-brand feed-sort-button nav-item-active"></div>',
+  '<div class="text-xs text-sm text-base text-lg text-xl text-2xl text-3xl text-4xl text-5xl text-thread-title site-header header-content header-search integrated-brand-logo header-action-group header-account header-account-panel header-auth-actions header-auth-button header-ask mobile-menu mobile-menu-panel mobile-menu-feedback community-shortcuts notification-icon site-brand feed-sort-button nav-item-active tab-row tab-row-centered"></div>',
 }] })]).process(source, { from: new URL('src/styles/globals.css', root).pathname });
 const rules = [];
 output.root.walkRules(rule => rules.push(rule));
@@ -162,17 +162,26 @@ test('navigation and account menus stay reachable on narrow and short viewports'
     assert(rules.some(rule => rule.selector === selector && property(rule, 'min-height') === '44px'), selector);
   }
   const shortcuts = rules.find(rule => rule.selector === '.community-shortcuts nav' && rule.parent.params === '(max-width: 639px)');
-  assert.equal(property(shortcuts, 'grid-template-columns'), 'repeat(2, minmax(0, 1fr))');
-  assert.equal(property(shortcuts, 'overflow-x'), undefined, 'No offscreen shortcut links');
+  assert.equal(property(shortcuts, 'display'), undefined, 'Mobile shortcuts retain the shared single-row layout');
   const header = await readFile(new URL('src/components/SiteHeader.tsx', root), 'utf8');
   assert.match(header, /<FeedbackLauncher mobileNavigation \/>/);
   const feedback = await readFile(new URL('src/components/FeedbackLauncher.tsx', root), 'utf8');
   assert.match(feedback, /mobileNavigation \? 'mobile-feedback-title' : 'feedback-title'/);
   assert.match(feedback, /open && createPortal\(<dialog/);
   assert.match(feedback, /<\/dialog>, document.body\)/);
-  const phone = selector => rules.find(rule => rule.selector === selector && rule.parent.params === '(max-width: 639px)');
-  assert.equal(property(phone('.news-tabs > button'), 'white-space'), 'normal');
-  assert.equal(property(phone('.account-sections'), 'grid-template-columns'), 'repeat(2, minmax(0, 1fr))');
+  const row = rules.find(rule => rule.selector === '.tab-row');
+  assert.equal(property(row, 'flex-wrap'), 'nowrap');
+  assert.equal(property(row, 'min-width'), '0');
+  assert.equal(property(row, 'max-width'), '100%');
+  assert.equal(property(row, 'overflow-x'), 'auto', 'Controls remain reachable instead of overflowing the page');
+  const labels = rules.find(rule => rule.selector === '.tab-row > *');
+  assert.equal(property(labels, 'white-space'), 'nowrap');
+  assert.equal(property(labels, 'flex-shrink'), '0');
+  const targets = rules.find(rule => rule.selector === '.tab-row :is(a, button)');
+  assert.equal(property(targets, 'min-height'), '44px');
+  assert.match(property(targets, 'padding-inline'), /^clamp\(/);
+  assert(!rules.some(rule => ['.news-tabs', '.account-sections'].includes(rule.selector) && property(rule, 'display') === 'grid'));
+
 });
 
 test('related heading is plain Related in feed, question and draft states', async () => {
