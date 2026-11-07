@@ -383,14 +383,14 @@
 /* Shared action rows keep votes, replies and menus together at every breakpoint. */
 .post-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .vote-control-wrap { display: flex; flex-direction: column; min-width: 0; }
-.vote-controls { display: inline-flex; align-items: center; flex-shrink: 0; border-radius: 999px; background: #f1f5f9; color: #334155; }
-.vote-controls button { display: inline-flex; justify-content: center; align-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 999px; }
+.vote-controls { display: inline-flex; align-self: flex-start; align-items: center; flex-shrink: 0; border-radius: 999px; background: #f1f5f9; color: #334155; }
+.vote-controls button { display: inline-flex; justify-content: center; align-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 999px; }
 .vote-controls button:hover { background: #e2e8f0; }
 .vote-controls button:focus-visible, .post-reply-action:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
 .vote-controls button:disabled { opacity: .4; cursor: not-allowed; }
 .vote-up[aria-pressed="true"] { background: #ffedd5; color: #c2410c; }
 .vote-down[aria-pressed="true"] { background: #dbeafe; color: #1d4ed8; }
-.vote-score { min-width: 18px; padding: 0 2px; text-align: center; font-size: .75rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.vote-score { min-width: 16px; padding: 0 1px; text-align: center; font-size: .75rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .post-reply-action { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; padding: 0 10px; border-radius: 999px; font-size: .875rem; font-weight: 600; color: #475569; white-space: nowrap; }
 .post-reply-action:hover { background: #e2e8f0; }
 .vote-error { max-width: 240px; margin-top: 6px; font-size: .75rem; line-height: 1.5; color: #be123c; }
