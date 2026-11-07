@@ -1,9 +1,27 @@
 {
   "source": "The Texas Tribune",
-  "retrievedAt": "2026-11-06T20:05:07.035Z",
-  "policyCheckedAt": "2026-11-06T20:05:07.035Z",
+  "retrievedAt": "2026-11-07T18:16:14.882Z",
+  "policyCheckedAt": "2026-11-07T18:16:14.882Z",
   "policyDigest": "83e8cafce5e3cba8d74297f86204f3a50ff06a6f6cd84ed93dac0bc33fc2d1d5",
   "articles": [
+    {
+      "id": "tt-252172",
+      "title": "Houston mayor limits police cooperation with ICE after Democratic wins",
+      "url": "https://www.texastribune.org/2026/11/06/ice-warrants-immigration-houston-texas-whitmire-police/",
+      "author": "Uriel J. García",
+      "publishedAt": "2026-11-06T21:03:11.000Z",
+      "excerpt": "Houston police will stop contacting ICE during traffic stops when drivers aren’t arrested, even if they have immigration warrants. The change follows pressure from Gov. Greg Abbott to maintain cooperation.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-252172-08404136bef3382e",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/11/20260711-ICE-Lorenzo-Protest-JS-24.jpg?fit=1024%2C683&ssl=1",
+        "caption": "People march through downtown to protest the killing of Lorenzo Salgado Araujo on Saturday, July 11, 2026, in Houston. Salgado Araujo was fatally shot by an immigration officer early in the morning of July 7.",
+        "credit": "Jon Shapley for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
     {
       "id": "tt-252029",
       "title": "Texas spent billions on border security. What happens to Greg Abbott’s mission when Dems take over?",
@@ -484,24 +502,6 @@
         "credit": "Paul Ratje for the Texas Tribune",
         "width": 1024,
         "height": 680
-      }
-    },
-    {
-      "id": "tt-240265",
-      "title": "What to know about possible border barriers in Big Bend",
-      "url": "https://www.texastribune.org/2026/09/14/texas-big-bend-national-park-border-wall-plans-explainer/",
-      "author": "Uriel J. García, graphic by Alex Ford, Alex Ford",
-      "publishedAt": "2026-09-14T18:49:27.000Z",
-      "excerpt": "The Trump administration has said the remote West Texas region needs measures to stop illegal immigration. But a bipartisan group of elected officials is pushing to halt that plan, especially in the national park.",
-      "publisher": "The Texas Tribune",
-      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
-      "photo": {
-        "id": "tt-240265-c7ce5741778ad959",
-        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/08/Greenlee-Big-Bend-Clearing-21.jpg?fit=1024%2C683&ssl=1",
-        "caption": "Southwest Valley employees clear an area near the Santa Elena Canyon trailhead parking lot in Big Bend National Park on Aug. 13, 2026.",
-        "credit": "Kaylee Greenlee for The Texas Tribune",
-        "width": 1024,
-        "height": 683
       }
     }
   ]
