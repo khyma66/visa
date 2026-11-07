@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import type {Question} from '@/lib/types';
+import {OwnerContentActions} from './OwnerContentActions';
 import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
 import { Bell, Bookmark, Ellipsis, GitFork } from 'lucide-react';
 import { ActionPopover } from './ActionPopover';
@@ -36,7 +38,7 @@ function MemberActions({ postId, userId }: { postId: string; userId: string }) {
   </>;
 }
 
-export function PostActions({ postId, path, imported = false, onRelated }: { postId: string; path: string; imported?: boolean; onRelated?: () => void }) {
+export function PostActions({ postId, path, imported = false, onRelated, content, onChanged }: { postId: string; path: string; imported?: boolean; onRelated?: () => void; content?:Question; onChanged?:(deleted:boolean)=>void }) {
   const { user, demoMode } = useAuth();
   const login = `/login?next=${encodeURIComponent(path)}`;
   return <ActionPopover label="More post options" trigger={<Ellipsis size={20} aria-hidden="true"/>}>
@@ -46,6 +48,7 @@ export function PostActions({ postId, path, imported = false, onRelated }: { pos
       <Link className="post-action" href={login}><Bookmark size={16} aria-hidden="true"/>Save</Link>
     </>)}
     {onRelated && <button type="button" className="post-action" data-close-popover onClick={onRelated}><GitFork size={16} aria-hidden="true"/>Also asked</button>}
+    {content&&!imported&&<OwnerContentActions content={content} kind="question" canEdit={content.status==='open'} onChanged={onChanged}/>}
     <ReportButton compact kind={imported ? 'source_question' : 'question'} target={postId}/>
   </ActionPopover>;
 }

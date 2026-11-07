@@ -25,6 +25,7 @@ export type Question = {
   accepted_answer_id: string | null;
   created_at: string;
   updated_at: string;
+  edited_at?: string | null;
   source?: 'visaflow' | 'apify';
   source_url?: string | null;
   source_label?: string | null;
@@ -47,6 +48,7 @@ export type Answer = {
   status: 'active' | 'archived';
   created_at: string;
   updated_at: string;
+  edited_at?: string | null;
   source?: 'visaflow' | 'apify';
   source_url?: string | null;
 };

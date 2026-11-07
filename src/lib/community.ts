@@ -190,7 +190,7 @@ export async function getQuestion(id: string): Promise<Question | null> {
     if (!question || !isSupabaseConfigured) return question;
     return (await withMemberReplyCounts([question]))[0];
   }
-  if (!isSupabaseConfigured) { const question = readDemo().questions.find((question) => question.id === id); return question ? usVisaPost(question) : null; }
+  if (!isSupabaseConfigured) { const question = readDemo().questions.find((question) => question.id === id && question.status !== 'archived'); return question ? usVisaPost(question) : null; }
   const { data, error } = await getSupabase().from('question_feed').select('*').eq('id', id).maybeSingle();
   throwIfError(error);
   return data ? usVisaPost(data as Question) : null;
@@ -661,4 +661,23 @@ export async function writeDemoVote(kind:string,id:string,userId:string,value:-1
   if(row.author_id===userId)throw new Error('You cannot vote on your own contribution.');
   state.memberVotes??={};row.vote_score+=value-(state.memberVotes[key]??0);state.memberVotes[key]=value;
   writeDemo(state);return row.vote_score;
+}
+
+export async function manageOwnContent(input: {kind:'question'|'answer'|'imported_answer';id:string;operation:'edit'|'delete';body:string;title?:string;expectedBody:string;expectedTitle?:string;userId:string}):Promise<void> {
+  if (!isSupabaseConfigured) {
+    const state=readDemo();
+    const row=input.kind==='question'?state.questions.find(q=>q.id===input.id):state.answers.find(a=>a.id===input.id);
+    if(!row || row.author_id!==input.userId || row.status==='archived')throw new Error('Content unavailable or not yours.');
+    if(row.body!==input.expectedBody || ('title' in row && row.title!==input.expectedTitle))throw new Error('This content changed. Reload before trying again.');
+    if(input.operation==='delete') {
+      row.status='archived';
+      if('question_id' in row){row.is_accepted=false;const parent=state.questions.find(q=>q.id===row.question_id);if(parent){parent.answer_count=Math.max(0,parent.answer_count-1);if(parent.accepted_answer_id===row.id)parent.accepted_answer_id=null;}}
+    } else {
+      if(row.body!==input.body || ('title' in row && row.title!==input.title))row.edited_at=new Date().toISOString();
+      row.body=input.body;if('title' in row)row.title=input.title!;
+    }
+    writeDemo(state);return;
+  }
+  const {error}=await getSupabase().rpc('manage_own_content',{kind:input.kind,target:input.id,operation:input.operation,new_body:input.body,new_title:input.title??null,expected_body:input.expectedBody,expected_title:input.expectedTitle??null,expected_user:input.userId});
+  throwIfError(error);
 }

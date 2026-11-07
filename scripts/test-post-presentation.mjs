@@ -23,7 +23,7 @@ const dependencies = {
   'next/navigation': moduleUrl(`export function useParams(){return {id:'fixture-question'};}`),
   'lucide-react': fileModule('lucide-react'),
   'date-fns': moduleUrl(`export function formatDistanceToNow(){return '2 days ago';}`),
-  '@/lib/community': moduleUrl(`const unused=()=>{throw new Error('Unexpected network call during render');}; export {unused as acceptAnswer,unused as createAnswer,unused as getQuestion,unused as listAnswers,unused as getAnswerPage,unused as getDiscussionContext,unused as sortAnswers,unused as voteAnswer,unused as voteQuestion};`),
+  '@/lib/community': moduleUrl(`const unused=()=>{throw new Error('Unexpected network call during render');}; export {unused as manageOwnContent,unused as acceptAnswer,unused as createAnswer,unused as getQuestion,unused as listAnswers,unused as getAnswerPage,unused as getDiscussionContext,unused as sortAnswers,unused as voteAnswer,unused as voteQuestion};`),
   '@/lib/realtime': moduleUrl(`export function subscribeLive(){throw new Error('Unexpected subscription during render');}`),
   './Avatar': moduleUrl(`export function Avatar(){return null;}`),
   './RelatedQuestions': moduleUrl(`export function RelatedQuestions(){return null;}`),
@@ -60,6 +60,8 @@ dependencies['./ActionPopover'] = moduleUrl(`import {jsx} from ${JSON.stringify(
 dependencies['@/lib/voting'] = moduleUrl('export const readArchiveVote=async()=>({score:0,value:0}),readVote=async()=>0,writeVote=async()=>0;');
 dependencies['./VoteControls'] = await compile('../src/components/VoteControls.tsx');
 dependencies['./AuthorIdentity'] = await compile('../src/components/AuthorIdentity.tsx');
+dependencies['./EditedLabel'] = await compile('../src/components/EditedLabel.tsx');
+dependencies['./OwnerContentActions'] = await compile('../src/components/OwnerContentActions.tsx');
 dependencies['./PostActions'] = await compile('../src/components/PostActions.tsx');
 dependencies['./PostAward'] = await compile('../src/components/PostAward.tsx');
 const { QuestionCard } = await import(await compile('../src/components/QuestionCard.tsx'));
