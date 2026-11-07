@@ -184,10 +184,10 @@ test('navigation and account menus stay reachable on narrow and short viewports'
 
 });
 
-test('related heading is plain Related in feed, question and draft states', async () => {
+test('related heading is Also asked in feed, question and draft states', async () => {
   const related = await readFile(new URL('src/components/RelatedQuestions.tsx', root), 'utf8');
-  assert.match(related, /aria-label="Related"/);
-  assert.match(related, /<h2[^>]+>Related<\/h2>/);
+  assert.match(related, /aria-label="Also asked"/);
+  assert.match(related, /<h2[^>]+>Also asked<\/h2>/);
   assert.doesNotMatch(related, /GitFork|Related to your draft/);
   assert.match(related, /Suggestions update as you type/);
   assert.match(related, /subscribeLive/);

@@ -5,7 +5,7 @@ import {ArrowDown,ArrowUp} from 'lucide-react';
 import {useAuth} from './AuthProvider';
 import {readArchiveVote,readVote,writeVote,type VoteKind,type VoteValue} from '@/lib/voting';
 
-/** One horizontal, touch-sized voting control on cards, posts and replies. */
+/** One compact horizontal voting control on cards, posts and replies. */
 export function VoteControls({id,kind,score,authorId,path}:{id:string;kind:VoteKind;score:number;authorId:string|null;path:string}) {
   const {user}=useAuth();
   const archive=kind.startsWith('archive_');
@@ -35,9 +35,9 @@ export function VoteControls({id,kind,score,authorId,path}:{id:string;kind:VoteK
   const own=user?.id===authorId;
   return <div className="vote-control-wrap">
     <div className="vote-controls" role="group" aria-label={kind==='question'||kind==='archive_question'?'Post votes':'Comment votes'} title={archive?'Votes from VisaThreads members':undefined} aria-busy={busy}>
-      <button type="button" disabled={own||busy} aria-label="Upvote" aria-pressed={selection===1} title={own?'You cannot vote on your own contribution':selection===1?'Remove upvote':'Upvote'} onClick={()=>void vote(1)} className="vote-up"><ArrowUp size={19} aria-hidden="true"/></button>
+      <button type="button" disabled={own||busy} aria-label="Upvote" aria-pressed={selection===1} title={own?'You cannot vote on your own contribution':selection===1?'Remove upvote':'Upvote'} onClick={()=>void vote(1)} className="vote-up"><ArrowUp size={16} aria-hidden="true"/></button>
       <span className="vote-score" aria-live="polite" aria-label={archive&&confirmed===null?'Votes loading':`${confirmed??score} ${archive?'VisaThreads ':''}votes`}>{archive&&confirmed===null?'—':Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(confirmed??score)}</span>
-      <button type="button" disabled={own||busy} aria-label="Downvote" aria-pressed={selection===-1} title={own?'You cannot vote on your own contribution':selection===-1?'Remove downvote':'Downvote'} onClick={()=>void vote(-1)} className="vote-down"><ArrowDown size={19} aria-hidden="true"/></button>
+      <button type="button" disabled={own||busy} aria-label="Downvote" aria-pressed={selection===-1} title={own?'You cannot vote on your own contribution':selection===-1?'Remove downvote':'Downvote'} onClick={()=>void vote(-1)} className="vote-down"><ArrowDown size={16} aria-hidden="true"/></button>
     </div>
     {error&&<p role="alert" className="vote-error">{error}</p>}
   </div>;

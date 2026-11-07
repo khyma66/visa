@@ -10,7 +10,7 @@ const MIN_SPLIT_WIDTH = 1000;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** One ratio and resize preference for every content page with a supporting panel. */
-export function ResizablePostLayout({ children, related, mainLabel = 'Post', relatedLabel = 'Related questions panel', className = '' }: {
+export function ResizablePostLayout({ children, related, mainLabel = 'Post', relatedLabel = 'Also asked panel', className = '' }: {
   children: ReactNode; related: ReactNode; mainLabel?: string; relatedLabel?: string; className?: string;
 }) {
   const id = useId();
