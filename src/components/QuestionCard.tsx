@@ -26,7 +26,6 @@ export function QuestionCard({ question, onTagSelect, onRelated }: { question: Q
             <time className="capitalize" dateTime={question.created_at} title={new Date(question.created_at).toLocaleString()}>{formatDistanceToNow(new Date(question.created_at), { addSuffix: true })}</time>
             <PostViews postId={question.id}/>
             {imported&&<span title="Original reactions on the source site">{question.vote_score} original reactions</span>}
-            <span className="ml-auto rounded bg-blue-50 px-2 py-1 font-semibold text-blue-800">{question.visa_type}</span>
           </div>
           <Link href={path} className="block break-words text-thread-title font-semibold text-slate-950 decoration-1 underline-offset-4 hover:text-blue-700 hover:underline">
             {question.title}
