@@ -152,7 +152,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
         <div>
           <section className="border-b border-slate-200 pb-8">
             {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/us/en/experiences" className="underline capitalize">Experience</Link> · {question.experience_category}</p>}
-            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span><PostOriginBadge post={question} /></div>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><PostOriginBadge post={question} /></div>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-950">{question.title}</h1>
             <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time>{imported&&<span title="Original reactions on the source site">{question.vote_score} original reactions</span>}<PostViews key={question.id} postId={question.id} record/></div>
           </section>
