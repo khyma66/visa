@@ -35,6 +35,8 @@ before(async () => {
     '20261003175707_native_parent_visibility_hardening.sql',
     '20261003180348_secure_native_vote_rpcs.sql',
   ]) await db.exec(await readFile(new URL(`../../supabase/migrations/${name}`, import.meta.url), 'utf8'));
+  const wrapper = await readFile(new URL('../../supabase/migrations/20261107042328_member_reply_voting.sql', import.meta.url), 'utf8');
+  await db.exec(wrapper.slice(0, wrapper.indexOf('-- Member-authored')) + 'commit;');
   await db.query('insert into auth.users values($1),($2),($3)', [alice, bob, suspended]);
   await db.query('insert into private.community_suspensions(user_id,moderator_id) values($1,$2)', [suspended, alice]);
   for (const status of ['open', 'closed', 'archived']) {
@@ -135,3 +137,17 @@ test('browser vote methods use the RPC result and never submit the supplied user
     await assert.rejects(() => client.voteAnswer(ids.open.answer, alice, 1), /could not be confirmed/);
   } finally { delete globalThis.__voteRpcFixture; }
 });
+
+for (const kind of ['question','answer']) {
+  test(`${kind} inline control clears only its own vote and preserves other voters`, () => asRole('authenticated',alice,async()=>{
+    const vote=value=>scalar('select public.set_native_vote($1,$2,$3,$4)',[kind,ids.open[kind],value,alice]);
+    assert.equal(await vote(1),1);assert.equal(await vote(1),1);
+    await db.query("select set_config('request.jwt.claim.sub',$1,true)",[bob]);
+    await scalar(`select public.vote_${kind}($1,1)`,[ids.open[kind]]);
+    await db.query("select set_config('request.jwt.claim.sub',$1,true)",[alice]);
+    assert.equal(await vote(-1),0);assert.equal(await vote(0),1);assert.equal(await vote(0),1);
+    assert.equal(await scalar(`select count(*)::int from public.${kind}_votes where ${kind}_id=$1`,[ids.open[kind]]),0);
+  }));
+  test(`${kind} inline clear cannot expose an archived contribution`,()=>denied(()=>asRole('authenticated',alice,
+    ()=>db.query('select public.set_native_vote($1,$2,0,$3)',[kind,ids.archived[kind],alice]))));
+}

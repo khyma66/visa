@@ -15,6 +15,7 @@ type DemoState = {
   answers: Answer[];
   conversations: Conversation[];
   messages: DirectMessage[];
+  memberVotes?: Record<string, -1|0|1>;
   externalQuestionVotes: Record<string, number>;
   externalAnswerVotes: Record<string, number>;
 };
@@ -647,4 +648,17 @@ export async function markConversationRead(conversationId: string, userId: strin
     const { error } = await getSupabase().rpc('mark_direct_messages_read', { target_conversation: conversationId, message_ids: ids.slice(i, i + 50) });
     throwIfError(error);
   }
+}
+
+export function readDemoVote(kind:string,id:string,userId:string): -1|0|1 {
+  return readDemo().memberVotes?.[`${userId}:${kind}:${id}`] ?? 0;
+}
+export async function writeDemoVote(kind:string,id:string,userId:string,value:-1|0|1):Promise<number> {
+  const state=readDemo(),key=`${userId}:${kind}:${id}`;
+  if(kind.startsWith('archive_')){state.memberVotes??={};state.memberVotes[key]=value;writeDemo(state);return value;}
+  const row=(kind==='question'?state.questions:state.answers).find(item=>item.id===id);
+  if(!row)throw new Error('Contribution unavailable.');
+  if(row.author_id===userId)throw new Error('You cannot vote on your own contribution.');
+  state.memberVotes??={};row.vote_score+=value-(state.memberVotes[key]??0);state.memberVotes[key]=value;
+  writeDemo(state);return row.vote_score;
 }

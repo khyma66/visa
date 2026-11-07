@@ -51,6 +51,8 @@ dependencies['./CompactTextarea'] = (await component('CompactTextarea')).url;
 dependencies['./PostViews'] = moduleUrl('export const PostViews=()=>null;');
 // Expose disclosure contents in these policy/presentation fixtures; real closed behavior is tested separately.
 dependencies['./ActionPopover'] = moduleUrl(`import {jsx} from ${JSON.stringify(import.meta.resolve('react/jsx-runtime'))};export function ActionPopover({label,trigger,children}){return jsx('section',{'aria-label':label,children:jsx('div',{children})});}`);
+dependencies['@/lib/voting'] = moduleUrl('export const readArchiveVote=async()=>({score:0,value:0}),readVote=async()=>0,writeVote=async()=>0;');
+dependencies['./VoteControls'] = (await component('VoteControls')).url;
 dependencies['./AuthorIdentity'] = (await component('AuthorIdentity')).url;
 dependencies['./PostActions'] = (await component('PostActions')).url;
 dependencies['./PostAward'] = (await component('PostAward')).url;
@@ -135,18 +137,18 @@ test('discussion and promotion labels describe content rather than where it came
     assert(render(QuestionCard,{question:{...native,source:sourceKind,post_kind:'promotion'}}).includes('Promotional post'));
   }
 });
-test('source detail uses neutral presentation with no source-author messaging or voting affordance',()=>{
+test('source detail keeps neutral authors while supporting separate VisaThreads votes',()=>{
   const html=render(QuestionDetail,{initialQuestion:source},{user:{id:bob}});
   noPipelineLabels(html);assert(!html.includes('Originally shared in'));
   assert(!html.includes(source.source_url));assert.match(html,/user-\d{4}/);
   assert(html.includes('Join the discussion'));assert(!html.includes('Original discussion'));
-  assert(!html.includes('Message user'));assert(!html.includes('/messages?'));assert(!html.includes('aria-label="Upvote"'));
+  assert(!html.includes('Message user'));assert(!html.includes('/messages?'));assert(html.includes('aria-label="Upvote"'));assert(html.includes('Votes from VisaThreads members'));
   assert(!html.includes(source.author_username));assert(!html.includes('Peer experiences, not legal advice'));
 });
 test('an apify ID remains source-only even when its source flag/link are absent and author fields resemble a member',()=>{
   const malformed={...source,source:undefined,source_url:null,author_id:alice,author_username:'alice-test'};
   const html=render(QuestionDetail,{initialQuestion:malformed},{user:{id:bob}});
-  assert(!html.includes('/messages?'));assert(!html.includes('u/alice-test'));assert(!html.includes('aria-label="Upvote"'));
+  assert(!html.includes('/messages?'));assert(!html.includes('u/alice-test'));assert(html.includes('aria-label="Upvote"'));assert(html.includes('Votes from VisaThreads members'));
   assert.match(html,/user-\d{4}/);
 });
 test('native post messaging binds both public username and registered profile ID for guests and other members',()=>{
@@ -161,7 +163,7 @@ test('source comments cannot become member identities or message targets through
   const comment={...reply,id:'apify-comment-fixture',source:undefined,author_username:'bob-test',source_url:source.source_url};
   const html=render(QuestionDetail,{initialQuestion:source,initialAnswers:[comment]},{user:{id:alice}});
   noPipelineLabels(html);assert(!html.includes('Original comment'));assert(html.includes(comment.body));
-  assert(!html.includes('u/bob-test'));assert(!html.includes('/messages?'));assert(!html.includes('aria-label="Upvote"'));
+  assert(!html.includes('u/bob-test'));assert(!html.includes('/messages?'));assert(html.includes('aria-label="Upvote"'));assert(html.includes('Votes from VisaThreads members'));
 });
 test('registered member replies on source discussions retain their own message action',()=>{
   const html=render(QuestionDetail,{initialQuestion:source,initialAnswers:[reply]},{user:{id:alice}});
