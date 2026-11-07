@@ -7,10 +7,10 @@ import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowDown, ArrowUp, Check, CheckCircle2, MessageCircle, ThumbsUp } from 'lucide-react';
+import { Check, CheckCircle2, MessageCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
-  acceptAnswer, createAnswer, getAnswerPage, getDiscussionContext, getQuestion, sortAnswers, voteAnswer, voteQuestion,
+  acceptAnswer, createAnswer, getAnswerPage, getDiscussionContext, getQuestion, sortAnswers,
   type AnswerCursor,
 } from '@/lib/community';
 import type { Answer, Question } from '@/lib/types';
@@ -24,6 +24,10 @@ import { ReportButton } from './ReportButton';
 import { PostOriginBadge } from './PostOriginBadge';
 import { PostActions } from './PostActions';
 import { PostViews } from './PostViews';
+import {VoteControls} from './VoteControls';
+import {ActionPopover} from './ActionPopover';
+import {PostShare} from './PostShare';
+import {Ellipsis} from 'lucide-react';
 import { AuthorIdentity } from './AuthorIdentity';
 
 function Author({ id, memberId, username, seed, createdAt, sourceOnly = false }: { id: string; memberId: string | null; username: string; seed: string; createdAt: string; sourceOnly?: boolean }) {
@@ -31,27 +35,6 @@ function Author({ id, memberId, username, seed, createdAt, sourceOnly = false }:
     <div className="flex items-center gap-2 text-xs text-slate-500">
       {!sourceOnly && <Avatar seed={seed} size="sm" />}
       <span><AuthorIdentity content={{id,author_id:memberId,author_username:username,source:sourceOnly ? 'apify' : undefined}}/><br />{formatDistanceToNow(new Date(createdAt), { addSuffix: true })}</span>
-    </div>
-  );
-}
-
-function VoteRail({ score, onVote, accepted, own = false }: { score: number; onVote: (value: -1 | 1) => void; accepted?: boolean; own?: boolean }) {
-  return (
-    <div className="flex w-11 shrink-0 flex-col items-center gap-2">
-      <button disabled={own} title={own ? 'You cannot vote on your own contribution' : 'Helpful contribution'} onClick={() => onVote(1)} className="grid h-9 w-9 place-items-center rounded-full border border-slate-300 text-slate-500 hover:border-blue-600 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Upvote"><ArrowUp size={19} /></button>
-      <b className="text-lg text-slate-800">{score}</b>
-      <button disabled={own} title={own ? 'You cannot vote on your own contribution' : 'Not helpful'} onClick={() => onVote(-1)} className="grid h-9 w-9 place-items-center rounded-full border border-slate-300 text-slate-500 hover:border-rose-500 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Downvote"><ArrowDown size={19} /></button>
-      {accepted && <CheckCircle2 className="mt-2 text-emerald-600" size={28} aria-label="Accepted answer" />}
-    </div>
-  );
-}
-
-function ImportedScore({ score }: { score: number }) {
-  return (
-    <div className="flex w-11 shrink-0 flex-col items-center gap-1.5 text-blue-700" aria-label={`${score} reactions`}>
-      <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-50"><ThumbsUp size={17} /></span>
-      <b className="text-base text-slate-800">{score}</b>
-      <span className="whitespace-nowrap text-xs font-bold text-slate-500 capitalize">reactions</span>
     </div>
   );
 }
@@ -171,20 +154,20 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/us/en/experiences" className="underline capitalize">Experience</Link> · {question.experience_category}</p>}
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><span className="rounded-full bg-blue-50 px-2.5 py-1">{question.visa_type}</span><PostOriginBadge post={question} /></div>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-950">{question.title}</h1>
-            <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><span>{question.vote_score} {imported ? 'reactions' : 'votes'}</span><Link href={`${threadPath}#reply`} onClick={() => document.getElementById('reply-body')?.focus()} className="rounded hover:text-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700" title="Reply to this post">{question.answer_count} {question.answer_count === 1 ? 'reply' : 'replies'}</Link><PostViews key={question.id} postId={question.id} record/><span className="ml-auto"><PostActions postId={question.id} path={threadPath} imported={imported} /></span></div>
+            <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><PostViews key={question.id} postId={question.id} record/></div>
           </section>
           <article className="flex flex-wrap gap-3 py-8 sm:gap-5">
-            {imported ? <ImportedScore score={question.vote_score} /> : <VoteRail score={question.vote_score} own={question.author_id === user?.id} onVote={(value) => {
-              if (!user) { window.location.href = `/login?next=${threadPath}`; return; }
-              void voteQuestion(id, user.id, value).then((score) => setQuestion((current) => current ? { ...current, vote_score: score } : current)).catch((reason: Error) => setError(reason.message));
-            }} />}
             <div className="min-w-0 flex-1">
               <div className="max-w-prose whitespace-pre-wrap text-lg leading-relaxed text-slate-800">{question.body}</div>
               <div className="mt-6 flex flex-wrap gap-2">{question.tags.map((tag) => <Link key={tag} href={`/us/en?tag=${encodeURIComponent(tag)}`} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}</div>
               <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
                 <Author id={question.id} memberId={question.author_id} username={question.author_username} seed={question.author_avatar_seed} createdAt={question.created_at} sourceOnly={imported} />
               </div>
-
+              <div className="post-toolbar mt-4">
+                <VoteControls key={`${question.id}:${user?.id}`} id={question.id} kind="question" score={question.vote_score} authorId={question.author_id} path={threadPath} readOnly={imported}/>
+                <Link href={`${threadPath}#reply`} onClick={()=>document.getElementById('reply-body')?.focus()} className="post-reply-action" title="Reply to this post"><MessageCircle size={17} aria-hidden="true"/>{question.answer_count} {question.answer_count===1?'reply':'replies'}</Link>
+                <PostActions postId={question.id} path={threadPath} imported={imported}/>
+              </div>
             </div>
           </article>
 
@@ -199,18 +182,22 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                 const sourceOnly = isImportedPost(answer);
                 return (
                 <article key={answer.id} id={`answer-${answer.id}`} className={`flex scroll-mt-24 gap-3 py-8 sm:gap-5 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
-                  {sourceOnly ? <ImportedScore score={answer.vote_score} /> : imported ? <MessageCircle className="w-11 shrink-0 text-blue-600" size={22} /> : <VoteRail score={answer.vote_score} own={answer.author_id === user?.id} accepted={answer.is_accepted} onVote={(value) => {
-                    if (!user) { window.location.href = `/login?next=${threadPath}`; return; }
-                    void voteAnswer(answer.id, user.id, value).then(load).catch((reason: Error) => setError(reason.message));
-                  }} />}
                   <div className="min-w-0 flex-1">
                     {sourceOnly && <div className="mb-3"><PostOriginBadge post={answer} /></div>}
                     {answer.is_accepted && <p className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-700 capitalize"><CheckCircle2 size={17} /> Accepted by the question author</p>}
                     <div className="max-w-prose whitespace-pre-wrap text-lg leading-relaxed text-slate-800">{answer.body}</div>
-                    {!sourceOnly && <ReportButton kind={imported ? 'imported_answer' : 'answer'} target={answer.id} />}
+
                     <div className="mt-6 flex items-end justify-between gap-4">
                       {!imported && !experience && owner && canAnswer && !sourceOnly && !answer.is_accepted ? <button onClick={() => void acceptAnswer(answer.id, question.id).then(load).catch((reason: Error) => setError(reason.message))} className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 hover:underline capitalize"><Check size={16} /> Accept this answer</button> : <span />}
                       <div className="flex items-center gap-3"><Author id={answer.id} memberId={answer.author_id} username={answer.author_username} seed={answer.author_avatar_seed} createdAt={answer.created_at} sourceOnly={sourceOnly} /></div>
+                    </div>
+                    <div className="post-toolbar mt-4">
+                      <VoteControls key={`${answer.id}:${user?.id}`} id={answer.id} kind={imported&&!sourceOnly?'imported_answer':'answer'} score={answer.vote_score} authorId={answer.author_id} path={`${threadPath}#answer-${answer.id}`} readOnly={sourceOnly}/>
+                      <Link href={`${threadPath}#reply`} onClick={()=>document.getElementById('reply-body')?.focus()} className="post-reply-action"><MessageCircle size={17} aria-hidden="true"/>Reply</Link>
+                      <ActionPopover label="More comment options" trigger={<Ellipsis size={20} aria-hidden="true"/>}>
+                        <PostShare path={`${threadPath}#answer-${answer.id}`} inline/>
+                        {!sourceOnly&&<ReportButton compact kind={imported?'imported_answer':'answer'} target={answer.id}/>}
+                      </ActionPopover>
                     </div>
                   </div>
                 </article>

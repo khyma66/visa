@@ -51,6 +51,8 @@ dependencies['./CompactTextarea'] = (await component('CompactTextarea')).url;
 dependencies['./PostViews'] = moduleUrl('export const PostViews=()=>null;');
 // Expose disclosure contents in these policy/presentation fixtures; real closed behavior is tested separately.
 dependencies['./ActionPopover'] = moduleUrl(`import {jsx} from ${JSON.stringify(import.meta.resolve('react/jsx-runtime'))};export function ActionPopover({label,trigger,children}){return jsx('section',{'aria-label':label,children:jsx('div',{children})});}`);
+dependencies['@/lib/voting'] = moduleUrl('export const readVote=async()=>0,writeVote=async()=>0;');
+dependencies['./VoteControls'] = (await component('VoteControls')).url;
 dependencies['./AuthorIdentity'] = (await component('AuthorIdentity')).url;
 dependencies['./PostActions'] = (await component('PostActions')).url;
 dependencies['./PostAward'] = (await component('PostAward')).url;

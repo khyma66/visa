@@ -57,6 +57,8 @@ dependencies['@/lib/post-views'] = moduleUrl('export const observePostView=()=>(
 dependencies['./PostViews'] = await compile('../src/components/PostViews.tsx');
 // Expose disclosure contents in these policy/presentation fixtures; real closed behavior is tested separately.
 dependencies['./ActionPopover'] = moduleUrl(`import {jsx} from ${JSON.stringify(jsx)};export function ActionPopover({label,trigger,children}){return jsx('section',{'aria-label':label,children:jsx('div',{children})});}`);
+dependencies['@/lib/voting'] = moduleUrl('export const readVote=async()=>0,writeVote=async()=>0;');
+dependencies['./VoteControls'] = await compile('../src/components/VoteControls.tsx');
 dependencies['./AuthorIdentity'] = await compile('../src/components/AuthorIdentity.tsx');
 dependencies['./PostActions'] = await compile('../src/components/PostActions.tsx');
 dependencies['./PostAward'] = await compile('../src/components/PostAward.tsx');
