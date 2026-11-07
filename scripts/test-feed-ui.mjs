@@ -86,7 +86,7 @@ class Harness {
 }
 function nodes(node) { return Array.isArray(node) ? node.flatMap(nodes) : node && typeof node === 'object' ? [node, ...nodes([node.props?.children,node.props?.related])] : []; }
 function textOf(node) { return Array.isArray(node) ? node.map(textOf).join(' ') : node == null || typeof node === 'boolean' ? '' : typeof node === 'object' ? (textOf(node.props?.children) + (node.props?.related ? ' ' + textOf(node.props.related) : '')) : String(node); }
-function button(h, label) { const result = nodes(h.tree).find((node) => node.type === 'button' && textOf(node).trim() === label); assert(result, `Missing ${label} button`); return result; }
+function button(h, label) { const result = nodes(h.tree).find((node) => node.type === 'button' && (node.props['aria-label'] || textOf(node).trim()) === label); assert(result, `Missing ${label} button`); return result; }
 function search(h, value) { const input = nodes(h.tree).find((node) => node.type === 'input'); input.props.onChange({ target: { value } }); h.render(); }
 function ids(h) { return nodes(h.tree).filter((node) => node.props?.question).map((node) => node.props.question.id); }
 
@@ -250,7 +250,7 @@ test('feed controls publish clean framework-aware query state and clear filters'
     assert.equal(new URLSearchParams(h.search).get('q'), 'documents');
     assert.equal(new URLSearchParams(h.search).get('sort'), 'score');
     assert(h.writes.every((write) => write.state === null), 'Do not pass app-owned Next history state when changing query parameters');
-    button(h, 'Clear Filters').props.onClick(); h.render(); await h.flush();
+    button(h, 'Reset filters').props.onClick(); h.render(); await h.flush();
     assert.equal(h.search, '');
     assert.deepEqual(h.calls.at(-1), { search: '', tag: '', visaType: '', sort: 'newest', experience: false, category: '' });
   } finally { h.close(); }
@@ -272,7 +272,7 @@ test('experience category links restore filters without incompatible question-ty
     h.render({experience:true}); await h.flush();
     assert.equal(h.calls.at(-1).category, 'Other'); assert.deepEqual(ids(h), ['story']);
     assert(!nodes(h.tree).some(node => node.props?.['aria-label'] === 'Post type'));
-    button(h, 'Clear Filters').props.onClick(); h.render(); await h.flush();
+    button(h, 'Reset filters').props.onClick(); h.render(); await h.flush();
     assert.equal(h.search, ''); assert.equal(h.calls.at(-1).category, '');
   } finally { h.close(); }
 });
@@ -340,7 +340,7 @@ test('public source URL state restores and filters member and earlier rows indep
   }
 });
 
-test('source links preserve other filters and Clear Filters removes the source parameter', async () => {
+test('source links preserve other filters and Reset filters removes the source parameter', async () => {
   const h = new Harness('?q=documents&tag=documents&visa=H1B&origin=earlier&sort=score');
   h.getPage = async () => ({ questions: [question('member'), question('apify-archive')], more: false });
   try {
@@ -352,7 +352,7 @@ test('source links preserve other filters and Clear Filters removes the source p
     assert.equal(new URLSearchParams(h.search).has('origin'), false);
     assert.equal(Object.hasOwn(h.calls.at(-1), 'origin'), false);
     h.search = '?origin=earlier'; h.render(); await h.flush();
-    button(h, 'Clear Filters').props.onClick(); h.render(); await h.flush();
+    button(h, 'Reset filters').props.onClick(); h.render(); await h.flush();
     assert.equal(h.search, '');
     assert(!nodes(h.tree).some(node => node.props?.['aria-label'] === 'Post source'));
     assert.equal(Object.hasOwn(h.calls.at(-1), 'origin'), false);
