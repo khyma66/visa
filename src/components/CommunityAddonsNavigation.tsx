@@ -17,7 +17,7 @@ export function CommunityAddonsNavigation() {
     ['/communities/new', 'Start a Community', Plus, 'Create'],
   ] as const;
   return <div className="community-shortcuts">
-    <nav aria-label="Community tools" className="flex flex-wrap items-center gap-2 px-4 py-2">
+    <nav aria-label="Community tools" className="tab-row items-center px-4 py-2">
       {links.map(([href, label, Icon, shortLabel]) => <Link key={href} href={href} aria-label={label}
         aria-current={pathname === href ? 'page' : undefined}
         className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${href === '/communities/new'

@@ -129,7 +129,7 @@ export function CommunityPage({ slug }: { slug: string }) {
         {questions.map((question) => <QuestionCard key={question.id} question={question} onTagSelect={(value) => { setTag(value); resetQuestionPage(); }} />)}
         {questionsLoading && <p role="status" className="p-6 text-sm text-slate-500 capitalize">Loading questions…</p>}
         {!questionsLoading && !questionError && !questions.length && <div className="p-8 capitalize"><h3 className="font-bold capitalize">{tag ? 'No questions with this tag yet' : 'Start the first conversation'}</h3><p className="mt-2 text-sm leading-6 text-slate-600 capitalize">{tag ? 'Try another tag or clear the filter to see all community questions.' : 'Ask a specific question with relevant tags, or share an experience others can learn from.'}</p></div>}
-        {(next || after) && <nav aria-label="Question pages" className="my-5 flex flex-wrap items-center justify-center gap-3 px-4">
+        {(next || after) && <nav aria-label="Question pages" className="tab-row my-5 items-center tab-row-centered px-4">
           {after && <button onClick={resetQuestionPage} disabled={questionsLoading} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold disabled:opacity-50 capitalize">First page</button>}
           <button onClick={previousQuestionPage} disabled={questionsLoading || !history.length} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold disabled:opacity-50 capitalize">Previous questions</button>
           <span className="text-xs text-slate-500">Page {pageNumber}</span>

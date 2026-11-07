@@ -21,7 +21,7 @@ export function OfficialNewsResults({ feed }: { feed: OfficialNews }) {
   const visible = topic === 'All updates' ? feed.articles : feed.articles.filter(article => newsTopic(article) === topic);
   const [lead, ...remaining] = visible;
   return <>
-    <nav aria-label="News topics" className="news-topics">{NEWS_TOPICS.map(label => <button type="button" key={label} aria-pressed={topic === label} onClick={() => setTopic(label)}>{label}</button>)}</nav>
+    <nav aria-label="News topics" className="tab-row news-topics">{NEWS_TOPICS.map(label => <button type="button" key={label} aria-pressed={topic === label} onClick={() => setTopic(label)}>{label}</button>)}</nav>
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
       <h2 className="text-thread-title font-semibold text-slate-950">Latest updates <span className="ml-1.5 rounded-md bg-teal-100 px-2 py-1 text-xs text-teal-900">{visible.length}</span></h2>
       <p role="status" className="text-xs leading-5 text-slate-500">Updated <time dateTime={feed.retrievedAt}>{new Date(feed.retrievedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</time></p>
@@ -59,7 +59,7 @@ export function HeadlineResults({ headlines }: { headlines: ImmigrationHeadlines
   const searchUrl = `https://www.google.com/search?${new URLSearchParams({ q: 'us immigration visa news', tbm: 'nws' })}`;
   return <div className="min-w-0">
     <div className="min-w-0">
-      <nav aria-label="Headline topics" className="news-topics mt-4">{['All Headlines', ...Object.keys(topics)].map(label => <button type="button" key={label} aria-pressed={topic === label} onClick={() => { setTopic(label); setLimit(12); }}>{label}</button>)}</nav>
+      <nav aria-label="Headline topics" className="tab-row news-topics mt-4">{['All Headlines', ...Object.keys(topics)].map(label => <button type="button" key={label} aria-pressed={topic === label} onClick={() => { setTopic(label); setLimit(12); }}>{label}</button>)}</nav>
       <p role="status" aria-live="polite" className="mb-3 text-xs text-slate-500">{articles.length} {articles.length === 1 ? 'headline' : 'headlines'} · {headlines.source === 'GDELT Project' ? 'News coverage · dates indicate when indexed' : 'Agency announcements · publication dates'}</p>
       <div className="news-story-list">
         {articles.slice(0, limit).map(article => <article key={article.url} className="news-story">
@@ -127,7 +127,7 @@ export function OfficialNewsFeed({ initialFeed = null, children }: { initialFeed
       </div>
       <p className="mt-2 max-w-2xl text-base leading-6 text-slate-600">Immigration reporting, the latest headlines, and official updates — organized in one place.</p>
     </header>
-    <div role="tablist" aria-label="News sections" aria-orientation="horizontal" className="news-tabs">
+    <div role="tablist" aria-label="News sections" aria-orientation="horizontal" className="tab-row news-tabs">
       {sections.map((item, index) => <button key={item.id} type="button" role="tab" id={`news-tab-${item.id}`} aria-controls={`news-panel-${item.id}`} aria-selected={section === item.id} tabIndex={section === item.id ? 0 : -1}
         onClick={() => setSection(item.id)}
         onKeyDown={event => {

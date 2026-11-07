@@ -117,14 +117,14 @@ export function ExploreCommunities({ initialTab = 'all' }: { initialTab?: 'all' 
       <div><div className="flex items-center gap-2"><Compass className="text-blue-700" size={23} aria-hidden="true" /><h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl capitalize">Explore Communities</h1></div><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 capitalize">Find your people by U.S. visa type or next step.</p></div>
       <Link href={user ? '/communities/new' : '/login?next=%2Fcommunities%2Fnew'} className="inline-flex items-center gap-1.5 rounded-full bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 capitalize"><Plus size={17} aria-hidden="true" />Start a Community</Link>
     </div>
-    <nav aria-label="Explore sections" className="mt-5 flex flex-wrap items-center gap-1 border-b border-slate-200 pb-3">
+    <nav aria-label="Explore sections" className="tab-row mt-5 items-center border-b border-slate-200 pb-3">
       <button onClick={() => changeTab('all')} aria-pressed={tab === 'all'} className={`rounded-full px-4 py-2 text-sm font-semibold ${tab === 'all' ? 'bg-slate-200 text-slate-950' : 'text-slate-600 hover:bg-slate-100'} capitalize`}>All Communities</button>
       <button onClick={() => changeTab('mine')} aria-pressed={tab === 'mine'} className={`rounded-full px-4 py-2 text-sm font-semibold ${tab === 'mine' ? 'bg-slate-200 text-slate-950' : 'text-slate-600 hover:bg-slate-100'} capitalize`}>My Communities</button>
       <Link href="/us/en/news" className="ml-auto rounded-full px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 capitalize">U.S. Visa News</Link>
       <Link href="/us/en/tags" className="rounded-full px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 capitalize">Browse Tags</Link>
     </nav>
     {tab === 'all' && <><TopicCollections /><h2 className="mt-8 text-thread-title font-semibold text-slate-950 capitalize">Member Communities</h2><p className="mt-1 text-sm text-slate-600 capitalize">Create or join a dedicated group. Member counts reflect actual memberships.</p></>}
-    <div aria-label="Browse community categories" className="mt-5 flex flex-wrap gap-2">
+    <div aria-label="Browse community categories" className="tab-row mt-5">
       {COMMUNITY_CATEGORIES.map((item) => { const Icon = CATEGORY_ICONS[item]; return <button key={item} onClick={() => { setCategory(category === item ? '' : item); resetPage(); }} aria-pressed={category === item} className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium ${category === item ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}><Icon size={16} aria-hidden="true" />{item === 'Work visas' ? 'Work Visas' : item}</button>; })}
     </div>
     <div className="my-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_160px_180px]">
@@ -149,7 +149,7 @@ export function ExploreCommunities({ initialTab = 'all' }: { initialTab?: 'all' 
       })}</div>
       {loading && <div role="status" aria-label="Loading communities" className="grid gap-3 md:grid-cols-2">{[1, 2, 3, 4].map((item) => <div key={item} className="h-44 animate-pulse rounded-lg bg-slate-100" />)}</div>}
       {!loading && !rows.length && !error && !membershipError && <div className="border-y border-slate-200 py-10 text-center"><Search size={28} className="mx-auto text-slate-400" aria-hidden="true" /><h2 className="mt-3 text-thread-title font-semibold capitalize">{tab === 'mine' && !search && !category && !after ? 'Find your first community' : 'No communities match yet'}</h2><p className="mt-2 text-sm text-slate-600 capitalize">{tab === 'mine' ? 'Browse All Communities to join a conversation, or adjust the filters.' : 'Try a broader search or start a community for your topic.'}</p>{tab === 'mine' ? <button onClick={() => { changeTab('all'); setSearch(''); setCategory(''); }} className="mt-4 text-sm font-semibold text-blue-700 underline capitalize">Explore all communities</button> : <Link href="/communities/new" className="mt-4 inline-block text-sm font-semibold text-blue-700 underline capitalize">Create a Community</Link>}</div>}
-      {(next || after) && <nav aria-label="Community pages" className="mt-6 flex flex-wrap items-center justify-center gap-3">
+      {(next || after) && <nav aria-label="Community pages" className="tab-row mt-6 items-center tab-row-centered">
         {after && <button disabled={loading} onClick={resetPage} className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50 capitalize">First page</button>}
         <button disabled={loading || !history.length} onClick={previousPage} className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50 capitalize">Previous communities</button>
         <span className="text-xs text-slate-500">Page {pageNumber}</span>
