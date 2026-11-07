@@ -12,6 +12,7 @@ export type AccountActivity = {
   answer_count?: number;
   is_accepted?: boolean;
   created_at: string;
+  edited_at?: string | null;
 };
 export type ActivityPage = { items: AccountActivity[]; more: boolean };
 export type AccountIdentity = { email: string | null; providers: string[]; emailVerified: boolean };
@@ -21,8 +22,8 @@ export async function getAccountActivity(client: SupabaseClient, userId: string,
   const start = page * ACCOUNT_PAGE_SIZE;
   if (!Number.isSafeInteger(start + ACCOUNT_PAGE_SIZE)) throw new Error('Invalid activity page.');
   const fields = kind === 'questions'
-    ? 'id,title,body,vote_score,answer_count,created_at'
-    : 'id,question_id,body,vote_score,is_accepted,created_at';
+    ? 'id,title,body,vote_score,answer_count,created_at,edited_at'
+    : 'id,question_id,body,vote_score,is_accepted,created_at,edited_at';
   // RLS-backed public views retain moderation rules; author_id scopes every page.
   const { data, error } = await client.from(kind === 'questions' ? 'question_feed' : 'answer_feed')
     .select(fields).eq('author_id', userId)
