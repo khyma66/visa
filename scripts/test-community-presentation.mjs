@@ -21,7 +21,7 @@ const dependencies = {
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'), react: hooks,
   'next/link': link, 'next/navigation': moduleUrl('export const useSearchParams=()=>new URLSearchParams();export const useParams=()=>({id:globalThis.__presentation.question?.id});'),
   'lucide-react': import.meta.resolve('lucide-react'), 'date-fns': import.meta.resolve('date-fns'),
-  '@/lib/community': moduleUrl('export const acceptAnswer=()=>{},createAnswer=()=>{},getAnswerPage=()=>{},getDiscussionContext=()=>{},getQuestion=()=>{},sortAnswers=x=>x,voteAnswer=()=>{},voteQuestion=()=>{},getCommunitySource=()=>{},getQuestionPage=()=>{},discoverQuestions=()=>{};'),
+  '@/lib/community': moduleUrl('export const manageOwnContent=()=>{},acceptAnswer=()=>{},createAnswer=()=>{},getAnswerPage=()=>{},getDiscussionContext=()=>{},getQuestion=()=>{},sortAnswers=x=>x,voteAnswer=()=>{},voteQuestion=()=>{},getCommunitySource=()=>{},getQuestionPage=()=>{},discoverQuestions=()=>{};'),
   '@/lib/realtime': moduleUrl('export const subscribeLive=()=>()=>{};'),
   '@/lib/supabase/client': moduleUrl('export const isSupabaseConfigured=false,getSupabase=()=>{throw new Error("Network not permitted in presentation test")};'),
   '@/lib/tag-directory': moduleUrl('export const archiveDirectoryPage=()=>{},directoryPage=()=>{};'),
@@ -54,6 +54,8 @@ dependencies['./ActionPopover'] = moduleUrl(`import {jsx} from ${JSON.stringify(
 dependencies['@/lib/voting'] = moduleUrl('export const readArchiveVote=async()=>({score:0,value:0}),readVote=async()=>0,writeVote=async()=>0;');
 dependencies['./VoteControls'] = (await component('VoteControls')).url;
 dependencies['./AuthorIdentity'] = (await component('AuthorIdentity')).url;
+dependencies['./EditedLabel'] = (await component('EditedLabel')).url;
+dependencies['./OwnerContentActions'] = (await component('OwnerContentActions')).url;
 dependencies['./PostActions'] = (await component('PostActions')).url;
 dependencies['./PostAward'] = (await component('PostAward')).url;
 const {value:{QuestionCard},url:cardUrl} = await component('QuestionCard');
@@ -206,4 +208,17 @@ test('related questions use singular labels for exactly one post and reply',()=>
     const plural=render(RelatedQuestions,{context:{tags:['h1b']}},{values:{0:[{...source,answer_count:count} ]}});
     assert(plural.includes(`aria-label="${count} replies"`));
   }
+});
+
+
+test('edit metadata is explicit, and author actions are absent for other members and source content',()=>{
+ const stamp='2026-11-07T12:00:00Z';
+ const own=render(QuestionCard,{question:{...native,edited_at:stamp}},{user:{id:alice}});
+ assert.match(own,/>Edited<\/time>/);assert.match(own,/Edit post/);assert.match(own,/Delete post/);
+ const other=render(QuestionCard,{question:{...native,updated_at:stamp}},{user:{id:bob}});
+ assert.doesNotMatch(other,/>Edited<\/time>|Edit post|Delete post/);
+ const imported=render(QuestionCard,{question:source},{user:{id:source.author_id}});
+ assert.doesNotMatch(imported,/Edit post|Delete post/);
+ const comments=render(QuestionDetail,{initialQuestion:native,initialAnswers:[{...reply,edited_at:stamp}]},{user:{id:bob}});
+ assert.match(comments,/>Edited<\/time>/);assert.match(comments,/Edit comment/);assert.match(comments,/Delete comment/);
 });
