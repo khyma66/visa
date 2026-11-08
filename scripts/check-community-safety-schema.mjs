@@ -14,3 +14,11 @@ for(const [name,args] of Object.entries({manage_own_content:{kind:'question',tar
   assert([401,403].includes(response.status) && result.code==='42501',name+': apply the reviewed community safety and security evidence migrations to this environment before deploying the UI.');
 }
 console.log('Community safety schema exists and rejects anonymous access.');
+
+// The feed RPC is public but must exist before publishing its client.
+const recentResponse = await fetch(origin+'/rest/v1/rpc/recent_community_post_page', {
+  method:'POST', headers:{apikey:key,'Content-Type':'application/json'},
+  body:JSON.stringify({filter_tag:'visathreads-schema-probe-no-results'}),
+  redirect:'error',signal:AbortSignal.timeout(10000),
+});
+assert(recentResponse.ok && Array.isArray(await recentResponse.json()), 'Apply the recent post feed migration before deploying the UI.');

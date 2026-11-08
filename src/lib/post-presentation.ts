@@ -61,3 +61,18 @@ export function selectedExperiences(questions: Question[]): Question[] {
       post_kind: 'experience' as const, experience_category: selection.category }];
   });
 }
+
+/** Rolling two calendar months in UTC, clamped for shorter target months. */
+export function recentPostCutoff(now = new Date()): number {
+  const cutoff = new Date(now);
+  const day = cutoff.getUTCDate();
+  cutoff.setUTCDate(1);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - 2);
+  const lastDay = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth() + 1, 0)).getUTCDate();
+  cutoff.setUTCDate(Math.min(day, lastDay));
+  return cutoff.getTime();
+}
+export function recentPosts<T extends { created_at: string }>(posts: T[], now = new Date()): T[] {
+  const cutoff = recentPostCutoff(now);
+  return posts.filter(post => Date.parse(post.created_at) >= cutoff);
+}
