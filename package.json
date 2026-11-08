@@ -46,7 +46,7 @@
     "deploy:prod": "npm run check:secrets && npm test && npm run typecheck && npm audit --audit-level=high && npm run build:prod && vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build",
     "build:dev": "CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development vinext build && CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development npm run check:archive-bundle",
     "deploy:dev": "vinext-cloudflare deploy --config wrangler.jsonc --env development",
-    "test:feed-ui": "node --test scripts/test-feed-ui.mjs",
+    "test:feed-ui": "node --test scripts/test-feed-ui.mjs scripts/test-recent-post-feed.mjs",
     "build:devsite": "node scripts/development-site.mjs",
     "deploy:devsite": "node scripts/development-site.mjs --deploy",
     "test:dependencies": "node --test scripts/test-braces-security.mjs vendor/braces/test/*.js",

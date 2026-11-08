@@ -1,6 +1,6 @@
 'use client';
 
-import { canMessageAuthor, isImportedPost, selectedExperiences, usVisaPost } from './post-presentation';
+import { canMessageAuthor, isImportedPost, selectedExperiences, usVisaPost, recentPosts } from './post-presentation';
 import { DEMO_ANSWERS, DEMO_CONVERSATIONS, DEMO_MESSAGES, DEMO_QUESTIONS, DEMO_USER } from './demo-data';
 import { getSupabase, isSupabaseConfigured } from './supabase/client';
 import { inferTags, normalizeTags } from './tagging';
@@ -199,17 +199,17 @@ export async function getQuestion(id: string): Promise<Question | null> {
 export type QuestionPageOptions = { search?: string; tag?: string; visaType?: string; sort?: string; before?: Question; experience?: boolean; category?: string; origin?: 'member' | 'archive' };
 export async function getQuestionPage(options: QuestionPageOptions = {}): Promise<{ questions: Question[]; more: boolean; cursor?: Question }> {
   if (!isSupabaseConfigured) {
-    const questions = await listQuestions();
+    const questions = recentPosts(await listQuestions());
     return { questions: options.experience ? [...questions.filter(q => q.post_kind === 'experience'), ...selectedExperiences(questions)] : questions.filter(q => q.post_kind !== 'experience'), more: false };
   }
   // Origin is distinct from topic tags. Archive-only browsing needs no native
   // pagination; member-only browsing never downloads the archive here.
   if (options.origin === 'archive') {
-    const archive = (await importedFeedOrNull())?.questions ?? [];
+    const archive = recentPosts((await importedFeedOrNull())?.questions ?? []);
     return { questions: await withMemberReplyCounts(options.experience ? selectedExperiences(archive) : archive), more: false };
   }
   const before = options.before;
-  const { data, error } = await getSupabase().rpc('community_post_page', {
+  const { data, error } = await getSupabase().rpc('recent_community_post_page', {
     filter_kind: options.experience ? 'experience' : 'question', filter_category: options.category ?? '',
     query_text: options.search?.trim() ?? '', filter_tag: options.tag ?? '', filter_visa: options.visaType ?? '', sort_mode: options.sort ?? 'newest',
     before_time: before?.created_at ?? null, before_id: before?.id ?? null,
@@ -218,7 +218,8 @@ export async function getQuestionPage(options: QuestionPageOptions = {}): Promis
   throwIfError(error);
   const rows = (data ?? []) as Question[];
   const archive = before || options.origin === 'member' ? [] : (await importedFeedOrNull())?.questions ?? [];
-  const imported = options.experience ? selectedExperiences(archive) : archive;
+  const recentArchive = recentPosts(archive);
+  const imported = options.experience ? selectedExperiences(recentArchive) : recentArchive;
   return { questions: await withMemberReplyCounts([...rows, ...imported].flatMap(question => { const scoped = usVisaPost(question); return scoped ? [scoped] : []; })), more: rows.length === 50, cursor: rows.at(-1) };
 }
 
