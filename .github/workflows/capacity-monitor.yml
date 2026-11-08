@@ -1,0 +1,25 @@
+name: Monitor platform capacity
+on:
+  schedule:
+    - cron: '8,23,38,53 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: platform-capacity-monitor
+  cancel-in-progress: false
+jobs:
+  capacity:
+    if: github.repository == 'khyma66/visa' && github.ref == 'refs/heads/main' && vars.CAPACITY_MONITOR_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check capacity and readiness
+        run: node scripts/check-platform-capacity.mjs
+        env:
+          CAPACITY_MONITOR_TOKEN: ${{ secrets.CAPACITY_MONITOR_TOKEN }}

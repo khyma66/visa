@@ -20,6 +20,28 @@ type DemoState = {
   externalAnswerVotes: Record<string, number>;
 };
 
+const pending=new Map<string,Promise<{question:Question;answers:Answer[]} | null>>();
+const cached=new Map<string,{at:number;value:{question:Question;answers:Answer[]} | null}>();
+/** Public archive only. No account/session data enters this cache. */
+async function archiveThread(id:string) {
+  const previous=cached.get(id);if(previous&&Date.now()-previous.at<30000)return previous.value;
+  let request=pending.get(id);if(request)return request;
+  request=(async()=>{
+    const response=await fetch('/api/archive/'+encodeURIComponent(id),{signal:AbortSignal.timeout(8000)});
+    if(response.status===404)return null;
+    if(!response.ok)throw new Error('This discussion is temporarily unavailable. Please retry.');
+    const value=await response.json() as {question:Question;answers:Answer[]};
+    if(value.question?.id!==id||!Array.isArray(value.answers))throw new Error('Invalid discussion response.');
+    cached.set(id,{at:Date.now(),value});if(cached.size>100)cached.delete(cached.keys().next().value!);
+    return value;
+  })().finally(()=>pending.delete(id));pending.set(id,request);return request;
+}
+async function archiveSource():Promise<CommunityFeed['source'] | null> {
+  const response=await fetch('/api/archive/status',{signal:AbortSignal.timeout(8000)});
+  if(!response.ok)return null;
+  const data=await response.json() as {available:boolean;source:CommunityFeed['source']|null};return data.available?data.source:null;
+}
+
 const DEMO_KEY = 'visaflow-demo-v4';
 const DEMO_EVENT = 'visaflow-demo-change';
 const DEMO_QUESTION_IDS = new Set(DEMO_QUESTIONS.map((question) => question.id));
@@ -83,7 +105,7 @@ async function loadImportedFeed(): Promise<CommunityFeed> {
 }
 
 export async function getCommunitySource(): Promise<CommunityFeed['source'] | null> {
-  return (await importedFeedOrNull())?.source ?? null;
+  return isSupabaseConfigured ? archiveSource() : (await importedFeedOrNull())?.source ?? null;
 }
 
 function applyLocalActivity(feed: CommunityFeed, state: DemoState): CommunityFeed {
@@ -185,8 +207,7 @@ export async function listQuestions(search = '', visaType = ''): Promise<Questio
 
 export async function getQuestion(id: string): Promise<Question | null> {
   if (id.startsWith('apify-')) {
-    const imported = await importedFeedOrNull();
-    const question = imported?.questions.find((question) => question.id === id) ?? null;
+    const question = isSupabaseConfigured ? (await archiveThread(id))?.question ?? null : (await importedFeedOrNull())?.questions.find(question => question.id === id) ?? null;
     if (!question || !isSupabaseConfigured) return question;
     return (await withMemberReplyCounts([question]))[0];
   }
@@ -196,31 +217,23 @@ export async function getQuestion(id: string): Promise<Question | null> {
   return data ? usVisaPost(data as Question) : null;
 }
 
-export type QuestionPageOptions = { search?: string; tag?: string; visaType?: string; sort?: string; before?: Question; experience?: boolean; category?: string; origin?: 'member' | 'archive' };
+export type QuestionPageOptions = { search?: string; tag?: string; visaType?: string; sort?: string; before?: Question; experience?: boolean; category?: string; origin?: 'member' | 'archive'; kind?: string };
 export async function getQuestionPage(options: QuestionPageOptions = {}): Promise<{ questions: Question[]; more: boolean; cursor?: Question }> {
   if (!isSupabaseConfigured) {
     const questions = recentPosts(await listQuestions());
     return { questions: options.experience ? [...questions.filter(q => q.post_kind === 'experience'), ...selectedExperiences(questions)] : questions.filter(q => q.post_kind !== 'experience'), more: false };
   }
-  // Origin is distinct from topic tags. Archive-only browsing needs no native
-  // pagination; member-only browsing never downloads the archive here.
-  if (options.origin === 'archive') {
-    const archive = recentPosts((await importedFeedOrNull())?.questions ?? []);
-    return { questions: await withMemberReplyCounts(options.experience ? selectedExperiences(archive) : archive), more: false };
-  }
   const before = options.before;
-  const { data, error } = await getSupabase().rpc('recent_community_post_page', {
-    filter_kind: options.experience ? 'experience' : 'question', filter_category: options.category ?? '',
-    query_text: options.search?.trim() ?? '', filter_tag: options.tag ?? '', filter_visa: options.visaType ?? '', sort_mode: options.sort ?? 'newest',
-    before_time: before?.created_at ?? null, before_id: before?.id ?? null,
-    before_score: before ? options.sort === 'score' ? before.vote_score : options.sort === 'activity' ? before.vote_score + before.answer_count * 2 : 0 : null,
-  });
+  const {data,error}=await getSupabase().rpc('platform_post_page', {
+    filter_kind:options.experience?'experience':options.kind??'',filter_category:options.category??'',
+    query_text:options.search?.trim()??'',filter_tag:options.tag??'',filter_visa:options.visaType??'',sort_mode:options.sort??'newest',
+    filter_origin:options.origin??'',before_time:before?.created_at??null,before_id:before?.id??null,
+    before_score:before?(before as Question & {feed_rank?:number}).feed_rank??(options.sort==='score'?before.vote_score:options.sort==='activity'?before.vote_score+before.answer_count*2:0):null,
+  }).abortSignal(AbortSignal.timeout(8000));
   throwIfError(error);
-  const rows = (data ?? []) as Question[];
-  const archive = before || options.origin === 'member' ? [] : (await importedFeedOrNull())?.questions ?? [];
-  const recentArchive = recentPosts(archive);
-  const imported = options.experience ? selectedExperiences(recentArchive) : recentArchive;
-  return { questions: await withMemberReplyCounts([...rows, ...imported].flatMap(question => { const scoped = usVisaPost(question); return scoped ? [scoped] : []; })), more: rows.length === 50, cursor: rows.at(-1) };
+  const rows=(data??[]) as Question[];
+  const page=rows.slice(0,50).flatMap(question=>{const scoped=usVisaPost(question);return scoped?[scoped]:[];});
+  return {questions:page,more:rows.length>50,cursor:page.at(-1)};
 }
 
 export async function createQuestion(authorId: string, input: NewQuestion): Promise<string> {
@@ -263,7 +276,7 @@ export async function getAnswerPage(questionId: string, before?: AnswerCursor): 
   // Source comments are a bounded archive, not registered-member answers. Include
   // them once and never use their non-UUID IDs as a database pagination cursor.
   const sourceAnswers = imported && !before
-    ? ((await importedFeedOrNull())?.answersByQuestionId[questionId] ?? []).filter((row) => row.status === 'active') : [];
+    ? (isSupabaseConfigured ? (await archiveThread(questionId))?.answers ?? [] : (await importedFeedOrNull())?.answersByQuestionId[questionId] ?? []).filter(row => row.status === 'active') : [];
   let rows: Answer[];
   if (!isSupabaseConfigured) {
     rows = sortAnswers(readDemo().answers.filter((answer) => answer.question_id === questionId
@@ -294,7 +307,7 @@ export async function listAnswers(questionId: string): Promise<Answer[]> {
 export async function getDiscussionContext(questionId: string): Promise<string> {
   const imported = questionId.startsWith('apify-');
   const source = imported
-    ? ((await importedFeedOrNull())?.answersByQuestionId[questionId] ?? []).filter((row) => row.status === 'active') : [];
+    ? (isSupabaseConfigured ? (await archiveThread(questionId))?.answers ?? [] : (await importedFeedOrNull())?.answersByQuestionId[questionId] ?? []).filter(row => row.status === 'active') : [];
   let replies: Pick<Answer, 'id' | 'body' | 'created_at'>[];
   if (!isSupabaseConfigured) {
     replies = readDemo().answers.filter((row) => row.question_id === questionId && row.status === 'active'
@@ -334,6 +347,15 @@ export async function createAnswer(questionId: string, authorId: string, body: s
 }
 
 export async function discoverQuestions(context: DiscoveryContext): Promise<RelatedQuestion[]> {
+  if(isSupabaseConfigured){
+    const {data,error}=await getSupabase().rpc('platform_related_posts',{
+      source_id:context.id??'',query_tags:contextTags(context),
+      query_text:searchTerms(`${context.draftText??''} ${context.commentText??''} ${context.title??''} ${context.body??''}`).join(' '),
+      filter_visa:context.visa_type??'',
+    }).abortSignal(AbortSignal.timeout(8000));
+    throwIfError(error);return withMemberReplyCounts(((data??[]) as RelatedQuestion[]).filter(q=>usVisaPost(q)));
+  }
+
   const feed = await loadImportedFeed().catch(() => null);
   const local = isSupabaseConfigured ? '' : window.localStorage.getItem(DEMO_KEY) ?? '';
   if (!discoveryCache || discoveryCache.feed !== feed || discoveryCache.local !== local) {

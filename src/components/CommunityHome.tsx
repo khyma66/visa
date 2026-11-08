@@ -51,7 +51,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   // Sort immediately over the already loaded rows while the fresh server page
   // arrives, but never present rows from a different search/filter as results.
   const contentFilterKey = JSON.stringify([search, tag, visaType, experience, category, origin]);
-  const filterKey = JSON.stringify([search, tag, visaType, sortMode, revision, experience, category, origin]);
+  const filterKey = JSON.stringify([search, tag, visaType, sortMode, revision, experience, category, origin, kind]);
   const filterRef = useRef(filterKey);
   filterRef.current = filterKey;
   const previousSearch = useRef(search);
@@ -92,7 +92,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     olderLock.current = null; setLoadingOlder(false);
     const fetchQuestions = () => {
       const dataOrigin = origin === 'earlier' ? 'archive' : origin;
-      void getQuestionPage({ search, tag: sortMode === 'sos' ? 'sos' : tag, visaType, sort: sortMode === 'sos' ? 'newest' : sortMode, experience, category, ...(dataOrigin ? { origin: dataOrigin } : {}) })
+      void getQuestionPage({ search, tag: sortMode === 'sos' ? 'sos' : tag, visaType, sort: sortMode === 'sos' ? 'newest' : sortMode, experience, category, ...(kind ? {kind} : {}), ...(dataOrigin ? { origin: dataOrigin } : {}) })
         .then((data) => { if (active) { setQuestions(data.questions); setMore(data.more); setCursor(data.cursor); setLoadedFilterKey(contentFilterKey); } })
         .catch(() => { if (active) { setQuestions([]); setError('Questions could not be loaded. Please try again.'); } })
         .finally(() => { if (active) setLoading(false); });
@@ -102,7 +102,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     const timer = typing && search ? setTimeout(fetchQuestions, 200) : undefined;
     if (timer === undefined) fetchQuestions();
     return () => { active = false; clearTimeout(timer); };
-  }, [search, tag, visaType, sortMode, revision, experience, category, origin]);
+  }, [search, tag, visaType, sortMode, revision, experience, category, origin, kind]);
 
   async function loadOlder() {
     if (loading || olderLock.current || !cursor) return;
@@ -111,7 +111,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     const requestedFilter = filterKey;
     try {
       const dataOrigin = origin === 'earlier' ? 'archive' : origin;
-      const data = await getQuestionPage({ search, tag: sortMode === 'sos' ? 'sos' : tag, visaType, sort: sortMode === 'sos' ? 'newest' : sortMode, before: cursor, experience, category, ...(dataOrigin ? { origin: dataOrigin } : {}) });
+      const data = await getQuestionPage({ search, tag: sortMode === 'sos' ? 'sos' : tag, visaType, sort: sortMode === 'sos' ? 'newest' : sortMode, before: cursor, experience, category, ...(kind ? {kind} : {}), ...(dataOrigin ? { origin: dataOrigin } : {}) });
       if (!alive.current || filterRef.current !== requestedFilter) return;
       setQuestions((current) => [...current, ...data.questions.filter((question) => !current.some((item) => item.id === question.id))]);
       setMore(data.more); setCursor(data.cursor); setError('');
@@ -218,7 +218,6 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
                 {!experience && initialKind && <select aria-label="Post type" value={kind} onChange={(event) => { const value = event.target.value as PostKind; setKind(value); updateQuery({ type: value }); }} className="max-w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-600"><option value="" className="capitalize">All Post Types</option><option value="question" className="capitalize">Questions</option><option value="discussion" className="capitalize">Discussions & experiences</option><option value="promotion" className="capitalize">Promotional posts</option></select>}
                 {tag && <button onClick={() => selectTag('')} className="inline-flex max-w-full items-center gap-1 break-words rounded bg-blue-50 px-2 py-1.5 text-sm font-semibold text-blue-700">{topicLabel(tag)}<X size={13} aria-hidden="true" /><span className="sr-only capitalize">Clear tag</span></button>}
                 {filtered && <button onClick={resetFilters} aria-label="Reset filters" title="Reset filters" className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700"><X size={16} aria-hidden="true" /></button>}
-                <span className="text-xs text-slate-500">Last 2 Months</span>
                 <span aria-live="polite" className="ml-auto text-xs text-slate-500">{loading ? refreshing ? 'Updating results…' : 'Loading questions...' : visibleQuestions.length ? `Showing ${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, visibleQuestions.length)} of ${visibleQuestions.length} loaded${more ? ' · More available' : ''}` : '0 posts shown'}</span>
               </div>
               {origin === 'earlier' && <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600 capitalize">Previously published discussions use neutral public aliases. You can reply here, but the original contributor is not a VisaThreads member and cannot receive direct messages.</p>}

@@ -122,6 +122,7 @@ const pagingSource = community.slice(community.indexOf('export const ANSWER_PAGE
 const paging = await import(moduleUrl(transpile(`const isSupabaseConfigured=true;
   const getSupabase=()=>globalThis.__answerBackend;
   const importedFeedOrNull=async()=>globalThis.__answerArchive;
+  const archiveThread=async(id)=>({answers:globalThis.__answerArchive?.answersByQuestionId[id]??[]});
   function throwIfError(error) { if(error) throw new Error(error.message); }
   ${pagingSource}`)));
 const row = (n, extra = {}) => ({ id: `30000000-0000-4000-8000-${String(n).padStart(12,'0')}`,

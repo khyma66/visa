@@ -1,5 +1,6 @@
 export const ADMIN_SECTIONS = [
   { id: 'analytics', label: 'Overview & analytics' },
+  { id: 'capacity', label: 'Capacity & alerts' },
   { id: 'members', label: 'Members & signups' },
   { id: 'reports', label: 'Reports & moderation' },
   { id: 'security', label: 'Security' },

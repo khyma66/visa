@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { BarChart3, Users, Flag, ShieldCheck, ClipboardList, Inbox, ArrowLeft, Settings, Plus } from 'lucide-react';
+import { BarChart3, Gauge, Users, Flag, ShieldCheck, ClipboardList, Inbox, ArrowLeft, Settings, Plus } from 'lucide-react';
 import { ADMIN_SECTIONS, adminHref, adminSection } from '@/lib/admin-navigation';
 
-const icons = { analytics: BarChart3, members: Users, reports: Flag, security: ShieldCheck, launch: ClipboardList, feedback: Inbox };
+const icons = { analytics: BarChart3, capacity: Gauge, members: Users, reports: Flag, security: ShieldCheck, launch: ClipboardList, feedback: Inbox };
 export function AdminNavigation({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const params = useSearchParams();

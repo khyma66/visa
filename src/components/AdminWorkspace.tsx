@@ -8,6 +8,7 @@ import { useOwnerAccess } from './OwnerAccessProvider';
 import { ADMIN_SECTIONS, adminHref, adminSection } from '@/lib/admin-navigation';
 
 const panels = {
+  capacity: lazy(() => import('./OwnerCapacityDashboard').then(module => ({ default: module.OwnerCapacityDashboard }))),
   analytics: lazy(() => import('./OwnerAnalyticsDashboard').then(module => ({ default: module.OwnerAnalyticsDashboard }))),
   members: lazy(() => import('./OwnerMembersDashboard').then(module => ({ default: module.OwnerMembersDashboard }))),
   reports: lazy(() => import('./ModerationDashboard').then(module => ({ default: module.ModerationDashboard }))),
