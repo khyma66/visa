@@ -17,24 +17,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     setData(EMPTY_NOTIFICATIONS); setReady(false); setError('');
     if (!user || demoMode) { setReady(true); return; }
-    let active = true, running = false, again = false;
+    let active = true, running = false, again = false, failures = 0;
+    let timer:ReturnType<typeof setTimeout>;
+    const schedule = () => { clearTimeout(timer); if(active)timer=setTimeout(()=>{if(document.visibilityState==='visible')void load();else schedule();},Math.min(300000,120000*2**Math.min(failures,2))+Math.random()*15000); };
     const load = async () => {
       if (running) { again = true; return; }
       running = true;
       do {
         again = false;
-        try { const value = await getNotifications(); if (active) { setData(value); setError(''); } }
-        catch (reason) { if (active) setError(reason instanceof Error ? reason.message : 'Notifications are unavailable.'); }
+        try { const value = await getNotifications(); if (active) { setData(value); setError(''); failures=0; } }
+        catch (reason) { failures++; if (active) setError(reason instanceof Error ? reason.message : 'Notifications are unavailable.'); }
         finally { if (active) setReady(true); }
       } while (active && again);
-      running = false;
+      running = false; schedule();
     };
     reload.current = () => { void load(); };
     void load();
     const stop = subscribeLive([`inbox:${user.id}`], () => { void load(); });
     // Reconcile after missed socket events, without polling hidden tabs.
-    const timer = setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 60000);
-    return () => { active = false; reload.current = () => {}; clearInterval(timer); stop(); };
+
+    return () => { active = false; reload.current = () => {}; clearTimeout(timer); stop(); };
   }, [user?.id, demoMode]);
   return <NotificationContext.Provider value={{ data, ready, error, refresh }}>{children}</NotificationContext.Provider>;
 }

@@ -68,6 +68,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Verify source, new archive, assistant, assets and authorization
         run: node scripts/smoke-production-features.mjs
+      - name: Sync the verified published archive to indexed storage
+        run: node scripts/sync-archive-database.mjs src/data/api-archive.json
+        env:
+          ARCHIVE_INGEST_TOKEN: ${{ secrets.ARCHIVE_INGEST_TOKEN }}
       - name: Restore captured Worker version if verification fails
         if: failure() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')
         run: |

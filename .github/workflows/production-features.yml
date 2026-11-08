@@ -44,6 +44,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
+      - name: Sync the already-published reviewed archive to indexed storage
+        run: node scripts/sync-archive-database.mjs src/data/api-archive.json
+        env:
+          ARCHIVE_INGEST_TOKEN: ${{ secrets.ARCHIVE_INGEST_TOKEN }}
       - name: Require reputation and moderation schema with anonymous access denied
         run: node scripts/check-community-safety-schema.mjs .cache/visaflow/live-preview/public-build-values.json
       - name: Build candidate preserving current launch state and existing content

@@ -37,7 +37,8 @@ async function publicRows<T>(table: string, query: Record<string,string>): Promi
 
 export const publicQuestion = cache(async (id: string): Promise<Question | null> => {
   if (IMPORTED_THREAD_ID.test(id)) {
-    const question = publicArchive()?.questions.find(row => row.id === id && row.status !== 'archived');
+    if (process.env.COMMUNITY_SOURCE_MODE !== 'snapshot' || (process.env.APP_ENV === 'production' && process.env.IMPORTED_CONTENT_APPROVED !== 'true')) return null;
+    const question = process.env.NEXT_PUBLIC_SUPABASE_URL ? (await publicRows<{payload:Question}>('archive_posts',{id:`eq.${id}`,select:'payload',limit:'1'}))?.[0]?.payload : publicArchive()?.questions.find(row => row.id === id && row.status !== 'archived');
     if (!question || !usVisaPost(question)) return null;
     const counts = await publicRows<{ question_id: string; answer_count: number | string }>('imported_reply_counts', {
       question_id: `eq.${id}`, select: 'question_id,answer_count', limit: '1',
@@ -52,10 +53,12 @@ export const publicQuestion = cache(async (id: string): Promise<Question | null>
 });
 export async function publicAnswers(id: string): Promise<Answer[]> {
   if (IMPORTED_THREAD_ID.test(id)) {
-    const snapshot = publicArchive();
-    const question = snapshot?.questions.find(row => row.id === id && row.status !== 'archived');
-    if (!snapshot || !question || !usVisaPost(question)) return [];
-    const source = snapshot.answersByQuestionId[id] ?? [];
+    if (process.env.COMMUNITY_SOURCE_MODE !== 'snapshot' || (process.env.APP_ENV === 'production' && process.env.IMPORTED_CONTENT_APPROVED !== 'true')) return [];
+    const stored = process.env.NEXT_PUBLIC_SUPABASE_URL ? (await publicRows<{payload:Question;source_answers:Answer[]}>('archive_posts',{id:`eq.${id}`,select:'payload,source_answers',limit:'1'}))?.[0] : null;
+    const snapshot = process.env.NEXT_PUBLIC_SUPABASE_URL ? null : publicArchive();
+    const question = stored?.payload ?? snapshot?.questions.find(row => row.id === id && row.status !== 'archived');
+    if (!question || !usVisaPost(question)) return [];
+    const source = stored?.source_answers ?? snapshot?.answersByQuestionId[id] ?? [];
     const members = await publicRows<Answer>('imported_answer_feed', {
       question_id: `eq.${id}`, select: '*', order: 'is_accepted.desc,vote_score.desc,id.desc', limit: '50',
     }) ?? [];

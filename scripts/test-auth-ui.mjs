@@ -174,7 +174,8 @@ test('unified workspace mounts one selected panel only after owner authorization
     h.access={status:'owner',retry:()=>{}};h.render();
     assert.equal(nodes(h.tree).filter(node=>node.type?.testPanel).length,1);
     const tabs=nodes(h.tree).filter(node=>node.props?.href?.startsWith('/admin?section='));
-    assert.equal(tabs.length,6);
+    assert.equal(tabs.length,7);
+    assert(tabs.some(node=>node.props.href==='/admin?section=capacity'));
     assert.equal(tabs.find(node=>node.props['aria-current']==='page').props.href,'/admin?section=members');
     h.search='section=unknown';h.render();
     assert.equal(nodes(h.tree).find(node=>node.props?.['aria-current']==='page').props.href,'/admin?section=analytics');
