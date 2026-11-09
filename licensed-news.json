@@ -1,9 +1,27 @@
 {
   "source": "The Texas Tribune",
-  "retrievedAt": "2026-11-08T18:29:15.652Z",
-  "policyCheckedAt": "2026-11-08T18:29:15.652Z",
+  "retrievedAt": "2026-11-09T23:09:07.557Z",
+  "policyCheckedAt": "2026-11-09T23:09:07.557Z",
   "policyDigest": "83e8cafce5e3cba8d74297f86204f3a50ff06a6f6cd84ed93dac0bc33fc2d1d5",
   "articles": [
+    {
+      "id": "tt-252584",
+      "title": "Trump’s Big Bend border wall construction can resume after U.S. Supreme Court ruling",
+      "url": "https://www.texastribune.org/2026/11/09/big-bend-border-wall-construction-supreme-court/",
+      "author": "Uriel J. García",
+      "publishedAt": "2026-11-09T20:51:35.000Z",
+      "excerpt": "In an 8-1 unsigned opinion, the justices overturned an El Paso federal judge’s order to halt construction, while the Trump administration seeks further Supreme Court review.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-252584-e1d0d335af261351",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/11/20260813-Big-Bend-Clearing-KG-03.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Southwest Valley employees excavate and bulldoze an area starting from the Santa Elena Canyon trailhead parking lot next to Ross Maxwell Scenic Drive in Big Bend National Park on Aug. 13, 2026.",
+        "credit": "Kaylee Greenlee for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
     {
       "id": "tt-252172",
       "title": "Houston mayor limits police cooperation with ICE after Democratic wins",
@@ -484,24 +502,6 @@
         "credit": "Jacob Lujan/The Texas Tribune",
         "width": 1024,
         "height": 683
-      }
-    },
-    {
-      "id": "tt-243467",
-      "title": "Feds reimburse Texas for $7.5 billion in border spending, ending delay",
-      "url": "https://www.texastribune.org/2026/09/18/texas-border-money-reimburse-billions/",
-      "author": "Gabby Birenbaum",
-      "publishedAt": "2026-09-18T19:48:19.000Z",
-      "excerpt": "The grant program was created by the One Big Beautiful Bill Act, which became law in July 2025.",
-      "publisher": "The Texas Tribune",
-      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
-      "photo": {
-        "id": "tt-243467-54e3a84e6c64a9be",
-        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/0601-Clinica-Hope-Border-PR-17.jpg?fit=1024%2C680&ssl=1",
-        "caption": "Texas National Guard soldiers check concertina wire fence where migrants must cross through to turn themselves into Border Patrol in El Paso as seen from Ciudad Juarez, Chihuahua state, Mexico on June 1, 2024.",
-        "credit": "Paul Ratje for the Texas Tribune",
-        "width": 1024,
-        "height": 680
       }
     }
   ]
