@@ -111,7 +111,7 @@ export function SiteHeader() {
           </div>
         ) : (
           <nav aria-label="Account access" className="header-auth-actions">
-            <a href="/login#sign-in" aria-label="Log In or Sign Up" className="header-auth-button capitalize">Log in / Sign up</a>
+            <a href="/login#sign-in" aria-label="Login or Sign Up" className="header-auth-button capitalize">Login/SignUp</a>
           </nav>
         )}
       </div>
