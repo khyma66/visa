@@ -5,9 +5,33 @@ import { serializeCsv,parseCsv,COLUMNS } from './editorial-csv.mjs';
 import { validateReview,ownerRpc,withStageReceipts } from './editorial-review.mjs';
 import { redact,validateRewrite } from './editorial-rewrite.mjs';
 import { prepareReview } from './editorial-export.mjs';
+import { planSchedule } from './editorial-plan.mjs';
 const url='https://www.facebook.com/groups/123/posts/456';
 const original={id:hash(url),source_url:url,source_key:'https://www.facebook.com/groups/123',source_posted_at:'2026-09-03T05:00:00.000Z',source_hash:hash('Original text'),original_text:'Original text',run_id:'I0AI56pOzxvFHTz40'};
 const review={...original,review_decision:'pending',title:'A member asks about H-1B processing',body:'A member asks about H-1B processing and reported delays.',visa_type:'H-1B',post_kind:'question',experience_category:'',tags:['h1b'],review_flags:[],backend_revision:0};
+const consent=(n)=>({author_id:`22222222-2222-4222-8222-${String(n).padStart(12,'0')}`,source_key:original.source_key,enabled:true,daily_limit:1,expires_at:'2027-01-01T00:00:00Z'});
+const approved=(n)=>({...review,id:hash(String(n)),backend_revision:1,review_decision:'approved',reuse_basis:'Written permission from the source author.',reviewer_notes:'Compared all facts to the original source.',author_id:'',scheduled_at:''});
+test('offline plan rotates accounts and respects daily quotas across Chicago DST',()=>{
+  const rows=Array.from({length:8},(_,n)=>approved(n));
+  const planned=planSchedule([...rows,{...review,id:hash('pending')}],[1,2,3,4,5].map(consent),{from:'2026-10-31T13:00:00Z',now:'2026-10-31T12:00:00Z'});
+  assert.equal(planned[0].scheduled_at,'2026-10-31T13:00:00.000Z');
+  assert.equal(planned[5].scheduled_at,'2026-11-01T14:00:00.000Z');
+  assert.equal(planned[0].author_id,consent(1).author_id);assert.equal(planned[5].author_id,consent(1).author_id);
+  assert.equal(planned.at(-1).review_decision,'pending');assert.equal(planned.at(-1).author_id,undefined);
+  assert.equal(rows[0].scheduled_at,'');
+});
+test('offline plan rejects expired consent, missing review, duplicate identities and existing assignments',()=>{
+  const opts={from:'2026-11-08T14:00:00Z',now:'2026-11-08T13:00:00Z'};
+  assert.throws(()=>planSchedule([approved(1)],[{...consent(1),expires_at:opts.now}],opts),/Insufficient/);
+  assert.throws(()=>planSchedule([approved(1)],[consent(1),consent(1)],opts),/Duplicate account/);
+  assert.throws(()=>planSchedule([{...approved(1),backend_revision:0}],[consent(1)],opts),/Stage and review/);
+  assert.throws(()=>planSchedule([{...approved(1),author_id:consent(1).author_id}],[consent(1)],opts),/unscheduled/);
+  assert.throws(()=>planSchedule([approved(1),approved(1)],[consent(1)],opts),/Duplicate draft/);
+});
+test('monthly limits roll over rather than oversubscribing a calendar month',()=>{
+  const planned=planSchedule(Array.from({length:7},(_,n)=>approved(n)),[1,2,3,4,5].map(consent),{from:'2026-10-30T13:00:00Z',now:'2026-10-30T12:00:00Z',monthly:5});
+  assert.equal(planned[5].scheduled_at,'2026-11-01T14:00:00.000Z');
+});
 test('CSV quotes newlines and protects spreadsheet formulas reversibly',()=>{
   for(const text of ['=HYPERLINK("evil")',' +123','@name','-42',"'=already literal","''apostrophes",'A "quote", comma\nand line']){
     const rows=parseCsv(serializeCsv([{...review,original_text:text,body:text}]));assert.equal(rows[0].body,text);assert.equal(rows[0].original_text,text);

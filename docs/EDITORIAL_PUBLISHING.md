@@ -167,3 +167,66 @@ source fields, authorization, review revisions, account consent/revocation,
 policy changes, duplicate prevention, posting limits and transaction rollback.
 Database tests use synthetic accounts in an isolated PostgreSQL runtime. No live
 test accounts or public posts are created by the suite.
+
+## Operator status and complete shutdown
+
+The private operator functions are callable only through the database operator,
+not from the website, ordinary authenticated clients or the service-role API.
+There are no new website routes, controls, banners or account labels in this
+release. The production application and its Cloudflare configuration are unchanged.
+
+```sql
+select private.editorial_operator_status();
+select private.editorial_stop_all();
+```
+
+`editorial_stop_all()` takes the same lock as the publisher, switches publication
+off, deactivates only `visathreads-reviewed-editorial`, disables every editorial
+source and consent, and blocks all scheduled drafts while clearing their assigned
+account and time. It preserves drafts, published posts and audit receipts. After
+it commits, subsequent publisher ticks return `paused`. A publication that already
+committed before shutdown remains available to normal moderation.
+
+Restart needs fresh member permission, source activation, deliberate rescheduling,
+the explicit owner enable command and timer activation. Turning on the timer
+alone cannot replay the old queue. Repeated shutdown calls do not advance disabled
+consent versions. No shutdown is scheduled automatically after a few weeks; the
+owner decides when to activate or stop this separate workflow.
+
+## Prepare a CSV schedule with account rotation
+
+The existing review CSV remains the publishing contract. The two-column
+`description,reframed` download is a review convenience; restore its source and
+review metadata before staging. Gmail addresses or usernames are resolved to
+verified website account UUIDs during the later account setup, without requesting
+Gmail access or passwords. Each account grants the existing source-specific
+publishing consent API through its signed-in website session.
+
+After staging and reviewing the approved rows, export the verified consent records
+privately as JSON with `author_id`, `source_key`, `enabled`, `daily_limit`, and
+`expires_at`. The offline planner creates a new reviewable schedule file:
+
+```sh
+node scripts/editorial-plan.mjs --file reviewed-staged.csv \
+  --accounts verified-consents.json --from 2026-12-01T14:00:00Z \
+  --out proposed-schedule.csv
+```
+
+The helper rotates accounts, observes Chicago publishing hours and DST, consent
+expiry, source scope, per-account limits, a 60-minute gap and default 5/day and
+150/month caps. It preserves pending/rejected rows, refuses existing assignments,
+and fails instead of writing a partial schedule when capacity is insufficient.
+It does not connect to the backend or activate publishing. Its capacity estimates
+assume an empty publication schedule; reconcile existing posts and slots first
+when adding a later batch. The publisher remains the authority for live quotas.
+
+Validate the resulting file against the original sources, review its checksum,
+then use the existing `editorial-review.mjs --action schedule` operation. Backend
+approval revisions and current account permission are rechecked at scheduling
+and publication. A schedule proposal never grants account permission or approval.
+
+For this low-volume CSV workflow, the existing Supabase timer avoids an additional
+Worker, stored account refresh tokens and a second scheduling system. Apify import
+and rewriting remain explicit preparation steps; this release does not enable
+continuous scraping or model inference. Initial preparation installs no accounts,
+stages no posts, starts no new paid resources, and leaves publication paused.
