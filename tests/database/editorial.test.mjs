@@ -34,6 +34,14 @@ before(async()=>{
   // Compile the exact migration, then use a fixed transaction clock in its functions for deterministic time-window tests.
   await db.exec(migration);
   for(const fn of migration.matchAll(/create function [\s\S]*?\$\$;/g)) await db.exec(fn[0].replace('create function','create or replace function').replaceAll('now()',"'2026-11-03T18:00:00Z'::timestamptz"));
+  // pg_cron itself is unavailable in PGlite; only its documented job-control
+  // surface is replaced. The shutdown function is compiled unchanged.
+  await db.exec(`create schema cron;
+    create table cron.job(jobid bigint primary key,jobname text unique,active boolean);
+    create function cron.alter_job(job_id bigint,active boolean default null) returns void language sql as
+      $$update cron.job set active=coalesce(alter_job.active,job.active) where jobid=job_id$$;
+    insert into cron.job values(1,'visathreads-reviewed-editorial',false),(2,'unrelated-retention',true);`);
+  await db.exec(await read('20261109052645_editorial_operator_shutdown.sql'));
   for(const id of [owner,author,outsider]) {
     await db.query("insert into auth.users values($1,'2026-01-01',null,false,null)",[id]);
     await db.query('insert into public.profiles values($1)',[id]);
@@ -148,4 +156,26 @@ test('duplicate source text cannot create a second website post',()=>transaction
   await ready();assert.equal((await tick()).status,'published');await ready(2);
   await db.exec('update private.editorial_settings set last_published_at=null');await db.exec('update private.editorial_consents set daily_limit=3');
   assert.equal((await tick()).status,'blocked');assert.equal(await scalar('select count(*)::int from public.questions'),1);
+}));
+for(const role of ['anon','authenticated','service_role']) for(const fn of ['editorial_operator_status','editorial_stop_all'])
+  test(`${role} cannot invoke operator ${fn}`,()=>transaction(async()=>{
+    await claims(null,role);await assert.rejects(()=>db.query(`select private.${fn}()`),/permission denied/);
+  }));
+test('complete shutdown disables only this timer and invalidates queued assignments',()=>transaction(async()=>{
+  await ready();await db.exec("update cron.job set active=true where jobid=1");
+  const state=await scalar('select private.editorial_stop_all()');
+  assert.equal(state.enabled,false);assert.equal(state.timer_active,false);
+  assert.equal(state.enabled_sources,0);assert.equal(state.enabled_consents,0);assert.equal(state.scheduled_posts,0);
+  assert.equal(await scalar('select active from cron.job where jobid=2'),true);
+  assert.deepEqual(await scalar('select jsonb_build_object(\'status\',status,\'author\',author_id,\'slot\',scheduled_at) from private.editorial_drafts'),{status:'blocked',author:null,slot:null});
+  assert.equal((await tick()).status,'paused');assert.equal(await scalar('select count(*)::int from public.questions'),0);
+  const version=await scalar('select version from private.editorial_consents');
+  await scalar('select private.editorial_stop_all()');
+  assert.equal(await scalar('select version from private.editorial_consents'),version);
+}));
+test('shutdown preserves published posts and their duplicate-prevention receipts',()=>transaction(async()=>{
+  await ready();assert.equal((await tick()).status,'published');
+  const state=await scalar('select private.editorial_stop_all()');
+  assert.equal(state.published_posts,1);assert.equal(await scalar('select count(*)::int from public.questions'),1);
+  assert.equal(await scalar('select status from private.editorial_drafts'),'published');
 }));
