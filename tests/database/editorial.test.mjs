@@ -42,6 +42,15 @@ before(async()=>{
       $$update cron.job set active=coalesce(alter_job.active,job.active) where jobid=job_id$$;
     insert into cron.job values(1,'visathreads-reviewed-editorial',false),(2,'unrelated-retention',true);`);
   await db.exec(await read('20261109052645_editorial_operator_shutdown.sql'));
+  await db.exec(`create schema security_ingress;
+    grant usage on schema security_ingress to anon;
+    create table private.security_ingest_key(key_hash bytea);
+    insert into private.security_ingest_key values(sha256(convert_to(repeat('ab',32),'UTF8')));
+    create table public.communities(id uuid,is_public boolean,is_active boolean);
+    alter table public.questions add column status text default 'open',add column community_id uuid;
+    create function cron.schedule(text,text,text) returns bigint language sql as $$select 3::bigint$$;`);
+  await db.exec(await read('20261105055658_post_view_counts.sql'));
+  await db.exec(await read('20261109055326_editorial_tactical_views.sql'));
   for(const id of [owner,author,outsider]) {
     await db.query("insert into auth.users values($1,'2026-01-01',null,false,null)",[id]);
     await db.query('insert into public.profiles values($1)',[id]);
@@ -179,3 +188,56 @@ test('shutdown preserves published posts and their duplicate-prevention receipts
   assert.equal(state.published_posts,1);assert.equal(await scalar('select count(*)::int from public.questions'),1);
   assert.equal(await scalar('select status from private.editorial_drafts'),'published');
 }));
+const display=async id=>{
+  await db.query("select set_config('request.headers',$1,true)",[JSON.stringify({'x-security-ingest-key':'ab'.repeat(32)})]);
+  return (await scalar('select public.post_views($1)',[[id]]))[0]?.views;
+};
+test('tactical posts receive one stable synthetic starting count while measured analytics remain intact',()=>transaction(async()=>{
+  await ready();const result=await tick();assert.equal(result.status,'published');
+  const seed=await scalar('select starting_views from private.editorial_view_seeds');
+  assert(seed>=500&&seed<=2500);assert.equal(await display(result.question_id),seed);
+  assert.equal(await display(result.question_id),seed);assert.equal(await scalar('select count(*)::int from private.post_view_totals'),0);
+  const counted=await scalar("select public.post_views($1,repeat('cd',32),(now() at time zone 'UTC')::date)",[[result.question_id]]);
+  assert.equal(counted[0].views,seed+1);assert.equal(await scalar('select views::int from private.post_view_totals'),1);
+  assert.equal((await tick()).status,'spacing');assert.equal(await scalar('select count(*)::int from private.editorial_view_seeds'),1);
+}));
+test('ordinary posts are never seeded and tactical overrides can be disabled and restored without rerolling',()=>transaction(async()=>{
+  await ready();const result=await tick();const seed=await display(result.question_id);
+  await db.query("insert into public.questions(id,author_id,title,body) values($1,$2,'An ordinary member question','This ordinary member question must keep measured views only.')",['44444444-4444-4444-8444-444444444444',author]);
+  assert.equal(await display('44444444-4444-4444-8444-444444444444'),0);
+  assert.equal(await display('apify-unrelated'),0);
+  await scalar('select private.editorial_configure_tactical_views(false)');assert.equal(await display(result.question_id),0);
+  await scalar('select private.editorial_configure_tactical_views(true)');assert.equal(await display(result.question_id),seed);
+  const status=await scalar('select private.editorial_stop_all()');assert.equal(status.tactical_views.active,false);
+  assert.equal(await display(result.question_id),0);assert.equal(await scalar('select starting_views from private.editorial_view_seeds'),seed);
+}));
+test('view configuration is dormant until publishing starts and supports inclusive 500 and 2500 bounds',()=>transaction(async()=>{
+  const initial=await scalar('select private.editorial_operator_status()');
+  assert.deepEqual(initial.tactical_views,{configured:true,active:false,minimum:500,maximum:2500,seeded_posts:0});
+  await scalar('select private.editorial_configure_tactical_views(true,500,500)');
+  await ready();await tick();assert.equal(await scalar('select starting_views from private.editorial_view_seeds'),500);
+  await scalar('select private.editorial_configure_tactical_views(true,2500,2500)');
+  await ready(2);await db.exec("update private.editorial_drafts set source_hash=repeat('b',64),body=body||' Additional source question.' where id<>'"+row().id+"';update private.editorial_consents set daily_limit=3;update private.editorial_settings set last_published_at=null");
+  assert.equal((await tick()).status,'published');assert.equal(await scalar('select max(starting_views) from private.editorial_view_seeds'),2500);
+}));
+test('disabled tactical mode never seeds a newly published post',()=>transaction(async()=>{
+  await scalar('select private.editorial_configure_tactical_views(false)');await ready();const result=await tick();
+  assert.equal(result.status,'published');assert.equal(await scalar('select count(*)::int from private.editorial_view_seeds'),0);
+  await scalar('select private.editorial_configure_tactical_views(true)');assert.equal(await display(result.question_id),0);
+}));
+for(const role of ['anon','authenticated','service_role']) for(const query of [
+  'select * from private.editorial_view_seeds','select private.editorial_configure_tactical_views(true)',
+  "select private.editorial_display_views('anything',0)",
+]) test(`${role} cannot access tactical view configuration: ${query}`,()=>transaction(async()=>{
+  await claims(null,role);await assert.rejects(()=>db.query(query),/permission denied/);
+}));
+test('tactical projection retains the ingress-key guard',()=>transaction(async()=>{
+  await ready();const result=await tick();
+  await db.query("select set_config('request.headers','{}',true)");
+  await assert.rejects(()=>scalar('select public.post_views($1)',[[result.question_id]]),/Not authorized/);
+}));
+for(const args of [[true,499,2500],[true,500,2501],[true,1500,1000],[null,500,2500]])
+  test(`invalid tactical view range is denied: ${JSON.stringify(args)}`,()=>transaction(async()=>{
+    await claims(null,'postgres');
+    await assert.rejects(()=>scalar('select private.editorial_configure_tactical_views($1,$2,$3)',args),/range within/);
+  }));

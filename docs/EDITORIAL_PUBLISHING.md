@@ -230,3 +230,30 @@ Worker, stored account refresh tokens and a second scheduling system. Apify impo
 and rewriting remain explicit preparation steps; this release does not enable
 continuous scraping or model inference. Initial preparation installs no accounts,
 stages no posts, starts no new paid resources, and leaves publication paused.
+
+## Tactical starting view counts
+
+The private `tactical_views_enabled` setting prepares synthetic starting counts
+for posts published by this queue. Its default range is 500–2500 inclusive. The
+setting is configured on, while the global publisher and its timer stay off.
+The new setting does not start publication or change any current post count.
+
+At successful publication, a private receipt stores one random integer for that
+post in the same transaction. Reads and retries never reroll it. Future measured
+opens are added for display, while `private.post_view_totals` continues to store
+only measured opens. Synthetic values are not added to analytics, ranking or
+ordinary member/imported posts. These starting values are generated display
+offsets, not measured traffic or historical visitor estimates.
+
+Operator-only configuration, with no frontend controls or operation labels:
+
+```sql
+select private.editorial_configure_tactical_views(true,500,2500);
+select private.editorial_configure_tactical_views(false);
+```
+
+Disabling the setting removes the offset from subsequent backend responses.
+`editorial_stop_all()` also removes offsets from responses by switching the global
+publisher off. Seeds remain private so re-enabling does not generate a different
+number for an existing post. Already-open browser tabs can retain cached counts
+until reloaded. No source or existing post is backfilled.
