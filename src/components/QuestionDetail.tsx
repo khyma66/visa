@@ -155,7 +155,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
             {experience && <p className="mb-3 text-sm font-bold text-orange-800"><Link href="/us/en/experiences" className="underline capitalize">Experience</Link> · {question.experience_category}</p>}
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-800"><PostOriginBadge post={question} /></div>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-950">{question.title}</h1>
-            <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time>{imported&&<span title="Original reactions on the source site">{question.vote_score} original reactions</span>}<EditedLabel at={question.edited_at}/><PostViews key={question.id} postId={question.id} record/></div>
+            <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500 capitalize"><time dateTime={question.created_at} title={new Date(question.created_at).toUTCString()}>Posted {formatDistanceToNow(new Date(question.created_at), { addSuffix: true })} · {new Date(question.created_at).toISOString().slice(0,10)}</time><EditedLabel at={question.edited_at}/><PostViews key={question.id} postId={question.id} record/></div>
           </section>
           <article className="flex flex-wrap gap-3 py-8 sm:gap-5">
             <div className="min-w-0 flex-1">
@@ -185,7 +185,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                 return (
                 <article key={answer.id} id={`answer-${answer.id}`} className={`flex scroll-mt-24 gap-3 py-8 sm:gap-5 ${answer.is_accepted ? 'rounded-xl bg-emerald-50/50 px-3' : ''}`}>
                   <div className="min-w-0 flex-1">
-                    {sourceOnly && <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500"><PostOriginBadge post={answer} /><span title="Original reactions on the source site">{answer.vote_score} original reactions</span></div>}
+                    {sourceOnly && <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500"><PostOriginBadge post={answer} /></div>}
                     {answer.is_accepted && <p className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-700 capitalize"><CheckCircle2 size={17} /> Accepted by the question author</p>}
                     <div className="max-w-prose whitespace-pre-wrap text-lg leading-relaxed text-slate-800">{answer.body}</div>
 

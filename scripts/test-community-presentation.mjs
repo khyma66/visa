@@ -112,11 +112,11 @@ test('mobile post actions use five equal controls and keep Related off desktop',
   assert.match(render(RelatedQuestions, { context: native }), /id="related-posts"/);
 });
 
-test('source question cards use normal discussion layout without fake member identities or changed reaction semantics',()=>{
+test('source question cards use normal discussion layout without fake member identities or source reactions',()=>{
   const html=render(QuestionCard,{question:source});
   noPipelineLabels(html);
   assert(html.includes(source.title));assert(html.includes(source.body));
-  assert(html.includes('reactions'));assert(html.includes('replies'));assert(!html.includes('views'));
+  assert(!html.includes('original reactions'));assert(html.includes('replies'));assert(!html.includes('views'));
   assert.match(html,/user-\d{4}/);assert(!html.includes(source.author_username));assert(!html.includes('Member avatar'));
   assert(!html.includes(source.source_url));assert(!html.includes('/messages?'));
 });
@@ -163,6 +163,7 @@ test('source detail keeps neutral authors while supporting separate VisaThreads 
   noPipelineLabels(html);assert(!html.includes('Originally shared in'));
   assert(!html.includes(source.source_url));assert.match(html,/user-\d{4}/);
   assert(html.includes('Join the discussion'));assert(!html.includes('Original discussion'));
+  assert(!html.includes('original reactions'));
   assert(!html.includes('Message user'));assert(!html.includes('/messages?'));assert(html.includes('aria-label="Upvote"'));assert(html.includes('Votes from VisaThreads members'));
   assert(!html.includes(source.author_username));assert(!html.includes('Peer experiences, not legal advice'));
 });
@@ -184,6 +185,7 @@ test('source comments cannot become member identities or message targets through
   const comment={...reply,id:'apify-comment-fixture',source:undefined,author_username:'bob-test',source_url:source.source_url};
   const html=render(QuestionDetail,{initialQuestion:source,initialAnswers:[comment]},{user:{id:alice}});
   noPipelineLabels(html);assert(!html.includes('Original comment'));assert(html.includes(comment.body));
+  assert(!html.includes('original reactions'));
   assert(!html.includes('u/bob-test'));assert(!html.includes('/messages?'));assert(html.includes('aria-label="Upvote"'));assert(html.includes('Votes from VisaThreads members'));
 });
 test('registered member replies on source discussions retain their own message action',()=>{
