@@ -33,11 +33,12 @@ export function VoteControls({id,kind,score,authorId,path}:{id:string;kind:VoteK
     finally{if(current===version.current){lock.current=false;setBusy(false);}}
   }
   const own=user?.id===authorId;
+  const displayed=archive&&confirmed===null?'—':Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(confirmed??score);
   return <div className="vote-control-wrap">
     <div className="vote-controls" role="group" aria-label={kind==='question'||kind==='archive_question'?'Post votes':'Comment votes'} title={archive?'Votes from VisaThreads members':undefined} aria-busy={busy}>
-      <button type="button" disabled={own||busy} aria-label="Upvote" aria-pressed={selection===1} title={own?'You cannot vote on your own contribution':selection===1?'Remove upvote':'Upvote'} onClick={()=>void vote(1)} className="vote-up"><ArrowUp size={14} aria-hidden="true"/></button>
-      <span className="vote-score" aria-live="polite" aria-label={archive&&confirmed===null?'Votes loading':`${confirmed??score} ${archive?'VisaThreads ':''}votes`}>{archive&&confirmed===null?'—':Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(confirmed??score)}</span>
-      <button type="button" disabled={own||busy} aria-label="Downvote" aria-pressed={selection===-1} title={own?'You cannot vote on your own contribution':selection===-1?'Remove downvote':'Downvote'} onClick={()=>void vote(-1)} className="vote-down"><ArrowDown size={14} aria-hidden="true"/></button>
+      <button type="button" disabled={own||busy} aria-label="Upvote" aria-pressed={selection===1} title={own?'You cannot vote on your own contribution':selection===1?'Remove upvote':'Upvote'} onClick={()=>void vote(1)} className="vote-up"><ArrowUp size={14} aria-hidden="true"/><span className="mobile-vote-score" aria-hidden="true">Up {displayed}</span></button>
+      <span className="vote-score" aria-live="polite" aria-label={archive&&confirmed===null?'Votes loading':`${confirmed??score} ${archive?'VisaThreads ':''}votes`}>{displayed}</span>
+      <button type="button" disabled={own||busy} aria-label="Downvote" aria-pressed={selection===-1} title={own?'You cannot vote on your own contribution':selection===-1?'Remove downvote':'Downvote'} onClick={()=>void vote(-1)} className="vote-down"><ArrowDown size={14} aria-hidden="true"/><span className="mobile-action-label" aria-hidden="true">Down</span></button>
     </div>
     {error&&<p role="alert" className="vote-error">{error}</p>}
   </div>;

@@ -391,9 +391,43 @@
 .vote-up[aria-pressed="true"] { background: #ffedd5; color: #c2410c; }
 .vote-down[aria-pressed="true"] { background: #dbeafe; color: #1d4ed8; }
 .vote-score { min-width: 16px; padding: 0 1px; text-align: center; font-size: .75rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mobile-action-label, .mobile-vote-score { display: none; }
 .post-reply-action { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; padding: 0 10px; border-radius: 999px; font-size: .875rem; font-weight: 600; color: #475569; white-space: nowrap; }
 .post-reply-action:hover { background: #e2e8f0; }
+.post-related-action { display: none; }
 .vote-error { max-width: 240px; margin-top: 6px; font-size: .75rem; line-height: 1.5; color: #be123c; }
 /* Keep the complete card action row together even on a 320px phone. */
 .feed-post-toolbar { column-gap: .375rem; }
 .feed-post-toolbar .post-reply-action { padding-inline: .375rem; gap: .25rem; }
+@media (max-width: 639px) {
+  .feed-post-toolbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .25rem; align-items: stretch; }
+  .feed-post-toolbar .vote-control-wrap, .feed-post-toolbar .vote-controls { display: contents; }
+  .feed-post-toolbar .vote-score, .feed-post-toolbar .post-reply-copy { display: none; }
+  .feed-post-toolbar :is(.vote-controls button, .post-reply-action, .post-related-action, .post-options-trigger) {
+    display: inline-flex;
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    min-height: 44px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    border-radius: .75rem;
+    background: #f1f5f9;
+    padding: 0;
+    color: #475569;
+  }
+  .feed-post-toolbar :is(.vote-controls button, .post-reply-action, .post-related-action, .post-options-trigger):hover { background: #e2e8f0; }
+  .feed-post-toolbar :is(.mobile-action-label, .mobile-vote-score) {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: .625rem;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  .feed-post-toolbar .vote-error { grid-column: 1 / -1; max-width: none; }
+}

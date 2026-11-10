@@ -93,6 +93,25 @@ test('shared page gutter removes the second centered left rail without forcing r
   }
 });
 
+test('mobile post actions use five equal controls and keep Related off desktop', async () => {
+  const css = await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8');
+  const actionStart = css.indexOf('/* Keep the complete card action row together even on a 320px phone. */');
+  const actionCss = css.slice(actionStart);
+  assert(actionStart >= 0);
+  assert.match(css, /\.post-related-action\s*\{\s*display:\s*none;/);
+  assert.match(actionCss, /@media \(max-width: 639px\)/);
+  assert.match(actionCss, /grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(actionCss, /width:\s*100%/);
+  assert.match(actionCss, /height:\s*44px/);
+  const html = render(QuestionCard, { question: native });
+  assert.match(html, new RegExp(`/questions/${native.id}#related-posts`));
+  assert.match(html, /class="post-related-action"/);
+  const detail = render(QuestionDetail, { initialQuestion: native }, { user: { id: bob } });
+  assert.match(detail, /class="feed-post-toolbar post-toolbar mt-4"/);
+  assert.match(detail, /href="#related-posts"/);
+  assert.match(render(RelatedQuestions, { context: native }), /id="related-posts"/);
+});
+
 test('source question cards use normal discussion layout without fake member identities or changed reaction semantics',()=>{
   const html=render(QuestionCard,{question:source});
   noPipelineLabels(html);
@@ -130,7 +149,7 @@ test('experience feed excludes questions, includes Other, and defaults to newest
   assert(html.indexOf('/experiences/newer') < html.indexOf('/experiences/older'));
   assert(!html.includes(`/questions/${native.id}`));
   assert.match(html,/aria-pressed="true"[^>]*>New/);
-  const filtered=render(CommunityHome,{experience:true},{values:{0:[older,newer],3:false,15:'Visa interview'}});
+  const filtered=render(CommunityHome,{experience:true},{values:{0:[older,newer],3:false,14:'Visa interview'}});
   assert(filtered.includes('No matching experiences')); assert(!filtered.includes('/experiences/newer'));
 });
 test('discussion and promotion labels describe content rather than where it came from',()=>{

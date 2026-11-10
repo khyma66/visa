@@ -39,7 +39,7 @@ export function RelatedQuestions({ context, drafting = false }: { context: Disco
     return () => { current = false; clearTimeout(timer); };
   }, [key, revision, hasContext]);
 
-  return <section aria-label="Also asked" aria-busy={loading} className="min-w-0 border-b border-slate-200 bg-white pb-3">
+  return <section id="related-posts" aria-label="Also asked" aria-busy={loading} className="min-w-0 scroll-mt-24 border-b border-slate-200 bg-white pb-3">
     <div className="px-2 pb-2">
       <h2 className="text-2xl font-semibold leading-tight text-slate-900">Also asked</h2>
       {drafting && <p className="mt-2 text-base leading-6 text-slate-500 capitalize">Suggestions update as you type. Your draft is not published.</p>}

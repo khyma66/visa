@@ -4,7 +4,7 @@ import Link from 'next/link';
 import type {Question} from '@/lib/types';
 import {OwnerContentActions} from './OwnerContentActions';
 import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
-import { Bell, Bookmark, Ellipsis, GitFork } from 'lucide-react';
+import { Bell, Bookmark, Ellipsis } from 'lucide-react';
 import { ActionPopover } from './ActionPopover';
 import { featureAccess } from '@/lib/feature-access';
 import { useAuth } from './AuthProvider';
@@ -38,16 +38,15 @@ function MemberActions({ postId, userId }: { postId: string; userId: string }) {
   </>;
 }
 
-export function PostActions({ postId, path, imported = false, onRelated, content, onChanged }: { postId: string; path: string; imported?: boolean; onRelated?: () => void; content?:Question; onChanged?:(deleted:boolean)=>void }) {
+export function PostActions({ postId, path, imported = false, content, onChanged }: { postId: string; path: string; imported?: boolean; content?:Question; onChanged?:(deleted:boolean)=>void }) {
   const { user, demoMode } = useAuth();
   const login = `/login?next=${encodeURIComponent(path)}`;
-  return <ActionPopover label="More post options" trigger={<Ellipsis size={20} aria-hidden="true"/>}>
+  return <ActionPopover label="More post options" trigger={<><Ellipsis size={20} aria-hidden="true"/><span className="mobile-action-label" aria-hidden="true">More</span></>}>
     {featureAccess.postSharing && <PostShare path={path} inline/>}
     {featureAccess.postLibrary && (user && !demoMode ? <MemberActions key={`${user.id}:${postId}`} userId={user.id} postId={postId}/> : <>
       <Link className="post-action" href={login}><Bell size={16} aria-hidden="true"/>Follow</Link>
       <Link className="post-action" href={login}><Bookmark size={16} aria-hidden="true"/>Save</Link>
     </>)}
-    {onRelated && <button type="button" className="post-action" data-close-popover onClick={onRelated}><GitFork size={16} aria-hidden="true"/>Also asked</button>}
     {content&&!imported&&<OwnerContentActions content={content} kind="question" canEdit={content.status==='open'} onChanged={onChanged}/>}
     <ReportButton compact kind={imported ? 'source_question' : 'question'} target={postId}/>
   </ActionPopover>;
