@@ -51,6 +51,11 @@ before(async()=>{
     create function cron.schedule(text,text,text) returns bigint language sql as $$select 3::bigint$$;`);
   await db.exec(await read('20261105055658_post_view_counts.sql'));
   await db.exec(await read('20261109055326_editorial_tactical_views.sql'));
+  const growthMigration=await read('20261110014343_editorial_gradual_view_growth.sql');
+  await db.exec(growthMigration);
+  // Freeze production's transaction clock only in this isolated test runtime.
+  for(const fn of growthMigration.matchAll(/create (?:or replace )?function [\s\S]*?\$\$;/g))
+    await db.exec(fn[0].replace(/create (?:or replace )?function/,'create or replace function').replaceAll('now()',"'2026-11-03T18:00:00Z'::timestamptz"));
   for(const id of [owner,author,outsider]) {
     await db.query("insert into auth.users values($1,'2026-01-01',null,false,null)",[id]);
     await db.query('insert into public.profiles values($1)',[id]);
@@ -192,24 +197,25 @@ const display=async id=>{
   await db.query("select set_config('request.headers',$1,true)",[JSON.stringify({'x-security-ingest-key':'ab'.repeat(32)})]);
   return (await scalar('select public.post_views($1)',[[id]]))[0]?.views;
 };
-test('tactical posts receive one stable synthetic starting count while measured analytics remain intact',()=>transaction(async()=>{
+test('tactical posts start at zero and keep a stable growth profile while measured analytics remain intact',()=>transaction(async()=>{
   await ready();const result=await tick();assert.equal(result.status,'published');
   const seed=await scalar('select starting_views from private.editorial_view_seeds');
-  assert(seed>=500&&seed<=2500);assert.equal(await display(result.question_id),seed);
-  assert.equal(await display(result.question_id),seed);assert.equal(await scalar('select count(*)::int from private.post_view_totals'),0);
+  assert(seed>=500&&seed<=2500);assert.equal(await display(result.question_id),0);
+  assert.equal(await display(result.question_id),0);assert.equal(await scalar('select count(*)::int from private.post_view_totals'),0);
   const counted=await scalar("select public.post_views($1,repeat('cd',32),(now() at time zone 'UTC')::date)",[[result.question_id]]);
-  assert.equal(counted[0].views,seed+1);assert.equal(await scalar('select views::int from private.post_view_totals'),1);
+  assert.equal(counted[0].views,1);assert.equal(await scalar('select views::int from private.post_view_totals'),1);
   assert.equal((await tick()).status,'spacing');assert.equal(await scalar('select count(*)::int from private.editorial_view_seeds'),1);
 }));
 test('ordinary posts are never seeded and tactical overrides can be disabled and restored without rerolling',()=>transaction(async()=>{
   await ready();const result=await tick();const seed=await display(result.question_id);
+  const storedSeed=await scalar('select starting_views from private.editorial_view_seeds');
   await db.query("insert into public.questions(id,author_id,title,body) values($1,$2,'An ordinary member question','This ordinary member question must keep measured views only.')",['44444444-4444-4444-8444-444444444444',author]);
   assert.equal(await display('44444444-4444-4444-8444-444444444444'),0);
   assert.equal(await display('apify-unrelated'),0);
   await scalar('select private.editorial_configure_tactical_views(false)');assert.equal(await display(result.question_id),0);
   await scalar('select private.editorial_configure_tactical_views(true)');assert.equal(await display(result.question_id),seed);
   const status=await scalar('select private.editorial_stop_all()');assert.equal(status.tactical_views.active,false);
-  assert.equal(await display(result.question_id),0);assert.equal(await scalar('select starting_views from private.editorial_view_seeds'),seed);
+  assert.equal(await display(result.question_id),0);assert.equal(await scalar('select starting_views from private.editorial_view_seeds'),storedSeed);
 }));
 test('view configuration is dormant until publishing starts and supports inclusive 500 and 2500 bounds',()=>transaction(async()=>{
   const initial=await scalar('select private.editorial_operator_status()');
@@ -241,3 +247,61 @@ for(const args of [[true,499,2500],[true,500,2501],[true,1500,1000],[null,500,25
     await claims(null,'postgres');
     await assert.rejects(()=>scalar('select private.editorial_configure_tactical_views($1,$2,$3)',args),/range within/);
   }));
+const curve=(hours,freezeHours=336,settleHours=240)=>scalar(`select private.editorial_growth_at(
+  '2026-11-03T18:00:00Z','2026-11-03T18:00:00Z'::timestamptz+make_interval(hours=>$2),
+  '2026-11-03T18:00:00Z'::timestamptz+make_interval(hours=>$3),500,2000,4800,
+  '2026-11-03T18:00:00Z'::timestamptz+make_interval(mins=>$1))`,[hours*60,freezeHours,settleHours]);
+test('growth reaches two-hour and twelve-hour milestones, slows down and eventually stops',()=>transaction(async()=>{
+  assert.equal(await curve(0),0);assert.equal(await curve(2),500);assert.equal(await curve(12),2000);
+  const day=await curve(24),week=await curve(168),settled=await curve(240);
+  assert(day>2000&&day<3000);assert(week>day&&week<=4800);assert.equal(settled,4800);
+  assert.equal(await curve(720),settled);assert.equal(await curve(-1),0);
+  let previous=0;
+  for(let hour=1;hour<=336;hour++) {const value=await curve(hour);assert(value>=previous);assert(value-previous<=250);assert(value<=5000);previous=value;}
+}));
+test('campaign expiry freezes curves without accelerating late posts to their target',()=>transaction(async()=>{
+  assert.equal(await curve(100,6),await curve(6,6));
+  assert.equal(await curve(100,0),0);
+}));
+test('the unchanged view RPC returns gradual milestone counts without rerolling the stored profile',()=>transaction(async()=>{
+  await ready();const result=await tick();
+  await db.exec("update private.editorial_view_growth set started_at=started_at-interval '2 hours',settles_at=settles_at-interval '2 hours'");
+  const checkpoint=await scalar('select two_hour_views from private.editorial_view_growth');
+  assert.equal(await display(result.question_id),checkpoint);assert.equal(await display(result.question_id),checkpoint);
+  await db.exec("update private.editorial_view_growth set started_at=started_at-interval '10 hours',settles_at=settles_at-interval '10 hours'");
+  assert.equal(await display(result.question_id),await scalar('select twelve_hour_views from private.editorial_view_growth'));
+  assert.equal(await scalar('select count(*)::int from private.post_view_totals'),0);
+}));
+test('only first activation starts the two-week window; off/on never renews it',()=>transaction(async()=>{
+  let state=await scalar('select private.editorial_operator_status()');assert.equal(state.tactical_growth.started_at,null);
+  await ready();const result=await tick();state=await scalar('select private.editorial_operator_status()');
+  assert.equal(Date.parse(state.tactical_growth.ends_at)-Date.parse(state.tactical_growth.started_at),336*3600000);
+  const before=state.tactical_growth;
+  await scalar('select private.editorial_stop_all()');await claims();
+  await action('controls',{enabled:true,confirmation:'START APPROVED PUBLISHING'});await claims(null,'postgres');
+  state=await scalar('select private.editorial_operator_status()');assert.equal(state.tactical_growth.ends_at,before.ends_at);
+  const profile=await scalar('select to_jsonb(g) from private.editorial_view_growth g');
+  assert.equal(profile.post_id,result.question_id);assert(profile.final_views>=4200&&profile.final_views<=5000);
+  assert.equal(profile.freeze_at,before.ends_at);
+}));
+test('tactical display has a hard 5000 cap while real totals and ordinary posts are uncapped',()=>transaction(async()=>{
+  await ready();const result=await tick();await db.query('insert into private.post_view_totals values($1,6001)',[result.question_id]);
+  assert.equal(await display(result.question_id),5000);assert.equal(await scalar('select views::int from private.post_view_totals'),6001);
+  assert.equal(await scalar("select private.editorial_display_views('apify-unrelated',6001)"),6001);
+  await scalar('select private.editorial_stop_all()');assert.equal(await display(result.question_id),6001);
+}));
+test('a publication after campaign expiry receives zero synthetic growth',()=>transaction(async()=>{
+  await ready();await db.exec("update private.editorial_settings set tactical_growth_started_at='2026-10-01',tactical_growth_ends_at='2026-10-15'");
+  const result=await tick();assert.equal(result.status,'published');
+  const profile=await scalar('select to_jsonb(g) from private.editorial_view_growth g');
+  assert.equal(profile.started_at,profile.freeze_at);assert.equal(await display(result.question_id),0);
+}));
+for(const role of ['anon','authenticated','service_role']) test(`${role} cannot read growth profiles or mutate the campaign`,()=>transaction(async()=>{
+  await claims(null,role);await assert.rejects(()=>db.query('select * from private.editorial_view_growth'),/permission denied/);
+}));
+for(const role of ['anon','authenticated','service_role']) test(`${role} cannot extend the campaign deadline`,()=>transaction(async()=>{
+  await claims(null,role);await assert.rejects(()=>db.query("update private.editorial_settings set tactical_growth_ends_at=now()+interval '1 year'"),/permission denied/);
+}));
+test('a stored profile cannot exceed the approved 5000 ceiling',()=>transaction(async()=>{
+  await ready();await tick();await assert.rejects(()=>db.query('update private.editorial_view_growth set final_views=5001'),/check constraint/);
+}));
