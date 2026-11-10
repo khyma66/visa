@@ -126,6 +126,17 @@ test('unknown fields are removed at every level before report data leaves the se
   assert(!JSON.stringify(result.metrics).includes('private_content'));
   assert.equal(upstream.private_content, 'must never leave the server');
 });
+test('actual view aggregates are strictly validated and simulation fields are never returned',()=>{
+  const post_views={measured_total:6008,posts_with_measured_views:2,measured_scheduled_total:6001,scheduled_published_total:2,scheduled_published_in_period:1};
+  const metrics={...validMetrics(),post_views:{...post_views,simulated_views:5000,private_content:'hidden'}};
+  assert.deepEqual(sanitizeOwnerAnalytics(metrics,7).post_views,post_views);
+  for(const invalid of [null,{}, {...post_views,measured_total:'6008'}, {...post_views,measured_total:-1},
+    {...post_views,measured_total:Number.MAX_SAFE_INTEGER+1}, {...post_views,posts_with_measured_views:6009},
+    {...post_views,measured_scheduled_total:6009},{...post_views,scheduled_published_in_period:3}]) {
+    assert.throws(()=>sanitizeOwnerAnalytics({...validMetrics(),post_views:invalid},7),/Invalid analytics contract/);
+  }
+  assert(!Object.hasOwn(sanitizeOwnerAnalytics(validMetrics(),7),'post_views'));
+});
 test('expired identity and non-owner cannot read analytics; upstream error detail is hidden', async () => {
   let calls = 0;
   let result = await authorizedAnalytics(request(), config, async () => { calls++; return Response.json({ secret: 'do-not-return' }, { status: 401 }); });
@@ -309,6 +320,17 @@ test('authorized overview renders genuine zero counts without inventing traffic 
   assert.match(html, /Visitor analytics is not integrated/);
   assert.match(html, /do not interpret missing traffic data as zero/);
   assert.match(html, /not a sum of daily counts/);
+  for(const label of ['Measured post views','Posts with measured views','Views on scheduled posts','Scheduled posts published','All scheduled publications'])assert.equal(cardValue(html,label),'—');
+});
+test('owner readership cards show actual uncapped counts and distinguish all-time from period totals',()=>{
+  const data=reportFixture();
+  data.metrics.post_views={measured_total:6008,posts_with_measured_views:2,measured_scheduled_total:6001,scheduled_published_total:2,scheduled_published_in_period:1};
+  const html=renderDashboard({data});
+  assert.equal(cardValue(html,'Measured post views'),'6,008');
+  assert.equal(cardValue(html,'Views on scheduled posts'),'6,001');
+  assert.equal(cardValue(html,'Scheduled posts published'),'1');
+  assert.equal(cardValue(html,'All scheduled publications'),'2');
+  assert.match(html,/No generated offsets/);assert.match(html,/Not unique visitors/);
 });
 test('community rendering distinguishes unavailable answer measurements from an observed zero rate', () => {
   const data = reportFixture();

@@ -14,8 +14,13 @@ const approved=(n)=>({...review,id:hash(String(n)),backend_revision:1,review_dec
 test('offline plan rotates accounts and respects daily quotas across Chicago DST',()=>{
   const rows=Array.from({length:8},(_,n)=>approved(n));
   const planned=planSchedule([...rows,{...review,id:hash('pending')}],[1,2,3,4,5].map(consent),{from:'2026-10-31T13:00:00Z',now:'2026-10-31T12:00:00Z'});
-  assert.equal(planned[0].scheduled_at,'2026-10-31T13:00:00.000Z');
-  assert.equal(planned[5].scheduled_at,'2026-11-01T14:00:00.000Z');
+  assert.equal(planned[0].scheduled_at.slice(0,10),'2026-10-31');
+  assert.equal(planned[5].scheduled_at.slice(0,10),'2026-11-01');
+  const chicago=new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',hour:'numeric',hourCycle:'h23'});
+  for(const row of planned.slice(0,8)) {
+    const hour=Number(chicago.format(new Date(row.scheduled_at)));
+    assert(hour>=8&&hour<21);
+  }
   assert.equal(planned[0].author_id,consent(1).author_id);assert.equal(planned[5].author_id,consent(1).author_id);
   assert.equal(planned.at(-1).review_decision,'pending');assert.equal(planned.at(-1).author_id,undefined);
   assert.equal(rows[0].scheduled_at,'');
@@ -30,7 +35,24 @@ test('offline plan rejects expired consent, missing review, duplicate identities
 });
 test('monthly limits roll over rather than oversubscribing a calendar month',()=>{
   const planned=planSchedule(Array.from({length:7},(_,n)=>approved(n)),[1,2,3,4,5].map(consent),{from:'2026-10-30T13:00:00Z',now:'2026-10-30T12:00:00Z',monthly:5});
-  assert.equal(planned[5].scheduled_at,'2026-11-01T14:00:00.000Z');
+  assert.equal(planned[5].scheduled_at.slice(0,10),'2026-11-01');
+});
+test('posting proposals spread across the day with stable slots and no quota or gap violations',()=>{
+  const rows=Array.from({length:10},(_,n)=>approved(n)),accounts=[1,2,3,4,5].map(consent);
+  const opts={from:'2026-11-08T14:00:00Z',now:'2026-11-08T13:00:00Z'};
+  const planned=planSchedule(rows,accounts,opts);
+  assert.deepEqual(planSchedule(rows,accounts,opts),planned);
+  assert(Date.parse(planned[4].scheduled_at)-Date.parse(planned[0].scheduled_at)>=7*3600000);
+  for(let i=1;i<planned.length;i++)assert(Date.parse(planned[i].scheduled_at)-Date.parse(planned[i-1].scheduled_at)>=3600000);
+  assert.equal(new Set(planned.slice(0,5).map(r=>r.author_id)).size,5);
+  assert.notDeepEqual(planned.slice(0,5).map(r=>r.scheduled_at.slice(11)),planned.slice(5).map(r=>r.scheduled_at.slice(11)));
+});
+test('long posting gaps still work and proposals never activate publication',()=>{
+  const planned=planSchedule([approved(1),approved(2)],[consent(1)],{
+    from:'2026-11-08T14:00:00Z',now:'2026-11-08T13:00:00Z',gapMinutes:1440,
+  });
+  assert(Date.parse(planned[1].scheduled_at)-Date.parse(planned[0].scheduled_at)>=86400000);
+  assert(planned.every(r=>!Object.hasOwn(r,'views')&&!Object.hasOwn(r,'publishing_enabled')));
 });
 test('CSV quotes newlines and protects spreadsheet formulas reversibly',()=>{
   for(const text of ['=HYPERLINK("evil")',' +123','@name','-42',"'=already literal","''apostrophes",'A "quote", comma\nand line']){

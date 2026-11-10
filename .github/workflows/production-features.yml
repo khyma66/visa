@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Responsive header, reachable phone navigation and plain Related heading.
+# Release actual owner readership totals and separated scheduled publications.
 
 on:
   workflow_dispatch:

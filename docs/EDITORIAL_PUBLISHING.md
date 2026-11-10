@@ -220,6 +220,12 @@ It does not connect to the backend or activate publishing. Its capacity estimate
 assume an empty publication schedule; reconcile existing posts and slots first
 when adding a later batch. The publisher remains the authority for live quotas.
 
+Proposed slots now span the whole publishing day instead of filling an early
+five-hour burst. Slot variation is stable for the batch and Chicago date, so a
+rerun produces the same proposal. No post receives views merely because another
+post was scheduled or published. Do not use account rotation to imply independent
+firsthand authorship: source attribution and real account consent still apply.
+
 Validate the resulting file against the original sources, review its checksum,
 then use the existing `editorial-review.mjs --action schedule` operation. Backend
 approval revisions and current account permission are rechecked at scheduling
@@ -231,7 +237,28 @@ and rewriting remain explicit preparation steps; this release does not enable
 continuous scraping or model inference. Initial preparation installs no accounts,
 stages no posts, starts no new paid resources, and leaves publication paused.
 
-## Tactical view counts and gradual growth
+## Actual readership reporting
+
+The owner dashboard reads actual opens from `private.post_view_totals`, never
+generated display offsets. It shows all-time measured opens, posts with recorded
+opens, actual opens on reviewed/scheduled publications, successful publication
+receipts in the selected period, and all-time successful receipts. Drafts and
+planned slots are not publications. Reviewed publications are excluded from
+organic question/experience counts; genuine member replies remain real activity.
+
+Post-view totals begin at the view-tracking rollout, apply the existing daily
+repeat-open filtering, and are not unique visitor counts. The retained counter
+does not support historical 7/30/90-day view totals; only publications use that
+period selector. Missing metrics on an older isolated environment display as
+unavailable, never fabricated zero. No public operations panel or extra tracker
+is added. The live owner/session authorization stays in place.
+
+## Legacy tactical view implementation (inactive; not approved for activation)
+
+Generated counts are not actual readership. Keep this legacy feature disabled;
+the current release does not activate it or publish invented views. Use any
+24/36/48-hour scenario only as a private forecast, not a public counter. The
+implementation below documents the earlier inactive migration for operators.
 
 The private `tactical_views_enabled` setting is configured on, while the global
 publisher and its timer stay off. It does not start publication or change any

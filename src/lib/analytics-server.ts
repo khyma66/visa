@@ -94,6 +94,21 @@ export function sanitizeOwnerAnalytics(value: unknown, requestedDays: AnalyticsP
     if (typeof value !== 'string' || value.length < 1 || value.length > 1000) return invalidMetrics();
     return value;
   });
+  // Optional during isolated-environment rollout; absent means unavailable,
+  // never zero. Copy only actual aggregate counts, not simulation fields.
+  let postViews: OwnerAnalytics['post_views'];
+  if (Object.hasOwn(input, 'post_views')) {
+    const views = record(input.post_views);
+    postViews = {
+      measured_total: count(views.measured_total), posts_with_measured_views: count(views.posts_with_measured_views),
+      measured_scheduled_total: count(views.measured_scheduled_total),
+      scheduled_published_total: count(views.scheduled_published_total),
+      scheduled_published_in_period: count(views.scheduled_published_in_period),
+    };
+    if (postViews.measured_scheduled_total > postViews.measured_total
+      || postViews.posts_with_measured_views > postViews.measured_total
+      || postViews.scheduled_published_in_period > postViews.scheduled_published_total) return invalidMetrics();
+  }
   return {
     schema_version: 1, generated_at: generatedAt,
     window: { days: requestedDays, start_inclusive: start, end_exclusive: end, timezone: 'UTC', includes_partial_today: true },
@@ -102,7 +117,7 @@ export function sanitizeOwnerAnalytics(value: unknown, requestedDays: AnalyticsP
       reports_received: count(operations.reports_received), reports_pending_current: count(operations.reports_pending_current),
       feedback_received: count(operations.feedback_received), feedback_pending_current: count(operations.feedback_pending_current),
     },
-    daily, limitations,
+    daily, limitations, ...(postViews ? { post_views: postViews } : {}),
   };
 }
 

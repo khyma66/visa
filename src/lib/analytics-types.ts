@@ -9,6 +9,10 @@ export type OwnerAnalytics = {
   overview: ActivityTotals;
   quality: { questions_in_window: number; questions_with_human_answer: number; answer_rate_percent: number | null; median_first_answer_hours: number | null; unanswered_questions_current: number };
   operations: { reports_received: number; reports_pending_current: number; feedback_received: number; feedback_pending_current: number };
+  post_views?: {
+    measured_total: number; posts_with_measured_views: number; measured_scheduled_total: number;
+    scheduled_published_total: number; scheduled_published_in_period: number;
+  };
   daily: (ActivityTotals & { date: string })[];
   limitations: string[];
 };

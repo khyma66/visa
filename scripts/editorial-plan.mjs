@@ -3,12 +3,23 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 import { parseCsv, serializeCsv } from './editorial-csv.mjs';
 
-const local = new Intl.DateTimeFormat('en-CA', { timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23' });
+const local = new Intl.DateTimeFormat('en-CA', { timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23' });
 function calendar(date) {
   const p=Object.fromEntries(local.formatToParts(date).map(p=>[p.type,p.value]));
-  return {day:`${p.year}-${p.month}-${p.day}`,month:`${p.year}-${p.month}`,hour:Number(p.hour)};
+  return {day:`${p.year}-${p.month}-${p.day}`,month:`${p.year}-${p.month}`,hour:Number(p.hour),minute:Number(p.minute)};
+}
+// Spread proposals across the 08:00–21:00 Chicago window. A stable batch/date
+// seed makes reruns reproducible; this is cadence planning, not identity masking.
+function postingSlots(batch,day,daily,gapMinutes) {
+  const minimum=Math.ceil(gapMinutes/15),count=Math.min(daily,Math.max(1,Math.floor(52/minimum)));
+  const step=52/count,jitter=Math.max(0,Math.floor((Math.floor(step)-minimum)/2));
+  return new Set(Array.from({length:count},(_,i)=>{
+    const seed=createHash('sha256').update(`${batch}:${day}:${i}`).digest().readUInt32BE(0);
+    return Math.max(0,Math.min(51,Math.floor((i+0.5)*step)+(seed%(jitter*2+1))-jitter));
+  }));
 }
 export function planSchedule(rows, accounts, {from,now=new Date().toISOString(),daily=5,monthly=150,gapMinutes=60}={}) {
   const start=Date.parse(from),clock=Date.parse(now);
@@ -34,11 +45,13 @@ export function planSchedule(rows, accounts, {from,now=new Date().toISOString(),
     assert(!r.author_id&&!r.scheduled_at,'Use unscheduled approved rows; reconcile existing assignments first');
   }
   const days=new Map(),months=new Map(),authorDays=new Map(),planned=new Map();
+  const batch=createHash('sha256').update(JSON.stringify(pending.map(r=>r.id))).digest('hex'),slots=new Map();
   let tick=Math.ceil(start/900000)*900000,last=-Infinity,cursor=0;
   const end=clock+90*86400000;
   while(planned.size<pending.length&&tick<=end) {
     const date=new Date(tick),c=calendar(date),iso=date.toISOString();
-    if(c.hour>=8&&c.hour<21&&tick-last>=gapMinutes*60000&&(days.get(c.day)??0)<daily&&(months.get(c.month)??0)<monthly) {
+    if(!slots.has(c.day))slots.set(c.day,postingSlots(batch,c.day,daily,gapMinutes));
+    if(c.hour>=8&&c.hour<21&&slots.get(c.day).has((c.hour-8)*4+c.minute/15)&&tick-last>=gapMinutes*60000&&(days.get(c.day)??0)<daily&&(months.get(c.month)??0)<monthly) {
       // Stable CSV order, rotating verified accounts. Source-specific permissions
       // and account-wide daily counts both apply to every proposal.
       const row=pending.find(r=>!planned.has(r.id));
