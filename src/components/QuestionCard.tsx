@@ -13,11 +13,13 @@ import { PostViews } from './PostViews';
 import {VoteControls} from './VoteControls';
 import { AuthorIdentity } from './AuthorIdentity';
 
-export function QuestionCard({ question, onTagSelect }: { question: Question; onTagSelect?: (tag: string) => void }) {
+export function QuestionCard({ question, onTagSelect, onSelect, selected = false }: { question: Question; onTagSelect?: (tag: string) => void; onSelect?: () => void; selected?: boolean }) {
   const imported = isImportedPost(question);
   const path = `/us/en/${question.post_kind === 'experience' && !imported ? 'experiences' : 'questions'}/${question.id}`;
   return (
-    <article className="feed-card group min-w-0 border-b border-slate-200 bg-white px-3 py-4 transition hover:bg-slate-50/70 sm:px-4">
+    <article data-selected={selected || undefined} onClick={onSelect ? (event) => {
+      if (!(event.target as HTMLElement).closest('a, button, input, textarea, select, [role="button"]') && !window.getSelection()?.toString()) onSelect();
+    } : undefined} className="feed-card group min-w-0 border-b border-slate-200 bg-white px-3 py-4 transition hover:bg-slate-50/70 sm:px-4">
       <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
             {!imported && <Avatar seed={question.author_avatar_seed} size="sm" />}
@@ -32,7 +34,9 @@ export function QuestionCard({ question, onTagSelect }: { question: Question; on
             {question.title}
           </Link>
           {question.post_kind && question.post_kind !== 'question' && <p className="mt-2 text-xs font-semibold text-slate-600">{question.post_kind === 'experience' ? `Experience · ${question.experience_category}` : question.post_kind === 'promotion' ? 'Promotional post' : 'Discussion'}</p>}
-          <p className="mt-2 line-clamp-2 break-words text-base leading-6 text-slate-600">{question.body}</p>
+          {onSelect ? <button type="button" onClick={onSelect} aria-pressed={selected} aria-controls="feed-related" aria-label={`Show related posts for ${question.title}`} className="post-preview-select mt-2 block w-full rounded text-left text-base leading-6 text-slate-600">
+            <span className="line-clamp-2 break-words">{question.body}</span>
+          </button> : <p className="mt-2 line-clamp-2 break-words text-base leading-6 text-slate-600">{question.body}</p>}
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {question.tags.map((tag) => <Link key={tag} href={`/us/en?tag=${encodeURIComponent(tag)}`} onClick={onTagSelect ? (event) => { event.preventDefault(); onTagSelect(tag); } : undefined} className="max-w-full break-words rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">{topicLabel(tag)}</Link>)}
           </div>

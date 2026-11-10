@@ -384,7 +384,7 @@
 .post-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .vote-control-wrap { display: flex; flex-direction: column; min-width: 0; }
 .vote-controls { display: inline-flex; align-self: flex-start; align-items: center; flex-shrink: 0; border-radius: 999px; background: #f1f5f9; color: #334155; }
-.vote-controls button { display: inline-flex; justify-content: center; align-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 999px; }
+.vote-controls button { display: inline-flex; justify-content: center; align-items: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 999px; }
 .vote-controls button:hover { background: #e2e8f0; }
 .vote-controls button:focus-visible, .post-reply-action:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
 .vote-controls button:disabled { opacity: .4; cursor: not-allowed; }
@@ -399,6 +399,11 @@
 /* Keep the complete card action row together even on a 320px phone. */
 .feed-post-toolbar { column-gap: .375rem; }
 .feed-post-toolbar .post-reply-action { padding-inline: .375rem; gap: .25rem; }
+.post-preview-select:focus-visible { outline: 2px solid #115e59; outline-offset: 3px; }
+@media (min-width: 640px) {
+  .feed-post-toolbar .post-reply-action { min-width: 104px; height: 44px; justify-content: center; padding-block: 0; }
+  .feed-card[data-selected="true"] { border-color: #115e59; box-shadow: inset 0 0 0 1px #115e59; }
+}
 @media (max-width: 639px) {
   .feed-post-toolbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .25rem; align-items: stretch; }
   .feed-post-toolbar .vote-control-wrap, .feed-post-toolbar .vote-controls { display: contents; }
@@ -430,4 +435,6 @@
     line-height: 1.1;
   }
   .feed-post-toolbar .vote-error { grid-column: 1 / -1; max-width: none; }
+  .feed-post-toolbar .vote-up[aria-pressed="true"] { background: #ffedd5; color: #c2410c; }
+  .feed-post-toolbar .vote-down[aria-pressed="true"] { background: #dbeafe; color: #1d4ed8; }
 }
