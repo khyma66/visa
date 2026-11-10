@@ -1,9 +1,27 @@
 {
   "source": "The Texas Tribune",
-  "retrievedAt": "2026-11-09T23:09:07.557Z",
-  "policyCheckedAt": "2026-11-09T23:09:07.557Z",
+  "retrievedAt": "2026-11-10T20:36:11.661Z",
+  "policyCheckedAt": "2026-11-10T20:36:11.661Z",
   "policyDigest": "83e8cafce5e3cba8d74297f86204f3a50ff06a6f6cd84ed93dac0bc33fc2d1d5",
   "articles": [
+    {
+      "id": "tt-252740",
+      "title": "Ken Paxton drops lawsuit seeking to shut down immigration aid group FIEL Houston",
+      "url": "https://www.texastribune.org/2026/11/10/ken-paxton-attorney-general-fiel-immigration-lawsuit-houston/",
+      "author": "Uriel J. García",
+      "publishedAt": "2026-11-10T18:31:08.000Z",
+      "excerpt": "The Texas attorney general also ended his effort to dissolve Annunciation House, another immigrant-serving nonprofit, as he prepares to leave office in January.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-252740-2b2a592c67aac266",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/11/20260109-FIEL-ICE-Protest-AT-01.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Mary Schultz, 80, holds a sign that reads “Stop ICE brutality! Defeat Trump Tyranny!!” during a protest held by FIEL in Houston on Jan. 9, 2026.",
+        "credit": "Antranik Tavitian for The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
     {
       "id": "tt-252584",
       "title": "Trump’s Big Bend border wall construction can resume after U.S. Supreme Court ruling",
@@ -482,24 +500,6 @@
         "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260921-ATX-ICE-Shooting-LULAC-Presser-LS-02.jpg?fit=1024%2C683&ssl=1",
         "caption": "Kate Lincoln-Goldfinch, an immigration attorney representing Wilber Rafael Garces Pérez, who was shot by an immigration officer in Austin on Sunday, listens as Garces Pérez speaks on the phone from detention at a press conference on Monday, Sept. 21, 2026.",
         "credit": "Leila Saidane for The Texas Tribune",
-        "width": 1024,
-        "height": 683
-      }
-    },
-    {
-      "id": "tt-243592",
-      "title": "ICE officer shoots, injures man in Austin, officials say",
-      "url": "https://www.texastribune.org/2026/09/20/austin-immigration-shooting-texas/",
-      "author": "Alex Nguyen, Uriel J. García, Alejandro Serrano",
-      "publishedAt": "2026-09-20T19:57:25.000Z",
-      "excerpt": "The shooting in Austin, which injured Wilber Rafael Garces Perez, came more than two months after an ICE officer fatally shot a man in Houston.",
-      "publisher": "The Texas Tribune",
-      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
-      "photo": {
-        "id": "tt-243592-666de4b21c190fbd",
-        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260920-JL-Austin-ICE-Shooting-08.jpg?fit=1024%2C683&ssl=1",
-        "caption": "Immigration and Customs Enforcement agents in North Austin after a person was shot earlier on Sunday, Sept. 20, 2026.",
-        "credit": "Jacob Lujan/The Texas Tribune",
         "width": 1024,
         "height": 683
       }
