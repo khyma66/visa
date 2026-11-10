@@ -53,6 +53,12 @@ before(async()=>{
     '20261006044132_visa_experiences.sql','20261013191116_private_owner_feedback.sql'])
     await db.exec(await readFile(new URL(`../../supabase/migrations/${name}`,import.meta.url),'utf8'));
   await db.exec(await readFile(new URL(migration,import.meta.url),'utf8'));
+  // Minimal actual-ledger/queue fixture: no synthetic display implementation
+  // is installed, so the analytics contract cannot depend on one.
+  await db.exec(`create table private.editorial_drafts(question_id uuid unique,status text,published_at timestamptz);
+    create table private.post_view_totals(post_id text primary key,views bigint not null check(views>=0));
+    revoke all on private.editorial_drafts,private.post_view_totals from public,anon,authenticated,service_role;`);
+  await db.exec(await readFile(new URL('../../supabase/migrations/20261110035300_editorial_actual_dashboard_metrics.sql',import.meta.url),'utf8'));
   for(const user of [owner,alice,bob,carol,moderator,fixture,anonymous,deleted])
     await db.query('insert into auth.users(id) values($1)',[user]);
   await db.query('insert into private.feedback_owner(user_id) values($1)',[owner]);
@@ -129,6 +135,7 @@ test('aggregates reconcile known rows, exclusion rules and human response qualit
   assert.deepEqual(result.overview,{members_joined:2,questions_created:3,experiences_created:1,answers_created:7,imported_replies_created:3,distinct_contributors:3});
   assert.deepEqual(result.quality,{questions_in_window:3,questions_with_human_answer:2,answer_rate_percent:66.7,median_first_answer_hours:4,unanswered_questions_current:1});
   assert.deepEqual(result.operations,{reports_received:2,reports_pending_current:2,feedback_received:2,feedback_pending_current:2});
+  assert.deepEqual(result.post_views,{measured_total:0,posts_with_measured_views:0,measured_scheduled_total:0,scheduled_published_total:0,scheduled_published_in_period:0});
   assert.equal(result.schema_version,1); assert.equal(result.window.timezone,'UTC'); assert.equal(result.window.days,7);
   assert.equal(result.window.includes_partial_today,true); assert.equal(result.generated_at,result.window.end_exclusive);
   assert.equal(result.daily.length,7); assert(result.daily.every((day,i)=>i===0||day.date>result.daily[i-1].date));
@@ -138,6 +145,20 @@ test('aggregates reconcile known rows, exclusion rules and human response qualit
   const serialized=JSON.stringify(result);
   for(const sensitive of [owner,alice,bob,carol,'Private','Sensitive','author_id','submitter_id','user_metadata']) assert(!serialized.includes(sensitive));
 }));
+test('actual view ledger is uncapped and scheduled publications are separate from organic questions',()=>ownerAfter(async()=>{
+  await db.query(`insert into private.editorial_drafts values($1,'published',${windowStart}+interval '1 hour'),
+    ($2,'published',${windowStart}-interval '1 day'),($3,'scheduled',null)`,[uid(101),uid(105),uid(103)]);
+  await db.query('insert into private.post_view_totals values($1,6001),($2,7),($3,0)',[uid(101),'apify-fixture',uid(103)]);
+},async()=>{
+  const result=await analytics();
+  assert.equal(result.overview.questions_created,2);
+  assert.equal(result.quality.questions_in_window,2);
+  assert.equal(result.daily.reduce((n,d)=>n+d.questions_created,0),2);
+  assert.deepEqual(result.post_views,{measured_total:6008,posts_with_measured_views:2,measured_scheduled_total:6001,scheduled_published_total:2,scheduled_published_in_period:1});
+}));
+for(const role of ['anon','authenticated','service_role']) test(`${role} cannot bypass the owner RPC to read view aggregates`,()=>asUser(owner,async()=>{
+  await assert.rejects(()=>db.query('select private.editorial_actual_metrics(now()-interval \'7 days\',now())'),/permission denied/);
+},{role}));
 for(const days of [7,30,90]) test(`${days} UTC days includes zero-filled days with bounded output`,()=>asUser(owner,async()=>{
   const result=await analytics(days);assert.equal(result.daily.length,days);
   const start=new Date(result.window.start_inclusive);assert.equal(start.getUTCHours(),0);
