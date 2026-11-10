@@ -88,6 +88,29 @@ function nodes(node) { return Array.isArray(node) ? node.flatMap(nodes) : node &
 function textOf(node) { return Array.isArray(node) ? node.map(textOf).join(' ') : node == null || typeof node === 'boolean' ? '' : typeof node === 'object' ? (textOf(node.props?.children) + (node.props?.related ? ' ' + textOf(node.props.related) : '')) : String(node); }
 function button(h, label) { const result = nodes(h.tree).find((node) => node.type === 'button' && (node.props['aria-label'] || textOf(node).trim()) === label); assert(result, `Missing ${label} button`); return result; }
 function search(h, value) { const input = nodes(h.tree).find((node) => node.type === 'input'); input.props.onChange({ target: { value } }); h.render(); }
+
+test('selected feed card and related context stay together across selection and filtering', async () => {
+  const h = new Harness();
+  h.getPage = async () => ({ questions: [question('first'), question('second')], more: false });
+  const cards = () => nodes(h.tree).filter(node => node.props?.question && node.props?.onSelect);
+  const context = () => nodes(h.tree).find(node => node.props?.context)?.props.context;
+  try {
+    h.render(); await h.flush();
+    assert.equal(cards().filter(node => node.props.selected).length, 1);
+    assert.equal(context().id, cards().find(node => node.props.selected).props.question.id);
+    const target = cards().find(node => !node.props.selected);
+    target.props.onSelect(); h.render(); await h.settle();
+    assert.equal(context().id, target.props.question.id);
+    assert.equal(cards().find(node => node.props.selected).props.question.id, target.props.question.id);
+    search(h, target.props.question.id === 'first' ? 'second' : 'first'); await h.flush();
+    assert.equal(cards().length, 1);
+    assert.equal(context().id, cards()[0].props.question.id);
+    assert.equal(cards()[0].props.selected, true);
+    search(h, 'no matching post'); await h.flush();
+    assert.equal(cards().length, 0);
+    assert.equal(context().id, undefined);
+  } finally { h.close(); }
+});
 function ids(h) { return nodes(h.tree).filter((node) => node.props?.question).map((node) => node.props.question.id); }
 
 test('initial feed and sort clicks start fetching without the search debounce', async () => {

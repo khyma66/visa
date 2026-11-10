@@ -42,6 +42,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const [category, setCategory] = useState('');
   const [origin, setOrigin] = useState<'' | 'member' | 'earlier'>('');
   const [loadedFilterKey, setLoadedFilterKey] = useState<string | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const olderLock = useRef<symbol | null>(null);
   const alive = useRef(true);
   const askTarget = sortMode === 'sos' ? '/ask?sos=1' : '/ask';
@@ -125,6 +126,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   }
 
   function updateQuery(updates: Record<string, string>) {
+    setSelectedPostId(null);
     const url = new URL(window.location.href);
     Object.entries(updates).forEach(([key, value]) => { if (value) url.searchParams.set(key, value); else url.searchParams.delete(key); });
     window.history.replaceState(null, '', url);
@@ -142,6 +144,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     updateQuery({ q: '', visa: '', tag: '', type: '', sort: '', category: '', origin: '' });
   }
   function goToPage(value: number) {
+    setSelectedPostId(null);
     setPage(value);
     document.getElementById('question-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -167,6 +170,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const refreshing = loading && loadedFilterKey === contentFilterKey && questions.length > 0;
   const currentPage = Math.min(page, pageCount);
   const pageQuestions = visibleQuestions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const selectedPost = pageQuestions.find(question => question.id === selectedPostId) ?? pageQuestions[0];
   const pageNumbers = Array.from({ length: pageCount }, (_, index) => index + 1)
     .filter((value) => value === 1 || value === pageCount || Math.abs(value - currentPage) <= 2);
   const visaTypes = [...new Set(questions.map((question) => question.visa_type).filter(type => VISA_TYPES.includes(type)))].sort();
@@ -191,7 +195,10 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
           </section>
           <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4"><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Member Discussions</h2><p className="mt-2 text-sm leading-6 text-slate-600 capitalize">See questions and experiences shared directly by VisaThreads members.</p><button onClick={() => { setOrigin(origin === 'member' ? '' : 'member'); updateQuery({ origin: origin === 'member' ? '' : 'member' }); }} className="mt-3 text-sm font-semibold text-teal-800 hover:underline capitalize">{origin === 'member' ? 'Show all posts' : 'See member posts'} <ArrowUpRight className="inline" size={13} aria-hidden="true" /></button></section>
           {popularTags.length > 0 && <section className="border-b border-slate-200 px-2 pb-5"><div className="flex items-center gap-2"><Tags size={17} className="shrink-0 text-slate-500" aria-hidden="true" /><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Topics in This Feed</h2></div><div className="mt-3 flex flex-wrap gap-2">{popularTags.map(([name, count]) => <button key={name} onClick={() => selectTag(name)} className="max-w-full break-words rounded bg-blue-50 px-2 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">{topicLabel(name)}<span className="ml-1.5 text-xs text-blue-500">{count}</span></button>)}</div><Link href="/us/en/tags" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-blue-700 capitalize">All Tags<ArrowUpRight size={13} aria-hidden="true" /></Link></section>}
-          {(search || tag || pageQuestions[0]) && <div id="feed-related" className="scroll-mt-24"><RelatedQuestions context={search || tag ? { title: search, tags: tag ? [tag] : [] } : pageQuestions[0]} /></div>}
+          {(selectedPost || search || tag) && <div id="feed-related" className="scroll-mt-24">
+            {selectedPost && <p aria-live="polite" className="mb-3 border-l-2 border-teal-800 pl-3 text-sm text-slate-600">Related To <span className="block break-words font-semibold text-slate-900">{selectedPost.title}</span></p>}
+            <RelatedQuestions key={selectedPost?.id ?? `${search}:${tag}`} context={selectedPost ?? { title: search, tags: tag ? [tag] : [] }} />
+          </div>}
         </div>}>
         <div id="home-feed-main" className="min-w-0">
           <header className="feed-heading flex flex-wrap items-center justify-between gap-4">
@@ -225,7 +232,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
             {error && <div role="alert" className="my-3 rounded-lg bg-rose-50 p-4 text-sm text-rose-800">{error} <button onClick={() => setRevision((value) => value + 1)} className="font-semibold underline capitalize">Retry</button></div>}
             {loading && !refreshing ? <div role="status" aria-label="Loading questions" className="divide-y divide-slate-100">{[1, 2, 3, 4].map((item) => <div key={item} className="space-y-3 py-5"><div className="h-5 w-2/5 animate-pulse rounded bg-slate-100" /><div className="h-6 w-4/5 animate-pulse rounded bg-slate-100" /><div className="h-10 animate-pulse rounded bg-slate-100" /></div>)}</div> : <>
               {!loading && !error && visibleQuestions.length === 0 && <div className="px-6 py-12 text-center"><Search className="mx-auto text-slate-400" size={28} aria-hidden="true" /><h2 className="mt-3 font-semibold text-slate-900 capitalize">{experience ? 'No matching experiences' : 'No matching questions'}</h2><p className="mt-1 text-sm text-slate-500 capitalize">{more ? 'Load more posts or adjust your filters.' : experience ? 'Try another filter or share your own first-hand story.' : 'Try another search or sign in to contribute.'}</p><Link href={experience ? '/experiences/new' : askHref} className="mt-4 inline-block text-sm font-semibold text-blue-700 hover:underline capitalize">{experience ? 'Share Your Experience' : 'Ask a Question'}</Link></div>}
-              {pageQuestions.map((question) => <QuestionCard key={question.id} question={question} onTagSelect={selectTag} />)}
+              {pageQuestions.map((question) => <QuestionCard key={question.id} question={question} onTagSelect={selectTag} selected={selectedPost?.id === question.id} onSelect={() => setSelectedPostId(question.id)} />)}
               {pageCount > 1 && <nav aria-label="Post pagination" className="tab-row items-center tab-row-centered py-5"><button disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} className="rounded-full px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40 capitalize">Previous</button>{pageNumbers.map((value, index) => <span key={value} className="inline-flex items-center gap-2">{index > 0 && value > pageNumbers[index - 1] + 1 && <span aria-hidden="true" className="capitalize">...</span>}<button aria-label={`Page ${value}`} aria-current={currentPage === value ? 'page' : undefined} onClick={() => goToPage(value)} className={`min-w-9 rounded-full px-3 py-2 text-sm ${currentPage === value ? 'bg-blue-700 text-white' : 'hover:bg-slate-100'}`}>{value}</button></span>)}<button disabled={currentPage === pageCount} onClick={() => goToPage(currentPage + 1)} className="rounded-full px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40 capitalize">Next</button></nav>}
               {more && <div className="py-4 text-center capitalize"><button onClick={() => void loadOlder()} disabled={loadingOlder} className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 capitalize">{loadingOlder ? 'Loading...' : 'Load more questions'}</button></div>}
             </>}

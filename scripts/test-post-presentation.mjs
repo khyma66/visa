@@ -88,6 +88,28 @@ const question = {
   accepted_answer_id: null, created_at: '2026-10-03T12:00:00Z', updated_at: '2026-10-03T12:00:00Z',
   source: 'visaflow',
 };
+
+test('card selection supports keyboard buttons without intercepting post actions or text selection', () => {
+  let selections = 0;
+  const tree = QuestionCard({ question, selected: true, onSelect: () => selections++ });
+  const visit = node => Array.isArray(node) ? node.flatMap(visit) : node && typeof node === 'object' ? [node, ...visit(node.props?.children)] : [];
+  const preview = visit(tree).find(node => node.props?.['aria-controls'] === 'feed-related');
+  assert.equal(preview.type, 'button');
+  assert.equal(preview.props['aria-pressed'], true);
+  preview.props.onClick();
+  assert.equal(selections, 1);
+  const previousWindow = globalThis.window;
+  try {
+    globalThis.window = { getSelection: () => ({ toString: () => '' }) };
+    tree.props.onClick({ target: { closest: () => null } });
+    assert.equal(selections, 2);
+    tree.props.onClick({ target: { closest: () => ({}) } });
+    assert.equal(selections, 2, 'Links, votes and menus retain their own behavior');
+    globalThis.window.getSelection = () => ({ toString: () => 'copied text' });
+    tree.props.onClick({ target: { closest: () => null } });
+    assert.equal(selections, 2, 'Selecting text does not change the related panel');
+  } finally { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; }
+});
 const answer = {
   id: '44444444-4444-4444-8444-444444444444', question_id: question.id, author_id: '22222222-2222-4222-8222-222222222222',
   author_username: 'reply-tester', author_avatar_seed: 'reply-avatar',
