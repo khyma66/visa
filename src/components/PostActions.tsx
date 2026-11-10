@@ -40,14 +40,15 @@ function MemberActions({ postId, userId }: { postId: string; userId: string }) {
 
 export function PostActions({ postId, path, imported = false, content, onChanged }: { postId: string; path: string; imported?: boolean; content?:Question; onChanged?:(deleted:boolean)=>void }) {
   const { user, demoMode } = useAuth();
+  const ownPost = Boolean(user && content && !imported && content.source !== 'apify' && user.id === content.author_id);
   const login = `/login?next=${encodeURIComponent(path)}`;
-  return <ActionPopover label="More post options" trigger={<><Ellipsis size={20} aria-hidden="true"/><span className="mobile-action-label" aria-hidden="true">More</span></>}>
+  return <ActionPopover triggerClassName={ownPost ? "post-options-trigger post-owner-trigger" : undefined} label={ownPost ? "Manage your post" : "More post options"} trigger={<><Ellipsis size={20} aria-hidden="true"/><span className={ownPost ? "owner-action-label mobile-action-label" : "mobile-action-label"} aria-hidden="true">{ownPost ? "Manage" : "More"}</span></>}>
+    {content&&!imported&&<OwnerContentActions content={content} kind="question" canEdit={content.status==='open'} onChanged={onChanged}/>}
     {featureAccess.postSharing && <PostShare path={path} inline/>}
     {featureAccess.postLibrary && (user && !demoMode ? <MemberActions key={`${user.id}:${postId}`} userId={user.id} postId={postId}/> : <>
       <Link className="post-action" href={login}><Bell size={16} aria-hidden="true"/>Follow</Link>
       <Link className="post-action" href={login}><Bookmark size={16} aria-hidden="true"/>Save</Link>
     </>)}
-    {content&&!imported&&<OwnerContentActions content={content} kind="question" canEdit={content.status==='open'} onChanged={onChanged}/>}
     <ReportButton compact kind={imported ? 'source_question' : 'question'} target={postId}/>
   </ActionPopover>;
 }

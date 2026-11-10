@@ -339,6 +339,8 @@
 .post-action[aria-pressed="true"] { color: #0f766e; background: #f0fdfa; }
 .post-action:disabled { opacity: .5; cursor: wait; }
 .post-options-trigger { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 9999px; color: #64748b; }
+.post-owner-trigger { width: auto; padding: 0 .75rem; gap: .375rem; }
+.post-owner-trigger .owner-action-label { display: inline; font-size: .75rem; font-weight: 600; }
 .post-options-trigger:hover, .post-options-trigger[aria-expanded="true"] { background: #f1f5f9; color: #0f172a; }
 .post-options-trigger:focus-visible, .author-identity:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
 .post-options-panel { position: fixed; z-index: 80; width: 240px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid #e2e8f0; border-radius: .875rem; background: white; padding: .375rem; box-shadow: 0 8px 30px #0f172a24; outline: none; }

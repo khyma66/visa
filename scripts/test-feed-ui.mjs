@@ -322,12 +322,12 @@ test('an old search response cannot replace a newer feed', async () => {
   } finally { h.close(); }
 });
 
-test('load more rejects double clicks and stale results after a filter change', async () => {
+test('next page rejects double clicks and stale results after a filter change', async () => {
   const h = new Harness(), older = deferred();
   h.getPage = ({ search, before }) => before ? older.promise : Promise.resolve({ questions: [question(search ? 'filtered' : 'first')], more: !search, cursor: question('first') });
   try {
     h.render(); await h.flush();
-    const more = button(h, 'Load more questions'); more.props.onClick(); more.props.onClick();
+    const more = button(h, 'Next'); more.props.onClick(); more.props.onClick();
     assert.equal(h.calls.filter((call) => call.before).length, 1);
     search(h, 'documents'); await h.flush();
     older.resolve({ questions: [question('stale-older')], more: false }); await h.settle();
@@ -341,7 +341,7 @@ test('an empty post-type filter keeps the next server page available', async () 
   try {
     h.render({ initialKind: 'discussion' }); await h.flush();
     assert.deepEqual(ids(h), []); assert.match(textOf(h.tree), /No matching questions/);
-    assert(button(h, 'Load more questions'));
+    assert(button(h, 'Next'));
     assert.equal(nodes(h.tree).find((node) => node.props?.['aria-label'] === 'Post type').props.value, 'discussion');
   } finally { h.close(); }
 });
@@ -404,13 +404,13 @@ test('loaded page ranges match twenty visible cards then the final twenty-first 
     h.render(); await h.flush();
     const firstPage = ids(h);
     assert.equal(firstPage.length, 20);
-    assert.match(textOf(h.tree), /Showing 1–20 of 21 loaded · More available/);
+    assert.match(textOf(h.tree), /Showing 1–20 of 21 loaded/);
     assert.equal(button(h, 'Previous').props.disabled, true);
     button(h, 'Next').props.onClick(); h.render(); await h.settle();
     assert.equal(ids(h).length, 1);
     assert(!firstPage.includes(ids(h)[0]));
-    assert.match(textOf(h.tree), /Showing 21–21 of 21 loaded · More available/);
-    assert.equal(button(h, 'Next').props.disabled, true);
+    assert.match(textOf(h.tree), /Showing 21–21 of 21 loaded/);
+    assert.equal(button(h, 'Next').props.disabled, false);
     assert.equal(nodes(h.tree).find(node => node.props?.['aria-label'] === 'Page 2').props['aria-current'], 'page');
     button(h, 'Previous').props.onClick(); h.render(); await h.settle();
     assert.deepEqual(ids(h), firstPage);
@@ -424,7 +424,7 @@ test('source changes discard stale older pages and pass the internal source to p
   try {
     h.render(); await h.flush();
     h.search = '?origin=member'; h.render(); await h.flush();
-    button(h, 'Load more questions').props.onClick();
+    button(h, 'Next').props.onClick();
     assert.equal(h.calls.at(-1).origin, 'member'); assert(h.calls.at(-1).before);
     h.search = '?origin=earlier'; h.render(); await h.flush();
     older.resolve({ questions: [question('apify-stale')], more: false }); await h.settle();
@@ -451,3 +451,21 @@ test('earlier-discussion provenance keeps legacy source-less records subject to 
  assert(nodes(h.tree).some(n=>n.props?.['aria-label']==='Visa Type'));
  }finally{h.close();}
  });
+
+for (const initialCount of [20, 21]) test(`Next fetches older questions without skipping a partial page (${initialCount})`, async () => {
+  const h = new Harness();
+  const rows = Array.from({length: initialCount}, (_, i) => question(`initial-${i}`, {created_at: '2026-10-10T00:00:00Z'}));
+  h.getPage = async ({before}) => before
+    ? {questions: [rows[0], question('older-result', {created_at: '2026-10-01T00:00:00Z'})], more: false}
+    : {questions: rows, more: true, cursor: rows.at(-1)};
+  try {
+    h.render(); await h.flush();
+    assert.doesNotMatch(textOf(h.tree), /Load more questions|More available/);
+    if(initialCount > 20) {button(h, 'Next').props.onClick(); h.render(); await h.settle();}
+    button(h, 'Next').props.onClick(); h.render(); await h.settle();
+    assert(ids(h).includes('older-result'));
+    assert.equal(ids(h).length, initialCount - 20 + 1);
+    assert.equal(h.calls.length, 2);
+    assert.equal(button(h, 'Next').props.disabled, true);
+  } finally {h.close();}
+});
