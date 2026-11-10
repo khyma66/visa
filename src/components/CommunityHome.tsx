@@ -26,6 +26,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const searchParams = useSearchParams();
   const queryString = searchParams.toString();
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [initialPageSize, setInitialPageSize] = useState(0);
   const [search, setSearch] = useState('');
   const [visaType, setVisaType] = useState('');
   const [loading, setLoading] = useState(true);
@@ -93,7 +94,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     const fetchQuestions = () => {
       const dataOrigin = origin === 'earlier' ? 'archive' : origin;
       void getQuestionPage({ search, tag: sortMode === 'sos' ? 'sos' : tag, visaType, sort: sortMode === 'sos' ? 'newest' : sortMode, experience, category, ...(kind ? {kind} : {}), ...(dataOrigin ? { origin: dataOrigin } : {}) })
-        .then((data) => { if (active) { setQuestions(data.questions); setMore(data.more); setCursor(data.cursor); setLoadedFilterKey(contentFilterKey); } })
+        .then((data) => { if (active) { setQuestions(data.questions); setInitialPageSize(data.questions.length); setMore(data.more); setCursor(data.cursor); setLoadedFilterKey(contentFilterKey); } })
         .catch(() => { if (active) { setQuestions([]); setError('Questions could not be loaded. Please try again.'); } })
         .finally(() => { if (active) setLoading(false); });
     };
@@ -183,7 +184,14 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 10);
   }, [questions]);
 
-  const liveTopics = tag || popularTags.slice(0, 5).map(([name]) => name).join('|');
+  // Keep subscriptions stable when older pages are appended. A new subscription
+  // refreshes the feed, which would otherwise replace those pages with page one.
+  const liveTopics = useMemo(() => {
+    if (tag) return tag;
+    const counts = new Map<string, number>();
+    questions.slice(0, initialPageSize).forEach(question => question.tags.forEach(name => counts.set(name, (counts.get(name) ?? 0) + 1)));
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([name]) => name).join('|');
+  }, [tag, questions, initialPageSize]);
   useEffect(() => subscribeLive(liveTopics.split('|').filter(Boolean).map((name) => `discovery:${name}`),
     () => setRevision((value) => value + 1)), [liveTopics, user?.id]);
 

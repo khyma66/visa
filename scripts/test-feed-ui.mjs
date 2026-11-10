@@ -22,7 +22,7 @@ const dependencies = {
   'lucide-react': dataUrl(`function Icon(){return null;} export {${icons.map((name) => `Icon as ${name}`).join(',')}};`),
   '@/lib/post-categories': dataUrl('export const EXPERIENCE_CATEGORIES=["Other"],VISA_TYPES=["H1B","Other"];'),
   '@/lib/community': dataUrl('export async function getCommunitySource(){return {};} export async function getQuestionPage(options){const h=globalThis.__feedHarness;h.calls.push(options);return h.getPage(options);}'),
-  '@/lib/realtime': dataUrl('export function subscribeLive(){return ()=>{};}'),
+  '@/lib/realtime': dataUrl('export function subscribeLive(topics){globalThis.__feedHarness.subscriptions.push(topics);return ()=>{};}'),
   './AuthProvider': dataUrl('export function useAuth(){return globalThis.__feedHarness.auth ?? {user:null,demoMode:true};}'),
   './QuestionCard': dataUrl('export function QuestionCard(){return null;}'),
   './RelatedQuestions': dataUrl('export function RelatedQuestions(){return null;}'),
@@ -40,7 +40,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 
 // Exercise the actual hook state and event handlers without a hosted service.
 class Harness {
-  slots = []; index = 0; effects = []; dirty = false; calls = []; writes = [];
+  subscriptions = []; slots = []; index = 0; effects = []; dirty = false; calls = []; writes = [];
   constructor(search = '') {
     this.search = search;
     this.storage = new Map();
@@ -467,5 +467,21 @@ for (const initialCount of [20, 21]) test(`Next fetches older questions without 
     assert.equal(ids(h).length, initialCount - 20 + 1);
     assert.equal(h.calls.length, 2);
     assert.equal(button(h, 'Next').props.disabled, true);
+  } finally {h.close();}
+});
+
+test('appending older pages does not resubscribe and reset the feed', async () => {
+  const h = new Harness();
+  const first = Array.from({length: 50}, (_,i) => question(`first-${i}`, {tags:['h1b']}));
+  h.getPage = async ({before}) => before
+    ? {questions:Array.from({length:50},(_,i)=>question(`older-${i}`, {tags:['f1','opt','ead','h4','uscis'],created_at:'2026-09-01T00:00:00Z'})),more:false}
+    : {questions:first,more:true,cursor:first.at(-1)};
+  try {
+    h.render();await h.flush();
+    const count=h.subscriptions.length;
+    nodes(h.tree).find(n=>n.props?.['aria-label']==='Page 3').props.onClick();h.render();await h.settle();
+    button(h,'Next').props.onClick();h.render();await h.settle();
+    assert.match(textOf(h.tree),/of 100 loaded/);
+    assert.equal(h.subscriptions.length,count,'Fetching older posts must not change live subscriptions');
   } finally {h.close();}
 });
