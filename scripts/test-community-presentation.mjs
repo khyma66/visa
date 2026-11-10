@@ -143,13 +143,13 @@ test('experience cards and details expose category and discussion actions withou
 test('experience feed excludes questions, includes Other, and defaults to newest',()=>{
   const older={...native,id:'older',post_kind:'experience',experience_category:'Other',created_at:'2026-09-01T00:00:00Z'};
   const newer={...older,id:'newer',title:'A newer visa experience',created_at:'2026-10-01T00:00:00Z'};
-  const html=render(CommunityHome,{experience:true},{values:{0:[older,native,newer],3:false}});
+  const html=render(CommunityHome,{experience:true},{values:{0:[older,native,newer],4:false}});
   assert(html.includes('Share Your Experience')); assert(html.includes('/experiences/new'));
   assert(html.includes('All Experience Categories')); assert(html.includes('Other</option>'));
   assert(html.indexOf('/experiences/newer') < html.indexOf('/experiences/older'));
   assert(!html.includes(`/questions/${native.id}`));
   assert.match(html,/aria-pressed="true"[^>]*>New/);
-  const filtered=render(CommunityHome,{experience:true},{values:{0:[older,newer],3:false,14:'Visa interview'}});
+  const filtered=render(CommunityHome,{experience:true},{values:{0:[older,newer],4:false,15:'Visa interview'}});
   assert(filtered.includes('No matching experiences')); assert(!filtered.includes('/experiences/newer'));
 });
 test('discussion and promotion labels describe content rather than where it came from',()=>{
@@ -202,7 +202,7 @@ test('home renders community-first copy and sends signed-out Ask clicks through 
   assert(!html.includes('Privacy-aware import'));
 });
 test('partial feed failures remain visible without exposing ingestion diagnostics',()=>{
-  const html=render(CommunityHome,{}, {values:{0:[native],3:false,9:true}});
+  const html=render(CommunityHome,{}, {values:{0:[native],4:false,10:true}});
   assert(html.includes('Some discussions are temporarily unavailable.'));noPipelineLabels(html);
 });
 test('tag directory presents combined discussion counts without splitting people into imported and native sources',()=>{
