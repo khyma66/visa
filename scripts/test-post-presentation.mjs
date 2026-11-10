@@ -273,3 +273,16 @@ test('cards expose replies and the mobile related destination outside the action
   assert.match(html,/class="post-related-action"/);
   assert.doesNotMatch(html,/>Reply<|>Message user</);
 });
+
+test('author menus identify ownership and put Edit/Delete before sharing', () => {
+  setUser({id:question.author_id});
+  const own = renderToStaticMarkup(createElement(QuestionCard, {question}));
+  assert.match(own, /aria-label="Manage your post"/);
+  assert(own.indexOf('Edit post') < own.indexOf('Copy link'));
+  assert(own.indexOf('Delete post') < own.indexOf('Copy link'));
+  setUser({id:'another-member'});
+  const other = renderToStaticMarkup(createElement(QuestionCard, {question}));
+  assert.match(other, /aria-label="More post options"/);
+  assert.doesNotMatch(other, /Edit post|Delete post|Manage your post/);
+  setUser(null);
+});
