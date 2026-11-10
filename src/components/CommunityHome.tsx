@@ -188,6 +188,10 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   return (
     <main className="page-shell">
       <ResizablePostLayout mainLabel="Posts" relatedLabel="Community discovery" related={<div id="home-feed-aside" className="feed-discovery min-w-0 space-y-5">
+          {(selectedPost || search || tag) && <div id="feed-related" className="scroll-mt-24">
+            {selectedPost && <p aria-live="polite" className="mb-3 border-l-2 border-teal-800 pl-3 text-sm text-slate-600">Related To <span className="block break-words font-semibold text-slate-900">{selectedPost.title}</span></p>}
+            <RelatedQuestions key={selectedPost?.id ?? `${search}:${tag}`} context={selectedPost ?? { title: search, tags: tag ? [tag] : [] }} />
+          </div>}
           <section className="rounded-xl bg-teal-50 p-4">
             <h2 className="text-thread-title font-semibold text-slate-900 capitalize">Find Your Community</h2><p className="mt-2 text-base leading-6 text-slate-600 capitalize">Connect around a U.S. visa or stage of your journey.</p>
             <Link href="/us/en/explore" className="mt-3 flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 capitalize"><span className="inline-flex items-center gap-2 capitalize"><Compass size={17} aria-hidden="true" />Explore Communities</span><ArrowUpRight size={16} aria-hidden="true" /></Link>
@@ -195,10 +199,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
           </section>
           <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4"><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Member Discussions</h2><p className="mt-2 text-sm leading-6 text-slate-600 capitalize">See questions and experiences shared directly by VisaThreads members.</p><button onClick={() => { setOrigin(origin === 'member' ? '' : 'member'); updateQuery({ origin: origin === 'member' ? '' : 'member' }); }} className="mt-3 text-sm font-semibold text-teal-800 hover:underline capitalize">{origin === 'member' ? 'Show all posts' : 'See member posts'} <ArrowUpRight className="inline" size={13} aria-hidden="true" /></button></section>
           {popularTags.length > 0 && <section className="border-b border-slate-200 px-2 pb-5"><div className="flex items-center gap-2"><Tags size={17} className="shrink-0 text-slate-500" aria-hidden="true" /><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Topics in This Feed</h2></div><div className="mt-3 flex flex-wrap gap-2">{popularTags.map(([name, count]) => <button key={name} onClick={() => selectTag(name)} className="max-w-full break-words rounded bg-blue-50 px-2 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">{topicLabel(name)}<span className="ml-1.5 text-xs text-blue-500">{count}</span></button>)}</div><Link href="/us/en/tags" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-blue-700 capitalize">All Tags<ArrowUpRight size={13} aria-hidden="true" /></Link></section>}
-          {(selectedPost || search || tag) && <div id="feed-related" className="scroll-mt-24">
-            {selectedPost && <p aria-live="polite" className="mb-3 border-l-2 border-teal-800 pl-3 text-sm text-slate-600">Related To <span className="block break-words font-semibold text-slate-900">{selectedPost.title}</span></p>}
-            <RelatedQuestions key={selectedPost?.id ?? `${search}:${tag}`} context={selectedPost ?? { title: search, tags: tag ? [tag] : [] }} />
-          </div>}
+
         </div>}>
         <div id="home-feed-main" className="min-w-0">
           <header className="feed-heading flex flex-wrap items-center justify-between gap-4">
