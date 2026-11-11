@@ -8,7 +8,7 @@ const flush=()=>new Promise(r=>setImmediate(r));
 const hooks=url(`export function useState(initial){const h=globalThis.__votes,i=h.index++;if(!(i in h.slots))h.slots[i]=initial;return [h.slots[i],v=>{h.slots[i]=typeof v==='function'?v(h.slots[i]):v;}];}export function useRef(initial){const h=globalThis.__votes,i=h.index++;return h.slots[i]??={current:initial};}export function useEffect(fn,deps){const h=globalThis.__votes,i=h.index++,old=h.slots[i];if(!old||deps.some((d,j)=>!Object.is(d,old.deps[j]))){old?.cleanup?.();h.slots[i]={deps,cleanup:fn()};}}`);
 const {VoteControls}=await import(url(await compile('../src/components/VoteControls.tsx',{
  react:hooks,'react/jsx-runtime':import.meta.resolve('react/jsx-runtime'),
- 'lucide-react':url('export const ArrowUp=()=>null,ArrowDown=()=>null,ThumbsUp=()=>null;'),
+ 'lucide-react':url('export const ArrowBigUp=()=>null,ArrowBigDown=()=>null,ThumbsUp=()=>null;'),
  './AuthProvider':url('export const useAuth=()=>globalThis.__votes.auth;'),
  '@/lib/voting':url('export const readArchiveVote=(...a)=>globalThis.__votes.archiveRead(...a),readVote=(...a)=>globalThis.__votes.read(...a),writeVote=(...a)=>globalThis.__votes.write(...a);'),
 })));

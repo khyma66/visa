@@ -42,7 +42,7 @@ export function PostActions({ postId, path, imported = false, content, onChanged
   const { user, demoMode } = useAuth();
   const ownPost = Boolean(user && content && !imported && content.source !== 'apify' && user.id === content.author_id);
   const login = `/login?next=${encodeURIComponent(path)}`;
-  return <ActionPopover triggerClassName={ownPost ? "post-options-trigger post-owner-trigger" : undefined} label={ownPost ? "Manage your post" : "More post options"} trigger={<><Ellipsis size={20} aria-hidden="true"/><span className={ownPost ? "owner-action-label mobile-action-label" : "mobile-action-label"} aria-hidden="true">{ownPost ? "Manage" : "More"}</span></>}>
+  return <ActionPopover triggerClassName={ownPost ? "post-options-trigger post-owner-trigger" : undefined} label={ownPost ? "Manage your post" : "More post options"} trigger={<Ellipsis size={20} aria-hidden="true"/>}>
     {content&&!imported&&<OwnerContentActions content={content} kind="question" canEdit={content.status==='open'} onChanged={onChanged}/>}
     {featureAccess.postSharing && <PostShare path={path} inline/>}
     {featureAccess.postLibrary && (user && !demoMode ? <MemberActions key={`${user.id}:${postId}`} userId={user.id} postId={postId}/> : <>

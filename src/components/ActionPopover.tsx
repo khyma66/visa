@@ -33,7 +33,7 @@ export function ActionPopover({label,trigger,children,triggerClassName='post-opt
     return()=>{document.removeEventListener('pointerdown',pointer);document.removeEventListener('focusin',focus);document.removeEventListener('keydown',escape);window.removeEventListener('resize',reposition);document.removeEventListener('scroll',scroll,true);};
   },[open]);
   return <>
-    <button ref={button} type="button" className={triggerClassName} aria-label={label} aria-expanded={open} aria-controls={open?id:undefined} aria-haspopup="dialog" onClick={()=>open?close():setOpen(true)}>{trigger}</button>
+    <button ref={button} type="button" className={triggerClassName} title={label} aria-label={label} aria-expanded={open} aria-controls={open?id:undefined} aria-haspopup="dialog" onClick={()=>open?close():setOpen(true)}>{trigger}</button>
     {open&&createPortal(<div ref={panel} id={id} role="dialog" aria-label={label} tabIndex={-1} className="post-options-panel" style={{...position,maxHeight:position?`calc(100dvh - ${position.top+8}px)`:undefined,visibility:position?'visible':'hidden'}} onClick={event=>{if((event.target as Element).closest('a,[data-close-popover]'))close();}} onKeyDown={event=>{
       if((event.target as Element).closest('dialog'))return;
       const items=[...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],summary')].filter(item=>item.getClientRects().length>0);
