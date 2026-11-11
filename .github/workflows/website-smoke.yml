@@ -1,0 +1,72 @@
+name: Read-only production site monitoring
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '37 11 * * *'
+  pull_request:
+    paths: ['tactical-smoke/**', '.github/workflows/website-smoke.yml']
+  push:
+    branches: [main]
+    paths: ['tactical-smoke/**', '.github/workflows/website-smoke.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visathreads-read-only-post-monitor-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  contracts:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: tactical-smoke
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tactical-smoke/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npx --no-install playwright install --with-deps chromium
+      - run: npm run test:fixtures
+
+  production:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'schedule' && vars.PRODUCTION_SITE_SMOKE_PAUSED != 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: tactical-smoke
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tactical-smoke/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - name: Confirm fixed production-only read budget
+        run: npm run preflight
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Open production homepage and reload once without engagement writes
+        run: npm run test:production
+      - name: Retain failure-only evidence for one day
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: read-only-post-failure-${{ github.run_id }}
+          path: tactical-smoke/test-results/production/
+          retention-days: 1
+          if-no-files-found: ignore
