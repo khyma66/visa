@@ -1,0 +1,14 @@
+{
+  "name": "visathreads-read-only-post-monitor",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "check": "node --test tests/policy.test.mjs",
+    "preflight": "node scripts/preflight.mjs",
+    "test:fixtures": "playwright test --config playwright.fixtures.config.ts",
+    "test:production": "playwright test --config playwright.config.ts"
+  },
+  "devDependencies": { "@playwright/test": "1.65.0" }
+}
