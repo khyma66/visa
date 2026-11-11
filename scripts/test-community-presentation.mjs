@@ -93,16 +93,17 @@ test('shared page gutter removes the second centered left rail without forcing r
   }
 });
 
-test('mobile post actions use five equal controls and keep Related off desktop', async () => {
+test('post actions keep votes grouped and Related available only on mobile', async () => {
   const css = await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8');
-  const actionStart = css.indexOf('/* Keep the complete card action row together even on a 320px phone. */');
+  const actionStart = css.indexOf('/* One compact row:');
   const actionCss = css.slice(actionStart);
   assert(actionStart >= 0);
   assert.match(css, /\.post-related-action\s*\{\s*display:\s*none;/);
   assert.match(actionCss, /@media \(max-width: 639px\)/);
-  assert.match(actionCss, /grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/);
-  assert.match(actionCss, /width:\s*100%/);
-  assert.match(actionCss, /height:\s*44px/);
+  assert.match(actionCss, /flex-wrap:\s*nowrap/);
+  assert.match(actionCss, /overflow-x:\s*auto/);
+  assert.doesNotMatch(actionCss, /display:\s*contents/);
+  assert.doesNotMatch(actionCss, /\.vote-score[^}]*display:\s*none/);
   const html = render(QuestionCard, { question: native });
   assert.match(html, new RegExp(`/questions/${native.id}#related-posts`));
   assert.match(html, /class="post-related-action"/);

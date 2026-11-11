@@ -235,10 +235,11 @@ test('public alias presentation does not change source records or topic tags', (
   for (const tag of post.tags) assert(renderDetail(post).includes(`/us/en?tag=${tag}`));
 });
 
-test('cards expose exact reply totals without rounding', () => {
+test('compact reply counts retain exact accessible totals and tooltips', () => {
   const html = renderToStaticMarkup(createElement(QuestionCard, { question: { ...question, answer_count: 1234 } }));
-  assert(visibleText(html).includes('1234 replies'));
-  assert.doesNotMatch(visibleText(html), /1\.2K replies/);
+  assert.match(visibleText(html), /1\.2K/);
+  assert.match(html, /aria-label="1234 replies"/);
+  assert.match(html, /title="1234 replies"/);
 });
 
 test('untracked views never appear as zero or as an inferred count on member or archive posts', () => {
@@ -248,7 +249,7 @@ test('untracked views never appear as zero or as an inferred count on member or 
         const post = { ...question, source, view_count, answer_count };
         const before = structuredClone(post);
         const html = renderToStaticMarkup(createElement(QuestionCard, { question: post }));
-        assert.match(visibleText(html), new RegExp(`\\b${answer_count} ${answer_count === 1 ? 'reply' : 'replies'}\\b`));
+        assert.match(accessibleLabels(html), new RegExp(`\\b${answer_count} ${answer_count === 1 ? 'reply' : 'replies'}\\b`));
         assert.doesNotMatch(`${visibleText(html)} ${accessibleLabels(html)}`, /\bviews?\b/i);
         assert.deepEqual(post, before, 'Replies must not fabricate or rewrite a view count');
         assert.doesNotMatch(visibleText(renderDetail(post)), /\b\d+ views?\b/i);
