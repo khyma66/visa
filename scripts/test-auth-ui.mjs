@@ -393,7 +393,15 @@ test('email code flow shows VisaThreads and retains its return destination', asy
     assert.equal(new URL(call.args[1]).searchParams.get('next'), '/my-communities');
     assert(textOf(h.tree).includes('VisaThreads sign-in email'));
     assert(field(h, 'Sign-in code'));
-    assert(byText(h, 'button', 'Resend in 60s').props.disabled);
+    assert.equal(byText(h, 'button', 'Resend code').props.disabled,false);
+    const pending=deferred();h.handlers.requestCode=()=>pending.promise;
+    const resend=byText(h,'button','Resend code').props.onClick;
+    resend();resend();await h.settle();
+    assert.equal(h.calls.filter(c=>c.name==='requestCode').length,2,'Only one resend is allowed while its request is pending');
+    assert(byText(h,'button','Resend code').props.disabled);
+    pending.resolve();await h.settle();
+    assert.equal(byText(h,'button','Resend code').props.disabled,false,'No timed wait after a completed request');
+    assert.doesNotMatch(textOf(h.tree),/Resend in|Try again in/);
   } finally { h.close(); }
 });
 

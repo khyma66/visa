@@ -38,7 +38,7 @@ function render(values={},signup=false,auth={}){
 const button=(html,label)=>[...html.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)].map(match=>match[0]).find(markup=>markup.includes(label));
 
 test('login requires email and password by default while retaining an email-code alternative',()=>{
-  const html=render({11:{google:true,phone:false}});
+  const html=render({10:{google:true,phone:false}});
   assert.match(html,/name="email"/);
   assert.match(html,/name="password"/);
   assert.match(html,/autoComplete="current-password"/);
@@ -72,7 +72,7 @@ test('OAuth errors take priority over a stored session and manual visits never s
 
 test('unconfigured Google stays visible but the simple email prompt remains primary',()=>{
   for(const signup of [false,true]){
-    const html=render({11:{google:false,phone:false}},signup);
+    const html=render({10:{google:false,phone:false}},signup);
     assert.match(button(html,'Continue with Google'),/disabled=""/);
     assert.match(button(html,'Continue with Google'),/Not available yet/);
     assert.doesNotMatch(html,/aria-label="Sign-in contact method"|Not available yet<\/button>/);
@@ -80,7 +80,7 @@ test('unconfigured Google stays visible but the simple email prompt remains prim
   }
 });
 test('configured Google and phone keep one primary prompt with a secondary phone link',()=>{
-  const html=render({11:{google:true,phone:true}});
+  const html=render({10:{google:true,phone:true}});
   assert.doesNotMatch(button(html,'Continue with Google'),/disabled=""/);
   assert.match(html,/Use phone instead/);
   assert.doesNotMatch(html,/Sign-in contact method/);
@@ -90,22 +90,22 @@ test('loading and failed settings keep provider actions disabled and allow retry
   const loading=render();
   assert.match(loading,/Checking sign-in options/);
   assert.match(button(loading,'Continue with Google'),/disabled=""/);
-  const failed=render({12:true});
+  const failed=render({11:true});
   assert.match(failed,/Retry/);
   assert.match(button(failed,'Continue with Google'),/disabled=""/);
 });
 test('phone mode uses telephone input and SMS verification without a password',()=>{
-  const phone=render({4:true,5:'phone',11:{google:true,phone:true}});
+  const phone=render({4:true,5:'phone',10:{google:true,phone:true}});
   assert.match(phone,/type="tel"/);
   assert.doesNotMatch(phone,/type="password"/);
   assert.match(phone,/Use phone instead/);
-  const verify=render({1:'+15551234567',4:true,5:'phone',6:'code',11:{google:true,phone:true}});
+  const verify=render({1:'+15551234567',4:true,5:'phone',6:'code',10:{google:true,phone:true}});
   assert.match(verify,/Check your phone/);
   assert.match(verify,/autoComplete="one-time-code"/);
   assert.match(verify,/Use a different phone/);
 });
 test('email signup collects private names and policy acknowledgement happens only after sign-in',()=>{
-  const signup=render({11:{google:true,phone:true}},true);
+  const signup=render({10:{google:true,phone:true}},true);
   const inputs=[...signup.matchAll(/<input\b[^>]*>/g)].map(match=>match[0]);
   assert.match(inputs.find(input=>input.includes('name="firstName"')),/required=""/);
   assert.match(inputs.find(input=>input.includes('name="lastName"')),/required=""/);
@@ -113,11 +113,11 @@ test('email signup collects private names and policy acknowledgement happens onl
   assert.match(inputs.find(input=>input.includes('name="password"')),/required=""/);
   assert.match(inputs.find(input=>input.includes('name="passwordConfirmation"')),/required=""/);
   assert.doesNotMatch(signup,/type="checkbox"/);
-  assert.doesNotMatch(render({11:{google:true,phone:true}}),/type="checkbox"/);
+  assert.doesNotMatch(render({10:{google:true,phone:true}}),/type="checkbox"/);
   assert.doesNotMatch(signup,/Your full name stays private|Only your first initial appears/);
   assert.match(signup,/href="\/terms"/);
   assert.match(signup,/href="\/privacy"/);
-  for(const html of [render({11:{google:true,phone:true}}),render({5:'phone',11:{google:true,phone:true}},true),render({6:'code'},true)]) assert.doesNotMatch(html,/name="firstName"|name="lastName"/);
+  for(const html of [render({10:{google:true,phone:true}}),render({5:'phone',10:{google:true,phone:true}},true),render({6:'code'},true)]) assert.doesNotMatch(html,/name="firstName"|name="lastName"/);
 });
 
 function findElement(tree,predicate) {
@@ -141,7 +141,7 @@ function interactive(t,{values={},auth={},signup=true,query='?next=/messages'}={
 
 test('Google signup launches without email names or a preliminary checkbox',async t=>{
   const calls=[];
-  const {tree}=interactive(t,{values:{11:{google:true,phone:false}},auth:{signInWithProvider:async(...args)=>{calls.push(args);}}});
+  const {tree}=interactive(t,{values:{10:{google:true,phone:false}},auth:{signInWithProvider:async(...args)=>{calls.push(args);}}});
   const google=findElement(tree,node=>node.type==='button'&&renderToStaticMarkup(node).includes('Continue with Google'));
   assert.equal(google.props.type,'button','Email form validation must not block Google');
   google.props.onClick();await tick();
@@ -152,7 +152,7 @@ test('Google signup launches without email names or a preliminary checkbox',asyn
 
 test('email signup passes required password and names to registration then shows confirmation',async t=>{
   const calls=[];
-  const {tree,state}=interactive(t,{values:{0:'ada@example.invalid',3:'correct-horse-battery-staple',14:'Ada',15:'Lovelace',20:'correct-horse-battery-staple'},auth:{register:async(...args)=>{calls.push(args);return false;}}});
+  const {tree,state}=interactive(t,{values:{0:'ada@example.invalid',3:'correct-horse-battery-staple',13:'Ada',14:'Lovelace',19:'correct-horse-battery-staple'},auth:{register:async(...args)=>{calls.push(args);return false;}}});
   findElement(tree,node=>node.type==='form').props.onSubmit({preventDefault(){}});await tick();
   assert.equal(calls.length,1);
   assert.equal(calls[0][0],'ada@example.invalid');
@@ -164,7 +164,7 @@ test('email signup passes required password and names to registration then shows
   assert(findElement(confirmation,node=>node.type==='form'));
   assert(renderToStaticMarkup(confirmation).includes('Confirmation code'));
   assert.equal(state.values[3],'');
-  assert.equal(state.values[20],'');
+  assert.equal(state.values[19],'');
   assert.deepEqual(state.redirects,[]);
 });
 test('typography uses a local system font, readable shared scale and responsive headings',async()=>{
