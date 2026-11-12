@@ -60,7 +60,7 @@ export function PasswordRecovery({ update = false }: { update?: boolean }) {
         setMessage('Password updated.');
       } else {
         await requestPasswordRecovery(getSupabase(), email, `${window.location.origin}/account/update-password`, captchaToken);
-        setDone(true); setMessage('If an account exists, check your inbox or spam folder for a recovery link. Open it in this browser.');
+        setMessage('If an account exists, check your inbox or spam folder for a recovery link. Use the newest email and open its link in this browser.');
       }
     } catch (reason) { setError(authErrorMessage(reason, { action: update ? 'update-password' : 'request-recovery' })); }
     finally { inFlight.current = false; setBusy(false); if (!update) { setCaptchaToken(''); setCaptchaReset(value => value + 1); } }
