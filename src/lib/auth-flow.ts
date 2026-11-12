@@ -1,14 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export const MIN_PASSWORD_LENGTH = 12;
+export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_PASSWORD_LENGTH = 128;
-export const PASSWORD_GUIDANCE = 'Use a unique password with 12–128 characters.';
+export const PASSWORD_GUIDANCE = 'At least 8 characters.';
 
 export type SocialProvider = 'google';
 export type AuthMethods = { google: boolean; phone: boolean };
 export type SignupNames = { firstName: string; lastName: string; contactPhone?: string };
 export type AuthErrorContext = {
-  action?: 'request-code' | 'verify-code' | 'password' | 'signup' | 'oauth' | 'sign-out';
+  action?: 'request-code' | 'verify-code' | 'password' | 'signup' | 'oauth' | 'sign-out' | 'request-recovery' | 'update-password';
   createAccount?: boolean;
   channel?: 'email' | 'phone';
 };
@@ -28,12 +28,16 @@ export function authCallbackUrl(origin: string, next: string | null): string {
 }
 
 export function authErrorMessage(reason: unknown, context: AuthErrorContext = {}): string {
-  const error = reason as { code?: string; status?: number } | null;
+  const error = reason as { code?: string; status?: number; name?: string } | null;
+  const recovery = context.action === 'request-recovery' || context.action === 'update-password';
   const requestFailure = context.createAccount
     ? 'We couldn’t send your verification code. Check your details and try again. Already a member? Choose Log In.'
     : 'We couldn’t send a sign-in code. Check your details. New to VisaThreads? Choose Sign Up first.';
   if (error?.code === 'policy_required') return 'Please review the policies and confirm your eligibility first.';
   if (error?.status === 429 || ['over_email_send_rate_limit', 'over_sms_send_rate_limit', 'over_request_rate_limit'].includes(error?.code ?? '')) return 'Too many attempts. Please wait a few minutes before trying again.';
+  if (recovery && (['otp_expired', 'flow_state_expired', 'flow_state_not_found', 'bad_code_verifier', 'session_not_found', 'session_expired', 'refresh_token_not_found', 'refresh_token_already_used', 'bad_jwt'].includes(error?.code ?? '') || error?.name === 'AuthSessionMissingError')) return 'Your recovery session has expired. Request a new link and open it in the same browser.';
+  if (error?.code === 'same_password') return 'Choose a new password that differs from your current password.';
+  if (recovery && ['reauthentication_needed', 'reauthentication_not_valid', 'insufficient_aal'].includes(error?.code ?? '')) return 'Verify your account again using a new recovery link before changing your password.';
   // Supabase also returns otp_disabled when create_user:false cannot find an
   // account. At the request step it does not prove OTP is globally unavailable.
   if (error?.code === 'otp_disabled') return context.action === 'request-code' ? requestFailure : 'Code sign-in is not available right now. Try another sign-in option.';
@@ -59,10 +63,13 @@ export function authErrorMessage(reason: unknown, context: AuthErrorContext = {}
   if (error?.code === 'email_provider_disabled') return 'Email sign-in is not available right now. Try another sign-in option.';
   if (error?.code === 'sms_send_failed') return 'Your text message could not be sent. Check the phone number or use email instead.';
   if (error?.code === 'email_address_not_authorized') return 'Email delivery is not available for this address right now. Try another sign-in option.';
-  if (error?.code === 'email_not_confirmed') return 'Verify your email before signing in.';
-  if (['weak_password', 'invalid_password'].includes(error?.code ?? '')) return 'Use a unique password between 12 and 128 characters.';
+  if (error?.code === 'email_not_confirmed') return recovery ? 'Verify your email before changing your password.' : 'Verify your email before signing in.';
+  if (error?.code === 'invalid_password') return `Use between ${MIN_PASSWORD_LENGTH} and ${MAX_PASSWORD_LENGTH} characters.`;
+  if (error?.code === 'weak_password') return 'Choose a different password with at least 8 characters. Avoid common or compromised passwords.';
   if (error?.code === 'password_mismatch') return 'Passwords do not match.';
   if (['captcha_failed', 'captcha_required'].includes(error?.code ?? '')) return 'Complete the security check and try again.';
+  if (context.action === 'request-recovery') return 'We couldn’t send the recovery email. Please try again shortly.';
+  if (context.action === 'update-password') return 'We couldn’t update your password. Please try again.';
   if (context.action === 'request-code') return context.channel === 'phone'
     ? 'Your text message could not be sent. Check your connection and try again.'
     : 'Your verification email could not be sent. Check your connection and try again.';
@@ -183,7 +190,9 @@ export async function setVerifiedPassword(client: SupabaseClient, password: stri
   if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) throw { code: 'invalid_password' };
   // Verify against the auth server, not a client-edited session or metadata.
   const { data: current, error: currentError } = await client.auth.getUser();
-  if (currentError || !current.user?.email_confirmed_at) throw { code: 'email_not_confirmed' };
+  if (currentError) throw currentError;
+  if (!current.user) throw { code: 'session_not_found' };
+  if (!current.user.email_confirmed_at) throw { code: 'email_not_confirmed' };
   const { data, error } = await client.auth.updateUser({ password });
   if (error) throw error;
   if (!data.user) throw new Error('User missing');
