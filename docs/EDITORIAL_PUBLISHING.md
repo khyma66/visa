@@ -119,6 +119,16 @@ The owner cannot use this API to consent for another account.
 The initial migration grants no account consent. Account onboarding UI can expose
 this existing API when the owner supplies the approved contributor roster.
 
+For a small owner-controlled batch, run `node scripts/editorial-consent.mjs` in an
+interactive terminal once as each account owner. The utility asks for the account
+email, shows the exact source, duration and limit, and requires an explicit ALLOW
+before asking for the website password with terminal echo disabled. It keeps the
+session in memory and signs out that temporary session after the grant. It does
+not create accounts, accept policies, approve drafts, schedule or publish. The
+utility does not support accounts requiring an additional CAPTCHA or MFA step;
+those accounts must use their normal sign-in and a compatible authorization flow.
+Never send passwords or tokens in chat or store them in the CSV.
+
 ## Backend and activation
 
 All five editorial tables use the unexposed `private` schema, RLS and revoked

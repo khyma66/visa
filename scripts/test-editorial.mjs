@@ -6,11 +6,28 @@ import { validateReview,ownerRpc,withStageReceipts } from './editorial-review.mj
 import { redact,validateRewrite } from './editorial-rewrite.mjs';
 import { prepareReview } from './editorial-export.mjs';
 import { planSchedule } from './editorial-plan.mjs';
+import { grantConsent, SOURCE } from './editorial-consent.mjs';
 const url='https://www.facebook.com/groups/123/posts/456';
 const original={id:hash(url),source_url:url,source_key:'https://www.facebook.com/groups/123',source_posted_at:'2026-09-03T05:00:00.000Z',source_hash:hash('Original text'),original_text:'Original text',run_id:'I0AI56pOzxvFHTz40'};
 const review={...original,review_decision:'pending',title:'A member asks about H-1B processing',body:'A member asks about H-1B processing and reported delays.',visa_type:'H-1B',post_kind:'question',experience_category:'',tags:['h1b'],review_flags:[],backend_revision:0};
 const consent=(n)=>({author_id:`22222222-2222-4222-8222-${String(n).padStart(12,'0')}`,source_key:original.source_key,enabled:true,daily_limit:1,expires_at:'2027-01-01T00:00:00Z'});
 const approved=(n)=>({...review,id:hash(String(n)),backend_revision:1,review_decision:'approved',reuse_basis:'Written permission from the source author.',reviewer_notes:'Compared all facts to the original source.',author_id:'',scheduled_at:''});
+test('account authorization signs in as the account, grants only its scoped permission and closes the temporary session',async()=>{
+  const calls=[];
+  const client={auth:{
+    signInWithPassword:async value=>{calls.push(['login',value.email]);return {data:{session:{}},error:null};},
+    getUser:async()=>({data:{user:{email:'member@example.com'}},error:null}),
+    signOut:async options=>{calls.push(['logout',options.scope]);return {error:null};}
+  },rpc:async (name,args)=>{calls.push(['rpc',name,args]);return {data:{enabled:true,expires_at:'2026-11-25',daily_limit:3},error:null};}};
+  assert.equal((await grantConsent(client,'member@example.com','password-not-logged')).enabled,true);
+  assert.deepEqual(calls,[['login','member@example.com'],['rpc','editorial_consent',{source:SOURCE,allow_posting:true,days_valid:14,per_day:3}],['logout','local']]);
+});
+test('account authorization rejects a mismatched identity and closes its session without granting',async()=>{
+  let grants=0,logout=0;
+  const client={auth:{signInWithPassword:async()=>({data:{session:{}},error:null}),getUser:async()=>({data:{user:{email:'other@example.com'}},error:null}),signOut:async()=>{logout++;return {error:null};}},rpc:async()=>{grants++;}};
+  await assert.rejects(()=>grantConsent(client,'member@example.com','ignored'),/could not be verified/);
+  assert.equal(grants,0);assert.equal(logout,1);
+});
 test('offline plan rotates accounts and respects daily quotas across Chicago DST',()=>{
   const rows=Array.from({length:8},(_,n)=>approved(n));
   const planned=planSchedule([...rows,{...review,id:hash('pending')}],[1,2,3,4,5].map(consent),{from:'2026-10-31T13:00:00Z',now:'2026-10-31T12:00:00Z'});

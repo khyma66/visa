@@ -66,6 +66,18 @@ before(async()=>{
 });
 after(()=>db.close());
 async function transaction(fn){await db.exec('begin');try{return await fn();}finally{await db.exec('rollback');}}
+test('publisher requires the current website policy without creating acceptance or enabling the queue',()=>transaction(async()=>{
+  await db.query("insert into public.policy_acceptances values($1,'2026-11-05-preview-v4')",[author]);
+  const currentPolicy=await read('20261105060304_post_view_privacy_notice_v4.sql');
+  await db.exec(currentPolicy.match(/create or replace function private\.community_write_guard\(\)[\s\S]*?\$\$;/)[0]);
+  await db.exec("create policy record_current_policy on public.policy_acceptances to authenticated with check (policy_version in ('2026-11-02-preview-v3','2026-11-05-preview-v4'))");
+  await db.exec(await read('20261112042514_editorial_accept_current_policy.sql'));
+  assert.equal(await scalar('select private.editorial_author_eligible($1)',[author]),true);
+  assert.equal(await scalar('select private.editorial_author_eligible($1)',[outsider]),false);
+  assert.equal(await scalar('select enabled from private.editorial_settings'),false);
+  assert.equal(await scalar("select active from cron.job where jobname='visathreads-reviewed-editorial'"),false);
+  assert.equal(await scalar('select count(*)::int from private.editorial_consents'),0);
+}));
 async function claims(user=owner,role='authenticated'){
   await db.exec('reset role');
   await db.query("select set_config('request.jwt.claims',$1,true)",[user?JSON.stringify({sub:user,session_id:session}):'{}']);
