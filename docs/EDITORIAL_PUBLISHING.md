@@ -146,7 +146,7 @@ initial preparation.
 
 Defaults: one due post per tick, at least 60 minutes apart, at most 5 total per day
 and 150 per month, between 8am and 9pm America/Chicago. Database constraints limit
-configuration to 10/day and 300/month. Counters use Chicago calendar boundaries,
+configuration to 12/day and 372/month. Each account remains subject to its own consent limit. Counters use Chicago calendar boundaries,
 including DST. Slots older than 24 hours require rescheduling instead of a burst.
 
 The publisher rechecks current consent/version/expiry, verification, suspension,

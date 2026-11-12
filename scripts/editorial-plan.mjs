@@ -24,7 +24,7 @@ function postingSlots(batch,day,daily,gapMinutes) {
 export function planSchedule(rows, accounts, {from,now=new Date().toISOString(),daily=5,monthly=150,gapMinutes=60}={}) {
   const start=Date.parse(from),clock=Date.parse(now);
   assert(Number.isFinite(start)&&Number.isFinite(clock)&&start>=clock,'Start must be a future ISO timestamp');
-  assert(Number.isInteger(daily)&&daily>=1&&daily<=10&&Number.isInteger(monthly)&&monthly>=1&&monthly<=300,'Invalid posting limits');
+  assert(Number.isInteger(daily)&&daily>=1&&daily<=12&&Number.isInteger(monthly)&&monthly>=1&&monthly<=372,'Invalid posting limits');
   assert(Number.isInteger(gapMinutes)&&gapMinutes>=20&&gapMinutes<=1440,'Invalid posting gap');
   assert(Array.isArray(accounts)&&accounts.length>0&&accounts.length<=100,'Supply 1–100 verified consent records');
   const keys=new Set();

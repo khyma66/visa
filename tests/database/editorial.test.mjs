@@ -95,6 +95,14 @@ test('safe update migration fixes start, publish and shutdown without altering t
   await scalar('select private.editorial_stop_all()');
   assert.equal(await scalar('select enabled from private.editorial_settings'),false);
 }));
+test('sitewide 12-post limit preserves individual permissions and fake views setting',()=>transaction(async()=>{
+  const sql=(await read('20261112213049_editorial_raise_sitewide_limit.sql')).replace(/^begin;\n/i,'').replace(/commit;\s*$/i,'');
+  await db.exec(sql);
+  const settings=(await db.query('select daily_limit,monthly_limit,tactical_views_enabled from private.editorial_settings where singleton=true')).rows[0];
+  assert.equal(settings.daily_limit,12);assert.equal(settings.monthly_limit,372);
+  assert.equal(await scalar("select pg_get_constraintdef(oid) like '%<= 3%' from pg_constraint where conrelid='private.editorial_consents'::regclass and conname='editorial_consents_daily_limit_check'"),true);
+  assert.equal(await scalar('select count(*)::int from private.editorial_consents'),0);
+}));
 async function claims(user=owner,role='authenticated'){
   await db.exec('reset role');
   await db.query("select set_config('request.jwt.claims',$1,true)",[user?JSON.stringify({sub:user,session_id:session}):'{}']);
