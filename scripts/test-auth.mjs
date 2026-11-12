@@ -202,7 +202,6 @@ test('code template and screen keep branding and security boundaries', async () 
   assert(form.includes('Phone number'));
   assert(form.includes('Continue with Google'));
   assert(form.includes('role="alert"'));
-  assert(form.includes('setCooldown(60)'));
   assert(form.includes('safeAuthNext'));
   assert(template.includes('{{ .Token }}'));
   assert(template.includes('VisaThreads'));

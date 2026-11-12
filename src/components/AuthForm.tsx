@@ -29,7 +29,6 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
   const [methods, setMethods] = useState<AuthMethods | null>(null);
   const [settingsError, setSettingsError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -76,12 +75,6 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
   }, [user, loading, demoMode, router, signup]);
 
   useEffect(() => {
-    if (!cooldown) return;
-    const timer = window.setTimeout(() => setCooldown(value => Math.max(0, value - 1)), 1000);
-    return () => window.clearTimeout(timer);
-  }, [cooldown]);
-
-  useEffect(() => {
     setReturnTo(safeAuthNext(new URLSearchParams(window.location.search).get('next')));
   }, []);
   const accountHref = (createAccount: boolean) => `${createAccount ? '/signup' : '/login'}${returnTo === '/' ? '' : `?next=${encodeURIComponent(returnTo)}`}#sign-in`;
@@ -104,7 +97,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
         await requestCode(email, callback(), signup, signup ? { firstName, lastName } : undefined, token);
       }
     } finally { resetCaptcha(); }
-    setStep('code'); setCode(''); setCooldown(60);
+    setStep('code'); setCode('');
     setMessage(codeChannel === 'phone'
       ? (signup ? 'Check your text messages for your VisaThreads verification code.' : 'If this number has an account, a sign-in code is on its way. New here? Choose Sign Up.')
       : (signup ? 'Check your inbox and spam folder for your VisaThreads verification code.' : 'If this email has an account, a VisaThreads sign-in email is on its way. New here? Choose Sign Up.'));
@@ -220,11 +213,11 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             {captchaSiteKey && <TurnstileCheck siteKey={captchaSiteKey} resetKey={captchaReset} onToken={setCaptchaToken} />}
             {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
             {message && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
-            <button disabled={busy || loading || (step === 'email' && useCode && cooldown > 0) || Boolean(captchaSiteKey && !captchaToken)} className={buttonClass}>{busy ? 'Please wait…' : step === 'email' ? (signup && codeChannel === 'email' ? 'Sign Up' : !useCode ? 'Log In' : cooldown ? `Try again in ${cooldown}s` : 'Send verification code') : 'Verify & continue'}<ArrowRight aria-hidden="true" size={17} /></button>
+            <button disabled={busy || loading || Boolean(captchaSiteKey && !captchaToken)} className={buttonClass}>{busy ? 'Please wait…' : step === 'email' ? (signup && codeChannel === 'email' ? 'Sign Up' : !useCode ? 'Log In' : 'Send verification code') : 'Verify & continue'}<ArrowRight aria-hidden="true" size={17} /></button>
           </form>}
           {signup && step === 'email' && <p className="mt-3 text-xs leading-5 text-slate-500 capitalize">Before participating, you’ll confirm the <Link href="/terms" target="_blank" rel="noopener" className="underline capitalize">Terms</Link> and <Link href="/privacy" target="_blank" rel="noopener" className="underline capitalize">Privacy notice</Link>. Links open in a new tab.</p>}
           {step === 'email' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm text-teal-700 capitalize"><span className="flex flex-wrap gap-3 capitalize">{methods?.phone && <button type="button" disabled={busy || loading} onClick={() => { setCodeChannel('phone'); setUseCode(true); setPassword(''); setError(''); }} className="capitalize">Use phone instead</button>}{codeChannel === 'phone' && <button type="button" disabled={busy || loading} onClick={() => { setCodeChannel('email'); setUseCode(true); setPassword(''); setError(''); }} className="capitalize">Use email instead</button>}{codeChannel === 'email' && !signup && <button type="button" disabled={busy || loading} onClick={() => { setUseCode(value => !value); setPassword(''); setError(''); }} className="capitalize">{useCode ? 'Use a password instead' : 'Use an email code instead'}</button>}</span>{!signup && <Link href="/account/recovery" className="underline capitalize">Forgot password?</Link>}</div>}
-          {step === 'code' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm font-bold text-teal-700"><button type="button" disabled={busy || cooldown > 0 || Boolean(captchaSiteKey && !captchaToken)} onClick={() => void run(sendCode, { action: 'request-code', createAccount: signup, channel: codeChannel })} className="disabled:text-slate-400">{cooldown ? `Resend in ${cooldown}s` : 'Resend code'}</button><button type="button" disabled={busy || loading} onClick={() => { setStep('email'); setCode(''); setError(''); setMessage(''); }} className="capitalize">Use a different {codeChannel === 'phone' ? 'phone' : 'email'}</button></div>}
+          {step === 'code' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm font-bold text-teal-700"><button type="button" disabled={busy || loading || Boolean(captchaSiteKey && !captchaToken)} onClick={() => void run(sendCode, { action: 'request-code', createAccount: signup, channel: codeChannel })} className="disabled:text-slate-400">Resend code</button><button type="button" disabled={busy || loading} onClick={() => { setStep('email'); setCode(''); setError(''); setMessage(''); }} className="capitalize">Use a different {codeChannel === 'phone' ? 'phone' : 'email'}</button></div>}
           <p className="mt-4 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 capitalize">Your email stays private. We’ll create a public username for you.</p>
         </>}
       </section>
