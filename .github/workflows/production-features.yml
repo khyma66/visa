@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Release actual owner readership totals and separated scheduled publications.
+# Release repeatable account-recovery requests; hosted email templates are applied separately.
 
 on:
   workflow_dispatch:

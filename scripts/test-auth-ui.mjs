@@ -655,6 +655,36 @@ test('password recovery passes and clears the CAPTCHA token, while disabled conf
   } finally { h.close();if(previous===undefined)delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY=previous; }
 });
 
+test('recovery keeps its form available for subsequent emails and retries after delivery limits', async () => {
+  const h = setup();
+  let finish;
+  h.handlers.resetPasswordForEmail = () => new Promise(resolve => { finish = resolve; });
+  const requests = () => h.calls.filter(call => call.name === 'resetPasswordForEmail');
+  try {
+    h.slots = []; h.effects = []; h.render(PasswordRecovery, {}); await h.settle();
+    change(h, 'Account email', 'member@example.invalid');
+    const firstSubmit = nodes(h.tree).find(n => n.type === 'form').props.onSubmit;
+    firstSubmit(event()); firstSubmit(event()); await h.settle();
+    assert.equal(requests().length, 1, 'Concurrent submissions send only one request');
+    assert(byText(h, 'button', 'Please wait…').props.disabled);
+    finish({ error: null }); await h.settle();
+    assert.match(textOf(h.tree), /Use the newest email/);
+    assert.equal(byText(h, 'button', 'Send recovery email').props.disabled, false);
+    h.handlers.resetPasswordForEmail = async () => ({ error: { status: 429, code: 'over_email_send_rate_limit' } });
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    assert.equal(requests().length, 2);
+    assert.match(textOf(h.tree), /Too many attempts/);
+    assert.doesNotMatch(textOf(h.tree), /If an account exists/);
+    assert.equal(byText(h, 'button', 'Send recovery email').props.disabled, false);
+    h.handlers.resetPasswordForEmail = async () => ({ error: null });
+    nodes(h.tree).find(n => n.type === 'form').props.onSubmit(event()); await h.settle();
+    assert.equal(requests().length, 3);
+    assert(requests().every(call => call.args[1].redirectTo === `${window.location.origin}/account/update-password`));
+    assert(!nodes(h.tree).some(n => n.props?.role === 'alert'));
+    assert(field(h, 'Account email'));
+  } finally { h.close(); }
+});
+
 test('compact signup marks every required input and associates the existing password guidance',async()=>{
  const h=setup({signup:true});
  try{
@@ -760,8 +790,8 @@ test('recovery delivery keeps account privacy and blocks duplicate submissions b
     assert.equal(h.calls.filter(c=>c.name==='resetPasswordForEmail').length,1);
     assert(field(h,'Account email').props.disabled);assert(byText(h,'button','Please wait').props.disabled);
     pending.resolve({error:null});await h.settle();
-    assert.match(textOf(h.tree),/If an account exists/);assert.match(textOf(h.tree),/Open it in this browser/);
-    assert.equal(nodes(h.tree).filter(n=>n.type==='form').length,0);
+    assert.match(textOf(h.tree),/If an account exists/);assert.match(textOf(h.tree),/open its link in this browser/);
+    assert.equal(nodes(h.tree).filter(n=>n.type==='form').length,1);
     assert.equal(h.calls.find(c=>c.name==='resetPasswordForEmail').args[0],'member@example.invalid');
   }finally{h.close();}
 });
