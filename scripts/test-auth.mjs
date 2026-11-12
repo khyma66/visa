@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
+import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'node:crypto';
 
 const source = await readFile(new URL('../src/lib/auth-flow.ts', import.meta.url), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
@@ -259,19 +261,112 @@ test('optional CAPTCHA passes fresh tokens to every supported Auth request and f
   } finally { if (previous === undefined) delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY; else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = previous; }
 });
 
-test('signup and password changes preserve the existing twelve-character boundary and password text', async () => {
+test('signup and password changes accept eight characters without character-mix requirements', async () => {
   const calls=[];
   const client={auth:{signUp:async input=>{calls.push(input.password);return{data:{user:{id:'fixture'},session:null},error:null};},getUser:async()=>({data:{user:{email_confirmed_at:'2026-11-03T00:00:00Z'}},error:null}),updateUser:async input=>{calls.push(input.password);return{data:{user:{id:'fixture'}},error:null};}}};
-  for(const password of ['abcdefghijkl','123456789012','with a space','!?@#%^&*()_-',' a password ','x'.repeat(128)]){
+  for(const password of ['abcdefgh','12345678','with gap','!?@#%^&*',' a pass ','x'.repeat(128)]){
     await flow.registerWithPassword(client,'fixture@example.invalid',password,'https://visathreads.com/login',{firstName:'Ada',lastName:'Lovelace'});
     await flow.setVerifiedPassword(client,password);
     assert.deepEqual(calls.slice(-2),[password,password]);
   }
   const count=calls.length;
-  for(const password of ['', 'abcdefgh', 'abcdefghijk','x'.repeat(129)]){
+  for(const password of ['', 'abcdefg','x'.repeat(129)]){
     await assert.rejects(()=>flow.registerWithPassword(client,'fixture@example.invalid',password,'https://visathreads.com/login',{firstName:'Ada',lastName:'Lovelace'}),error=>error.code==='invalid_password');
     await assert.rejects(()=>flow.setVerifiedPassword(client,password),error=>error.code==='invalid_password');
   }
   assert.equal(calls.length,count,'Rejected passwords never reach Auth');
-  assert.equal(flow.MIN_PASSWORD_LENGTH,12);assert.equal(flow.MAX_PASSWORD_LENGTH,128);
+  assert.equal(flow.MIN_PASSWORD_LENGTH,8);assert.equal(flow.MAX_PASSWORD_LENGTH,128);
+});
+
+test('recovery errors distinguish reused passwords, expired sessions, rejected passwords and delivery failures', () => {
+  const context = {action:'update-password'};
+  assert.match(flow.authErrorMessage({code:'same_password'},context),/differs from your current/);
+  for (const code of ['otp_expired','flow_state_expired','bad_code_verifier','session_not_found','session_expired','refresh_token_not_found','bad_jwt']) {
+    assert.match(flow.authErrorMessage({code},context),/new link.*same browser/);
+  }
+  assert.match(flow.authErrorMessage({name:'AuthSessionMissingError'},context),/session has expired/);
+  assert.match(flow.authErrorMessage({code:'weak_password'},context),/common or compromised/);
+  for(const action of ['request-recovery','update-password']) {
+    const message=flow.authErrorMessage(new Error('private server detail'),{action});
+    assert.doesNotMatch(message,/sign-in|private server detail/);
+    assert.match(message,action==='request-recovery'?/send the recovery email/:/update your password/);
+  }
+});
+
+test('password updates preserve server errors and never write after missing or invalid sessions', async () => {
+  let writes=0;
+  const client={auth:{getUser:async()=>({data:{user:null},error:null}),updateUser:async()=>{writes++;}}};
+  await assert.rejects(()=>flow.setVerifiedPassword(client,'newpass8'),e=>e.code==='session_not_found');
+  for(const failure of [{code:'session_expired'},new TypeError('offline')]){
+    client.auth.getUser=async()=>({data:{user:null},error:failure});
+    await assert.rejects(()=>flow.setVerifiedPassword(client,'newpass8'),e=>e===failure);
+  }
+  assert.equal(writes,0);
+});
+
+test('real Auth SDK recovery integration: PKCE, password update, logout and login with new password', async () => {
+  // All HTTP responses are fixtures. This exercises SDK contracts and our helpers,
+  // not live email delivery, CAPTCHA verification or the hosted password policy.
+  const storage = new Map(), calls = [], events = [];
+  const user = {id:'f1234567-1234-4234-8234-123456789abc',email:'reset@example.invalid',email_confirmed_at:'2026-11-01T00:00:00Z',aud:'authenticated',role:'authenticated',app_metadata:{},user_metadata:{}};
+  let password='original-password', challenge, linkUsed=false;
+  const jwt = ['header',Buffer.from(JSON.stringify({sub:user.id,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url'),'signature'].join('.');
+  const session=()=>({access_token:jwt,refresh_token:'fixture-refresh-token',expires_in:3600,token_type:'bearer',user});
+  const failure=(code,status=422)=>Response.json({code,msg:code},{status,headers:{'x-supabase-api-version':'2024-01-01'}});
+  const mockFetch=async(input,init={})=>{
+    const url=new URL(input);assert.equal(url.origin,'https://auth-fixture.invalid','Never contact a real auth server');
+    const body=init.body?JSON.parse(init.body):{};
+    const method=init.method??'GET';calls.push({path:url.pathname,method});
+    if(url.pathname==='/auth/v1/recover'){
+      assert.equal(body.email,user.email);assert.equal(body.code_challenge_method,'s256');
+      assert.equal(body.gotrue_meta_security.captcha_token,'fixture-challenge');
+      assert.equal(new URL(url.searchParams.get('redirect_to')).pathname,'/account/update-password');
+      challenge=body.code_challenge;return Response.json({});
+    }
+    if(url.pathname==='/auth/v1/token'&&url.searchParams.get('grant_type')==='pkce'){
+      if(linkUsed)return failure('flow_state_not_found',400);
+      assert.equal(body.auth_code,'fixture-recovery-code');
+      assert.equal(createHash('sha256').update(body.code_verifier).digest('base64url'),challenge);
+      linkUsed=true;return Response.json(session());
+    }
+    if(url.pathname==='/auth/v1/token'&&url.searchParams.get('grant_type')==='password'){
+      return body.email===user.email&&body.password===password?Response.json(session()):failure('invalid_credentials',400);
+    }
+    if(url.pathname==='/auth/v1/user'){
+      assert.equal(new Headers(init.headers).get('authorization'),`Bearer ${jwt}`);
+      if(method==='PUT'){
+        if(body.password===password)return failure('same_password');
+        if(body.password.length<8)return failure('weak_password');
+        password=body.password;
+      }
+      return Response.json(user);
+    }
+    if(url.pathname==='/auth/v1/logout')return new Response(null,{status:204});
+    assert.fail(`Unexpected fixture request ${method} ${url.pathname}`);
+  };
+  const makeClient=(store=storage)=>createClient('https://auth-fixture.invalid','fixture-public-key',{
+    auth:{flowType:'pkce',detectSessionInUrl:false,autoRefreshToken:false,persistSession:true,storageKey:'recovery-fixture',storage:{getItem:key=>store.get(key)??null,setItem:(key,value)=>store.set(key,value),removeItem:key=>store.delete(key)}},
+    global:{fetch:mockFetch},
+  });
+  const client=makeClient();await client.auth.initialize();
+  const {data:listener}=client.auth.onAuthStateChange(event=>events.push(event));
+  try {
+    await flow.requestPasswordRecovery(client,` ${user.email} `,'https://site-fixture.invalid/account/update-password','fixture-challenge');
+    assert(challenge);
+    const otherBrowser=makeClient(new Map());await otherBrowser.auth.initialize();
+    const missing=await otherBrowser.auth.exchangeCodeForSession('fixture-recovery-code');
+    assert(missing.error);assert.equal(linkUsed,false,'Missing verifier must not consume a link');
+    const recovered=await client.auth.exchangeCodeForSession('fixture-recovery-code');
+    assert.equal(recovered.error,null);assert.equal(recovered.data.user.id,user.id);assert(events.includes('PASSWORD_RECOVERY'));
+    await assert.rejects(()=>flow.setVerifiedPassword(client,password),e=>e.code==='same_password');
+    await flow.setVerifiedPassword(client,'newpass8');assert.equal(password,'newpass8');
+    const reused=await client.auth.exchangeCodeForSession('fixture-recovery-code');assert(reused.error);
+    assert.equal((await client.auth.signOut({scope:'local'})).error,null);
+    assert.equal((await client.auth.getSession()).data.session,null);
+    await assert.rejects(()=>flow.signInWithPassword(client,user.email,'original-password','fixture-challenge'),e=>e.code==='invalid_credentials');
+    await flow.signInWithPassword(client,user.email,'newpass8','fixture-challenge');
+    assert.equal((await client.auth.getUser()).data.user.id,user.id);
+    assert.equal(calls.filter(c=>c.path==='/auth/v1/user'&&c.method==='PUT').length,2);
+    await client.auth.signOut({scope:'local'});
+  }finally{listener.subscription.unsubscribe();client.auth.stopAutoRefresh();}
 });

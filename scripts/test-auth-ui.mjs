@@ -184,7 +184,7 @@ test('unified workspace mounts one selected panel only after owner authorization
     assert.match(textOf(h.tree),/Sign in as owner/);
   } finally {h.close();}
 });
-dependencies['@/lib/supabase/client'] = dataUrl('export function getAuthMethods(...args){return globalThis.__authHarness.invoke("getAuthMethods", args);} export function getSupabase(){return {auth:{resetPasswordForEmail:(...args)=>globalThis.__authHarness.invoke("resetPasswordForEmail",args)}};}');
+dependencies['@/lib/supabase/client'] = dataUrl('export function getAuthMethods(...args){return globalThis.__authHarness.invoke("getAuthMethods", args);} export function getSupabase(){return {auth:Object.fromEntries(["initialize","getUser","updateUser","resetPasswordForEmail"].map(name=>[name,(...args)=>globalThis.__authHarness.invoke(name,args)]))};}');
 const { AuthForm } = await import(await compile('../src/components/AuthForm.tsx'));
 const { PrivateContactPhone } = await import(await compile('../src/components/PrivateContactPhone.tsx', {
   '@/lib/supabase/client': dataUrl('export const getSupabase=()=>({auth:{getUser:(...args)=>globalThis.__authHarness.invoke("getUser",args),updateUser:(...args)=>globalThis.__authHarness.invoke("updateUser",args)}});'),
@@ -199,6 +199,7 @@ function setup({ loading = false, user = null, search = '', signup = false } = {
   h.auth = { user, loading, profile: null, demoMode: false };
   for (const method of ['requestCode', 'verifyCode', 'login', 'register', 'signInWithProvider']) h.auth[method] = (...args) => h.invoke(method, args);
   h.handlers.getAuthMethods = async () => ({ google: true });
+  h.handlers.initialize = async () => ({ error: null });
   h.router = {replace: url => h.replacements.push(url)};
   h.replacements = []; h.cleanUrls = []; h.timers = new Map(); h.reloads = 0;
   let timerId = 0;
@@ -650,14 +651,14 @@ test('compact signup marks every required input and associates the existing pass
  const h=setup({signup:true});
  try{
   await h.settle();assert.equal(nodes(h.tree).filter(node=>node.type==='section').length,1);
-  assert.equal(byText(h,'a','Sign Up').props['aria-current'],'page');assert.match(textOf(h.tree),/12–128 characters/);
+  assert.equal(byText(h,'a','Sign Up').props['aria-current'],'page');assert.match(textOf(h.tree),/At least 8 characters/);
   assert.doesNotMatch(textOf(h.tree),/No required mix/);
   for(const input of nodes(h.tree).filter(node=>node.type==='input'&&node.props.required)){
    const label=nodes(h.tree).find(node=>node.type==='label'&&nodes(node).includes(input));
    assert(label);assert(nodes(label).some(node=>node.type==='span'&&node.props['aria-hidden']==='true'&&node.props.className?.includes('text-red-600')&&textOf(node)==='*'));
    assert(input.props['aria-label']);
   }
-  assert.equal(field(h,'Password').props.minLength,12);assert.equal(field(h,'Confirm password').props.minLength,12);
+  assert.equal(field(h,'Password').props.minLength,8);assert.equal(field(h,'Confirm password').props.minLength,8);
   assert.equal(field(h,'Password').props['aria-describedby'],'password-guidance');
   assert(nodes(h.tree).some(node=>node.props?.id==='password-guidance'));
   const toggle=()=>nodes(h.tree).find(node=>node.type==='button'&&['Show password','Hide password'].includes(node.props['aria-label']));
@@ -680,12 +681,89 @@ test('account access keeps the regular search, mobile navigation, ask action and
   }
  }finally{h.close();}
 });
-test('recovery preserves the existing password rule with visible guidance and required markers',async()=>{
+test('recovery uses eight characters with visible guidance and required markers',async()=>{
  const h=setup();
  try{
   h.auth.user={id:'fixture'};h.slots=[];h.effects=[];h.render(PasswordRecovery,{update:true});await h.settle();
-  assert.equal(field(h,'New password').props.minLength,12);assert.equal(field(h,'Confirm password').props.minLength,12);
-  assert.equal(field(h,'New password').props['aria-describedby'],'password-guidance');assert.match(textOf(h.tree),/12–128 characters/);
+  assert.equal(field(h,'New password').props.minLength,8);assert.equal(field(h,'Confirm password').props.minLength,8);
+  assert.equal(field(h,'New password').props['aria-describedby'],'password-guidance');assert.match(textOf(h.tree),/At least 8 characters/);
   assert(nodes(h.tree).some(node=>node.props?.id==='password-guidance'));
  }finally{h.close();}
+});
+
+test('reset journey validates, explains same-password rejection, retries and finishes with eight characters', async () => {
+  const h=setup({user:{id:'member-a'}});
+  h.handlers.getUser=async()=>({data:{user:{id:'member-a',email_confirmed_at:'2026-11-01'}},error:null});
+  let attempt=0;
+  h.handlers.updateUser=async()=>++attempt===1 ? {data:{user:null},error:{code:'same_password'}} : {data:{user:{id:'member-a'}},error:null};
+  try {
+    h.slots=[];h.effects=[];h.render(PasswordRecovery,{update:true});await h.settle();
+    const submit=async()=>{nodes(h.tree).find(n=>n.type==='form').props.onSubmit(event());await h.settle();};
+    change(h,'New password','1234567');change(h,'Confirm password','1234567');await submit();
+    assert.match(textOf(h.tree),/between 8 and 128/);assert.equal(h.calls.filter(c=>c.name==='getUser').length,0);
+    change(h,'New password','newpass8');await submit();
+    assert.match(textOf(h.tree),/Passwords do not match/);assert.equal(attempt,0);
+    change(h,'Confirm password','newpass8');
+    nodes(h.tree).find(n=>n.props?.['aria-label']==='Show password').props.onClick();h.render();
+    assert.equal(field(h,'New password').props.type,'text');assert.equal(field(h,'Confirm password').props.type,'text');
+    await submit();assert.match(textOf(h.tree),/differs from your current/);assert.doesNotMatch(textOf(h.tree),/complete sign-in/);
+    change(h,'New password','another8');change(h,'Confirm password','another8');await submit();
+    assert.equal(attempt,2);assert.match(textOf(h.tree),/Password updated/);
+    assert.equal(nodes(h.tree).filter(n=>n.type==='input'||n.type==='form').length,0);
+    assert(nodes(h.tree).some(n=>n.props?.href==='/'&&textOf(n)==='Continue to community'));
+    assert.equal(h.slots[1],'');assert.equal(h.slots[2],'');
+  } finally {h.close();}
+});
+
+test('failed recovery callbacks never enable password changes with an older signed-in session', async () => {
+  for(const failure of ['?code=missing-verifier','?error=access_denied&error_description=private-detail','#error_code=otp_expired','initialize-error']) {
+    const h=setup({user:{id:'older-account'}});
+    if(failure.startsWith('?'))window.location.search=failure;
+    if(failure.startsWith('#'))window.location.hash=failure;
+    if(failure==='initialize-error')h.handlers.initialize=async()=>({error:{code:'flow_state_expired'}});
+    try {
+      h.slots=[];h.effects=[];h.render(PasswordRecovery,{update:true});await h.settle();
+      assert.equal(nodes(h.tree).filter(n=>n.type==='form').length,0);
+      assert.match(textOf(h.tree),/couldn’t be verified/);assert.doesNotMatch(textOf(h.tree),/private-detail|missing-verifier/);
+      assert(nodes(h.tree).some(n=>n.props?.href==='/account/recovery'&&textOf(n)==='request another link'));
+      assert.deepEqual(h.cleanUrls,['/account/update-password']);
+      assert.equal(h.calls.filter(c=>c.name==='updateUser').length,0);
+    }finally{h.close();}
+  }
+});
+
+test('password changes wait for callback initialization and require an authenticated session', async () => {
+  const h=setup();const initialization=deferred();h.handlers.initialize=()=>initialization.promise;
+  try {
+    h.slots=[];h.effects=[];h.render(PasswordRecovery,{update:true});await h.settle();
+    assert.match(textOf(h.tree),/Checking your session/);assert.equal(nodes(h.tree).filter(n=>n.type==='input').length,0);
+    initialization.resolve({error:null});await h.settle();
+    assert.equal(nodes(h.tree).filter(n=>n.type==='form').length,0);assert.match(textOf(h.tree),/latest recovery email/);
+  }finally{h.close();}
+});
+
+test('recovery delivery keeps account privacy and blocks duplicate submissions before rendering', async () => {
+  const h=setup();const pending=deferred();h.handlers.resetPasswordForEmail=()=>pending.promise;
+  try {
+    h.slots=[];h.effects=[];h.render(PasswordRecovery,{});await h.settle();
+    change(h,'Account email',' member@example.invalid ');
+    const submit=nodes(h.tree).find(n=>n.type==='form').props.onSubmit;
+    submit(event());submit(event());await h.settle();
+    assert.equal(h.calls.filter(c=>c.name==='resetPasswordForEmail').length,1);
+    assert(field(h,'Account email').props.disabled);assert(byText(h,'button','Please wait').props.disabled);
+    pending.resolve({error:null});await h.settle();
+    assert.match(textOf(h.tree),/If an account exists/);assert.match(textOf(h.tree),/Open it in this browser/);
+    assert.equal(nodes(h.tree).filter(n=>n.type==='form').length,0);
+    assert.equal(h.calls.find(c=>c.name==='resetPasswordForEmail').args[0],'member@example.invalid');
+  }finally{h.close();}
+});
+
+test('recovery email failures have recovery-specific feedback and allow a retry', async () => {
+  const h=setup();h.handlers.resetPasswordForEmail=async()=>({error:{code:'unexpected_failure',message:'private SMTP details'}});
+  try {
+    h.slots=[];h.effects=[];h.render(PasswordRecovery,{});await h.settle();change(h,'Account email','member@example.invalid');
+    nodes(h.tree).find(n=>n.type==='form').props.onSubmit(event());await h.settle();
+    assert.match(textOf(h.tree),/couldn’t send the recovery email/);assert.doesNotMatch(textOf(h.tree),/sign-in|private SMTP/);
+    assert.equal(byText(h,'button','Send recovery email').props.disabled,false);
+  }finally{h.close();}
 });
