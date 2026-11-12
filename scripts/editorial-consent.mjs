@@ -23,7 +23,7 @@ export async function grantConsent(client, email, password) {
     const result = await client.rpc('editorial_consent', { source: SOURCE, allow_posting: true, days_valid: DAYS, per_day: PER_DAY });
     if (result.error || result.data?.enabled !== true)
       throw new Error('Permission could not be saved. Sign in on VisaThreads and accept the current community policies first.');
-    return { enabled: true, expires_at: result.data.expires_at, daily_limit: result.data.daily_limit };
+    return { enabled: true, expires_at: result.data.expires_at, daily_limit: result.data.daily_limit, account_id: verified.data.user.id };
   } finally {
     // Revoke only this temporary session, never other sessions or credentials.
     try {
@@ -33,11 +33,11 @@ export async function grantConsent(client, email, password) {
   }
 }
 
-function ask(question) {
+export function ask(question) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   return new Promise(resolve => rl.question(question, answer => { rl.close(); resolve(answer.trim()); }));
 }
-function passwordPrompt() {
+export function passwordPrompt() {
   const input = process.stdin;
   assert(input.isTTY && process.stdout.isTTY, 'Run this utility in an interactive terminal.');
   const wasRaw = input.isRaw;
@@ -55,6 +55,14 @@ function passwordPrompt() {
     input.on('keypress', keypress);
   });
 }
+export function productionClient() {
+  return createClient(ORIGIN, PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.origin !== ORIGIN) throw new Error('Unexpected authentication destination.');
+      return fetch(input, { ...init, redirect: 'error', signal: AbortSignal.timeout(15000) });
+    } } });
+}
 async function main() {
   assert(process.stdin.isTTY && process.stdout.isTTY, 'Run this utility in an interactive terminal.');
   console.log('Authorize your VisaThreads account for reviewed, attributed community summaries.');
@@ -66,12 +74,7 @@ async function main() {
   if (answer !== 'ALLOW') { console.log('Cancelled; no permission changed.'); return; }
   let password = await passwordPrompt();
   assert(password, 'Password is required.');
-  const client = createClient(ORIGIN, PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { fetch: (input, init) => {
-      const url = new URL(input instanceof Request ? input.url : String(input));
-      if (url.origin !== ORIGIN) throw new Error('Unexpected authentication destination.');
-      return fetch(input, { ...init, redirect: 'error', signal: AbortSignal.timeout(15000) });
-    } } });
+  const client = productionClient();
   try {
     const receipt = await grantConsent(client, email, password);
     console.log(`Permission granted until ${receipt.expires_at}; limit ${receipt.daily_limit} posts/day.`);
