@@ -369,3 +369,21 @@ test('real Auth SDK recovery integration: PKCE, password update, logout and logi
     await client.auth.signOut({scope:'local'});
   }finally{listener.subscription.unsubscribe();client.auth.stopAutoRefresh();}
 });
+
+test('every recovery email includes a reset button, copyable URL and request-specific text', async () => {
+  const template = await readFile(new URL('../supabase/templates/reset-password.html', import.meta.url), 'utf8');
+  const render = (token, url) => template.replaceAll('{{ .Token }}', token).replaceAll('{{ .ConfirmationURL }}', url);
+  const firstUrl = 'https://auth.example.test/verify?token=first&type=recovery&redirect_to=https%3A%2F%2Fvisathreads.com%2Faccount%2Fupdate-password';
+  const secondUrl = firstUrl.replace('token=first', 'token=second');
+  const first = render('123456', firstUrl);
+  const second = render('654321', secondUrl);
+  for (const [html,url,token] of [[first,firstUrl,'123456'],[second,secondUrl,'654321']]) {
+    assert.equal([...html.matchAll(/href="([^"]+)"/g)].filter(match => match[1] === url).length, 2);
+    assert(html.includes(`>${url}</a>`), 'The complete URL remains copyable without button styling');
+    assert(html.indexOf(token) < html.indexOf('Reset password</a>'), 'Request-specific visible text precedes the action');
+    assert(!html.includes('{{'));
+  }
+  assert(!second.includes(firstUrl));
+  assert.match(template, /same browser/);
+  assert.match(template, /newest reset email/);
+});
