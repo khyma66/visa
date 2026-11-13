@@ -5,7 +5,7 @@ The owner requested visibility in ChatGPT search, rather than workspace domain v
 Official crawler guidance: https://developers.openai.com/api/docs/bots
 
 - The production robots route explicitly permits `OAI-SearchBot` while excluding private routes. Model-training crawler settings remain separate.
-- The canonical community landing page and About page emit a server-rendered `WebSite` and `Organization` graph with the real brand, logo and published support contact. The graph uses the request CSP nonce and safe JSON serialization.
+- The community homepage emits a server-rendered `WebSite` and `Organization` graph with the real brand, logo and published support contact, linking to the About page. The graph uses the request CSP nonce and safe JSON serialization.
 - The sitemap lists reviewed public editorial destinations. Existing publication gates still control native discussions and imported content.
 - Preview and UAT deployments remain excluded from search discovery and the public identity graph.
 
