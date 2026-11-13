@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { SiteIdentity } from '@/components/SiteIdentity';
 import { publicPageMetadata, type SearchParameters } from '@/lib/search-metadata';
 
 const title = 'About VisaThreads';
@@ -10,6 +11,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 
 export default function AboutPage() {
   return <main className="page-shell">
+    <SiteIdentity />
     <article className="mx-auto max-w-3xl space-y-7 text-base leading-7 text-slate-700">
       <header>
         <p className="mb-2 text-sm font-semibold text-blue-700 capitalize">Your visa journey, together</p>

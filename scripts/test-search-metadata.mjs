@@ -13,8 +13,32 @@ const { VISA_GUIDES } = await import(guides);
 const visibility = moduleUrl(compile(await read('search-visibility')).replace("'./visa-guides'", JSON.stringify(guides)));
 const presentation = moduleUrl(compile(await read('post-presentation')));
 const metadataUrl = moduleUrl(compile(await read('search-metadata')).replace("'./search-visibility'", JSON.stringify(visibility)).replace("'./post-presentation'", JSON.stringify(presentation)));
-const { publicPageMetadata, eligibleNativeThread, threadStructuredData, serializeStructuredData } = await import(metadataUrl);
+const { publicPageMetadata, eligibleNativeThread, threadStructuredData, serializeStructuredData, siteStructuredData } = await import(metadataUrl);
 const approved = { APP_ENV: 'production', PUBLIC_LAUNCH_APPROVED: 'true', NEXT_PUBLIC_SITE_URL: 'https://visathreads.com' };
+
+test('public site identity links the real brand, website, logo and published support contact', () => {
+  for (const env of [approved, { ...approved, APP_ENV: 'development', PUBLIC_LAUNCH_APPROVED: 'false', SEARCH_DISCOVERY_ENABLED: 'true' }]) {
+    const schema = siteStructuredData(env);
+    const organization = schema['@graph'].find(node => node['@type'] === 'Organization');
+    const website = schema['@graph'].find(node => node['@type'] === 'WebSite');
+    assert.equal(organization.name, 'VisaThreads');
+    assert.equal(organization.contactPoint.email, 'support@visathreads.com');
+    assert.equal(website.publisher['@id'], organization['@id']);
+    assert.equal(website.url, 'https://visathreads.com/us/en');
+    assert.equal(new URL(organization.logo).origin, 'https://visathreads.com');
+    assert.equal(organization.address, undefined);
+    assert.equal(organization.aggregateRating, undefined);
+    assert.deepEqual(JSON.parse(serializeStructuredData(schema)), schema);
+  }
+});
+
+test('site identity is absent on previews, isolated UAT and unapproved origins', () => {
+  for (const env of [{}, { ...approved, PUBLIC_LAUNCH_APPROVED: 'false' },
+    { ...approved, NEXT_PUBLIC_DEPLOYMENT_TARGET: 'development-sandbox', SEARCH_DISCOVERY_ENABLED: 'true' },
+    { ...approved, NEXT_PUBLIC_SITE_URL: 'https://visa-central.com', SEARCH_DISCOVERY_ENABLED: 'true' }]) {
+    assert.equal(siteStructuredData(env), null);
+  }
+});
 
 test('editorial discovery indexes canonical resources but not filters or individual discussions', () => {
   const env = { ...approved, APP_ENV: 'development', PUBLIC_LAUNCH_APPROVED: 'false', SEARCH_DISCOVERY_ENABLED: 'true' };

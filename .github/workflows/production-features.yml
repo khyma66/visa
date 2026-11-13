@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Release repeatable account-recovery requests; hosted email templates are applied separately.
+# Release public website identity and explicit ChatGPT search-crawler discovery rules.
 
 on:
   workflow_dispatch:

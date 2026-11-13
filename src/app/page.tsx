@@ -1,4 +1,5 @@
 import { CommunityHome } from '@/components/CommunityHome';
+import { SiteIdentity } from '@/components/SiteIdentity';
 import { publicPageMetadata, type SearchParameters } from '@/lib/search-metadata';
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<SearchParameters> }) {
@@ -6,5 +7,5 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 }
 
 export default function Home() {
-  return <CommunityHome />;
+  return <><SiteIdentity /><CommunityHome /></>;
 }
