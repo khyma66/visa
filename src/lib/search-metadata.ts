@@ -8,6 +8,29 @@ export type SearchParameters = Record<string, string | string[] | undefined>;
 const SITE_ORIGIN = 'https://visathreads.com';
 export const NATIVE_THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Public brand identity only; never describe accounts, credentials or endorsements. */
+export function siteStructuredData(env: SearchEnvironment = process.env): Record<string, unknown> | null {
+  const origin = publicSearchOrigin(env) ?? discoveryOrigin(env);
+  if (!origin) return null;
+  const organization = `${origin}/#organization`;
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Organization', '@id': organization, name: 'VisaThreads', url: `${origin}/about`,
+        description: 'An independent community for questions and shared experiences about U.S. visas.',
+        logo: `${origin}/assets/brand/visathreads-mark-v1.webp`,
+        contactPoint: { '@type': 'ContactPoint', contactType: 'customer support', email: 'support@visathreads.com', url: `${origin}/contact` },
+      },
+      {
+        '@type': 'WebSite', '@id': `${origin}/#website`, name: 'VisaThreads', url: `${origin}/us/en`, inLanguage: 'en',
+        description: 'U.S. visa questions, shared community experiences, and source-linked resource guides.',
+        publisher: { '@id': organization },
+      },
+    ],
+  };
+}
+
 export function threadPath(question: Pick<Question, 'id' | 'post_kind'>): string {
   return `/us/en/${question.post_kind === 'experience' ? 'experiences' : 'questions'}/${encodeURIComponent(question.id)}`;
 }

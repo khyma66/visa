@@ -72,6 +72,9 @@ test('approved robots excludes all private areas and points at the canonical sit
   assert.equal(robots.rules[0].allow, '/');
   assert.deepEqual(robots.rules[0].disallow, [...PRIVATE_CRAWL_PATHS]);
   assert.deepEqual(robots.rules[1], { userAgent: [...MODEL_USE_CRAWLERS], disallow: '/' });
+  assert.deepEqual(robots.rules.find(rule => rule.userAgent === 'OAI-SearchBot'), {
+    userAgent: 'OAI-SearchBot', allow: '/', disallow: [...PRIVATE_CRAWL_PATHS],
+  });
   for (const crawler of ['Googlebot', 'Bingbot', 'OAI-SearchBot', 'Claude-SearchBot', 'PerplexityBot']) {
     assert(!MODEL_USE_CRAWLERS.includes(crawler));
   }

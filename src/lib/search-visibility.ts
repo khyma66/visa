@@ -70,6 +70,7 @@ export function publicRobots(env: SearchEnvironment = process.env): MetadataRout
     rules: [
       { userAgent: '*', allow: '/', disallow: [...PRIVATE_CRAWL_PATHS] },
       { userAgent: [...MODEL_USE_CRAWLERS], disallow: '/' },
+      { userAgent: 'OAI-SearchBot', allow: '/', disallow: [...PRIVATE_CRAWL_PATHS] },
     ],
     sitemap: `${origin}/sitemap.xml`,
   };
