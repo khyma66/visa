@@ -6,11 +6,59 @@ import { validateReview,ownerRpc,withStageReceipts } from './editorial-review.mj
 import { redact,validateRewrite } from './editorial-rewrite.mjs';
 import { prepareReview } from './editorial-export.mjs';
 import { planSchedule } from './editorial-plan.mjs';
+import { grantConsent, SOURCE } from './editorial-consent.mjs';
+import { nextSlot, preparePilot } from './editorial-pilot.mjs';
+import { authorizeOne } from './editorial-consent-batch.mjs';
 const url='https://www.facebook.com/groups/123/posts/456';
 const original={id:hash(url),source_url:url,source_key:'https://www.facebook.com/groups/123',source_posted_at:'2026-09-03T05:00:00.000Z',source_hash:hash('Original text'),original_text:'Original text',run_id:'I0AI56pOzxvFHTz40'};
 const review={...original,review_decision:'pending',title:'A member asks about H-1B processing',body:'A member asks about H-1B processing and reported delays.',visa_type:'H-1B',post_kind:'question',experience_category:'',tags:['h1b'],review_flags:[],backend_revision:0};
 const consent=(n)=>({author_id:`22222222-2222-4222-8222-${String(n).padStart(12,'0')}`,source_key:original.source_key,enabled:true,daily_limit:1,expires_at:'2027-01-01T00:00:00Z'});
 const approved=(n)=>({...review,id:hash(String(n)),backend_revision:1,review_decision:'approved',reuse_basis:'Written permission from the source author.',reviewer_notes:'Compared all facts to the original source.',author_id:'',scheduled_at:''});
+test('account authorization signs in as the account, grants only its scoped permission and closes the temporary session',async()=>{
+  const calls=[];
+  const client={auth:{
+    signInWithPassword:async value=>{calls.push(['login',value.email]);return {data:{session:{}},error:null};},
+    getUser:async()=>({data:{user:{email:'member@example.com'}},error:null}),
+    signOut:async options=>{calls.push(['logout',options.scope]);return {error:null};}
+  },rpc:async (name,args)=>{calls.push(['rpc',name,args]);return {data:{enabled:true,expires_at:'2026-11-25',daily_limit:3},error:null};}};
+  assert.equal((await grantConsent(client,'member@example.com','password-not-logged')).enabled,true);
+  assert.deepEqual(calls,[['login','member@example.com'],['rpc','editorial_consent',{source:SOURCE,allow_posting:true,days_valid:14,per_day:3}],['logout','local']]);
+});
+test('account authorization rejects a mismatched identity and closes its session without granting',async()=>{
+  let grants=0,logout=0;
+  const client={auth:{signInWithPassword:async()=>({data:{session:{}},error:null}),getUser:async()=>({data:{user:{email:'other@example.com'}},error:null}),signOut:async()=>{logout++;return {error:null};}},rpc:async()=>{grants++;}};
+  await assert.rejects(()=>grantConsent(client,'member@example.com','ignored'),/could not be verified/);
+  assert.equal(grants,0);assert.equal(logout,1);
+});
+test('batch authorization validates each account and uses its own session',async()=>{
+  const calls=[];
+  const client={auth:{signInWithPassword:async x=>{calls.push(x.email);return {data:{session:{}}};},getUser:async()=>({data:{user:{email:'member@example.com',id:'22222222-2222-4222-8222-222222222222'}}}),signOut:async()=>({})},rpc:async()=>({data:{enabled:true,daily_limit:3}})};
+  await assert.rejects(()=>authorizeOne('not-an-email','x',client),/valid account email/);
+  await authorizeOne('member@example.com','x',client);
+  assert.deepEqual(calls,['member@example.com']);
+});
+test('pilot scheduling picks a future slot in the Chicago daytime',()=>{
+  assert.equal(nextSlot(Date.parse('2026-11-11T23:50:00Z')),'2026-11-12T00:15:00.000Z');
+  assert.equal(nextSlot(Date.parse('2026-11-12T03:00:00Z')),'2026-11-12T14:00:00.000Z');
+});
+test('pilot refuses changed settings before any write',async()=>{
+  const calls=[];
+  const client={rpc:async (_name,{operation})=>{calls.push(operation);return {data:{items:[],settings:{enabled:false,tactical_views_enabled:true}}};}};
+  await assert.rejects(()=>preparePilot(client,'22222222-2222-4222-8222-222222222222',async()=>true),/view settings changed/);
+  assert.deepEqual(calls,['list']);
+});
+test('pilot approves and schedules only the verified single post after confirmation',async()=>{
+  const calls=[];
+  const item={id:'6057998d86d5a7521241f76e53c48ef79fd6d614efc28daf790cac11b3b61431',status:'draft',revision:2,
+    title:'Question about an H-1B denial after an RFE response',
+    body:'A community member reports selection in this year’s H-1B lottery, followed by a request for evidence (RFE) in September. The RFE response was submitted on November 1, and on November 5 the member saw a denial status referring to the case being denied and available options. The member asks what that status means and what options are available.',
+    source_url:'https://www.facebook.com/groups/H1B.Visa.Community/permalink/2341109953370786',source_key:SOURCE,source_posted_at:'2026-11-06T16:29:13Z'};
+  const client={rpc:async (_name,{operation,payload})=>{calls.push([operation,payload]);return {data:operation==='list'?{items:[item],settings:{enabled:false,tactical_views_enabled:false}}:{}};}};
+  const result=await preparePilot(client,'22222222-2222-4222-8222-222222222222',async()=>true,Date.parse('2026-11-12T03:00:00Z'));
+  assert.equal(result.scheduled_at,'2026-11-12T14:00:00.000Z');
+  assert.deepEqual(calls.map(c=>c[0]),['list','review','source','schedule','controls']);
+  assert.equal(calls[3][1].author_id,'22222222-2222-4222-8222-222222222222');
+});
 test('offline plan rotates accounts and respects daily quotas across Chicago DST',()=>{
   const rows=Array.from({length:8},(_,n)=>approved(n));
   const planned=planSchedule([...rows,{...review,id:hash('pending')}],[1,2,3,4,5].map(consent),{from:'2026-10-31T13:00:00Z',now:'2026-10-31T12:00:00Z'});
@@ -36,6 +84,14 @@ test('offline plan rejects expired consent, missing review, duplicate identities
 test('monthly limits roll over rather than oversubscribing a calendar month',()=>{
   const planned=planSchedule(Array.from({length:7},(_,n)=>approved(n)),[1,2,3,4,5].map(consent),{from:'2026-10-30T13:00:00Z',now:'2026-10-30T12:00:00Z',monthly:5});
   assert.equal(planned[5].scheduled_at.slice(0,10),'2026-11-01');
+});
+test('sitewide twelve a day needs four accounts with three-post permissions',()=>{
+  const accounts=[1,2,3,4].map(n=>({...consent(n),daily_limit:3}));
+  const planned=planSchedule(Array.from({length:12},(_,n)=>approved(n)),accounts,{from:'2026-11-03T14:00:00Z',now:'2026-11-03T13:00:00Z',daily:12,monthly:372});
+  const chicagoDate=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'});
+  assert.equal(planned.filter(x=>chicagoDate.format(new Date(x.scheduled_at))==='2026-11-03').length,12);
+  for(const account of accounts) assert.equal(planned.filter(x=>x.author_id===account.author_id).length,3);
+  for(let i=1;i<planned.length;i++) assert.ok(Date.parse(planned[i].scheduled_at)-Date.parse(planned[i-1].scheduled_at)>=3600000);
 });
 test('posting proposals spread across the day with stable slots and no quota or gap violations',()=>{
   const rows=Array.from({length:10},(_,n)=>approved(n)),accounts=[1,2,3,4,5].map(consent);

@@ -119,6 +119,16 @@ The owner cannot use this API to consent for another account.
 The initial migration grants no account consent. Account onboarding UI can expose
 this existing API when the owner supplies the approved contributor roster.
 
+For a small owner-controlled batch, run `node scripts/editorial-consent.mjs` in an
+interactive terminal once as each account owner. The utility asks for the account
+email, shows the exact source, duration and limit, and requires an explicit ALLOW
+before asking for the website password with terminal echo disabled. It keeps the
+session in memory and signs out that temporary session after the grant. It does
+not create accounts, accept policies, approve drafts, schedule or publish. The
+utility does not support accounts requiring an additional CAPTCHA or MFA step;
+those accounts must use their normal sign-in and a compatible authorization flow.
+Never send passwords or tokens in chat or store them in the CSV.
+
 ## Backend and activation
 
 All five editorial tables use the unexposed `private` schema, RLS and revoked
@@ -136,7 +146,7 @@ initial preparation.
 
 Defaults: one due post per tick, at least 60 minutes apart, at most 5 total per day
 and 150 per month, between 8am and 9pm America/Chicago. Database constraints limit
-configuration to 10/day and 300/month. Counters use Chicago calendar boundaries,
+configuration to 12/day and 372/month. Each account remains subject to its own consent limit. Counters use Chicago calendar boundaries,
 including DST. Slots older than 24 hours require rescheduling instead of a burst.
 
 The publisher rechecks current consent/version/expiry, verification, suspension,
