@@ -267,11 +267,12 @@ test('real disclosure starts collapsed with one accessible trigger and no expose
   assert.equal((html.match(/<button/g)??[]).length,1);
   assert.doesNotMatch(html,/private-action|>Save<|role="dialog"/);
 });
-test('cards expose replies and the mobile related destination outside the action disclosure', () => {
+test('cards expose replies and a text-labelled Related destination outside the action disclosure', () => {
   const html=renderToStaticMarkup(createElement(QuestionCard,{question}));
   assert.match(html,new RegExp(`/questions/${question.id}#reply`));
   assert.match(html,new RegExp(`/questions/${question.id}#related-posts`));
   assert.match(html,/class="post-related-action"/);
+  assert.match(html,/class="post-related-action">\s*Related\s*<\/a>/);
   assert.doesNotMatch(html,/>Reply<|>Message user</);
 });
 

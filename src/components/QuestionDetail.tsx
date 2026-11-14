@@ -9,7 +9,7 @@ import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Check, CheckCircle2, Ellipsis, GitFork, MessageCircle } from 'lucide-react';
+import { Check, CheckCircle2, Ellipsis, MessageCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   acceptAnswer, createAnswer, getAnswerPage, getDiscussionContext, getQuestion, sortAnswers,
@@ -167,7 +167,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
               <div className="feed-post-toolbar post-toolbar mt-4">
                 <VoteControls key={`${question.id}:${user?.id}`} id={question.id} kind={imported?'archive_question':'question'} score={imported?0:question.vote_score} authorId={question.author_id} path={threadPath}/>
                 <Link href={`${threadPath}#reply`} onClick={()=>document.getElementById('reply-body')?.focus()} className="post-reply-action" title={`${question.answer_count} ${question.answer_count===1?'reply':'replies'}`} aria-label={`${question.answer_count} ${question.answer_count===1?'reply':'replies'}`}><MessageCircle size={20} aria-hidden="true"/><span className="post-reply-count" aria-hidden="true">{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(question.answer_count)}</span></Link>
-                <Link href="#related-posts" title="Related posts" aria-label={`Related posts for ${question.title}`} className="post-related-action"><GitFork size={20} aria-hidden="true"/></Link>
+                <Link href="#related-posts" title="Related posts" aria-label={`Related posts for ${question.title}`} className="post-related-action">Related</Link>
                 <PostActions content={question} onChanged={deleted=>{if(deleted)window.location.assign('/us/en');else void load();}} postId={question.id} path={threadPath} imported={imported}/>
               </div>
             </div>
