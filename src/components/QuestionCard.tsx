@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import {EditedLabel} from './EditedLabel';
-import { CheckCircle2, GitFork, MessageCircle } from 'lucide-react';
+import { CheckCircle2, MessageCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 import type { Question } from '@/lib/types';
@@ -46,7 +46,7 @@ export function QuestionCard({ question, onTagSelect, onSelect, selected = false
               <span className="post-reply-count" aria-hidden="true">{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(question.answer_count)}</span>
             </Link>
             <Link href={`${path}#related-posts`} title="Related posts" aria-label={`Related posts for ${question.title}`} className="post-related-action">
-              <GitFork size={20} aria-hidden="true" />
+              Related
             </Link>
 
             <PostActions content={question} postId={question.id} path={path} imported={imported}/>

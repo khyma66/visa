@@ -93,23 +93,26 @@ test('shared page gutter removes the second centered left rail without forcing r
   }
 });
 
-test('post actions keep votes grouped and Related available only on mobile', async () => {
+test('post actions keep votes grouped and Related visibly labelled at every size', async () => {
   const css = await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8');
-  const actionStart = css.indexOf('/* One compact row:');
+  const actionStart = css.indexOf('/* One compact row when space allows;');
   const actionCss = css.slice(actionStart);
   assert(actionStart >= 0);
-  assert.match(css, /\.post-related-action\s*\{\s*display:\s*none;/);
+  assert.doesNotMatch(actionCss, /\.post-related-action\s*\{[^}]*display:\s*none/);
   assert.match(actionCss, /@media \(max-width: 639px\)/);
   assert.match(actionCss, /flex-wrap:\s*nowrap/);
-  assert.match(actionCss, /overflow-x:\s*auto/);
+  assert.match(actionCss, /\.feed-post-toolbar\s*\{[^}]*flex-wrap:\s*wrap/);
+  assert.doesNotMatch(actionCss, /overflow-x:\s*(auto|hidden)/);
   assert.doesNotMatch(actionCss, /display:\s*contents/);
   assert.doesNotMatch(actionCss, /\.vote-score[^}]*display:\s*none/);
   const html = render(QuestionCard, { question: native });
   assert.match(html, new RegExp(`/questions/${native.id}#related-posts`));
   assert.match(html, /class="post-related-action"/);
+  assert.match(html, /class="post-related-action">\s*Related\s*<\/a>/);
   const detail = render(QuestionDetail, { initialQuestion: native }, { user: { id: bob } });
   assert.match(detail, /class="feed-post-toolbar post-toolbar mt-4"/);
   assert.match(detail, /href="#related-posts"/);
+  assert.match(detail, /class="post-related-action">Related<\/a>/);
   assert.match(render(RelatedQuestions, { context: native }), /id="related-posts"/);
 });
 

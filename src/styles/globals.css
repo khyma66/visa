@@ -382,9 +382,9 @@
   .notification-dot { background: Highlight; border: 1px solid CanvasText; box-shadow: none; }
 }
 
-/* One compact row: grouped arrow votes, replies, related posts and options. */
+/* One compact row when space allows; keep every action visible on narrow cards. */
 .post-toolbar, .feed-post-toolbar { --post-action-size: 40px; display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 6px; min-width: 0; }
-.feed-post-toolbar { container: post-actions / inline-size; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; padding: 3px; }
+.feed-post-toolbar { container: post-actions / inline-size; flex-wrap: wrap; padding: 3px; }
 .vote-control-wrap { display: flex; flex: 0 0 auto; flex-direction: column; min-width: 0; }
 .vote-controls { display: inline-flex; align-self: flex-start; align-items: center; flex-shrink: 0; border-radius: 8px; background: #eef1f3; color: #334155; }
 .vote-controls button { display: inline-flex; justify-content: center; align-items: center; width: var(--post-action-size, 40px); height: var(--post-action-size, 40px); padding: 0; flex-shrink: 0; border-radius: 8px; }
@@ -401,8 +401,8 @@
 .post-reply-action:hover, .post-related-action:hover, :is(.post-toolbar, .feed-post-toolbar) .post-options-trigger:hover { background: #dfe5e9; }
 .post-reply-action[data-accepted="true"] { background: #ecfdf5; color: #065f46; }
 .post-reply-count { font-variant-numeric: tabular-nums; }
-.post-related-action, :is(.post-toolbar, .feed-post-toolbar) .post-options-trigger { width: var(--post-action-size, 40px); padding: 0; }
-.post-related-action { display: none; }
+:is(.post-toolbar, .feed-post-toolbar) .post-options-trigger { width: var(--post-action-size, 40px); padding: 0; }
+.post-related-action { padding-inline: 8px; }
 :is(.post-toolbar, .feed-post-toolbar) svg { flex-shrink: 0; }
 .vote-error { max-width: 112px; margin-top: 6px; font-size: .75rem; line-height: 1.5; color: #be123c; }
 .post-preview-select:focus-visible { outline: 2px solid #115e59; outline-offset: 3px; }
@@ -411,12 +411,12 @@
 }
 @media (max-width: 639px) {
   .feed-post-toolbar { gap: 4px; }
-  .feed-post-toolbar .post-related-action { display: inline-flex; }
 }
 /* Scale controls to the card width, including narrow resized desktop panels. */
 @container post-actions (max-width: 287px) {
   .vote-control-wrap, .post-reply-action, .post-related-action, .post-options-trigger { --post-action-size: 36px; }
   .post-reply-action { padding-inline: 6px; gap: 4px; }
+  .post-related-action { padding-inline: 6px; }
 }
 @media (forced-colors: active) {
   .vote-controls, .post-reply-action, .post-related-action, :is(.post-toolbar, .feed-post-toolbar) .post-options-trigger { outline: 1px solid ButtonText; outline-offset: -1px; }
