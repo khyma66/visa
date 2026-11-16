@@ -34,9 +34,10 @@ const { VoteControls } = await load('VoteControls');
 const { ActionPopover } = await load('ActionPopover');
 const h = React.createElement;
 function toolbar(score, comment = false) {
+  const replies = score < 0 ? '12.5K' : '12';
   return h('div', { className: comment ? 'post-toolbar mt-4' : 'feed-post-toolbar mt-3' },
     h(VoteControls, { id: `fixture-${score}`, kind: comment ? 'answer' : 'question', score, authorId: null, path: '#fixture' }),
-    !comment && h('a', { className: 'post-reply-action', href: '#reply', 'aria-label': '12 replies' }, h(MessageCircle, { size: 20 }), h('span', { className: 'post-reply-count' }, '12')),
+    !comment && h('a', { className: 'post-reply-action', href: '#reply', 'aria-label': `${replies} replies` }, h(MessageCircle, { size: 20 }), h('span', { className: 'post-reply-count' }, replies)),
     !comment && h('a', { className: 'post-related-action', href: '#related' }, 'Related'),
     h(ActionPopover, { label: 'More post options', trigger: h(Ellipsis, { size: 20 }) }, 'Render-only fixture'));
 }
@@ -48,7 +49,7 @@ createServer(async (request, response) => {
     ? `<h1>Mobile action sizing — isolated rendering</h1><p>Actual vote components and site stylesheet. No live data or voting.</p><div style="display:flex;flex-wrap:wrap;gap:16px">${[320, 360, 390, 430, 768].map(width => `<section><h2>${width}px viewport</h2><iframe title="${width}px viewport" width="${width}" height="700" src="/phone"></iframe></section>`).join('')}<section><h2>320px · 200% text</h2><iframe title="320px enlarged text" width="320" height="900" src="/phone?text=200"></iframe></section></div>`
     : renderToStaticMarkup(h('main', { style: { padding: 16 } },
       h('header', { className: 'mb-4 text-lg font-semibold' }, 'VisaThreads · Post actions'),
-      ...[0, 12500, -1200].map(score => h('article', { key: score, className: 'feed-card bg-white border-b border-slate-200 px-3 py-4' },
+      ...[0, 12500, -12500].map(score => h('article', { key: score, className: 'feed-card bg-white border-b border-slate-200 px-3 py-4' },
         h('h2', { className: 'text-thread-title font-semibold' }, score === 0 ? 'Preparing for a visa interview' : 'A discussion with a larger vote count'),
         h('p', { className: 'mt-2 text-base text-slate-600' }, 'Sample content for checking mobile spacing.'), toolbar(score))),
       h('section', { className: 'px-3 py-4' }, h('h2', { className: 'font-semibold' }, 'Reply actions'), toolbar(8, true))));
@@ -63,7 +64,7 @@ createServer(async (request, response) => {
       controls:[...row.querySelectorAll('button,a')].map(el=>{
         const rect=el.getBoundingClientRect(), icon=el.querySelector('svg')?.getBoundingClientRect();
         return {name:el.className,width:rect.width,height:rect.height,top:rect.top,icon:icon&&[icon.width,icon.height]};
-      }),overflow:row.scrollWidth>row.clientWidth
+      }),singleRow:new Set([...row.querySelectorAll('button,a')].map(el=>el.getBoundingClientRect().top)).size===1,overflow:row.scrollWidth>row.clientWidth
     }));
     parent.postMessage({type:'action-measurements',label:innerWidth+'px / '+getComputedStyle(document.documentElement).fontSize,rows,pageOverflow:document.documentElement.scrollWidth>innerWidth},location.origin);
   </script>`;
