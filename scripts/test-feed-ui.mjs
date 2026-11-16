@@ -20,7 +20,7 @@ const dependencies = {
   'next/link': dataUrl(`import {jsx} from ${JSON.stringify(jsx)}; export default function Link(props){return jsx('a',props);}`),
   'next/navigation': dataUrl('export function useSearchParams(){return new URLSearchParams(globalThis.__feedHarness.search);}'),
   'lucide-react': dataUrl(`function Icon(){return null;} export {${icons.map((name) => `Icon as ${name}`).join(',')}};`),
-  '@/lib/post-categories': dataUrl('export const EXPERIENCE_CATEGORIES=["Other"],VISA_TYPES=["H1B","Other"];'),
+  '@/lib/post-categories': dataUrl('export const EXPERIENCE_CATEGORIES=["Other"],VISA_TYPES=["H1B","F-1 / OPT","H-4","H-4 / EAD","Other"];'),
   '@/lib/community': dataUrl('export async function getCommunitySource(){return {};} export async function getQuestionPage(options){const h=globalThis.__feedHarness;h.calls.push(options);return h.getPage(options);}'),
   '@/lib/realtime': dataUrl('export function subscribeLive(topics){globalThis.__feedHarness.subscriptions.push(topics);return ()=>{};}'),
   './AuthProvider': dataUrl('export function useAuth(){return globalThis.__feedHarness.auth ?? {user:null,demoMode:true};}'),
@@ -445,10 +445,22 @@ test('earlier-discussion provenance keeps legacy source-less records subject to 
   } finally { h.close(); }
 });
 
- test('Home removes source and post-type dropdowns while keeping visa filtering', async () => {
+ test('Home keeps every visa status visible independently of the loaded posts', async () => {
  const h=new Harness();try {h.render();await h.flush();
  for(const label of ['Post source','Post type']) assert(!nodes(h.tree).some(n=>n.props?.['aria-label']===label));
- assert(nodes(h.tree).some(n=>n.props?.['aria-label']==='Visa Type'));
+ assert(nodes(h.tree).some(n=>n.props?.['aria-label']==='Visa status'));
+ for (const label of ['All visas','H1B','F-1 / OPT','H-4','H-4 / EAD','Other']) assert(button(h,label));
+ button(h,'H-4').props.onClick();h.render();await h.flush();
+ assert.equal(h.calls.at(-1).visaType,'H-4');
+ assert.equal(new URLSearchParams(h.search).get('visa'),'H-4');
+ assert.deepEqual(ids(h),[]);
+ assert.match(textOf(h.tree),/No matching H-4 posts/);
+ assert(button(h,'F-1 / OPT'));
+ button(h,'Top').props.onClick();h.render();await h.flush();
+ assert.equal(h.calls.at(-1).visaType,'H-4');assert.equal(h.calls.at(-1).sort,'score');
+ button(h,'All visas').props.onClick();h.render();await h.flush();
+ assert.equal(h.calls.at(-1).visaType,'');assert.equal(h.calls.at(-1).sort,'score');
+ assert.equal(new URLSearchParams(h.search).has('visa'),false);
  }finally{h.close();}
  });
 
