@@ -137,6 +137,11 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   }
 
   function selectTag(value: string) { setTag(value); updateQuery({ tag: value }); }
+  function selectVisa(value: string) {
+    if (value === visaType) return;
+    setVisaType(value);
+    updateQuery({ visa: value });
+  }
   function selectSort(value: SortMode) {
     if (value === sortMode) return;
     setSortMode(value);
@@ -176,7 +181,6 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const selectedPost = pageQuestions.find(question => question.id === selectedPostId) ?? pageQuestions[0];
   const pageNumbers = Array.from({ length: pageCount }, (_, index) => index + 1)
     .filter((value) => value === 1 || value === pageCount || Math.abs(value - currentPage) <= 2);
-  const visaTypes = [...new Set(questions.map((question) => question.visa_type).filter(type => VISA_TYPES.includes(type)))].sort();
   const filtered = Boolean(origin || category || search || visaType || tag || kind !== initialKind || sortMode !== 'newest');
   const popularTags = useMemo(() => {
     const counts = new Map<string, number>();
@@ -228,7 +232,12 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
             <div className="feed-controls">
               <div className="tab-row items-center justify-between">
                 <div className="flex shrink-0 gap-1" aria-label="Sort questions">{SORTS.filter(([value]) => !experience || value !== 'sos').map(([value, label]) => <button key={value} type="button" onClick={() => selectSort(value)} aria-pressed={sortMode === value} className={`feed-sort-button capitalize rounded-lg px-3 py-2 text-sm font-semibold ${sortMode === value ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}</div>
-                <label className="flex min-w-0 items-center gap-1.5 text-sm text-slate-600"><SlidersHorizontal size={15} aria-hidden="true" /><select aria-label="Visa Type" value={visaType} onChange={(event) => { setVisaType(event.target.value); updateQuery({ visa: event.target.value }); }} className="max-w-[180px] rounded bg-transparent py-2 font-medium focus:outline-blue-600"><option value="" className="capitalize">All U.S. Visa Types</option>{visaTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+              </div>
+              <div role="group" aria-label="Visa status" className="mt-3 border-t border-slate-100 pt-3">
+                <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500"><SlidersHorizontal size={14} aria-hidden="true" />Visa status</p>
+                <div className="flex flex-wrap gap-2">
+                  {['', ...VISA_TYPES].map((value) => <button key={value || 'all'} type="button" onClick={() => selectVisa(value)} aria-pressed={visaType === value} className={`min-h-11 rounded-full border px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${visaType === value ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50'}`}>{value || 'All visas'}</button>)}
+                </div>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
                 {(experience || initialKind) && <select aria-label="Post source" value={origin} onChange={event => { const value = event.target.value as typeof origin; setOrigin(value); updateQuery({ origin: value }); }} className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-medium text-slate-700"><option value="" className="capitalize">All Posts</option><option value="member" className="capitalize">Member Posts</option><option value="earlier" className="capitalize">Earlier Discussions</option></select>}
@@ -242,7 +251,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
             {!loading && feedUnavailable && <p className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900 capitalize">Some discussions are temporarily unavailable. Please try again later.</p>}
             {error && <div role="alert" className="my-3 rounded-lg bg-rose-50 p-4 text-sm text-rose-800">{error} <button onClick={() => setRevision((value) => value + 1)} className="font-semibold underline capitalize">Retry</button></div>}
             {loading && !refreshing ? <div role="status" aria-label="Loading questions" className="divide-y divide-slate-100">{[1, 2, 3, 4].map((item) => <div key={item} className="space-y-3 py-5"><div className="h-5 w-2/5 animate-pulse rounded bg-slate-100" /><div className="h-6 w-4/5 animate-pulse rounded bg-slate-100" /><div className="h-10 animate-pulse rounded bg-slate-100" /></div>)}</div> : <>
-              {!loading && !error && visibleQuestions.length === 0 && <div className="px-6 py-12 text-center"><Search className="mx-auto text-slate-400" size={28} aria-hidden="true" /><h2 className="mt-3 font-semibold text-slate-900 capitalize">{experience ? 'No matching experiences' : 'No matching questions'}</h2><p className="mt-1 text-sm text-slate-500 capitalize">{experience ? 'Try another filter or share your own first-hand story.' : 'Try another search or sign in to contribute.'}</p><Link href={experience ? '/experiences/new' : askHref} className="mt-4 inline-block text-sm font-semibold text-blue-700 hover:underline capitalize">{experience ? 'Share Your Experience' : 'Ask a Question'}</Link></div>}
+              {!loading && !error && visibleQuestions.length === 0 && <div className="px-6 py-12 text-center"><Search className="mx-auto text-slate-400" size={28} aria-hidden="true" /><h2 className="mt-3 font-semibold text-slate-900">{visaType ? `No matching ${visaType} ${experience ? 'experiences' : 'posts'}` : experience ? 'No matching experiences' : 'No matching questions'}</h2><p className="mt-1 text-sm text-slate-500">{visaType ? 'Try another visa status or reset the filters.' : experience ? 'Try another filter or share your own first-hand story.' : 'Try another search or sign in to contribute.'}</p><Link href={experience ? '/experiences/new' : askHref} className="mt-4 inline-block text-sm font-semibold text-blue-700 hover:underline capitalize">{experience ? 'Share Your Experience' : 'Ask a Question'}</Link></div>}
               {pageQuestions.map((question) => <QuestionCard key={question.id} question={question} onTagSelect={selectTag} selected={selectedPost?.id === question.id} onSelect={() => setSelectedPostId(question.id)} />)}
               {(pageCount > 1 || more) && <nav aria-label="Post pagination" className="tab-row items-center tab-row-centered py-5"><button disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} className="rounded-full px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40 capitalize">Previous</button>{pageNumbers.map((value, index) => <span key={value} className="inline-flex items-center gap-2">{index > 0 && value > pageNumbers[index - 1] + 1 && <span aria-hidden="true" className="capitalize">...</span>}<button aria-label={`Page ${value}`} aria-current={currentPage === value ? 'page' : undefined} onClick={() => goToPage(value)} className={`min-w-9 rounded-full px-3 py-2 text-sm ${currentPage === value ? 'bg-blue-700 text-white' : 'hover:bg-slate-100'}`}>{value}</button></span>)}<button disabled={loading || loadingOlder || (currentPage === pageCount && !more)} onClick={() => currentPage < pageCount ? goToPage(currentPage + 1) : void loadOlder()} className="rounded-full px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40 capitalize">{loadingOlder ? 'Loading…' : 'Next'}</button></nav>}
             </>}
