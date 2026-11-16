@@ -27,10 +27,10 @@ test('U.S. re-entry and H-1B stamping stay visible even when Canada is mentioned
 test('topic labels retain visa acronym capitalization and do not change tag identifiers', () => {
   for(const [input,expected] of [['h1b','H-1B'],['h4','H-4'],['uscis','USCIS'],['ead','EAD'],['premium-processing','Premium Processing'],['visa-question','Visa Question']]) assert.equal(topicLabel(input),expected);
 });
-test('feed options are populated from posts, not an unrelated static catalog', async () => {
+test('feed visa filters use the same supported U.S. categories as posting forms', async () => {
   const source=await read('src/components/CommunityHome.tsx');
-  assert(source.includes('new Set(questions.map('));assert(source.includes('VISA_TYPES.includes(type)'));
-  assert(!source.includes('[...VISA_TYPES,'));
+  assert(source.includes("['', ...VISA_TYPES].map("));
+  assert(source.includes('VISA_TYPES.includes(visa)'));
 });
 test('country controls are fixed to U.S. and community searches are scoped', async () => {
   for(const file of ['AskQuestionForm','CreateCommunity','ExploreCommunities']) {
