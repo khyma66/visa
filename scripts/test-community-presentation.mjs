@@ -100,7 +100,7 @@ test('post actions keep votes grouped and Related visibly labelled at every size
   assert(actionStart >= 0);
   assert.doesNotMatch(actionCss, /\.post-related-action\s*\{[^}]*display:\s*none/);
   assert.match(actionCss, /@media \(max-width: 639px\)/);
-  assert.match(actionCss, /flex-wrap:\s*nowrap/);
+  assert.match(actionCss, /\.post-toolbar, \.feed-post-toolbar\s*\{[^}]*flex-wrap:\s*wrap/);
   assert.match(actionCss, /\.feed-post-toolbar\s*\{[^}]*flex-wrap:\s*wrap/);
   assert.doesNotMatch(actionCss, /overflow-x:\s*(auto|hidden)/);
   assert.doesNotMatch(actionCss, /display:\s*contents/);

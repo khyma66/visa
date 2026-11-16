@@ -19,6 +19,24 @@ const property = (rule, name) => rule.nodes.find(node => node.type === 'decl' &&
 const base = rules.find(rule => rule.selector === ':root' && rule.parent.type === 'root');
 const desktop = rules.find(rule => rule.selector === ':root' && rule.parent.params === '(min-width: 640px)');
 
+test('post and reply vote buttons share fixed square dimensions at every card width', () => {
+  const sizes = rules.filter(rule => property(rule, '--post-action-size'));
+  assert.equal(sizes.length, 1, 'No viewport or container override may resize just some action bars');
+  assert.equal(property(sizes[0], '--post-action-size'), '40px');
+  assert.equal(property(sizes[0], 'flex-wrap'), 'wrap');
+  const vote = rules.find(rule => rule.selector === '.vote-controls button');
+  for (const dimension of ['width', 'min-width', 'height', 'min-height']) {
+    assert.equal(property(vote, dimension), 'var(--post-action-size, 40px)');
+  }
+  assert.equal(property(vote, 'flex'), '0 0 var(--post-action-size, 40px)');
+  assert.equal(property(vote, 'padding'), '0');
+  const icon = rules.find(rule => rule.selector === '.vote-controls button svg');
+  assert.equal(property(icon, 'width'), '20px');
+  assert.equal(property(icon, 'height'), '20px');
+  assert.equal(property(icon, 'flex'), '0 0 20px');
+  assert.equal(property(icon, 'stroke-width'), '2');
+});
+
 test('all shared text utilities compile to the readable rem-based hierarchy', () => {
   const tokens = {
     '--type-meta': '0.75rem', '--type-ui': '1rem', '--type-body': '1rem',
