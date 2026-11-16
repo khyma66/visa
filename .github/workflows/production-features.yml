@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Release persistent visa-status feed filters beside New, Active, Top, Unanswered and SOS.
+# Release the compact home feed controls and simpler pagination wording.
 
 on:
   workflow_dispatch:

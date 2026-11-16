@@ -404,12 +404,12 @@ test('loaded page ranges match twenty visible cards then the final twenty-first 
     h.render(); await h.flush();
     const firstPage = ids(h);
     assert.equal(firstPage.length, 20);
-    assert.match(textOf(h.tree), /Showing 1–20 of 21 loaded/);
+    assert.match(textOf(h.tree), /Posts 1–20/);
     assert.equal(button(h, 'Previous').props.disabled, true);
     button(h, 'Next').props.onClick(); h.render(); await h.settle();
     assert.equal(ids(h).length, 1);
     assert(!firstPage.includes(ids(h)[0]));
-    assert.match(textOf(h.tree), /Showing 21–21 of 21 loaded/);
+    assert.match(textOf(h.tree), /Posts 21–21/);
     assert.equal(button(h, 'Next').props.disabled, false);
     assert.equal(nodes(h.tree).find(node => node.props?.['aria-label'] === 'Page 2').props['aria-current'], 'page');
     button(h, 'Previous').props.onClick(); h.render(); await h.settle();
@@ -448,7 +448,7 @@ test('earlier-discussion provenance keeps legacy source-less records subject to 
  test('Home keeps every visa status visible independently of the loaded posts', async () => {
  const h=new Harness();try {h.render();await h.flush();
  for(const label of ['Post source','Post type']) assert(!nodes(h.tree).some(n=>n.props?.['aria-label']===label));
- assert(nodes(h.tree).some(n=>n.props?.['aria-label']==='Visa status'));
+ assert(nodes(h.tree).some(n=>n.props?.['aria-label']==='Filter by visa'));
  for (const label of ['All visas','H1B','F-1 / OPT','H-4','H-4 / EAD','Other']) assert(button(h,label));
  button(h,'H-4').props.onClick();h.render();await h.flush();
  assert.equal(h.calls.at(-1).visaType,'H-4');
@@ -493,7 +493,7 @@ test('appending older pages does not resubscribe and reset the feed', async () =
     const count=h.subscriptions.length;
     nodes(h.tree).find(n=>n.props?.['aria-label']==='Page 3').props.onClick();h.render();await h.settle();
     button(h,'Next').props.onClick();h.render();await h.settle();
-    assert.match(textOf(h.tree),/of 100 loaded/);
+    assert.match(textOf(h.tree),/Posts 41–60/);
     assert.equal(h.subscriptions.length,count,'Fetching older posts must not change live subscriptions');
   } finally {h.close();}
 });
