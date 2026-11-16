@@ -383,18 +383,18 @@
 }
 
 /* One compact row when space allows; keep every action visible on narrow cards. */
-.post-toolbar, .feed-post-toolbar { --post-action-size: 40px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; min-width: 0; }
-.feed-post-toolbar { container: post-actions / inline-size; flex-wrap: wrap; padding: 3px; }
+.post-toolbar, .feed-post-toolbar { --post-action-size: 40px; --post-icon-width: 40px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; min-width: 0; }
+.feed-post-toolbar { container: post-actions / inline-size; flex-wrap: wrap; padding: 0; }
 .vote-control-wrap { display: flex; flex: 0 0 auto; flex-direction: column; min-width: 0; }
 .vote-controls { display: inline-flex; align-self: flex-start; align-items: center; flex-shrink: 0; border-radius: 8px; background: #eef1f3; color: #334155; }
-.vote-controls button { display: inline-flex; justify-content: center; align-items: center; width: var(--post-action-size, 40px); min-width: var(--post-action-size, 40px); height: var(--post-action-size, 40px); min-height: var(--post-action-size, 40px); padding: 0; flex: 0 0 var(--post-action-size, 40px); border-radius: 8px; }
+.vote-controls button { display: inline-flex; justify-content: center; align-items: center; width: var(--post-icon-width, 40px); min-width: var(--post-icon-width, 40px); height: var(--post-action-size, 40px); min-height: var(--post-action-size, 40px); padding: 0; flex: 0 0 var(--post-icon-width, 40px); border-radius: 8px; }
 .vote-controls button svg { display: block; width: 20px; height: 20px; flex: 0 0 20px; stroke-width: 2; }
 .vote-controls button:hover { background: #dfe5e9; }
 .vote-controls button:focus-visible, .post-reply-action:focus-visible, .post-related-action:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
 .vote-controls button:disabled { opacity: .4; cursor: not-allowed; }
 .vote-up[aria-pressed="true"] { background: #ffede5; color: #d93900; }
 .vote-down[aria-pressed="true"] { background: #e9eaff; color: #5555c9; }
-.vote-score { min-width: 24px; padding: 0 2px; text-align: center; font-size: .75rem; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vote-score { min-width: 24px; padding: 0; text-align: center; font-size: .75rem; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .post-reply-action, .post-related-action, :is(.post-toolbar, .feed-post-toolbar) .post-options-trigger {
   display: inline-flex; flex: 0 0 auto; height: var(--post-action-size, 40px); min-height: var(--post-action-size, 40px); min-width: var(--post-action-size, 40px);
   align-items: center; justify-content: center; gap: 5px; padding: 0 10px; border-radius: 8px; background: #eef1f3; color: #334155; font-size: .75rem; line-height: 1; font-weight: 600; white-space: nowrap;
@@ -402,7 +402,7 @@
 .post-reply-action:hover, .post-related-action:hover, :is(.post-toolbar, .feed-post-toolbar) .post-options-trigger:hover { background: #dfe5e9; }
 .post-reply-action[data-accepted="true"] { background: #ecfdf5; color: #065f46; }
 .post-reply-count { font-variant-numeric: tabular-nums; }
-:is(.post-toolbar, .feed-post-toolbar) .post-options-trigger { width: var(--post-action-size, 40px); padding: 0; }
+:is(.post-toolbar, .feed-post-toolbar) .post-options-trigger { width: var(--post-icon-width, 40px); min-width: var(--post-icon-width, 40px); padding: 0; }
 .post-related-action { padding-inline: 8px; }
 :is(.post-toolbar, .feed-post-toolbar) svg { flex-shrink: 0; }
 .vote-error { max-width: 112px; margin-top: 6px; font-size: .75rem; line-height: 1.5; color: #be123c; }
@@ -411,12 +411,16 @@
   .feed-card[data-selected="true"] { border-color: #115e59; box-shadow: inset 0 0 0 1px #115e59; }
 }
 @media (max-width: 639px) {
-  .feed-post-toolbar { gap: 4px; }
+  /* Use horizontal space efficiently; keep 40px height and full-size labels. */
+  .post-toolbar, .feed-post-toolbar { --post-icon-width: 32px; gap: 2px; }
+  .post-reply-action { padding-inline: 2px; gap: 4px; }
+  .post-related-action { padding-inline: 4px; }
 }
-/* Tighten spacing, never the shared hit area: posts and replies stay identical. */
+/* Also support narrow desktop panels without changing the shared action height. */
 @container post-actions (max-width: 287px) {
-  .post-reply-action { padding-inline: 6px; gap: 4px; }
-  .post-related-action { padding-inline: 6px; }
+  .vote-control-wrap, .post-options-trigger { --post-icon-width: 32px; }
+  .post-reply-action { padding-inline: 2px; gap: 4px; }
+  .post-related-action { padding-inline: 4px; }
 }
 @media (forced-colors: active) {
   .vote-controls, .post-reply-action, .post-related-action, :is(.post-toolbar, .feed-post-toolbar) .post-options-trigger { outline: 1px solid ButtonText; outline-offset: -1px; }

@@ -19,16 +19,25 @@ const property = (rule, name) => rule.nodes.find(node => node.type === 'decl' &&
 const base = rules.find(rule => rule.selector === ':root' && rule.parent.type === 'root');
 const desktop = rules.find(rule => rule.selector === ':root' && rule.parent.params === '(min-width: 640px)');
 
-test('post and reply vote buttons share fixed square dimensions at every card width', () => {
+test('post and reply votes keep equal targets and compact horizontal spacing on phones', () => {
   const sizes = rules.filter(rule => property(rule, '--post-action-size'));
   assert.equal(sizes.length, 1, 'No viewport or container override may resize just some action bars');
   assert.equal(property(sizes[0], '--post-action-size'), '40px');
   assert.equal(property(sizes[0], 'flex-wrap'), 'wrap');
   const vote = rules.find(rule => rule.selector === '.vote-controls button');
-  for (const dimension of ['width', 'min-width', 'height', 'min-height']) {
+  for (const dimension of ['height', 'min-height']) {
     assert.equal(property(vote, dimension), 'var(--post-action-size, 40px)');
   }
-  assert.equal(property(vote, 'flex'), '0 0 var(--post-action-size, 40px)');
+  for (const dimension of ['width', 'min-width']) {
+    assert.equal(property(vote, dimension), 'var(--post-icon-width, 40px)');
+  }
+  assert.equal(property(vote, 'flex'), '0 0 var(--post-icon-width, 40px)');
+  const phone = rules.find(rule => rule.selector === '.post-toolbar, .feed-post-toolbar' && rule.parent.params === '(max-width: 639px)');
+  assert.equal(property(phone, '--post-icon-width'), '32px');
+  assert.equal(property(phone, 'gap'), '2px');
+  const options = rules.find(rule => rule.selector === ':is(.post-toolbar, .feed-post-toolbar) .post-options-trigger');
+  assert.equal(property(options, 'width'), 'var(--post-icon-width, 40px)');
+  assert.equal(property(options, 'min-width'), 'var(--post-icon-width, 40px)');
   assert.equal(property(vote, 'padding'), '0');
   const icon = rules.find(rule => rule.selector === '.vote-controls button svg');
   assert.equal(property(icon, 'width'), '20px');
