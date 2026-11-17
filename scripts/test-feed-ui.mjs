@@ -20,7 +20,7 @@ const dependencies = {
   'next/link': dataUrl(`import {jsx} from ${JSON.stringify(jsx)}; export default function Link(props){return jsx('a',props);}`),
   'next/navigation': dataUrl('export function useSearchParams(){return new URLSearchParams(globalThis.__feedHarness.search);}'),
   'lucide-react': dataUrl(`function Icon(){return null;} export {${icons.map((name) => `Icon as ${name}`).join(',')}};`),
-  '@/lib/post-categories': dataUrl('export const EXPERIENCE_CATEGORIES=["Other"],VISA_TYPES=["H1B","F-1 / OPT","H-4","H-4 / EAD","Other"];'),
+  '@/lib/post-categories': dataUrl('export const EXPERIENCE_CATEGORIES=["Other"],VISA_TYPES=["H1B","F-1 / OPT","H-4","H-4 / EAD","B1/B2","Family / spouse","General","Other"];'),
   '@/lib/community': dataUrl('export async function getCommunitySource(){return {};} export async function getQuestionPage(options){const h=globalThis.__feedHarness;h.calls.push(options);return h.getPage(options);}'),
   '@/lib/realtime': dataUrl('export function subscribeLive(topics){globalThis.__feedHarness.subscriptions.push(topics);return ()=>{};}'),
   './AuthProvider': dataUrl('export function useAuth(){return globalThis.__feedHarness.auth ?? {user:null,demoMode:true};}'),
@@ -31,7 +31,6 @@ const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.Scri
   assert(dependencies[name], `Unmapped dependency ${name}`);
   return prefix + JSON.stringify(dependencies[name]);
 });
-dependencies['@/lib/post-categories'] = dataUrl('export const EXPERIENCE_CATEGORIES=["Other"],VISA_TYPES=["H1B","Other"];');
 const { CommunityHome } = await import(dataUrl(compiled));
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const same = (a, b) => a && b && a.length === b.length && a.every((item, index) => Object.is(item, b[index]));
@@ -41,7 +40,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 // Exercise the actual hook state and event handlers without a hosted service.
 class Harness {
   subscriptions = []; slots = []; index = 0; effects = []; dirty = false; calls = []; writes = [];
-  constructor(search = '') {
+  constructor(search = '?visa=all') {
     this.search = search;
     this.storage = new Map();
     this.getPage = async () => ({ questions: [question('first')], more: false });
@@ -275,7 +274,7 @@ test('feed controls publish clean framework-aware query state and clear filters'
     assert(h.writes.every((write) => write.state === null), 'Do not pass app-owned Next history state when changing query parameters');
     button(h, 'Reset filters').props.onClick(); h.render(); await h.flush();
     assert.equal(h.search, '');
-    assert.deepEqual(h.calls.at(-1), { search: '', tag: '', visaType: '', sort: 'newest', experience: false, category: '' });
+    assert.deepEqual(h.calls.at(-1), { search: '', tag: '', visaType: 'F-1 / OPT', sort: 'newest', experience: false, category: '' });
   } finally { h.close(); }
 });
 
@@ -449,20 +448,65 @@ test('earlier-discussion provenance keeps legacy source-less records subject to 
  const h=new Harness();try {h.render();await h.flush();
  for(const label of ['Post source','Post type']) assert(!nodes(h.tree).some(n=>n.props?.['aria-label']===label));
  assert(nodes(h.tree).some(n=>n.props?.['aria-label']==='Filter by visa'));
- for (const label of ['All visas','H1B','F-1 / OPT','H-4','H-4 / EAD','Other']) assert(button(h,label));
- button(h,'H-4').props.onClick();h.render();await h.flush();
+ for (const label of ['All visas','H1B','F1 / OPT','H4','H4 / EAD','Other']) assert(button(h,label));
+ button(h,'H4').props.onClick();h.render();await h.flush();
  assert.equal(h.calls.at(-1).visaType,'H-4');
  assert.equal(new URLSearchParams(h.search).get('visa'),'H-4');
  assert.deepEqual(ids(h),[]);
  assert.match(textOf(h.tree),/No matching H-4 posts/);
- assert(button(h,'F-1 / OPT'));
+ assert(button(h,'F1 / OPT'));
  button(h,'Top').props.onClick();h.render();await h.flush();
  assert.equal(h.calls.at(-1).visaType,'H-4');assert.equal(h.calls.at(-1).sort,'score');
  button(h,'All visas').props.onClick();h.render();await h.flush();
  assert.equal(h.calls.at(-1).visaType,'');assert.equal(h.calls.at(-1).sort,'score');
- assert.equal(new URLSearchParams(h.search).has('visa'),false);
+ assert.equal(new URLSearchParams(h.search).get('visa'),'all');
  }finally{h.close();}
  });
+
+test('F1 is the first-request default on both feeds; All visas persists and search links stay broad', async () => {
+  for (const experience of [false, true]) {
+    const h = new Harness('');
+    h.getPage = async () => ({questions: [question('f1', {visa_type:'F-1 / OPT',post_kind:experience?'experience':'question'}), question('h1b')],more:false});
+    try {
+      h.render({experience});
+      assert.equal(button(h,'F1 / OPT').props['aria-pressed'],true);
+      await h.settle();
+      assert.equal(h.calls.length,1); assert.equal(h.calls[0].visaType,'F-1 / OPT');
+      assert.deepEqual(ids(h),['f1']);
+      button(h,'All visas').props.onClick();h.render();await h.settle();
+      assert.equal(new URLSearchParams(h.search).get('visa'),'all');assert.equal(h.calls.at(-1).visaType,'');
+      button(h,'Top').props.onClick();h.render();await h.settle();
+      assert.equal(button(h,'All visas').props['aria-pressed'],true);assert.equal(h.calls.at(-1).visaType,'');
+      button(h,'Reset filters').props.onClick();h.render();await h.settle();
+      assert.equal(h.search,'');assert.equal(h.calls.at(-1).visaType,'F-1 / OPT');
+      h.search='?q=documents&tag=documents';h.render();await h.flush();
+      assert.equal(h.calls.at(-1).visaType,'');
+    } finally {h.close();}
+  }
+});
+
+test('each visa scopes all five sorts before Experience navigation on both feeds', async () => {
+  for (const experience of [false,true]) for(const visa of ['H1B','H-4','H-4 / EAD','B1/B2','F-1 / OPT','Family / spouse','General','Other']) {
+    const h=new Harness(`?visa=${encodeURIComponent(visa)}`);
+    h.getPage=async()=>({questions:[question('matching',{visa_type:visa,post_kind:experience?'experience':'question',tags:['sos']}),question('unrelated',{visa_type:'unrelated'})],more:false});
+    try {
+      h.render({experience});await h.settle();
+      const elements=nodes(h.tree);
+      assert(elements.findIndex(n=>n.props?.['aria-label']==='Filter by visa')<elements.findIndex(n=>n.props?.['aria-label']===(experience?'Sort experiences':'Sort questions')));
+      assert.equal(button(h,visa.replace(/-/g,'')).props['aria-pressed'],true);
+      for (const [label,sort] of [['New','newest'],['Active','activity'],['Top','score'],['Unanswered','unanswered'],['SOS','newest']]) {
+        button(h,label).props.onClick();h.render();await h.settle();
+        assert.equal(h.calls.at(-1).visaType,visa);assert.equal(h.calls.at(-1).sort,sort);assert.equal(h.calls.at(-1).experience,experience);
+        assert.equal(h.calls.at(-1).tag,label==='SOS'?'sos':'');
+        assert.deepEqual(ids(h),['matching']);
+      }
+      const link=nodes(h.tree).find(n=>textOf(n).trim()==='Experience'&&n.props?.href);
+      assert(link);const url=new URL(link.props.href,'https://visa.test');
+      assert.equal(url.pathname,'/us/en/experiences');assert.equal(url.searchParams.get('visa'),visa);
+      assert.equal(link.props['aria-current'],experience?'page':undefined);
+    } finally {h.close();}
+  }
+});
 
 for (const initialCount of [20, 21]) test(`Next fetches older questions without skipping a partial page (${initialCount})`, async () => {
   const h = new Harness();

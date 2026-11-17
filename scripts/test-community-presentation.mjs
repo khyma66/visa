@@ -145,7 +145,7 @@ test('experience cards and details expose category and discussion actions withou
   assert(!detail.includes('Accept this answer')); assert(!detail.includes('Accepted answers and highest votes first'));
 });
 test('experience feed excludes questions, includes Other, and defaults to newest',()=>{
-  const older={...native,id:'older',post_kind:'experience',experience_category:'Other',created_at:'2026-09-01T00:00:00Z'};
+  const older={...native,id:'older',visa_type:'F-1 / OPT',post_kind:'experience',experience_category:'Other',created_at:'2026-09-01T00:00:00Z'};
   const newer={...older,id:'newer',title:'A newer visa experience',created_at:'2026-10-01T00:00:00Z'};
   const html=render(CommunityHome,{experience:true},{values:{0:[older,native,newer],4:false}});
   assert(html.includes('Share Your Experience')); assert(html.includes('/experiences/new'));
@@ -153,7 +153,7 @@ test('experience feed excludes questions, includes Other, and defaults to newest
   assert(html.indexOf('/experiences/newer') < html.indexOf('/experiences/older'));
   assert(!html.includes(`/questions/${native.id}`));
   assert.match(html,/aria-pressed="true"[^>]*>New/);
-  const filtered=render(CommunityHome,{experience:true},{values:{0:[older,newer],4:false,15:'Visa interview'}});
+  const filtered=render(CommunityHome,{experience:true},{values:{0:[older,newer],3:'',4:false,15:'Visa interview'}});
   assert(filtered.includes('No matching experiences')); assert(!filtered.includes('/experiences/newer'));
 });
 test('discussion and promotion labels describe content rather than where it came from',()=>{
