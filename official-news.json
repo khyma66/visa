@@ -1,7 +1,31 @@
 {
   "source": "Federal Register",
-  "retrievedAt": "2026-11-16T22:57:23.854Z",
+  "retrievedAt": "2026-11-17T21:50:25.034Z",
   "articles": [
+    {
+      "id": "2026-23370",
+      "title": "Modernizing the Labor Market Test and Improving Protections for U.S. Workers in the PERM Immigrant Visa Program",
+      "url": "https://www.federalregister.gov/documents/2026/11/17/2026-23370/modernizing-the-labor-market-test-and-improving-protections-for-us-workers-in-the-perm-immigrant",
+      "publishedOn": "2026-11-17",
+      "type": "Proposed Rule",
+      "agencies": [
+        "Labor Department",
+        "Employment and Training Administration"
+      ],
+      "summary": "The Department of Labor (Department or DOL) proposes to amend its regulations regarding the certification of job opportunities offered by employers seeking to employ aliens on a permanent basis in the United States. This Notice of Proposed Rulemaking (NPRM or proposed rule) strengthens the standards by which the Department receives and reviews employers' applications for permanent labor certification and improves the integrity of the overall employment-based immigrant visa program to more effectively protect the wages and job opportunities of U.S. workers similarly employed in the United States. Among the issues addressed in this proposed rule are eliminating further administration of Schedule A, which exempts certain job opportunities from the statutorily required labor market test; strengthening the minimum standards of recruitment to ensure all employers seeking labor certification access the broadest pool of high-quality U.S. workers using the latest technologies and methods; enhancing safeguards for U.S. workers impacted by layoffs, including those laid off by employers using third-party staffing companies and establishing standards for employers to report layoffs; expanding requirements for employers to provide U.S. workers with notice of filing (NOF) applications for permanent labor certification; improving employer compliance with program requirements and consideration of qualified U.S. workers that is comparable to job opportunities for which permanent labor certification is not required; and codifying the Department's practice of electronically receiving, processing, and issuing final determinations on employer requests for prevailing wages and permanent labor certifications. The changes in this proposed rule are consistent with the Secretary of Labor's (Secretary) statutory responsibilities to certify that there are not sufficient workers in the United States who are able, willing, qualified, and available to fill the petitioning employer's job opportunity at the time of application for a visa and admission to the United States, and that the employment of such alien will not adversely affect the wages and working conditions of similarly employed workers in the United States."
+    },
+    {
+      "id": "2026-23320",
+      "title": "Appellate Procedures for the Board of Immigration Appeals",
+      "url": "https://www.federalregister.gov/documents/2026/11/17/2026-23320/appellate-procedures-for-the-board-of-immigration-appeals",
+      "publishedOn": "2026-11-17",
+      "type": "Rule",
+      "agencies": [
+        "Justice Department",
+        "Executive Office for Immigration Review"
+      ],
+      "summary": "In February 2026, the Department issued an interim final rule (\"IFR\"), effective March 9, 2026, to streamline Board of Immigration Appeals (\"Board\" or \"BIA\") procedures. The IFR's comment period closed on April 8, 2026. In this final rule, the Department responds to comments received and finalizes the IFR with minor changes."
+    },
     {
       "id": "2026-22320",
       "title": "Agency Information Collection Activities; Extension, Without Change, of a Currently Approved Collection: Application for Free Training for Civics and Citizenship Teachers of Adults; Civics and Citizenship Toolkit",
@@ -256,28 +280,6 @@
         "Executive Office for Immigration Review"
       ],
       "summary": "The Department of Justice (\"Department\") is providing notice of statutorily required inflation adjustments to immigration-related fees for certain Department of Homeland Security (\"DHS\") forms filed with the Executive Office for Immigration Review (\"EOIR\") under the One Big Beautiful Bill Act for Fiscal Year (\"FY\") 2027."
-    },
-    {
-      "id": "2026-19756",
-      "title": "Extension, Without Change, of a Currently Approved Collection: Biographic Information (Registration)",
-      "url": "https://www.federalregister.gov/documents/2026/09/28/2026-19756/extension-without-change-of-a-currently-approved-collection-biographic-information-registration",
-      "publishedOn": "2026-09-28",
-      "type": "Notice",
-      "agencies": [
-        "Homeland Security Department",
-        "U.S. Citizenship and Immigration Services"
-      ],
-      "summary": "The Department of Homeland Security (DHS), U.S. Citizenship and Immigration Services (USCIS) invites the general public and other Federal agencies to comment upon this proposed extension of a currently approved collection of information. In accordance with the Paperwork Reduction Act (PRA) of 1995, the information collection notice is published in the Federal Register to obtain comments regarding the nature of the information collection, the categories of respondents, the estimated burden (i.e. the time, effort, and resources used by the respondents to respond), the estimated cost to the respondent, and the actual information collection instruments."
-    },
-    {
-      "id": "2026-19555",
-      "title": "Enhancing Program Integrity and Interagency Coordination in the Administration of the H-1B Nonimmigrant Visa Program",
-      "url": "https://www.federalregister.gov/documents/2026/09/23/2026-19555/enhancing-program-integrity-and-interagency-coordination-in-the-administration-of-the-h-1b",
-      "publishedOn": "2026-09-23",
-      "type": "Presidential Document",
-      "agencies": [
-        "Executive Office of the President"
-      ]
     }
   ]
 }
