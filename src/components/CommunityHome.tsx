@@ -17,9 +17,18 @@ import { ResizablePostLayout } from './ResizablePostLayout';
 import { EXPERIENCE_CATEGORIES, VISA_TYPES } from '@/lib/post-categories';
 
 const PAGE_SIZE = 20;
+const DEFAULT_VISA = 'F-1 / OPT';
 const SORTS = [['newest', 'New'], ['activity', 'Active'], ['score', 'Top'], ['unanswered', 'Unanswered'], ['sos', 'SOS']] as const;
 type SortMode = typeof SORTS[number][0];
 type PostKind = '' | 'question' | 'discussion' | 'promotion';
+
+function visaFromQuery(params: URLSearchParams) {
+  const visa = params.get('visa')?.slice(0, 80) ?? '';
+  if (VISA_TYPES.includes(visa)) return visa;
+  // Global search/topic links should still find discussions across all visas.
+  if (visa === 'all' || ['q', 'tag', 'category', 'origin'].some(key => params.get(key))) return '';
+  return DEFAULT_VISA;
+}
 
 export function CommunityHome({ initialKind = '', experience = false }: { initialKind?: PostKind; experience?: boolean } = {}) {
   const { user, demoMode } = useAuth();
@@ -28,7 +37,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const [questions, setQuestions] = useState<Question[]>([]);
   const [initialPageSize, setInitialPageSize] = useState(0);
   const [search, setSearch] = useState('');
-  const [visaType, setVisaType] = useState('');
+  const [visaType, setVisaType] = useState(() => visaFromQuery(new URLSearchParams(queryString)));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
@@ -63,8 +72,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     const postKind = params.get('type');
     setSearch(params.get('q')?.slice(0, 200) ?? '');
     setTag(params.get('tag')?.slice(0, 60) ?? '');
-    const visa = params.get('visa')?.slice(0, 80) ?? '';
-    setVisaType(VISA_TYPES.includes(visa) ? visa : '');
+    setVisaType(visaFromQuery(params));
     const experienceCategory = params.get('category') ?? '';
     setCategory(experience && EXPERIENCE_CATEGORIES.includes(experienceCategory) ? experienceCategory : '');
     const source = params.get('origin');
@@ -74,7 +82,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
       window.history.replaceState(window.history.state, '', url);
     }
     setOrigin(source === 'member' ? 'member' : source === 'earlier' || source === 'archive' ? 'earlier' : '');
-    setSortMode(SORTS.some(([value]) => value === sort) && !(experience && sort === 'sos') ? sort as SortMode : 'newest');
+    setSortMode(SORTS.some(([value]) => value === sort) ? sort as SortMode : 'newest');
     setKind(experience ? '' : postKind === 'question' || postKind === 'discussion' || postKind === 'promotion' ? postKind : initialKind);
     setPage(1);
   }, [queryString, initialKind, experience]);
@@ -131,6 +139,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   function updateQuery(updates: Record<string, string>) {
     setSelectedPostId(null);
     const url = new URL(window.location.href);
+    if (!Object.hasOwn(updates, 'visa')) url.searchParams.set('visa', visaType || 'all');
     Object.entries(updates).forEach(([key, value]) => { if (value) url.searchParams.set(key, value); else url.searchParams.delete(key); });
     window.history.replaceState(null, '', url);
     setPage(1);
@@ -140,7 +149,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   function selectVisa(value: string) {
     if (value === visaType) return;
     setVisaType(value);
-    updateQuery({ visa: value });
+    updateQuery({ visa: value || 'all' });
   }
   function selectSort(value: SortMode) {
     if (value === sortMode) return;
@@ -148,7 +157,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     updateQuery({ sort: value === 'newest' ? '' : value });
   }
   function resetFilters() {
-    setCategory(''); setSearch(''); setVisaType(''); setTag(''); setKind(initialKind); setSortMode('newest'); setOrigin('');
+    setCategory(''); setSearch(''); setVisaType(DEFAULT_VISA); setTag(''); setKind(initialKind); setSortMode('newest'); setOrigin('');
     updateQuery({ q: '', visa: '', tag: '', type: '', sort: '', category: '', origin: '' });
   }
   function goToPage(value: number) {
@@ -181,7 +190,13 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
   const selectedPost = pageQuestions.find(question => question.id === selectedPostId) ?? pageQuestions[0];
   const pageNumbers = Array.from({ length: pageCount }, (_, index) => index + 1)
     .filter((value) => value === 1 || value === pageCount || Math.abs(value - currentPage) <= 2);
-  const filtered = Boolean(origin || category || search || visaType || tag || kind !== initialKind || sortMode !== 'newest');
+  const filtered = Boolean(origin || category || search || visaType !== DEFAULT_VISA || tag || kind !== initialKind || sortMode !== 'newest');
+  const experienceParams = new URLSearchParams({ visa: visaType || 'all' });
+  if (search) experienceParams.set('q', search);
+  if (tag) experienceParams.set('tag', tag);
+  if (origin) experienceParams.set('origin', origin);
+  if (sortMode !== 'newest') experienceParams.set('sort', sortMode);
+  const experienceHref = `/us/en/experiences?${experienceParams}`;
   const popularTags = useMemo(() => {
     const counts = new Map<string, number>();
     questions.forEach((question) => question.tags.forEach((name) => counts.set(name, (counts.get(name) ?? 0) + 1)));
@@ -228,16 +243,17 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
 
           {experience && <label className="mb-4 flex flex-wrap items-center gap-2 text-sm">Experience Category<select value={category} onChange={event => { setCategory(event.target.value); updateQuery({ category: event.target.value }); }} className="rounded border px-3 py-2"><option value="" className="capitalize">All Experience Categories</option>{EXPERIENCE_CATEGORIES.map(value => <option key={value} value={value}>{value.replace(/\b\w/g, letter => letter.toUpperCase())}</option>)}</select></label>}
           <section id="question-list" aria-label="Community questions" aria-busy={loading} className="min-w-0 scroll-mt-24">
-            {sortMode === 'sos' && <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><strong>Urgent community questions</strong><p>Replies are not immediate or guaranteed. If someone is in immediate danger in the U.S., call 911.</p><Link href={askHref} className="mt-2 inline-block font-semibold underline">Post an SOS question</Link></div>}
+            {sortMode === 'sos' && !experience && <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><strong>Urgent community questions</strong><p>Replies are not immediate or guaranteed. If someone is in immediate danger in the U.S., call 911.</p><Link href={askHref} className="mt-2 inline-block font-semibold underline">Post an SOS question</Link></div>}
             <div className="feed-controls">
-              <div className="tab-row items-center justify-between">
-                <div className="flex shrink-0 gap-1" aria-label="Sort questions">{SORTS.filter(([value]) => !experience || value !== 'sos').map(([value, label]) => <button key={value} type="button" onClick={() => selectSort(value)} aria-pressed={sortMode === value} className={`feed-sort-button capitalize rounded-lg px-3 py-2 text-sm font-semibold ${sortMode === value ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}</div>
-              </div>
-              <div role="group" aria-label="Filter by visa" className="mt-3 border-t border-slate-100 pt-3">
+              <div role="group" aria-label="Filter by visa">
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                  {['', ...VISA_TYPES].map((value) => <button key={value || 'all'} type="button" onClick={() => selectVisa(value)} aria-pressed={visaType === value} className={`min-h-11 rounded-full border px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${visaType === value ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50'}`}>{value || 'All visas'}</button>)}
+                  {['', ...VISA_TYPES].map((value) => <button key={value || 'all'} type="button" onClick={() => selectVisa(value)} aria-pressed={visaType === value} className={`min-h-11 rounded-full border px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${visaType === value ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50'}`}>{value.replace(/-/g, '') || 'All visas'}</button>)}
                   {filtered && <button type="button" onClick={resetFilters} aria-label="Reset filters" className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"><X size={14} aria-hidden="true" />Clear filters</button>}
                 </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-3" role="group" aria-label={experience ? 'Sort experiences' : 'Sort questions'}>
+                {SORTS.map(([value, label]) => <button key={value} type="button" onClick={() => selectSort(value)} aria-pressed={sortMode === value} className={`feed-sort-button capitalize rounded-lg px-3 py-2 text-sm font-semibold ${sortMode === value ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}
+                <Link href={experienceHref} prefetch={false} aria-current={experience ? 'page' : undefined} className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700 ${experience ? 'bg-teal-50 text-teal-900' : 'text-teal-800 hover:bg-teal-50'}`}>Experience<ArrowUpRight size={14} aria-hidden="true" /></Link>
               </div>
               {(experience || initialKind || tag) && <div className="mt-3 flex flex-wrap items-center gap-2">
                 {(experience || initialKind) && <select aria-label="Post source" value={origin} onChange={event => { const value = event.target.value as typeof origin; setOrigin(value); updateQuery({ origin: value }); }} className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-medium text-slate-700"><option value="" className="capitalize">All Posts</option><option value="member" className="capitalize">Member Posts</option><option value="earlier" className="capitalize">Earlier Discussions</option></select>}

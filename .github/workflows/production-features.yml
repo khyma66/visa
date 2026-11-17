@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Release the compact home feed controls and simpler pagination wording.
+# Release visa-first feed tabs, the F1 default and the Experience shortcut.
 
 on:
   workflow_dispatch:
