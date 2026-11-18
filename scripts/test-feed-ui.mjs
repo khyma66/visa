@@ -469,6 +469,10 @@ test('F1 is the first-request default on both feeds; All visas persists and sear
     h.getPage = async () => ({questions: [question('f1', {visa_type:'F-1 / OPT',post_kind:experience?'experience':'question'}), question('h1b')],more:false});
     try {
       h.render({experience});
+      const visaControls=nodes(h.tree).find(n=>n.props?.['aria-label']==='Filter by visa');
+      const visaButtons=nodes(visaControls).filter(n=>n.type==='button');
+      assert.equal(textOf(visaButtons[0]).trim(),'F1 / OPT','F1 is visibly first, not just the default request');
+      assert.equal(textOf(visaButtons.at(-1)).trim(),'All visas');
       assert.equal(button(h,'F1 / OPT').props['aria-pressed'],true);
       await h.settle();
       assert.equal(h.calls.length,1); assert.equal(h.calls[0].visaType,'F-1 / OPT');
@@ -503,9 +507,64 @@ test('each visa scopes all five sorts before Experience navigation on both feeds
       const link=nodes(h.tree).find(n=>textOf(n).trim()==='Experience'&&n.props?.href);
       assert(link);const url=new URL(link.props.href,'https://visa.test');
       assert.equal(url.pathname,'/us/en/experiences');assert.equal(url.searchParams.get('visa'),visa);
+      assert.deepEqual([...url.searchParams.keys()],['visa'],'Entering Experience must not inherit SOS or question filters');
+      assert(!nodes(link).some(n=>n.props?.size),'Experience has no arrow icon');
       assert.equal(link.props['aria-current'],experience?'page':undefined);
     } finally {h.close();}
   }
+});
+
+test('Experience is the green current view; its sort remains accessible without looking like the current page', async () => {
+  for(const experience of [false,true]) {
+    const h=new Harness('');
+    try {
+      h.render({experience});await h.settle();
+      const link=nodes(h.tree).find(n=>textOf(n).trim()==='Experience'&&n.props?.href);
+      assert(link);assert.match(link.props.className,/feed-sort-button/);
+      assert.equal(link.props.prefetch,false,'Hover must not trigger navigation or data loading');
+      if(experience) {
+        assert.match(link.props.className,/(?:^| )bg-teal-700(?: |$)/);
+        assert.match(link.props.className,/hover:bg-teal-800/);
+        for(const label of ['New','Top','Active','Unanswered','SOS']) {
+          button(h,label).props.onClick();h.render();await h.settle();
+          assert.equal(button(h,label).props['aria-pressed'],true);
+          assert.doesNotMatch(button(h,label).props.className,/(?:^| )bg-teal-700(?: |$)/);
+        }
+        button(h,'Reset filters').props.onClick();h.render();await h.settle();
+        assert.equal(button(h,'New').props['aria-pressed'],true);
+        assert.equal(h.calls.at(-1).experience,true);
+      } else {
+        assert.match(button(h,'New').props.className,/(?:^| )bg-teal-700(?: |$)/);
+        assert.match(link.props.className,/hover:bg-teal-700 hover:text-white/);
+      }
+    }finally{h.close();}
+  }
+});
+
+test('combined Experience filters, empty results and Clear filters restore the real F1 baseline', async () => {
+  const h=new Harness('');
+  const story=(id,visa,category='Other',extra={})=>question(id,{visa_type:visa,post_kind:'experience',experience_category:category,...extra});
+  h.getPage=async()=>({questions:[story('f1','F-1 / OPT'),story('h4','H-4'),story('apify-h4','H-4'),story('different-category','H-4','Visa interview')],more:false});
+  const source=()=>nodes(h.tree).find(n=>n.props?.['aria-label']==='Post source');
+  const category=()=>nodes(h.tree).find(n=>n.type==='select'&&n.props.children?.some?.(item=>item?.props?.children==='All Experience Categories'));
+  try {
+    h.render({experience:true});await h.settle();assert.deepEqual(ids(h),['f1']);
+    button(h,'H4').props.onClick();h.render();await h.settle();
+    category().props.onChange({target:{value:'Other'}});h.render();await h.settle();
+    source().props.onChange({target:{value:'member'}});h.render();await h.settle();
+    search(h,'documents');await h.flush();
+    assert.deepEqual(ids(h),['h4']);
+    assert.deepEqual(h.calls.at(-1),{search:'documents',tag:'',visaType:'H-4',sort:'newest',experience:true,category:'Other',origin:'member'});
+    button(h,'SOS').props.onClick();h.render();await h.settle();assert.deepEqual(ids(h),[]);
+    assert.match(textOf(h.tree),/No matching H-4 experiences/);
+    button(h,'Reset filters').props.onClick();h.render();await h.settle();
+    assert.equal(h.search,'');assert.deepEqual(ids(h),['f1']);
+    assert.equal(source().props.value,'');assert.equal(category().props.value,'');
+    assert.equal(nodes(h.tree).find(n=>n.type==='input').props.value,'');
+    assert.equal(button(h,'F1 / OPT').props['aria-pressed'],true);
+    assert(!nodes(h.tree).some(n=>n.props?.['aria-label']==='Reset filters'));
+    assert.deepEqual(h.calls.at(-1),{search:'',tag:'',visaType:'F-1 / OPT',sort:'newest',experience:true,category:''});
+  }finally{h.close();}
 });
 
 for (const initialCount of [20, 21]) test(`Next fetches older questions without skipping a partial page (${initialCount})`, async () => {
