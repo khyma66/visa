@@ -25,10 +25,10 @@
 
 Prepared on current production source `51222b7`; this is not a claim of deployment. PR #163's composer work and PR #164's imported-post controls remain separate and are not discarded.
 
-The fresh registry audit still fails the existing high-severity gate for transitive picomatch, advisory GHSA-fc5q-39xc-vjpf (affected range `<=4.0.7`). No audit suppression, dependency downgrade, unreviewed custom patch or deployment bypass was made. Production must remain unchanged until the security gate passes through an approved remediation; then use the normal production-first verification and development-sync process.
+At the time of this initial check, the registry audit failed the high-severity gate for transitive picomatch, advisory GHSA-fc5q-39xc-vjpf (affected range `<=4.0.7`). Production remained unchanged pending remediation.
 
 ## Combined candidate — November 18, 2026
 
 The local `release/experience-visa-nov18` branch combines #163, #164 and #165 without replacing the existing production baseline. It preserves scoped Create Experience links, visa-specific fill-in templates, F1-first controls, Experience styling, independent drafts, and indexed archive target validation. The primary Create action spans the full phone grid row to keep its label readable. The combined post-control, import and feed checks pass (43 tests); the complete combined regression/build is checked separately before release.
 
-A fresh registry check still reports picomatch 4.0.7 as latest with no official patched release. Both live sites remain unchanged. No dependency fork, audit exception, production data import or deployment was performed while preparing this candidate.
+The official upstream package remained unpatched when this candidate was prepared. The candidate was subsequently updated with temporary, tested backports for both major versions and separate upstream-advisory monitoring; see [PICOMATCH_SECURITY_FORK.md](PICOMATCH_SECURITY_FORK.md). The high-severity audit gate remains enabled. Use the normal guarded production release and verify it before syncing development.
