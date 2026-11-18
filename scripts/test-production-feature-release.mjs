@@ -12,6 +12,28 @@ import { assertHealthProvenance } from './smoke-site.mjs';
 import { archiveFromWorkerModule, recoverWorkerArchive, canonicalJson, publishedArchive } from './recover-worker-archive.mjs';
 import { CHATBOT_RECOVERY, pinnedChatbotRecovery, verifyRecoveryFiles } from './pinned-chatbot-recovery.mjs';
 import { safeReleaseDiagnostic } from './safe-release-diagnostic.mjs';
+import { verifyArchiveIndex } from './verify-archive-index.mjs';
+
+test('feature releases check visible archive IDs without rewriting indexed or moderated posts', async () => {
+  const config = { NEXT_PUBLIC_SUPABASE_URL: LIVE_DATABASE, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: `sb_publishable_${'fixture'.repeat(5)}` };
+  const records = [{ id: 'apify-visible', status: 'open' }, { id: 'apify-hidden', status: 'archived' }];
+  let calls = 0;
+  const request = async (url, options) => {
+    calls++; assert.equal(options.method, undefined, 'Index verification must be read-only');
+    assert.equal(url.searchParams.get('id'), 'in.(apify-visible)');
+    assert.equal(url.searchParams.get('status'), 'neq.archived');
+    return Response.json([{ id: 'apify-visible' }]);
+  };
+  assert.equal(await verifyArchiveIndex(records, config, request), 1); assert.equal(calls, 1);
+  await assert.rejects(() => verifyArchiveIndex(records, config, async () => Response.json([])), /missing visible posts/);
+  await assert.rejects(() => verifyArchiveIndex(records, config, async () => new Response('', { status: 503 })), /503/);
+  await assert.rejects(() => verifyArchiveIndex([...records, records[0]], config, request), /Duplicate/);
+  await assert.rejects(() => verifyArchiveIndex([{ id: 'apify-x),id.neq.hidden', status: 'open' }], config, request), /Invalid archive ID/);
+  await assert.rejects(() => verifyArchiveIndex(records, { ...config, NEXT_PUBLIC_SUPABASE_URL: 'https://example.invalid' }, request));
+  const workflow = await readFile(new URL('../.github/workflows/production-features.yml', import.meta.url), 'utf8');
+  assert(workflow.includes('node scripts/verify-archive-index.mjs'));
+  assert(!workflow.includes('node scripts/sync-archive-database.mjs'), 'UI releases must not replay a stale archive snapshot');
+});
 
 test('release CLI diagnostics redact credentials and omit non-error output', () => {
   const secret = 'synthetic-only-credential';
