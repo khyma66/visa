@@ -1,5 +1,42 @@
 # Telegram experience source
 
+## November 18: F1 Experiences channel refresh
+
+The owner supplied completed run `LgBH1Y1beaLVkUlWS` from the same actor.
+It finished at `2026-11-18T05:38:08.940Z`; dataset `Z9InhQnuo50dbuidi`
+contains six messages from `https://t.me/F1_Experiences`. This is a different
+channel from the November 17 discussion-group import; keep both histories.
+
+Use the separately reviewed configuration:
+
+```sh
+node scripts/import-telegram-experiences.mjs \
+  --source config/telegram-f1-experiences-source.json \
+  --run LgBH1Y1beaLVkUlWS --out /absolute/private/new-output-directory
+```
+
+One interview account was inserted into production with insert-if-absent behavior:
+`apify-telegram-F1_Experiences-130747`, “F-1 Mumbai Interview: Reported 221(g)
+and Interview Questions.” Its original posting timestamp is
+`2026-10-22T05:54:29.000Z`. The source has incomplete answers and inconsistent
+dates in its body; preserve that wording without filling blanks or treating it
+as a verified outcome. Text hash:
+`a76324f420d623535f48ab800925b90a53c517a259b55985015f6829544a84c0`.
+
+The other five records were excluded: a blank promotional template, two advice
+questions (one secondhand), an empty forward, and a reply requesting elaboration.
+External engagement and source identities were not imported as member activity.
+The default F1 experience query now returns three imported experiences. Live
+API text and posting date were checked against the prepared record; no existing
+posts, replies or source metadata were replaced. This uses the owner's specified
+run and does not claim access to the actor's full run history.
+
+UAT publication was not performed: the connected operator was denied permission
+to project `ppdwysmeistjxzjpmxyk`. The pending vote/view integration and dependency
+audit blocker described below remain separate from this live content refresh.
+
+## November 17: discussion-group source
+
 The owner selected this actor on November 17, 2026:
 
 - Actor: [webfinity/telegram-channel-content-media-scraper-v2](https://apify.com/webfinity/telegram-channel-content-media-scraper-v2), ID `f9ah2tzQwzhF8OyfK`.

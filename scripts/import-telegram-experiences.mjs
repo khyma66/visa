@@ -66,9 +66,9 @@ export async function readApify(path, token, fetcher = fetch) {
 }
 
 async function main() {
-  const { values } = parseArgs({ options: { out: { type: 'string' }, run: { type: 'string' } } });
+  const { values } = parseArgs({ options: { out: { type: 'string' }, run: { type: 'string' }, source: { type: 'string' } } });
   assert(values.out, 'Supply --out PRIVATE_DIRECTORY');
-  const source = JSON.parse(await readFile(new URL('../config/telegram-experience-source.json', import.meta.url), 'utf8'));
+  const source = JSON.parse(await readFile(values.source ?? new URL('../config/telegram-experience-source.json', import.meta.url), 'utf8'));
   let token = process.env.APIFY_TOKEN;
   const read = async path => {
     try { return await readApify(path, token); }
