@@ -15,8 +15,10 @@
 - `npm run test:feed-ui`: 38 passing checks, including all visas × all five sorts on both feeds, default/order, current/hover classes, empty results, combined filters, URL state, reset, stale responses and pagination.
 - `npm run test:presentation`: 110 passing checks. The supported-visa test evaluates the actual feed constant and proves exact membership, uniqueness and order instead of requiring the former array spelling.
 - Typecheck and production build pass.
+- Final `npm run check` passes all 2,201 regression checks, typecheck, production build and archive-bundle verification. The dependency audit is a separate failing release gate, not included in that success claim.
 - Actual browser testing used the isolated `npm run dev:demo -- --port 3125` app, with no hosted database credentials. A synthetic F1 experience was published only in browser-local demo storage.
 - The default feed displayed that story. A matching refusal category + member source + Top sort retained it. A nonmatching category/source/search combination and H4 selection produced an honest empty state. Clear filters restored the F1 story, empty search, all categories and all sources.
+- Home → SOS → Experience opened the F1 story without the SOS filter. Actual browser Back restored Home/SOS; Forward restored Experience/F1.
 - Tested 390×844 and 320×740 viewports: no horizontal page overflow, unclipped labels, equal button dimensions, reachable category/source/reset controls. Actual pointer hover on Experience changed its computed background to `rgb(17, 94, 89)` while retaining white text. Current-page background is `rgb(15, 118, 110)`; New is gray. Temporary viewport override was reset.
 
 ## Release status
