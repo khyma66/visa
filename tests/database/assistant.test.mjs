@@ -165,8 +165,13 @@ test('direct retrieval RPC cannot bypass anonymous, suspension or rate-limit enf
   }), { code: '42501' });
   await transaction(async () => {
     await actor(alice);
-    for (let n = 0; n < 30; n++) await search(ids.public, 'Chennai');
-    await assert.rejects(() => search(ids.public, 'Chennai'), { code: 'PT429' });
+    // A burst can span a minute boundary; keep going until one full bucket is used.
+    let allowed = 0, blocked = false;
+    for (let n = 0; n < 70; n++) {
+      try { await search(ids.public, 'Chennai'); allowed++; }
+      catch (error) { assert.equal(error.code, 'PT429'); blocked = true; break; }
+    }
+    assert(allowed >= 30 && blocked, 'The direct RPC must reject a burst after at least 30 allowed requests');
   });
 });
 

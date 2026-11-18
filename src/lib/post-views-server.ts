@@ -17,18 +17,20 @@ export async function viewFingerprint(secret:string,post:string,ip:string,agent:
   const signed=await crypto.subtle.sign('HMAC',key,encoder.encode(JSON.stringify(['post-view-v1',day,post,ip,agent])));
   return [...new Uint8Array(signed)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
 }
-export async function handlePostViews(request:Request,env:SecurityBindings,visibleImported:(id:string)=>boolean,now=new Date()) {
+export async function handlePostViews(request:Request,env:SecurityBindings,visibleImported:(id:string)=>boolean|Promise<boolean>,now=new Date()) {
   const url=new URL(request.url), origin=process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,secret=env.SECURITY_INGEST_KEY;
   if (!origin || origin!==pairs[url.hostname] || !key || !secret || !/^[a-f0-9]{64}$/.test(secret)) return viewsJson({},503);
   if (request.headers.get('sec-fetch-site')==='cross-site') return viewsJson({},403);
   const ids=url.searchParams.getAll('id');
   if (!ids.length || ids.length>50 || ids.some(id=>!VIEW_ID.test(id))) return viewsJson({},400);
-  const targets=[...new Set(ids)].filter(id=>!id.startsWith('apify-')||visibleImported(id));
-  if (!targets.length) return viewsJson([]);
   const ip=request.headers.get('cf-connecting-ip');
   if (!ip || !env.SECURITY_READ_LIMIT) return viewsJson({},503);
   if (!(await env.SECURITY_READ_LIMIT.limit({key:`post-views:${url.hostname}:${ip}`})).success) return viewsJson({},429);
+  const unique=[...new Set(ids)];
+  const visible=await Promise.all(unique.map(id=>!id.startsWith('apify-')||visibleImported(id)));
+  const targets=unique.filter((_,index)=>visible[index]);
+  if (!targets.length) return viewsJson([]);
   const args:{targets:string[];fingerprint?:string;view_day?:string}={targets};
   if (request.method==='POST') {
     if (ids.length!==1 || request.headers.get('origin')!==url.origin) return viewsJson({},403);

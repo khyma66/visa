@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Release visa-first feed tabs, the F1 default and the Experience shortcut.
+# Release visa-scoped experience creation with simple fill-in templates.
 
 on:
   workflow_dispatch:
@@ -37,6 +37,7 @@ jobs:
       - run: npm ci
       - run: npm run check:secrets && npm test && npm run typecheck
       - run: node --test scripts/test-production-feature-release.mjs
+      - run: node scripts/check-picomatch-advisories.mjs
       - run: npm audit --audit-level=high
       - name: Capture original live archive and active rollback version
         run: node scripts/production-feature-release.mjs capture
@@ -44,10 +45,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7QnSRDvWRYFIqA3zhsNIsw_iWSspCTN' }}
-      - name: Sync the already-published reviewed archive to indexed storage
-        run: node scripts/sync-archive-database.mjs src/data/api-archive.json
-        env:
-          ARCHIVE_INGEST_TOKEN: ${{ secrets.ARCHIVE_INGEST_TOKEN }}
+      - name: Verify the visible archive index without changing existing posts
+        run: node scripts/verify-archive-index.mjs src/data/api-archive.json .cache/visaflow/live-preview/public-build-values.json
       - name: Require reputation and moderation schema with anonymous access denied
         run: node scripts/check-community-safety-schema.mjs .cache/visaflow/live-preview/public-build-values.json
       - name: Build candidate preserving current launch state and existing content

@@ -19,7 +19,7 @@
     "test:presentation": "node --test --test-timeout=60000 scripts/test-community-presentation.mjs scripts/test-avatar.mjs scripts/test-post-presentation.mjs scripts/test-post-award.mjs scripts/test-us-market.mjs scripts/test-brand-assets.mjs scripts/test-typography.mjs scripts/test-post-layout.mjs scripts/test-post-views.mjs scripts/test-voting.mjs scripts/test-archive-voting.mjs scripts/test-checklist-quality.mjs",
     "test:tags": "node --test --test-timeout=60000 scripts/test-tag-directory.mjs",
     "test:release": "node --test scripts/test-release.mjs scripts/test-provenance.mjs scripts/test-production-feature-release.mjs scripts/test-production-archive-refresh.mjs scripts/test-rollout-verification.mjs scripts/test-development-sync.mjs",
-    "test:archive": "node --test scripts/test-archive.mjs scripts/test-demo-reply-counts.mjs scripts/test-editorial.mjs",
+    "test:archive": "node --test scripts/test-archive.mjs scripts/test-demo-reply-counts.mjs scripts/test-editorial.mjs scripts/test-telegram-experiences.mjs",
     "test:notices": "node --test scripts/test-notices.mjs scripts/test-policy.mjs",
     "test:security": "node --test scripts/test-security.mjs scripts/test-security-edge.mjs scripts/test-security-edge-runtime.mjs",
     "test:auth": "node --test scripts/test-auth.mjs scripts/test-auth-presentation.mjs scripts/test-auth-settings.mjs scripts/test-account.mjs scripts/test-post-library.mjs scripts/test-account-presentation.mjs scripts/test-auth-ui.mjs scripts/test-turnstile.mjs scripts/test-notifications.mjs",
@@ -43,13 +43,13 @@
     "deploy": "npm run deploy:prod",
     "check:release": "npm run check:private-experiences && node --env-file-if-exists=.env.production.local scripts/release-check.mjs",
     "build:prod": "npm run check:release && CLOUDFLARE_ENV=production NEXT_PUBLIC_APP_ENV=production vinext build && NEXT_PUBLIC_APP_ENV=production npm run check:archive-bundle && npm run check:bundle",
-    "deploy:prod": "npm run check:secrets && npm test && npm run typecheck && npm audit --audit-level=high && npm run build:prod && vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build",
+    "deploy:prod": "npm run check:secrets && npm test && npm run typecheck && node scripts/check-picomatch-advisories.mjs && npm audit --audit-level=high && npm run build:prod && vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build",
     "build:dev": "CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development vinext build && CLOUDFLARE_ENV=development NEXT_PUBLIC_APP_ENV=development npm run check:archive-bundle",
     "deploy:dev": "vinext-cloudflare deploy --config wrangler.jsonc --env development",
     "test:feed-ui": "node --test scripts/test-feed-ui.mjs scripts/test-recent-post-feed.mjs scripts/test-platform-scale.mjs",
     "build:devsite": "node scripts/development-site.mjs",
     "deploy:devsite": "node scripts/development-site.mjs --deploy",
-    "test:dependencies": "node --test scripts/test-braces-security.mjs vendor/braces/test/*.js",
+    "test:dependencies": "node --test scripts/test-braces-security.mjs scripts/test-picomatch-security.mjs vendor/braces/test/*.js",
     "test:analytics": "node --test scripts/test-analytics.mjs scripts/test-search-visibility.mjs scripts/test-search-metadata.mjs scripts/test-launch-workspace.mjs scripts/test-launch-ui.mjs scripts/test-visa-guides.mjs scripts/test-members.mjs",
     "test:chatbot-removed": "node --test scripts/test-chatbot-removed.mjs",
     "test:destinations": "node --test scripts/test-destination-routing.mjs"
@@ -88,6 +88,7 @@
     "date-fns": "4.4.0",
     "lucide-react": "0.562.0",
     "next": "16.4.3",
+    "picomatch": "file:vendor/visathreads-picomatch-v4-4.0.7-patched.tgz",
     "react": "19.2.9",
     "react-dom": "19.2.9",
     "react-server-dom-webpack": "19.2.9",
@@ -103,15 +104,9 @@
     "sharp": "0.35.5",
     "source-map-js": "1.2.2",
     "yaml": "2.9.0",
-    "anymatch": {
-      "picomatch": "2.3.2"
-    },
-    "micromatch": {
-      "picomatch": "2.3.2"
-    },
-    "readdirp": {
-      "picomatch": "2.3.2"
-    },
+    "anymatch": { "picomatch": "file:../../vendor/visathreads-picomatch-v2-2.3.2.tgz" },
+    "micromatch": { "picomatch": "file:../../vendor/visathreads-picomatch-v2-2.3.2.tgz" },
+    "readdirp": { "picomatch": "file:../../vendor/visathreads-picomatch-v2-2.3.2.tgz" },
     "braces": "$braces",
     "postcss-selector-parser": "6.1.5",
     "undici": "7.30.1"

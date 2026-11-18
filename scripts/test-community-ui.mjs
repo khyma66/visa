@@ -132,6 +132,7 @@ dependencies['@/lib/groups'] = dataUrl(groupMethods.map((name) => `export async 
 dependencies['@/lib/community'] = dataUrl('export async function createQuestion(...args){return globalThis.__communityHarness.invoke("createQuestion",args);}');
 dependencies['@/lib/post-presentation'] = await compile('../src/lib/post-presentation.ts');
 dependencies['@/lib/post-categories'] = await compile('../src/lib/post-categories.ts');
+dependencies['@/lib/experience-template'] = await compile('../src/lib/experience-template.ts');
 dependencies['@/lib/tagging'] = await compile('../src/lib/tagging.ts');
 dependencies['./SafetyNotice'] = await compile('../src/components/SafetyNotice.tsx');
 const { AskQuestionForm } = await import(await compile('../src/components/AskQuestionForm.tsx'));
@@ -140,7 +141,7 @@ function createHarness(search = '', storage = new Map()) {
   const h = new Harness();
   h.search = search;
   h.storage = storage;
-  globalThis.window = { location: { search } };
+  globalThis.window = { location: { search, href: `https://visathreads.com/experiences/new${search}` }, history: { replaceState(_state, _title, value) { const url = new URL(value); window.location.href = url.href; window.location.search = url.search; h.search = url.search; } } };
   globalThis.sessionStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, String(value)), removeItem: key => storage.delete(key) };
   h.handlers.listMyCommunitiesPage = async () => ({ communities: [group], nextCursor: null });
   h.handlers.getCommunityById = async (id) => id === group.id ? group : null;
@@ -219,6 +220,82 @@ test('guest drafts survive sign-in or signup navigation in the same tab', async 
       assert.match(textOf(restored.tree), /Your draft is kept in this browser tab while you sign in/);
     } finally { restored.close(); }
   } catch (error) { h.close(); throw error; }
+});
+
+test('visa-scoped templates publish only entered sections with the real actor and selected visa', async () => {
+  const {default: NewExperiencePage}=await import(await compile('../src/app/experiences/new/page.tsx', {'@/components/AskQuestionForm':dataUrl('export function AskQuestionForm(){return null;}')}));
+  for(const visa of ['H-1B','H-4','H-4 / EAD','F-1 / OPT','B1/B2','Family / spouse','General','Other']) {
+    const page=await NewExperiencePage({searchParams:Promise.resolve({visa})});
+    assert.equal(page.props.initialVisa,visa);assert.equal(page.key,visa);
+    const h=createHarness(`?visa=${encodeURIComponent(visa)}`);
+    try {
+      h.render(AskQuestionForm,page.props);await h.settle();
+      assert.equal(field(h,'Visa Type').props.value,visa);
+      change(h,'Experience Title',`My ${visa} appointment experience`);
+      change(h,'Timeline','Application in March; decision in April.');
+      change(h,'Documents used','Appointment confirmation and supporting documents.');
+      change(h,'Details','I attended my appointment and described my own experience with the application process.');
+      change(h,'Outcome or current status','The decision is still pending.');
+      await publish(h);await h.settle();
+      const call=h.calls.find(c=>c.name==='createQuestion');
+      assert(call);assert.equal(call.args[0],'member-a');assert.equal(call.args[1].visa_type,visa);assert.equal(call.args[1].post_kind,'experience');
+      assert.match(call.args[1].body,/Timeline\nApplication in March/);assert.match(call.args[1].body,/My experience\nI attended/);
+      assert.match(call.args[1].body,/Outcome or current status\nThe decision is still pending/);
+      assert.doesNotMatch(call.args[1].body,/Tips for others|City or processing office|Which documents/);
+      assert.equal(h.storage.has(`visathreads:experience-draft:v2:${encodeURIComponent(visa)}`),false);
+      assert(h.pushes.includes('/us/en/experiences/created-question'));
+    }finally{h.close();}
+  }
+  for(const visa of [undefined,'not-a-visa',['H-4','H-1B']]) {
+    const page=await NewExperiencePage({searchParams:Promise.resolve({visa})});assert.equal(page.props.initialVisa,'F-1 / OPT');
+  }
+});
+
+test('experience visa changes restore independent drafts without copying content between them', async () => {
+  const h=createHarness('?visa=H-1B');
+  try {
+    h.render(AskQuestionForm,{experience:true,initialVisa:'H-1B'});await h.settle();
+    change(h,'Experience Title','My saved H1B experience');change(h,'Details','This H1B draft describes my personal visa appointment experience.');change(h,'Timeline','My original H1B timeline');await h.settle();
+    change(h,'Visa Type','H-4');await h.settle();
+    assert.equal(field(h,'Experience Title').props.value,'');assert.equal(field(h,'Timeline').props.value,'');assert.equal(field(h,'Details').props.value,'');
+    change(h,'Experience Title','My separate H4 experience');change(h,'Details','This separate H4 draft describes a different application experience.');await h.settle();
+    change(h,'Visa Type','H-1B');await h.settle();
+    assert.equal(field(h,'Experience Title').props.value,'My saved H1B experience');assert.equal(field(h,'Timeline').props.value,'My original H1B timeline');
+    assert.equal(new URL(window.location.href).searchParams.get('visa'),'H-1B');
+    assert.equal(JSON.parse(h.storage.get('visathreads:experience-draft:v2:H-4')).title,'My separate H4 experience');
+  }finally{h.close();}
+});
+
+test('guest experience template survives login and matching legacy drafts migrate without loss', async () => {
+  const storage=new Map([['visathreads:experience-draft:v1',JSON.stringify({visaType:'H-4',title:'My legacy H4 experience',body:'A saved personal account of my H4 visa application and appointment.'})]]);
+  const h=createHarness('?visa=F-1+%2F+OPT',storage);h.auth.user=null;
+  try {
+    h.render(AskQuestionForm,{experience:true,initialVisa:'F-1 / OPT'});await h.settle();
+    assert.equal(field(h,'Experience Title').props.value,'','An H4 legacy draft cannot populate the F1 form');
+    change(h,'Experience Title','My F1 interview experience');change(h,'Details','I am writing a personal account of my F1 visa interview experience.');change(h,'Tips for others','I prepared copies ahead of time.');await h.settle();
+    const login=nodes(h.tree).find(n=>n.props.href?.startsWith('/login?'));
+    assert.equal(new URL(login.props.href,'https://visa.test').searchParams.get('next'),'/experiences/new?visa=F-1+%2F+OPT');
+    await publish(h);assert(!h.calls.some(c=>c.name==='createQuestion'));
+    h.close();
+    const restored=createHarness('?visa=F-1+%2F+OPT',storage);
+    try{restored.render(AskQuestionForm,{experience:true,initialVisa:'F-1 / OPT'});await restored.settle();assert.equal(field(restored,'Tips for others').props.value,'I prepared copies ahead of time.');}finally{restored.close();}
+    const legacy=createHarness('?visa=H-4',storage);
+    try{legacy.render(AskQuestionForm,{experience:true,initialVisa:'H-4'});await legacy.settle();assert.equal(field(legacy,'Experience Title').props.value,'My legacy H4 experience');assert(!storage.has('visathreads:experience-draft:v1'));assert(storage.has('visathreads:experience-draft:v2:H-4'));}finally{legacy.close();}
+  }catch(error){h.close();throw error;}
+});
+
+test('experience templates enforce the full post limit and require a personal account', async () => {
+  const h=createHarness();
+  try {
+    h.render(AskQuestionForm,{experience:true});await h.settle();
+    change(h,'Experience Title','My F1 personal experience');change(h,'Timeline','A timeline by itself is not a personal account.');
+    await publish(h);h.render();assert(!h.calls.some(c=>c.name==='createQuestion'));assert.match(textOf(h.tree),/at least 30 characters/);
+    change(h,'Details','x'.repeat(9900));change(h,'Documents used','y'.repeat(1000));
+    await publish(h);h.render();assert(!h.calls.some(c=>c.name==='createQuestion'));assert.match(textOf(h.tree),/within 10,000 characters/);
+    const {readExperienceFields}=await import(dependencies['@/lib/experience-template']);
+    assert.deepEqual(readExperienceFields({timeline:12,unknown:'ignored'}),{});
+    assert.equal(readExperienceFields({location:'z'.repeat(2000)}).location.length,200);
+  }finally{h.close();}
 });
 
 test('experience popular tags are available before typing and persist when publishing', async () => {

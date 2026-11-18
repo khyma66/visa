@@ -18,6 +18,7 @@ test('edge validates origin, privacy signals, bots, rate limits, deployment and 
   for(const headers of [{'origin':'https://elsewhere.test'},{'sec-fetch-site':'cross-site'}])assert.equal((await handlePostViews(req('POST',headers),env,()=>true)).status,403);
   for(const headers of [{'dnt':'1'},{'sec-gpc':'1'},{'user-agent':'Googlebot'}])assert.equal((await handlePostViews(req('POST',headers),env,()=>true)).status,202);
   assert.deepEqual(await (await handlePostViews(req('GET',{},'apify-missing'),env,()=>false)).json(),[]);
+  assert.deepEqual(await (await handlePostViews(req('GET',{},'apify-missing'),env,async()=>false)).json(),[],'An asynchronous visibility denial must not count a view');
   assert.equal((await handlePostViews(req(),{...env,SECURITY_READ_LIMIT:{limit:async()=>({success:false})}},()=>true)).status,429);
   assert.equal((await handlePostViews(req(),{},()=>true)).status,503);
   assert.equal(calls.length,1);

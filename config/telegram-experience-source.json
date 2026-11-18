@@ -1,0 +1,26 @@
+{
+  "actorId": "f9ah2tzQwzhF8OyfK",
+  "actorName": "webfinity/telegram-channel-content-media-scraper-v2",
+  "actorUrl": "https://apify.com/webfinity/telegram-channel-content-media-scraper-v2",
+  "referenceRunId": "9G44wVjxkDUHmNG4b",
+  "referenceDatasetId": "8mZzgaiX3gfjOOqpZ",
+  "channel": "F1_Visa_Discussions",
+  "channelUrl": "https://t.me/F1_Visa_Discussions",
+  "input": { "daysRange": 3, "maxPosts": 200, "includeText": true, "downloadMedia": false },
+  "reviewedExperiences": [
+    {
+      "postId": 1363357,
+      "sourceHash": "e052b618b5b407a2dfaa9036ed7d7f31d5a15e3575423bc295854806157b4e5a",
+      "title": "F-1 Refusal for SUNY Buffalo: Applicant Profile",
+      "category": "Refusal & reapplication",
+      "tags": ["f1", "interview", "visa-refusal"]
+    },
+    {
+      "postId": 1363193,
+      "sourceHash": "c6fa07c6029cc470571e54a6cfcd57297154680142be8d82159dae292c7e8a62",
+      "title": "F-1 Refusal for UNH CIS: First Attempt and Applicant Profile",
+      "category": "Refusal & reapplication",
+      "tags": ["f1", "interview", "visa-refusal"]
+    }
+  ]
+}

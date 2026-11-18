@@ -1,0 +1,12 @@
+{
+  "name": "@visathreads/picomatch-v2",
+  "version": "2.3.2",
+  "private": true,
+  "description": "Temporary local picomatch security backport.",
+  "author": "Jon Schlinkert",
+  "license": "MIT",
+  "main": "index.js",
+  "files": ["index.js", "lib"],
+  "engines": { "node": ">=8.6" },
+  "upstream": { "name": "picomatch", "version": "2.3.2", "patch": "micromatch/picomatch#263 at 9ca61909ab0ec680953e21bac80a6e825e1ede81" }
+}

@@ -29,7 +29,13 @@ test('topic labels retain visa acronym capitalization and do not change tag iden
 });
 test('feed visa filters use the same supported U.S. categories as posting forms', async () => {
   const source=await read('src/components/CommunityHome.tsx');
-  assert(source.includes("['', ...VISA_TYPES].map("));
+  const declaration=source.match(/^const FEED_VISAS = .+;$/m)?.[0];assert(declaration);
+  const constants=`const DEFAULT_VISA = 'F-1 / OPT'; const VISA_TYPES = ${JSON.stringify(VISA_TYPES)}; ${declaration} export { FEED_VISAS };`;
+  const {FEED_VISAS}=await import(`data:text/javascript;base64,${Buffer.from(constants).toString('base64')}`);
+  assert.equal(FEED_VISAS[0],'F-1 / OPT');assert.equal(FEED_VISAS.at(-1),'');
+  assert.equal(new Set(FEED_VISAS).size,FEED_VISAS.length);
+  assert.deepEqual(FEED_VISAS.filter(Boolean).sort(),[...VISA_TYPES].sort());
+  assert(source.includes('FEED_VISAS.map('));
   assert(source.includes('VISA_TYPES.includes(visa)'));
 });
 test('country controls are fixed to U.S. and community searches are scoped', async () => {
