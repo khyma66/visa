@@ -5,7 +5,7 @@ const origins:Record<string,string>={
   'visaflow-dev.varunchinna5966.workers.dev':'https://cycnichledvqbxevrwnt.supabase.co',
   'visa-central.com':'https://ppdwysmeistjxzjpmxyk.supabase.co','www.visa-central.com':'https://ppdwysmeistjxzjpmxyk.supabase.co',
 };
-export async function handleArchiveVotes(request:Request,env:SecurityBindings,exists:(kind:string,id:string)=>boolean) {
+export async function handleArchiveVotes(request:Request,env:SecurityBindings,exists:(kind:string,id:string)=>boolean|Promise<boolean>) {
   const url=new URL(request.url),origin=process.env.NEXT_PUBLIC_SUPABASE_URL,key=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,secret=env.SECURITY_INGEST_KEY;
   if(!origin||origin!==origins[url.hostname]||!key||!secret||!/^[a-f0-9]{64}$/.test(secret))return viewsJson({},503);
   if(request.headers.get('sec-fetch-site')==='cross-site')return viewsJson({},403);
@@ -13,7 +13,8 @@ export async function handleArchiveVotes(request:Request,env:SecurityBindings,ex
   if(!ip||!env.SECURITY_READ_LIMIT)return viewsJson({},503);
   if(!(await env.SECURITY_READ_LIMIT.limit({key:`archive-votes:${url.hostname}:${ip}`})).success)return viewsJson({},429);
   const kind=url.searchParams.get('kind'),ids=url.searchParams.getAll('id');
-  if(!kind||!['question','answer'].includes(kind)||!ids.length||ids.length>50||ids.some(id=>!/^apify-[a-zA-Z0-9_-]{1,160}$/.test(id)||!exists(kind,id)))return viewsJson({},404);
+  if(!kind||!['question','answer'].includes(kind)||!ids.length||ids.length>50||ids.some(id=>!/^apify-[a-zA-Z0-9_-]{1,160}$/.test(id)))return viewsJson({},404);
+  if((await Promise.all(ids.map(id=>exists(kind,id)))).some(visible=>!visible))return viewsJson({},404);
   const authorization=request.headers.get('authorization');
   if(authorization&&(!/^Bearer [A-Za-z0-9._-]+$/.test(authorization)||authorization.length>8192))return viewsJson({},401);
   let rpc='archive_vote_summary',args:Record<string,unknown>={kind,targets:[...new Set(ids)]};

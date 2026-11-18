@@ -1,0 +1,28 @@
+{
+  "actorId": "f9ah2tzQwzhF8OyfK",
+  "actorName": "webfinity/telegram-channel-content-media-scraper-v2",
+  "actorUrl": "https://apify.com/webfinity/telegram-channel-content-media-scraper-v2",
+  "referenceRunId": "LgBH1Y1beaLVkUlWS",
+  "referenceDatasetId": "Z9InhQnuo50dbuidi",
+  "channel": "F1_Experiences",
+  "channelUrl": "https://t.me/F1_Experiences",
+  "input": {
+    "daysRange": 30,
+    "maxPosts": 200,
+    "includeText": true,
+    "downloadMedia": false
+  },
+  "reviewedExperiences": [
+    {
+      "postId": 130747,
+      "sourceHash": "a76324f420d623535f48ab800925b90a53c517a259b55985015f6829544a84c0",
+      "title": "F-1 Mumbai Interview: Reported 221(g) and Interview Questions",
+      "category": "Visa interview",
+      "tags": [
+        "f1",
+        "interview",
+        "221g"
+      ]
+    }
+  ]
+}

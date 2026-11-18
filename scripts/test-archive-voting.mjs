@@ -18,6 +18,9 @@ test('only published targets, trusted origin, valid sessions, bounded requests a
  try{
   const read=await handleArchiveVotes(req(),env,exists);assert.equal(read.status,200);assert.equal(read.headers.get('cache-control'),'private, no-store');assert.equal(calls[0].init.headers['x-security-ingest-key'],secret);
   assert.equal((await handleArchiveVotes(req('POST',auth,body),env,exists)).status,200);assert.equal(calls[1].init.headers.Authorization,auth.authorization);assert.deepEqual(JSON.parse(calls[1].init.body),{kind:'question',target:'apify-public',selected:1,expected_user:member});
+  assert.equal((await handleArchiveVotes(req(),env,async()=>false)).status,404,'Await an indexed visibility denial instead of accepting a truthy Promise');
+  assert.equal(calls.length,2);
+  assert.equal((await handleArchiveVotes(req(),env,async()=>true)).status,200,'Newly indexed published posts support vote reads');
   const count=calls.length;
   assert.equal((await handleArchiveVotes(req('GET',{},undefined,'kind=answer&id=apify-public'),env,exists)).status,404);
   assert.equal((await handleArchiveVotes(req('GET',{},undefined,'kind=question&id=apify-fake'),env,exists)).status,404);
@@ -29,4 +32,27 @@ test('only published targets, trusted origin, valid sessions, bounded requests a
   assert.equal((await handleArchiveVotes(req(),{...env,SECURITY_READ_LIMIT:{limit:async()=>({success:false})}},exists)).status,429);
   process.env.NEXT_PUBLIC_SUPABASE_URL='https://ppdwysmeistjxzjpmxyk.supabase.co';assert.equal((await handleArchiveVotes(req(),env,exists)).status,503);assert.equal(calls.length,count);
  }finally{if(oldUrl===undefined)delete process.env.NEXT_PUBLIC_SUPABASE_URL;else process.env.NEXT_PUBLIC_SUPABASE_URL=oldUrl;if(oldKey===undefined)delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;else process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=oldKey;}
+});
+
+test('indexed targets are bounded, deduplicated, gated and limited to visible U.S. posts',async()=>{
+ const compile=async path=>ts.transpileModule(await readFile(new URL(path,import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+ const presentation=url(await compile('../src/lib/post-presentation.ts'));
+ const helper=(await compile('../src/lib/archive-server.ts')).replace("'./licensed-news'",JSON.stringify(url('export const boundedNewsBytes=()=>{throw Error("Unexpected network read");};'))).replace("'./post-presentation'",JSON.stringify(presentation));
+ const {publishedArchiveQuestionIds}=await import(url(helper));
+ const previous={mode:process.env.COMMUNITY_SOURCE_MODE,environment:process.env.APP_ENV,approved:process.env.IMPORTED_CONTENT_APPROVED};
+ let calls=0; const read=async query=>{calls++;assert.equal(query.id,'in.(apify-new,apify-hidden,apify-other-country)');return [
+  {payload:{id:'apify-new',status:'open',destination_country:'United States',visa_type:'F-1 / OPT'}},
+  {payload:{id:'apify-hidden',status:'archived',destination_country:'United States'}},
+  {payload:{id:'apify-other-country',status:'open',destination_country:'Canada',visa_type:'Study permit'}},
+  {payload:{id:'apify-unrequested',status:'open',destination_country:'United States'}},
+ ];};
+ try{
+  process.env.COMMUNITY_SOURCE_MODE='snapshot';process.env.APP_ENV='production';process.env.IMPORTED_CONTENT_APPROVED='true';
+  assert.deepEqual([...await publishedArchiveQuestionIds(['apify-new','apify-new','apify-hidden','apify-other-country'],read)],['apify-new']);assert.equal(calls,1);
+  await assert.rejects(()=>publishedArchiveQuestionIds(['apify-x),id.neq.hidden'],read));
+  await assert.rejects(()=>publishedArchiveQuestionIds(Array.from({length:51},(_,i)=>`apify-${i}`),read));assert.equal(calls,1);
+  process.env.IMPORTED_CONTENT_APPROVED='false';assert.equal((await publishedArchiveQuestionIds(['apify-new'],read)).size,0);assert.equal(calls,1);
+ }finally{
+  for(const [key,value] of Object.entries({COMMUNITY_SOURCE_MODE:previous.mode,APP_ENV:previous.environment,IMPORTED_CONTENT_APPROVED:previous.approved})){if(value===undefined)delete process.env[key];else process.env[key]=value;}
+ }
 });

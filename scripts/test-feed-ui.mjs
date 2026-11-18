@@ -514,6 +514,9 @@ test('each visa scopes all five sorts before Experience navigation on both feeds
         const create=nodes(h.tree).filter(n=>n.props?.href&&textOf(n).includes('Create Experience'));
         assert(create.length>0);
         for(const item of create) assert.equal(new URL(item.props.href,'https://visa.test').searchParams.get('visa'),visa);
+        const primaryCreate=create.find(item=>nodes(nodes(h.tree).find(n=>n.props?.['aria-label']==='Sort experiences')).includes(item));
+        assert(primaryCreate,'The selected visa has a primary Create Experience action');
+        assert.match(primaryCreate.props.className,/(?:^| )col-span-full(?: |$)/,'Create spans the phone control row so its label remains readable');
       }
     } finally {h.close();}
   }
