@@ -95,6 +95,8 @@
   main.leading-7 :is(a[href^="mailto:"], a[href^="tel:"], code, pre) { text-transform: none; }
   .site-footer :is(a, summary) { text-transform: capitalize; }
   input::placeholder, textarea::placeholder { text-transform: none; }
+  /* A capitalized container titles its labels, not the sentences inside it. */
+  .capitalize p:not(.capitalize) { text-transform: none; }
   .site-shell { width: 100%; margin-inline: auto; padding-inline: var(--page-gutter); }
   /* Pages already sit beside navigation: a second centered container creates
      a large empty left rail. Keep reading widths, but share one leading edge. */
