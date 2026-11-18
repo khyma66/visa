@@ -24,6 +24,10 @@ eggs/
 lib/
 !vendor/braces/lib/
 !vendor/braces/lib/**
+!vendor/picomatch-v2/lib/
+!vendor/picomatch-v2/lib/**
+!vendor/picomatch-v4/lib/
+!vendor/picomatch-v4/lib/**
 !src/lib/
 !src/lib/**
 lib64/
@@ -114,6 +118,8 @@ jspm_packages/
 
 # Output of 'npm pack'
 *.tgz
+!vendor/visathreads-picomatch-v2-2.3.2.tgz
+!vendor/visathreads-picomatch-v4-4.0.7-patched.tgz
 
 # Yarn Integrity file
 .yarn-integrity

@@ -28,4 +28,5 @@ jobs:
           path: .cache/visaflow/build-provenance.json
           include-hidden-files: true
           if-no-files-found: error
+      - run: node scripts/check-picomatch-advisories.mjs
       - run: npm audit --audit-level=high

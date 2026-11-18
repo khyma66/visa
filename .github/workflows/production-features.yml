@@ -37,6 +37,7 @@ jobs:
       - run: npm ci
       - run: npm run check:secrets && npm test && npm run typecheck
       - run: node --test scripts/test-production-feature-release.mjs
+      - run: node scripts/check-picomatch-advisories.mjs
       - run: npm audit --audit-level=high
       - name: Capture original live archive and active rollback version
         run: node scripts/production-feature-release.mjs capture
