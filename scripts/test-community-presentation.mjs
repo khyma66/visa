@@ -148,7 +148,7 @@ test('experience feed excludes questions, includes Other, and defaults to newest
   const older={...native,id:'older',visa_type:'F-1 / OPT',post_kind:'experience',experience_category:'Other',created_at:'2026-09-01T00:00:00Z'};
   const newer={...older,id:'newer',title:'A newer visa experience',created_at:'2026-10-01T00:00:00Z'};
   const html=render(CommunityHome,{experience:true},{values:{0:[older,native,newer],4:false}});
-  assert(html.includes('Share Your Experience')); assert(html.includes('/experiences/new'));
+  assert(html.includes('Create Experience')); assert(html.includes('/experiences/new'));
   assert(html.includes('All Experience Categories')); assert(html.includes('Other</option>'));
   assert(html.indexOf('/experiences/newer') < html.indexOf('/experiences/older'));
   assert(!html.includes(`/questions/${native.id}`));

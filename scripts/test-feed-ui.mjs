@@ -503,7 +503,14 @@ test('each visa scopes all five sorts before Experience navigation on both feeds
       const link=nodes(h.tree).find(n=>textOf(n).trim()==='Experience'&&n.props?.href);
       assert(link);const url=new URL(link.props.href,'https://visa.test');
       assert.equal(url.pathname,'/us/en/experiences');assert.equal(url.searchParams.get('visa'),visa);
+      assert.deepEqual([...url.searchParams.keys()],['visa'],'Experience starts with this visa only, without stale search, tag or SOS filters');
+      assert(!nodes(link).some(n=>n.props?.size),'Experience navigation has no arrow icon');
       assert.equal(link.props['aria-current'],experience?'page':undefined);
+      if(experience) {
+        const create=nodes(h.tree).filter(n=>n.props?.href&&textOf(n).includes('Create Experience'));
+        assert(create.length>0);
+        for(const item of create) assert.equal(new URL(item.props.href,'https://visa.test').searchParams.get('visa'),visa);
+      }
     } finally {h.close();}
   }
 });

@@ -1,5 +1,5 @@
 name: Release VisaThreads site
-# Release visa-first feed tabs, the F1 default and the Experience shortcut.
+# Release visa-scoped experience creation with simple fill-in templates.
 
 on:
   workflow_dispatch:
