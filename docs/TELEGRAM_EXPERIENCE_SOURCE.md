@@ -56,4 +56,9 @@ The source posting dates remain November 16 UTC. The run capture date was not
 substituted for them. The saved credential could not read run history, so this
 receipt identifies the owner's shared run rather than claiming a verified latest
 actor run. Content is stored in the published index. Vote/view validation now
-uses that same index so future reviewed additions do not need a bundled-ID update.
+uses that same index in PR #164 so future reviewed additions do not need a
+bundled-ID update. That integration is not deployed yet: application checks and
+the build passed, but the dependency audit blocked the release. Its existing
+`picomatch` dependency is affected by GHSA-fc5q-39xc-vjpf; as checked November 17,
+the advisory lists no patched release. Do not bypass the audit. The two content
+records remain live; vote/view controls require the pending integration release.
