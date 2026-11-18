@@ -89,7 +89,7 @@ export function SiteHeader() {
             {open && <div id="account-panel" className="header-account-panel absolute right-0 top-12 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
               <p className="text-xs font-semibold tracking-wide text-slate-500 capitalize">Your Account</p>
               <p className="mt-1 break-words font-bold text-slate-900">{profile ? `u/${profile.username}` : 'Signed in'}</p>
-              <p className="text-xs text-slate-500 capitalize">{profile ? `${profile.reputation} reputation` : 'Private account menu'}</p>
+              <p className="text-xs text-slate-500">{profile ? `${profile.reputation} reputation` : 'Private account menu'}</p>
               {user.email && <p className="mt-2 break-all text-xs text-slate-600">{user.email}<span className="mt-1 block text-slate-400 capitalize">Sign-in email · visible only to you</span></p>}
               {!profile && (profileLoading ? <p role="status" className="mt-2 text-xs text-slate-500 capitalize">Loading profile…</p> : <button className="mt-2 text-xs text-blue-700 underline capitalize" onClick={() => { void refreshProfile().catch(() => setError('Couldn’t load your profile. Try again.')); }}>Reload profile</button>)}
               <nav aria-label="Account options" className="mt-3 border-y border-slate-100 py-2 capitalize" onClick={() => setOpen(false)}>

@@ -68,7 +68,7 @@ export function PasswordRecovery({ update = false }: { update?: boolean }) {
   return <main className="auth-page">
     <section className="auth-card">
       <h1 className="text-2xl font-black capitalize">{update ? 'Set a new password' : 'Recover your account'}</h1>
-      {demoMode ? <p className="mt-4 capitalize">Account recovery is unavailable in demo mode.</p> : loading || (update && recoveryStatus === 'checking') ? <p role="status" className="mt-4 capitalize">Checking your session…</p> : update && (!user || recoveryStatus === 'invalid') ?
+      {demoMode ? <p className="mt-4">Account recovery is unavailable in demo mode.</p> : loading || (update && recoveryStatus === 'checking') ? <p role="status" className="mt-4 capitalize">Checking your session…</p> : update && (!user || recoveryStatus === 'invalid') ?
         <p className="mt-4">Open your latest recovery email or <Link href="/account/recovery" className="underline">request another link</Link>.</p> : !done &&
         <form onSubmit={submit} aria-busy={busy} className="mt-5 space-y-3">
           <p className="text-xs text-slate-500 capitalize"><span aria-hidden="true" className="text-red-600 capitalize">*</span> Required fields</p>

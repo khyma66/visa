@@ -57,7 +57,7 @@ export default function RootLayout({
           <CommunityAddonsNavigation />
           <div id="main-content" tabIndex={-1}><PolicyAcceptance>{children}</PolicyAcceptance></div>
           <footer className="site-shell border-t border-slate-200 bg-white py-6 text-xs leading-6 text-slate-500 site-footer">
-            <p className="mb-2 font-semibold text-slate-700 capitalize">U.S. visa questions, shared experiences, and helpful resources.</p>
+            <p className="mb-2 font-semibold text-slate-700">U.S. visa questions, shared experiences, and helpful resources.</p>
             <SafetyNotice />
             <nav aria-label="Policies and support" className="mt-2 flex flex-wrap gap-x-4">
               <Link href="/us/en/guides" className="underline capitalize">U.S. Visa Guides</Link>
