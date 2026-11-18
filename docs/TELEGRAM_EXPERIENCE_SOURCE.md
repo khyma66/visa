@@ -55,4 +55,5 @@ source hashes; body text is identical in the detail and experience representatio
 The source posting dates remain November 16 UTC. The run capture date was not
 substituted for them. The saved credential could not read run history, so this
 receipt identifies the owner's shared run rather than claiming a verified latest
-actor run. No website rebuild is needed for these indexed content additions.
+actor run. Content is stored in the published index. Vote/view validation now
+uses that same index so future reviewed additions do not need a bundled-ID update.
