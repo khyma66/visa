@@ -18,6 +18,7 @@ import { EXPERIENCE_CATEGORIES, VISA_TYPES } from '@/lib/post-categories';
 
 const PAGE_SIZE = 20;
 const DEFAULT_VISA = 'F-1 / OPT';
+const FEED_VISAS = [DEFAULT_VISA, ...VISA_TYPES.filter(value => value !== DEFAULT_VISA), ''];
 const SORTS = [['newest', 'New'], ['activity', 'Active'], ['score', 'Top'], ['unanswered', 'Unanswered'], ['sos', 'SOS']] as const;
 type SortMode = typeof SORTS[number][0];
 type PostKind = '' | 'question' | 'discussion' | 'promotion';
@@ -192,10 +193,8 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     .filter((value) => value === 1 || value === pageCount || Math.abs(value - currentPage) <= 2);
   const filtered = Boolean(origin || category || search || visaType !== DEFAULT_VISA || tag || kind !== initialKind || sortMode !== 'newest');
   const experienceParams = new URLSearchParams({ visa: visaType || 'all' });
-  if (search) experienceParams.set('q', search);
-  if (tag) experienceParams.set('tag', tag);
-  if (origin) experienceParams.set('origin', origin);
-  if (sortMode !== 'newest') experienceParams.set('sort', sortMode);
+  // Experience is a separate feed: carry the visa, not question-only filters
+  // (in particular SOS/unanswered), which can otherwise hide every story.
   const experienceHref = `/us/en/experiences?${experienceParams}`;
   const popularTags = useMemo(() => {
     const counts = new Map<string, number>();
@@ -247,13 +246,13 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
             <div className="feed-controls">
               <div role="group" aria-label="Filter by visa">
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                  {['', ...VISA_TYPES].map((value) => <button key={value || 'all'} type="button" onClick={() => selectVisa(value)} aria-pressed={visaType === value} className={`min-h-11 rounded-full border px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${visaType === value ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50'}`}>{value.replace(/-/g, '') || 'All visas'}</button>)}
+                  {FEED_VISAS.map((value) => <button key={value || 'all'} type="button" onClick={() => selectVisa(value)} aria-pressed={visaType === value} className={`min-h-11 rounded-full border px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${visaType === value ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50'}`}>{value.replace(/-/g, '') || 'All visas'}</button>)}
                   {filtered && <button type="button" onClick={resetFilters} aria-label="Reset filters" className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"><X size={14} aria-hidden="true" />Clear filters</button>}
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-3" role="group" aria-label={experience ? 'Sort experiences' : 'Sort questions'}>
-                {SORTS.map(([value, label]) => <button key={value} type="button" onClick={() => selectSort(value)} aria-pressed={sortMode === value} className={`feed-sort-button capitalize rounded-lg px-3 py-2 text-sm font-semibold ${sortMode === value ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}
-                <Link href={experienceHref} prefetch={false} aria-current={experience ? 'page' : undefined} className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700 ${experience ? 'bg-teal-50 text-teal-900' : 'text-teal-800 hover:bg-teal-50'}`}>Experience<ArrowUpRight size={14} aria-hidden="true" /></Link>
+              <div className="mt-3 grid grid-cols-2 items-center gap-1 border-t border-slate-100 pt-3 min-[380px]:grid-cols-3 sm:flex sm:flex-wrap" role="group" aria-label={experience ? 'Sort experiences' : 'Sort questions'}>
+                {SORTS.map(([value, label]) => <button key={value} type="button" onClick={() => selectSort(value)} aria-pressed={sortMode === value} className={`feed-sort-button capitalize rounded-lg px-1 py-2 text-sm font-semibold sm:px-3 ${sortMode === value ? experience ? 'bg-slate-100 text-slate-900 ring-1 ring-inset ring-slate-300' : 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-teal-50 hover:text-teal-900'}`}>{label}</button>)}
+                <Link href={experienceHref} prefetch={false} aria-current={experience ? 'page' : undefined} className={`feed-sort-button inline-flex min-h-11 items-center justify-center rounded-lg px-1 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 sm:px-3 ${experience ? 'bg-teal-700 text-white hover:bg-teal-800' : 'text-teal-800 hover:bg-teal-700 hover:text-white'}`}>Experience</Link>
               </div>
               {(experience || initialKind || tag) && <div className="mt-3 flex flex-wrap items-center gap-2">
                 {(experience || initialKind) && <select aria-label="Post source" value={origin} onChange={event => { const value = event.target.value as typeof origin; setOrigin(value); updateQuery({ origin: value }); }} className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-medium text-slate-700"><option value="" className="capitalize">All Posts</option><option value="member" className="capitalize">Member Posts</option><option value="earlier" className="capitalize">Earlier Discussions</option></select>}
