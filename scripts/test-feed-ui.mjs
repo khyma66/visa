@@ -522,7 +522,7 @@ test('each visa scopes all five sorts before Experience navigation on both feeds
   }
 });
 
-test('Experience is the green current view; its sort remains accessible without looking like the current page', async () => {
+test('Experience is green only as the current view; its sort remains accessible without looking like the current page', async () => {
   for(const experience of [false,true]) {
     const h=new Harness('');
     try {
@@ -543,7 +543,9 @@ test('Experience is the green current view; its sort remains accessible without 
         assert.equal(h.calls.at(-1).experience,true);
       } else {
         assert.match(button(h,'New').props.className,/(?:^| )bg-teal-700(?: |$)/);
-        assert.match(link.props.className,/hover:bg-teal-700 hover:text-white/);
+        // Not the current view: same look and hover as the other tabs, never green.
+        assert.match(link.props.className,/text-slate-600 hover:bg-teal-50 hover:text-teal-900/);
+        assert.doesNotMatch(link.props.className,/(?:^| )(?:hover:)?(?:bg-teal-700|text-teal-800)(?: |$)/);
       }
     }finally{h.close();}
   }
