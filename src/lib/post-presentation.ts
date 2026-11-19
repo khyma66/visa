@@ -23,9 +23,54 @@ export function canMessageAuthor(post: PostAuthor, viewerId?: string | null): bo
     && Boolean(post.author_username.trim()) && post.author_id !== viewerId;
 }
 
-type MarketPost = { destination_country?: string; visa_type?: string; title?: string; body?: string };
+type MarketPost = { id?: string; source?: string; destination_country?: string; visa_type?: string; title?: string; body?: string };
+
+const GREETING = /^(?:hi|hello|hey|dear|greetings|good (?:morning|evening)|admin|folks|guys|all)\b/i;
+/** Imported text arrives with source formatting: markdown emphasis, Telegram
+ * @handles and #hashtags. Handles name third parties, so they are not shown. */
+export function cleanImportedText(text: string): string {
+  return text.replace(/\*\*|__/g, '')
+    .replace(/(^|[\s(])@[A-Za-z][A-Za-z0-9_]{2,31}\b/g, '$1a member')
+    .replace(/(^|\s)#([A-Za-z][\w-]*)/g, '$1$2');
+}
+function tidyTitle(text: string): string {
+  return cleanImportedText(text).replace(/\*+/g, '').replace(/^#{1,6}\s+/, '')
+    .replace(/^\[(.+)\]$/, '$1').replace(/[-_=~]{3,}$/, '').replace(/\s+/g, ' ').trim();
+}
+/** Earlier imports stored a sentence from the post as its title. When the post
+ * opens with its own short heading line, that line is the thread's real title. */
+export function importedTitle(title: string, body: string, id = ''): string {
+  let stored = tidyTitle(title).replace(/^\s*(?:\d+[.)]|[*•-])\s+/, '').trim();
+  // Stored titles were cut at a fixed length; end a cut-off title at its last
+  // complete sentence (not at abbreviations such as "U.S.").
+  if (stored.length >= 80 && !/[.?!]$/.test(stored)) {
+    const ends = [...stored.matchAll(/(?<![A-Z]\.[A-Z])[.?!](?=\s)/g)].map(match => match.index! + 1).filter(end => end >= 15);
+    if (ends.length) stored = stored.slice(0, ends.at(-1)).trim();
+  }
+  if (id.startsWith('apify-telegram-')) return stored || title;
+  const lines = body.split('\n');
+  const first = tidyTitle(lines[0] ?? '');
+  // A heading line is followed by a blank line or a greeting, not by more of the same paragraph.
+  const next = lines[1] ?? '';
+  const standalone = !next.trim() || GREETING.test(cleanImportedText(next).trim());
+  const words = first.split(/\s+/).filter(Boolean).length;
+  const heading = lines.length > 1 && standalone && first.length >= 15 && first.length <= 140 && words >= 3
+    && !GREETING.test(first) && !/[.,;:]$/.test(first) && first !== stored;
+  return heading ? first : stored || title;
+}
+function presentImported<T extends MarketPost>(post: T): T {
+  if (post.source !== 'apify' && !post.id?.startsWith('apify-')) return post;
+  return { ...post,
+    ...(typeof post.title === 'string' ? { title: importedTitle(post.title, post.body ?? '', post.id) } : {}),
+    ...(typeof post.body === 'string' ? { body: cleanImportedText(post.body) } : {}) };
+}
+
 /** Display scope only, not an authorization boundary. Original archive stays intact. */
 export function usVisaPost<T extends MarketPost>(post: T): T | null {
+  const scoped = usVisaScope(post);
+  return scoped && presentImported(scoped);
+}
+function usVisaScope<T extends MarketPost>(post: T): T | null {
   const country = post.destination_country?.trim().toLowerCase();
   const visa = post.visa_type ?? '';
   if (/^(?:schengen|study permit|work permit|canada work permit)$/i.test(visa)) return null;

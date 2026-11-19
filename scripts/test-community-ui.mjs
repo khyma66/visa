@@ -119,7 +119,8 @@ function byText(h, type, text) {
 function field(h, labelText) {
   const labels = nodes(h.tree).filter((node) => node.type === 'label' && textOf(node).includes(labelText));
   assert.equal(labels.length, 1, `Expected one field label containing ${labelText}`);
-  const input = nodes(labels[0]).find((node) => ['input', 'textarea', 'select'].includes(node.type));
+  const forId = labels[0].props.htmlFor;
+  const input = forId ? nodes(h.tree).find((node) => node.props?.id === forId) : nodes(labels[0]).find((node) => ['input', 'textarea', 'select'].includes(node.type));
   assert(input, `Expected input for ${labelText}`);
   return input;
 }
@@ -192,8 +193,9 @@ test('question and experience forms clearly mark required editable fields and ke
         assert.equal(field(h, name).props.required, true, name);
         if (name !== 'Experience Category') assert.equal(field(h, name).props['aria-label'], name, 'Accessible names exclude decorative asterisks');
       }
-      assert.equal(field(h, 'Destination Country').props.readOnly, true);
-      assert.match(textOf(h.tree), /Dates and timelines are optional/);
+      if (experience) assert(!nodes(h.tree).some(node => node.type === 'label' && textOf(node).includes('Destination Country')), 'Experience form has no fixed-country field');
+      else assert.equal(field(h, 'Destination Country').props.readOnly, true);
+      if (!experience) assert.match(textOf(h.tree), /Dates and timelines are optional/);
       assert.equal(field(h, 'Community').props.required, undefined);
       assert.equal(nodes(h.tree).find(node => node.props['aria-label'] === 'Add a tag').props.required, undefined);
       assert.match(textOf(h.tree), /Tags\s+\(optional\)/);
@@ -233,7 +235,6 @@ test('visa-scoped templates publish only entered sections with the real actor an
       assert.equal(field(h,'Visa Type').props.value,visa);
       change(h,'Experience Title',`My ${visa} appointment experience`);
       change(h,'Timeline','Application in March; decision in April.');
-      change(h,'Documents used','Appointment confirmation and supporting documents.');
       change(h,'Details','I attended my appointment and described my own experience with the application process.');
       change(h,'Outcome or current status','The decision is still pending.');
       await publish(h);await h.settle();
@@ -290,11 +291,13 @@ test('experience templates enforce the full post limit and require a personal ac
     h.render(AskQuestionForm,{experience:true});await h.settle();
     change(h,'Experience Title','My F1 personal experience');change(h,'Timeline','A timeline by itself is not a personal account.');
     await publish(h);h.render();assert(!h.calls.some(c=>c.name==='createQuestion'));assert.match(textOf(h.tree),/at least 30 characters/);
-    change(h,'Details','x'.repeat(9900));change(h,'Documents used','y'.repeat(1000));
+    change(h,'Details','x'.repeat(9900));change(h,'Tips for others','y'.repeat(1000));
     await publish(h);h.render();assert(!h.calls.some(c=>c.name==='createQuestion'));assert.match(textOf(h.tree),/within 10,000 characters/);
     const {readExperienceFields}=await import(dependencies['@/lib/experience-template']);
     assert.deepEqual(readExperienceFields({timeline:12,unknown:'ignored'}),{});
     assert.equal(readExperienceFields({location:'z'.repeat(2000)}).location.length,200);
+    // Drafts from before "Documents used" was removed keep that text under Tips.
+    assert.deepEqual(readExperienceFields({documents:'I-20 and bank letter',tips:'Arrive early'}),{tips:'Documents: I-20 and bank letter\n\nArrive early'});
   }finally{h.close();}
 });
 
@@ -950,4 +953,34 @@ test('member report prevents double submits and ignores late results after conve
     assert.doesNotMatch(textOf(h.tree),/Report Submitted For Review/);
     assert(!nodes(h.tree).some(n=>n.type==='form'));
   } finally {h.close();}
+});
+
+test('experience form drops Documents and the fixed country, and offers Me/VO lines and an interview template', async () => {
+  const h=createHarness('?visa=F-1+%2F+OPT');
+  try {
+    h.render(AskQuestionForm,{experience:true,initialVisa:'F-1 / OPT'});await h.settle();
+    assert(!nodes(h.tree).some(n=>n.props?.['aria-label']==='Documents used'));
+    assert.doesNotMatch(textOf(h.tree),/Destination Country/);
+    const chip=label=>nodes(h.tree).find(n=>n.type==='button'&&n.props['aria-label']===label);
+    assert.equal(chip('Add a line you said').props.draggable,true);
+    change(h,'Details','My interview at the consulate was short.');
+    chip('Add a line you said').props.onClick();h.render();
+    chip('Add a line the visa officer said').props.onClick();h.render();
+    assert.equal(field(h,'Details').props.value,'My interview at the consulate was short.\n🔹Me: \n🔻VO: ');
+    const template=nodes(h.tree).find(n=>n.type==='button'&&textOf(n).trim()==='Use interview template');
+    template.props.onClick();h.render();
+    const body=field(h,'Details').props.value;
+    assert.match(body,/^My interview at the consulate was short\.[\s\S]*\n\nInterview details\nConsulate:/);
+    assert.match(body,/Officer \(gender and approximate age only\):/);assert.match(body,/Your profile\nHighest degree:/);
+    assert.doesNotMatch(body,/race|@/i);
+    change(h,'Experience Category','Travel & arrival');h.render();
+    assert(!nodes(h.tree).some(n=>n.type==='button'&&textOf(n).trim()==='Use interview template'),'The interview template is offered for interview stories only');
+  }finally{h.close();}
+});
+
+test('speaker lines start on their own line at the caret', async () => {
+  const {insertSpeakerLine}=await import(dependencies['@/lib/experience-template']);
+  assert.deepEqual(insertSpeakerLine('',0,'me'),{text:'🔹Me: ',caret:6});
+  assert.deepEqual(insertSpeakerLine('Hello\n',6,'vo'),{text:'Hello\n🔻VO: ',caret:12});
+  assert.equal(insertSpeakerLine('AB',1,'me').text,'A\n🔹Me: B');
 });

@@ -154,16 +154,16 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
     <main className="auth-page">
       <div className={`auth-layout${signup ? ' auth-layout-signup' : ''}`}>
       <section id="sign-in" tabIndex={-1} aria-label={signup ? 'Sign Up for VisaThreads' : 'Log In to VisaThreads'} className="auth-card">
-        {demoMode ? <><h2 className="text-2xl font-black capitalize">Explore the preview</h2><p className="my-4 text-sm text-slate-600 capitalize">This preview uses a sample account. Real sign-in is not connected here.</p><button onClick={() => router.push('/')} className={`${buttonClass} capitalize`}>Explore questions</button></> : user ? <div className="space-y-5">
+        {demoMode ? <><h2 className="text-2xl font-black capitalize">Explore the preview</h2><p className="my-4 text-sm text-slate-600">This preview uses a sample account. Real sign-in is not connected here.</p><button onClick={() => router.push('/')} className={`${buttonClass} capitalize`}>Explore questions</button></> : user ? <div className="space-y-5">
           <h2 className="text-2xl font-bold capitalize">You’re signed in</h2>
           <p className="text-slate-600">Your active account is <strong className="break-all text-slate-900 normal-case">{user.email ?? 'your phone account'}</strong>.</p>
-          <p className="text-xs text-slate-500 capitalize">Only you can see your sign-in details here.</p>
+          <p className="text-xs text-slate-500">Only you can see your sign-in details here.</p>
           {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
           <button className={`${buttonClass} capitalize`} onClick={() => router.replace(safeAuthNext(new URLSearchParams(window.location.search).get('next')))}>Continue to VisaThreads <ArrowRight size={17} /></button>
           <Link href="/account" className="block text-center font-bold text-teal-700 capitalize">View my profile</Link>
           <button type="button" disabled={busy || loading} onClick={() => void run(signOut, { action: 'sign-out' })} className="w-full rounded-xl border border-slate-300 p-3 font-bold disabled:opacity-50 capitalize">{busy ? 'Signing out…' : 'Use a different account'}</button>
         </div> : <>
-          {loading && <p role="status" className="mb-4 text-sm text-slate-600 capitalize">Checking your session… {sessionSlow && <>This is taking longer than expected. <button type="button" onClick={() => window.location.reload()} className="underline capitalize">Reload sign-in</button></>}</p>}
+          {loading && <p role="status" className="mb-4 text-sm text-slate-600">Checking your session… {sessionSlow && <>This is taking longer than expected. <button type="button" onClick={() => window.location.reload()} className="underline capitalize">Reload sign-in</button></>}</p>}
           <nav aria-label="Account access" className="auth-account-tabs mb-5 grid grid-cols-2 gap-1 rounded-xl bg-teal-50 p-1 text-center text-sm font-semibold">
             <a href={accountHref(false)} aria-current={!signup ? 'page' : undefined} className={`${accountTabClass} ${!signup ? selectedAccountTabClass : alternateAccountTabClass} capitalize`}>Log In</a>
             <a href={accountHref(true)} aria-current={signup ? 'page' : undefined} className={`${accountTabClass} ${signup ? selectedAccountTabClass : alternateAccountTabClass} capitalize`}>Sign Up</a>
@@ -178,7 +178,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
                 Continue with Google{methods && !methods.google && <span className="text-xs font-normal capitalize">Not available yet</span>}
               </button>)}
             </div>
-            {settingsError ? <p className="mt-2 text-xs text-slate-600 capitalize">Couldn’t check social sign-in. <button type="button" onClick={() => setRetry(value => value + 1)} className="underline capitalize">Retry</button> or use email below.</p> : !methods && <p className="mt-2 text-xs text-slate-500 capitalize" role="status">Checking sign-in options…</p>}
+            {settingsError ? <p className="mt-2 text-xs text-slate-600">Couldn’t check social sign-in. <button type="button" onClick={() => setRetry(value => value + 1)} className="underline capitalize">Retry</button> or use email below.</p> : !methods && <p className="mt-2 text-xs text-slate-500 capitalize" role="status">Checking sign-in options…</p>}
             <div className="my-4 flex items-center gap-3 text-xs text-slate-500 capitalize"><span className="h-px flex-1 bg-slate-200" />or use email<span className="h-px flex-1 bg-slate-200" /></div>
           </>}
           {step !== 'confirmation' && <p className="text-xs text-slate-500 capitalize"><span className="font-semibold text-red-600 capitalize" aria-hidden="true">*</span> Required fields</p>}
@@ -215,10 +215,10 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             {message && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
             <button disabled={busy || loading || Boolean(captchaSiteKey && !captchaToken)} className={buttonClass}>{busy ? 'Please wait…' : step === 'email' ? (signup && codeChannel === 'email' ? 'Sign Up' : !useCode ? 'Log In' : 'Send verification code') : 'Verify & continue'}<ArrowRight aria-hidden="true" size={17} /></button>
           </form>}
-          {signup && step === 'email' && <p className="mt-3 text-xs leading-5 text-slate-500 capitalize">Before participating, you’ll confirm the <Link href="/terms" target="_blank" rel="noopener" className="underline capitalize">Terms</Link> and <Link href="/privacy" target="_blank" rel="noopener" className="underline capitalize">Privacy notice</Link>. Links open in a new tab.</p>}
+          {signup && step === 'email' && <p className="mt-3 text-xs leading-5 text-slate-500">Before participating, you’ll confirm the <Link href="/terms" target="_blank" rel="noopener" className="underline capitalize">Terms</Link> and <Link href="/privacy" target="_blank" rel="noopener" className="underline capitalize">Privacy notice</Link>. Links open in a new tab.</p>}
           {step === 'email' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm text-teal-700 capitalize"><span className="flex flex-wrap gap-3 capitalize">{methods?.phone && <button type="button" disabled={busy || loading} onClick={() => { setCodeChannel('phone'); setUseCode(true); setPassword(''); setError(''); }} className="capitalize">Use phone instead</button>}{codeChannel === 'phone' && <button type="button" disabled={busy || loading} onClick={() => { setCodeChannel('email'); setUseCode(true); setPassword(''); setError(''); }} className="capitalize">Use email instead</button>}{codeChannel === 'email' && !signup && <button type="button" disabled={busy || loading} onClick={() => { setUseCode(value => !value); setPassword(''); setError(''); }} className="capitalize">{useCode ? 'Use a password instead' : 'Use an email code instead'}</button>}</span>{!signup && <Link href="/account/recovery" className="underline capitalize">Forgot password?</Link>}</div>}
           {step === 'code' && <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm font-bold text-teal-700"><button type="button" disabled={busy || loading || Boolean(captchaSiteKey && !captchaToken)} onClick={() => void run(sendCode, { action: 'request-code', createAccount: signup, channel: codeChannel })} className="disabled:text-slate-400">Resend code</button><button type="button" disabled={busy || loading} onClick={() => { setStep('email'); setCode(''); setError(''); setMessage(''); }} className="capitalize">Use a different {codeChannel === 'phone' ? 'phone' : 'email'}</button></div>}
-          <p className="mt-4 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 capitalize">Your email stays private. We’ll create a public username for you.</p>
+          <p className="mt-4 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">Your email stays private. We’ll create a public username for you.</p>
         </>}
       </section>
       <aside className="auth-welcome" aria-label="VisaThreads community">
@@ -232,7 +232,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
         <div className="auth-welcome-copy capitalize">
           <span className="auth-community-label capitalize">The VisaThreads Community</span>
           <h2 className="capitalize">{signup ? <>Your Next Chapter<br />Starts Here.</> : <>Welcome<br />Back.</>}</h2>
-          <p className="capitalize">{signup ? 'Ask Questions, Share Experiences, And Find People On A Journey Like Yours.' : 'Pick Up Your Conversations And Find Fresh Perspectives For Your Visa Journey.'}</p>
+          <p className="">{signup ? 'Ask Questions, Share Experiences, And Find People On A Journey Like Yours.' : 'Pick Up Your Conversations And Find Fresh Perspectives For Your Visa Journey.'}</p>
         </div>
       </aside>
       </div>

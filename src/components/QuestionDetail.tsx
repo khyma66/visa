@@ -176,8 +176,8 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
 
           <section className="mt-4 border-t border-slate-200 pt-7">
             <h2 className="text-thread-title font-semibold text-slate-950 capitalize">{experience ? `${question.answer_count} ${question.answer_count === 1 ? 'reply' : 'replies'}` : imported ? `${question.answer_count} ${question.answer_count === 1 ? 'comment' : 'comments'}` : `${question.answer_count} ${question.answer_count === 1 ? 'answer' : 'answers'}`}</h2>
-            <p className="mt-2 text-xs text-slate-500 capitalize">{answers.length} shown{!imported && (experience ? ' · Highest votes first' : ' · Accepted answers and highest votes first')}</p>
-            <p className="mt-2 text-xs text-slate-500 capitalize" role="status">{demoMode ? 'Development preview · updates across tabs in this browser' : !user ? 'Log In for live replies and notifications' : liveStatus === 'live' ? 'Live discussion · replies update automatically' : 'Connecting to live updates…'}</p>
+            <p className="mt-2 text-xs text-slate-500">{answers.length} shown{!imported && (experience ? ' · Highest votes first' : ' · Accepted answers and highest votes first')}</p>
+            <p className="mt-2 text-xs text-slate-500" role="status">{demoMode ? 'Development preview · updates across tabs in this browser' : !user ? 'Log In for live replies and notifications' : liveStatus === 'live' ? 'Live discussion · replies update automatically' : 'Connecting to live updates…'}</p>
             {paginationNotice && <p role="status" className="mt-3 rounded-lg bg-blue-50 p-3 text-xs leading-5 text-blue-800">{paginationNotice}</p>}
             <div className="divide-y divide-slate-200">
               {answers.map((answer) => {
@@ -212,8 +212,8 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
 
           <section className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
             <h2 id="reply" className="scroll-mt-24 text-lg font-semibold text-slate-950 capitalize">{imported || experience ? 'Join the discussion' : 'Your answer'}</h2>
-            {canAnswer && <p className="mt-2 text-sm leading-6 text-slate-500 capitalize">Related posts update as you write, using the topics in your reply.</p>}
-            {!canAnswer ? <p className="mt-3 rounded-lg bg-slate-100 p-4 text-sm text-slate-700 capitalize">{experience ? 'This experience is closed to new replies.' : 'This question is closed. Existing answers remain available, but new answers and acceptance are disabled.'}</p> : !user ? <p className="mt-3 text-sm text-slate-600 capitalize"><Link href={`/login?next=${threadPath}`} className="font-bold text-blue-700 underline capitalize">Log In</Link> to reply with your public username.</p> : (
+            {canAnswer && <p className="mt-2 text-sm leading-6 text-slate-500">Related posts update as you write, using the topics in your reply.</p>}
+            {!canAnswer ? <p className="mt-3 rounded-lg bg-slate-100 p-4 text-sm text-slate-700">{experience ? 'This experience is closed to new replies.' : 'This question is closed. Existing answers remain available, but new answers and acceptance are disabled.'}</p> : !user ? <p className="mt-3 text-sm text-slate-600"><Link href={`/login?next=${threadPath}`} className="font-bold text-blue-700 underline capitalize">Log In</Link> to reply with your public username.</p> : (
               <form onSubmit={submitAnswer} className="mt-4"><CompactTextarea id="reply-body" aria-label="Your reply" required minLength={20} maxLength={10000} rows={1} value={answerBody} onChange={(event) => setAnswerBody(event.target.value)} placeholder="Explain what worked and cite official guidance where possible." className="w-full rounded-xl border border-slate-300 px-3 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" /><button disabled={submitting} className="mt-3 rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50 capitalize">{submitting ? 'Posting…' : experience ? 'Post reply' : 'Post answer'}</button></form>
             )}
             {error && <p className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}

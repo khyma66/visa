@@ -7,7 +7,7 @@ import { ResizablePostLayout } from './ResizablePostLayout';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, CheckCircle2, Plus, X } from 'lucide-react';
+import { Check, CheckCircle2, ClipboardList, Plus, X } from 'lucide-react';
 import { getCommunityById, getMembershipForCommunity, listMyCommunitiesPage, type Community } from '@/lib/groups';
 import { createQuestion } from '@/lib/community';
 import { topicLabel } from '@/lib/post-presentation';
@@ -16,7 +16,9 @@ import { useAuth } from './AuthProvider';
 import { RelatedQuestions } from './RelatedQuestions';
 
 import { VISA_TYPES, EXPERIENCE_CATEGORIES } from '@/lib/post-categories';
-import { buildExperienceBody, EXPERIENCE_FIELDS, experienceStoryPrompt, readExperienceFields, type ExperienceFields } from '@/lib/experience-template';
+import { buildExperienceBody, EXPERIENCE_FIELDS, experienceStoryPrompt, experienceTitlePlaceholder, insertSpeakerLine, interviewTemplate, readExperienceFields, SPEAKER_LINES, type ExperienceFields } from '@/lib/experience-template';
+
+const DETAILS_ID = 'post-details';
 
 export function AskQuestionForm({ experience = false, initialVisa }: { experience?: boolean; initialVisa?: string } = {}) {
   const { user, profile, loading } = useAuth();
@@ -48,6 +50,7 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
   const [selectionLoading, setSelectionLoading] = useState(false);
   const [selectionError, setSelectionError] = useState('');
   const submitLock = useRef<symbol | null>(null);
+  const detailsCaret = useRef<number | null>(null);
   const alive = useRef(true);
   const [draftLoaded, setDraftLoaded] = useState<string | null>(null);
   const publishedDraftKey = useRef<string | null>(null);
@@ -147,6 +150,27 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
     }
   }
 
+  // Speaker chips add a line at the last caret position in Details (or at the end).
+  function focusDetails(caret: number) {
+    setTimeout(() => {
+      const element = typeof document === 'undefined' ? null : document.getElementById?.(DETAILS_ID) as HTMLTextAreaElement | null;
+      element?.focus(); element?.setSelectionRange(caret, caret);
+    }, 0);
+  }
+  function addSpeaker(speaker: keyof typeof SPEAKER_LINES) {
+    const next = insertSpeakerLine(body, detailsCaret.current ?? body.length, speaker);
+    if (next.text.length > 10000) return;
+    setBody(next.text); detailsCaret.current = next.caret; focusDetails(next.caret);
+  }
+  function addInterviewTemplate() {
+    const template = interviewTemplate(visaType);
+    const next = body.trim() ? `${body.trimEnd()}\n\n${template}` : template;
+    if (next.length > 10000) return;
+    setBody(next); detailsCaret.current = next.length; focusDetails(next.length);
+  }
+  const rememberCaret = (event: { currentTarget: HTMLTextAreaElement }) => { detailsCaret.current = event.currentTarget.selectionStart; };
+  const templateFilled = EXPERIENCE_FIELDS.some(field => templateFields[field.key]?.trim());
+
   function addTag(value: string) {
     setSelectedTags((current) => normalizeTags([...current, value]));
     setTagInput('');
@@ -210,7 +234,7 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
               {communityId && !communities.some((community) => community.id === communityId) && <option value={communityId}>{selectedCommunity?.display_name ?? (selectionLoading ? 'Checking community…' : 'Join this community before posting')}</option>}
               {communities.map((community) => <option key={community.id} value={community.id}>{community.display_name}</option>)}
             </select>
-            <span className="mt-2 block text-sm text-slate-500 capitalize">Choose a community you joined, or ask the whole community. <Link href="/us/en/explore" className="font-bold text-blue-700 underline capitalize">Find a community</Link></span>
+            <span className="mt-2 block text-sm text-slate-500">Choose a community you joined, or ask the whole community. <Link href="/us/en/explore" className="font-bold text-blue-700 underline capitalize">Find a community</Link></span>
           </label>
           {user && <div className="space-y-3">
             <label className="block text-sm font-semibold capitalize">Search your communities<input maxLength={80} value={communitySearch} onChange={(event) => { setCommunitySearch(event.target.value); resetCommunityPage(); }} placeholder="Find a community you joined" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
@@ -222,6 +246,15 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
           {communityError && <div role="alert" className="text-sm text-rose-700">{communityError} <button type="button" onClick={() => setCommunityRevision((value) => value + 1)} className="font-bold underline capitalize">Retry</button></div>}
   </>;
 
+  const visaFields = <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {!experience && <label className="capitalize"><span className="font-bold text-slate-900 capitalize">Destination Country</span><input readOnly value={country} className="mt-2 w-full rounded-lg border border-slate-200 bg-blue-50 px-4 py-3 text-blue-900" /><span className="mt-1 block text-xs text-slate-500 capitalize">U.S. visa topics only for now.</span></label>}
+            <label className="block min-w-0"><span className="font-bold text-slate-900 capitalize">Visa Type <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Visa Type" required value={visaType} onChange={(event) => changeVisa(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600">{VISA_TYPES.map((type) => <option key={type} value={type}>{type === 'Family / spouse' ? 'Family / Spouse' : type.replace(/-/g, '')}</option>)}</select></label>
+            {experience && <label className="block min-w-0"><span className="font-bold text-slate-900 capitalize">Experience Category <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Experience Category" required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
+          </div>
+          {visaType === 'Other' && <p className="text-sm text-slate-600">Please mention your visa type in the title or details below.</p>}
+  </>;
+
   if (loading) return <div className="mx-auto max-w-4xl p-8 capitalize">Loading your profile…</div>;
 
   return (
@@ -231,41 +264,45 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
         {(experience ? ['Describe what happened in your own words.', 'Dates and waiting times can be approximate.', 'Add the outcome, or update your story when it changes.'] : ['Search first and review close matches.', 'Use a specific title with the visa type.', 'Return to accept the answer that solved your question.']).map((tip) => <div key={tip} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600"><CheckCircle2 className="mt-0.5 shrink-0 text-blue-600" size={18} />{tip}</div>)}
       </div>}>
       <section>
-        <p className="text-sm font-bold tracking-wider text-blue-700 capitalize">{experience ? `${visaLabel} experience` : 'Ask the Community'}</p>
+        <p className={`text-sm font-bold tracking-wider ${experience ? 'text-teal-800' : 'text-blue-700'}`}>{experience ? `${visaLabel} experience` : 'Ask the Community'}</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 capitalize">{experience ? 'Create your experience' : 'Share the details that make your case different'}</h1>
-        {user ? <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your public username'}</b>.</p> : <p className="mt-3 text-sm text-slate-600 capitalize"><Link href={loginReturn} className="font-semibold text-blue-700 underline capitalize">Log in</Link> or <Link href={loginReturn.replace('/login?', '/signup?')} className="font-semibold text-blue-700 underline capitalize">create an account</Link> to publish. Your draft is kept in this browser tab while you sign in.</p>}
+        {user ? <p className="mt-3 text-slate-600">You will post publicly as <b>u/{profile?.username ?? 'your public username'}</b>.</p> : <p className="mt-3 text-sm text-slate-600"><Link href={loginReturn} className="font-semibold text-blue-700 underline capitalize">Log in</Link> or <Link href={loginReturn.replace('/login?', '/signup?')} className="font-semibold text-blue-700 underline capitalize">create an account</Link> to publish. Your draft is kept in this browser tab while you sign in.</p>}
         <form onSubmit={submit} className="mt-5 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           {!experience && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={sos} onChange={event => setSos(event.target.checked)} /> Mark as SOS: urgent visa question</label>{sos && <p className="mt-2 leading-6">Community replies are not immediate or guaranteed. If someone is in immediate danger in the U.S., call 911.</p>}</div>}
           {sharedPath && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><p>Choose a community you have joined and add your own title and context. A link to the original discussion will be added when you post. Check that sharing it is appropriate for the chosen audience.</p></div>}
           <p className="text-sm text-slate-500 capitalize"><span aria-hidden="true" className="font-semibold text-rose-700 capitalize">*</span> Required fields</p>
-          {experience ? <details open={!!communityId || !!sharedPath} className="rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Post in a community (optional)</summary><div className="mt-4 space-y-4">{communityFields}</div></details> : communityFields}
-          <label className="block capitalize">
+          {experience ? visaFields : communityFields}
+          <label className="block">
             <span className="font-bold text-slate-900 capitalize">{experience ? 'Experience Title' : 'Question Title'} <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span>
-            <span id="post-title-help" className="mt-1 block text-sm text-slate-500 capitalize">Be specific. Use 15–180 characters.</span>
-            <input aria-label={experience ? 'Experience Title' : 'Question Title'} aria-describedby="post-title-help" required minLength={15} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={experience ? `My ${visaLabel} application experience` : 'Can I… / How should I…'}
+            <span id="post-title-help" className="mt-1 block text-sm text-slate-500">Be specific. Use 15–180 characters.</span>
+            <input aria-label={experience ? 'Experience Title' : 'Question Title'} aria-describedby="post-title-help" required minLength={15} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={experience ? experienceTitlePlaceholder(category, visaLabel) : 'Can I… / How should I…'}
               className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
           </label>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <label className="capitalize"><span className="font-bold text-slate-900 capitalize">Destination Country</span><input readOnly value={country} className="mt-2 w-full rounded-lg border border-slate-200 bg-blue-50 px-4 py-3 text-blue-900" /><span className="mt-1 block text-xs text-slate-500 capitalize">U.S. visa topics only for now.</span></label>
-            <label><span className="font-bold text-slate-900 capitalize">Visa Type <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Visa Type" required value={visaType} onChange={(event) => changeVisa(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600">{VISA_TYPES.map((type) => <option key={type} value={type}>{type === 'Family / spouse' ? 'Family / Spouse' : type.replace(/-/g, '')}</option>)}</select></label>
-          </div>
-          {visaType === 'Other' && <p className="text-sm text-slate-600 capitalize">Please mention your visa type in the title or details below.</p>}
-          {experience && <label className="block"><span className="font-bold text-slate-900 capitalize">Experience Category <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Experience Category" required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
+          {!experience && visaFields}
 
-          <label className="block capitalize">
-            <span className="font-bold text-slate-900 capitalize">Details <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span>
-            <span id="post-body-help" className="mt-1 block text-sm text-slate-500 capitalize">Share the relevant context in at least 30 characters. Dates and timelines are optional.</span>
-            <CompactTextarea aria-label="Details" aria-describedby="post-body-help" required minLength={30} maxLength={10000} rows={3} placeholder={experience ? experienceStoryPrompt(visaType) : undefined} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
-          </label>
-          {experience && <fieldset className="min-w-0 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
-            <legend className="px-1 text-base font-semibold text-teal-900">Your {visaLabel} template</legend>
-            <p className="mb-4 text-sm leading-6 text-slate-600">Fill in what helps tell your story. These fields are optional; empty sections stay out of your post.</p>
-            <div className="grid gap-4 sm:grid-cols-2">{EXPERIENCE_FIELDS.map(field => <label key={field.key} className={`block min-w-0 text-sm font-semibold text-slate-800 ${field.key !== 'timeline' && field.key !== 'location' ? 'sm:col-span-2' : ''}`}>{field.label}<span className="ml-1 font-normal text-slate-500">(optional)</span><CompactTextarea aria-label={field.label} rows={2} maxLength={field.maxLength} placeholder={field.placeholder} value={templateFields[field.key] ?? ''} onChange={event => setTemplateFields(current => ({...current, [field.key]: event.target.value}))} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-normal leading-6 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100" /></label>)}</div>
-          </fieldset>}
-          {experience && <div className="space-y-2"><p className={`text-right text-xs tabular-nums ${postBody.length > 10000 ? 'text-rose-700' : 'text-slate-500'}`}>{postBody.length.toLocaleString()} / 10,000 characters</p><details className="rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-semibold text-teal-800">Preview experience</summary><div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{postBody || 'Your experience will appear here as you write.'}</div></details></div>}
+          <div className="block min-w-0">
+            <label htmlFor={DETAILS_ID} className="font-bold text-slate-900 capitalize">Details <span aria-hidden="true" className="text-rose-700 capitalize">*</span></label>
+            <span id="post-body-help" className="mt-1 block text-sm text-slate-500">{experience ? 'At least 30 characters. Use Me and VO to write your interview as a conversation.' : 'Share the relevant context in at least 30 characters. Dates and timelines are optional.'}</span>
+            {experience && <div role="toolbar" aria-label="Writing helpers" className="mt-3 flex flex-wrap items-center gap-2">
+              {(['me', 'vo'] as const).map(speaker => <button key={speaker} type="button" draggable onClick={() => addSpeaker(speaker)} onDragStart={event => { event.dataTransfer.setData('text/plain', `\n${SPEAKER_LINES[speaker]}`); event.dataTransfer.effectAllowed = 'copy'; }}
+                aria-label={speaker === 'me' ? 'Add a line you said' : 'Add a line the visa officer said'} title="Tap to add a line, or drag it into your text"
+                className="inline-flex min-h-9 cursor-grab items-center rounded-full border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:border-teal-400 hover:bg-teal-50 active:cursor-grabbing focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">{SPEAKER_LINES[speaker].replace(': ', '')}</button>)}
+              {category === 'Visa interview' && <button type="button" onClick={addInterviewTemplate} className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"><ClipboardList size={15} aria-hidden="true" />Use interview template</button>}
+            </div>}
+            <CompactTextarea id={DETAILS_ID} aria-label="Details" aria-describedby="post-body-help" required minLength={30} maxLength={10000} rows={3} placeholder={experience ? experienceStoryPrompt(visaType) : undefined} value={body}
+              onChange={(event) => { setBody(event.target.value); detailsCaret.current = event.target.selectionStart; }} onSelect={rememberCaret} onKeyUp={rememberCaret} onClick={rememberCaret}
+              className="mt-3 w-full min-w-0 rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
+            {experience && <p className={`mt-1 flex justify-between gap-3 text-xs tabular-nums ${postBody.length > 10000 ? 'text-rose-700' : 'text-slate-500'}`}><span>{body.trim().length < 30 ? `${30 - body.trim().length} more characters needed` : 'Looks good'}</span><span>{postBody.length.toLocaleString()} / 10,000</span></p>}
+          </div>
+          {experience && <details open={templateFilled || undefined} className="group min-w-0 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
+            <summary className="cursor-pointer text-base font-semibold text-teal-900">More details <span className="font-normal text-slate-500">(optional)</span></summary>
+            <p className="mt-2 mb-4 text-sm leading-6 text-slate-600">Empty fields stay out of your post.</p>
+            <div className="grid gap-4 sm:grid-cols-2">{EXPERIENCE_FIELDS.map(field => <label key={field.key} className="block min-w-0 text-sm font-semibold text-slate-800">{field.label}<CompactTextarea aria-label={field.label} rows={1} maxLength={field.maxLength} placeholder={field.placeholder} value={templateFields[field.key] ?? ''} onChange={event => setTemplateFields(current => ({...current, [field.key]: event.target.value}))} className="mt-2 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-normal leading-6 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100" /></label>)}</div>
+          </details>}
+          {experience && <div className="space-y-2"><details className="rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-semibold text-teal-800">Preview experience</summary><div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{postBody || 'Your experience will appear here as you write.'}</div></details></div>}
           <div className="block">
             <span className="font-bold text-slate-900 capitalize">Tags <span className="text-sm font-normal text-slate-500 capitalize">(optional)</span></span>
-            <span id="post-tags-help" className="mt-1 block text-sm text-slate-500 capitalize">Pick popular tags below or type your own. Add up to five.</span>
+            <span id="post-tags-help" className="mt-1 block text-sm text-slate-500">Pick popular tags below or type your own. Add up to five.</span>
             <div className="mt-3 flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 focus-within:border-blue-600 focus-within:ring-4 focus-within:ring-blue-100">
               {selectedTags.map((tag) => <span key={topicLabel(tag)} className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1.5 text-sm font-bold text-blue-700">{topicLabel(tag)}<button type="button" aria-label={`Remove ${topicLabel(tag)}`} onClick={() => setSelectedTags((current) => current.filter((item) => item !== tag))} className="rounded p-0.5 hover:bg-blue-100"><X size={13} /></button></span>)}
               <input aria-label="Add a tag" aria-describedby="post-tags-help post-tags-count" disabled={selectedTags.length >= 5 || submitting} maxLength={40} value={tagInput} onChange={(event) => setTagInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); if (event.key === ',' || event.key === 'Enter' || event.key === 'Tab') { if (tagInput.trim()) { event.preventDefault(); addTag(tagInput); } } }} placeholder={selectedTags.length >= 5 ? 'Remove a tag to add another' : selectedTags.length ? 'Add another tag' : 'Type a tag and press Enter'} className="min-w-0 basis-40 flex-1 border-0 p-1 outline-none disabled:bg-transparent" />
@@ -281,10 +318,11 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
               })}</div>
             </div>
             {suggestedTags.length > 0 && <div className="mt-3 rounded-lg bg-slate-50 p-3"><div className="flex items-center gap-2 text-xs font-bold tracking-wide text-slate-500"><Check size={14} /> Suggested from Your Post</div><div className="mt-2 flex flex-wrap gap-2">{suggestedTags.map((tag) => selectedTags.includes(tag) ? <span key={topicLabel(tag)} className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700"><Check size={12} /> {topicLabel(tag)}</span> : <button key={topicLabel(tag)} type="button" onClick={() => addTag(tag)} disabled={selectedTags.length >= 5} className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-blue-700 shadow-sm ring-1 ring-slate-200 hover:bg-blue-50 disabled:opacity-40"><Plus size={12} /> {topicLabel(tag)}</button>)}</div></div>}
-            <p className="mt-2 text-xs text-slate-500 capitalize">Your selected tags are saved. Suggested tags are added automatically when you publish.</p>
+            <p className="mt-2 text-xs text-slate-500">Your selected tags are saved. Suggested tags are added automatically when you publish.</p>
           </div>
+          {experience && <details open={!!communityId || !!sharedPath} className="rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Post in a community <span className="font-normal text-slate-500">(optional)</span></summary><div className="mt-4 space-y-4">{communityFields}</div></details>}
           {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
-          <button disabled={submitting} className="rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-60 capitalize">{submitting ? 'Publishing…' : experience ? 'Publish Experience' : 'Publish Question'}</button>
+          <button disabled={submitting} className={`w-full rounded-lg px-5 py-3 font-bold text-white disabled:opacity-60 capitalize sm:w-auto ${experience ? 'bg-teal-700 hover:bg-teal-800' : 'bg-blue-700 hover:bg-blue-800'}`}>{submitting ? 'Publishing…' : experience ? 'Publish Experience' : 'Publish Question'}</button>
         </form>
       </section>
 

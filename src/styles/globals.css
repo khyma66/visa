@@ -89,12 +89,14 @@
   .tab-row-centered > :first-child { margin-inline-start: auto; }
   .tab-row-centered > :last-child { margin-inline-end: auto; }
 
-  /* Style information pages without changing versioned policy source text. */
-  main.leading-7 :is(h1, h2, h3, p, li, dt, dd),
-  main.leading-7 a:not([href^="mailto:"]):not([href^="tel:"]) { text-transform: capitalize; }
+  /* Title Case is for headings and labels only. Policy and help text stays in
+     its source sentence case so legal wording reads exactly as written. */
+  main.leading-7 :is(h1, h2, h3) { text-transform: capitalize; }
   main.leading-7 :is(a[href^="mailto:"], a[href^="tel:"], code, pre) { text-transform: none; }
-  .site-footer { text-transform: capitalize; }
-  input::placeholder, textarea::placeholder { text-transform: capitalize; }
+  .site-footer :is(a, summary) { text-transform: capitalize; }
+  input::placeholder, textarea::placeholder { text-transform: none; }
+  /* A capitalized container titles its labels, not the sentences inside it. */
+  .capitalize p:not(.capitalize) { text-transform: none; }
   .site-shell { width: 100%; margin-inline: auto; padding-inline: var(--page-gutter); }
   /* Pages already sit beside navigation: a second centered container creates
      a large empty left rail. Keep reading widths, but share one leading edge. */
@@ -234,7 +236,6 @@
 }
 .auth-card {
   width: 100%;
-  text-transform: capitalize;
   max-width: 380px;
   border: 1px solid #d9e8e5;
   border-radius: 20px;
@@ -243,6 +244,8 @@
   box-shadow: 0 12px 40px -20px #134e4a26;
   scroll-margin-top: 96px;
 }
+/* Keep Title Case on form labels and actions, not on help text or placeholders. */
+.auth-card :is(h1, h2, label, button, [role="tab"]) { text-transform: capitalize; }
 .auth-layout > .auth-card { max-width: var(--auth-form-width); border: 0; border-radius: 24px 0 0 24px; box-shadow: none; }
 .auth-layout-signup { --auth-form-width: 360px; --auth-welcome-width: 300px; }
 .auth-layout-signup > .auth-card { padding-block: 20px; }
@@ -330,6 +333,8 @@
 
 /* Consistent news presentation, including loaded headlines and topic controls. */
 .news-desk { text-transform: capitalize; }
+/* Story summaries, bylines and captions are publisher text: keep their case. */
+.news-desk :is(.news-story p, details p) { text-transform: none; }
 .news-desk :is(button, a, summary) { text-transform: inherit; }
 /* Shared compact editors: grow naturally, then scroll without losing draft text. */
 .compact-composer { min-height: 3rem; max-height: min(20rem, 50dvh); resize: none; overflow-y: auto; }

@@ -413,7 +413,7 @@ test('loaded page ranges match twenty visible cards then the final twenty-first 
     assert.equal(nodes(h.tree).find(node => node.props?.['aria-label'] === 'Page 2').props['aria-current'], 'page');
     button(h, 'Previous').props.onClick(); h.render(); await h.settle();
     assert.deepEqual(ids(h), firstPage);
-    assert.equal(h.calls.length, 1, 'Local pages should not refetch an already loaded page');
+    assert.equal(h.calls.length, 2, 'Next tries to fill a partial page once; Previous never refetches loaded pages');
   } finally { h.close(); }
 });
 
@@ -522,7 +522,7 @@ test('each visa scopes all five sorts before Experience navigation on both feeds
   }
 });
 
-test('Experience is the green current view; its sort remains accessible without looking like the current page', async () => {
+test('Experience is green only as the current view; its sort remains accessible without looking like the current page', async () => {
   for(const experience of [false,true]) {
     const h=new Harness('');
     try {
@@ -543,7 +543,9 @@ test('Experience is the green current view; its sort remains accessible without 
         assert.equal(h.calls.at(-1).experience,true);
       } else {
         assert.match(button(h,'New').props.className,/(?:^| )bg-teal-700(?: |$)/);
-        assert.match(link.props.className,/hover:bg-teal-700 hover:text-white/);
+        // Not the current view: same look and hover as the other tabs, never green.
+        assert.match(link.props.className,/text-slate-600 hover:bg-teal-50 hover:text-teal-900/);
+        assert.doesNotMatch(link.props.className,/(?:^| )(?:hover:)?(?:bg-teal-700|text-teal-800)(?: |$)/);
       }
     }finally{h.close();}
   }
@@ -607,4 +609,45 @@ test('appending older pages does not resubscribe and reset the feed', async () =
     assert.match(textOf(h.tree),/Posts 41–60/);
     assert.equal(h.subscriptions.length,count,'Fetching older posts must not change live subscriptions');
   } finally {h.close();}
+});
+
+test('Next keeps fetching filtered batches until the page is full and records it in the URL', async () => {
+  const h = new Harness();
+  // Each server batch has only 8 matching posts once browser filters run.
+  let batch = 0;
+  h.getPage = async ({ before }) => {
+    const n = before ? ++batch : 0;
+    return { questions: Array.from({ length: 8 }, (_, i) => question(`b${n}-${i}`, { created_at: `2026-10-${String(28 - n * 3).padStart(2, '0')}T00:0${i}:00Z` })), more: n < 6, cursor: question(`cursor-${n}`) };
+  };
+  try {
+    h.render(); await h.flush();
+    assert.equal(ids(h).length, 8);
+    // A partial page fills in place first, so no unseen post is skipped.
+    button(h, 'Next').props.onClick(); h.render(); await h.settle();
+    assert.equal(ids(h).length, 20);
+    assert.match(textOf(h.tree), /Posts 1–20/);
+    assert.equal(h.calls.filter((call) => call.before).length, 2);
+    // A full page advances to a full next page, fetching as many batches as needed.
+    button(h, 'Next').props.onClick(); h.render(); await h.settle();
+    assert.equal(ids(h).length, 20);
+    assert.match(textOf(h.tree), /Posts 21–40/);
+    assert.equal(h.calls.filter((call) => call.before).length, 4);
+    assert.match(h.writes.at(-1).url, /[?&]page=2(&|$)/);
+    button(h, 'Previous').props.onClick(); h.render(); await h.settle();
+    assert.doesNotMatch(h.writes.at(-1).url, /[?&]page=/);
+  } finally { h.close(); }
+});
+
+test('a shared ?page= link loads forward to that page and filter changes reset it', async () => {
+  const h = new Harness('?visa=all&page=2');
+  h.getPage = async ({ before }) => before
+    ? { questions: Array.from({ length: 20 }, (_, i) => question(`older-${String(i).padStart(2, '0')}`, { created_at: '2026-09-01T00:00:00Z' })), more: false }
+    : { questions: Array.from({ length: 20 }, (_, i) => question(`first-${String(i).padStart(2, '0')}`)), more: true, cursor: question('first-19') };
+  try {
+    h.render(); await h.settle();
+    assert.equal(nodes(h.tree).find((node) => node.props?.['aria-label'] === 'Page 2').props['aria-current'], 'page');
+    assert(ids(h).every((id) => id.startsWith('older-')));
+    button(h, 'Top').props.onClick(); h.render(); await h.settle();
+    assert.doesNotMatch(h.writes.at(-1).url, /[?&]page=/);
+  } finally { h.close(); }
 });

@@ -81,7 +81,7 @@ export function ReportButton({ kind, target, username, compact = false }: { kind
           <option value="spam" className="capitalize">Spam</option><option value="harassment" className="capitalize">Harassment</option><option value="personal-information" className="capitalize">Exposed personal information</option><option value="scam" className="capitalize">Scam or impersonation</option><option value="other" className="capitalize">Other</option>
         </select></label>
         <label className="mt-2 block capitalize">Details (optional)<textarea value={details} maxLength={1000} onChange={(event) => setDetails(event.target.value)} className="mt-1 w-full rounded border p-2" /></label>
-        {kind === 'message' && <p className="my-2 capitalize">Reporting shares this message with authorized moderators, not your entire conversation.</p>}
+        {kind === 'message' && <p className="my-2">Reporting shares this message with authorized moderators, not your entire conversation.</p>}
         <button disabled={busy} className="rounded bg-slate-900 px-3 py-2 font-bold text-white disabled:opacity-50 capitalize">{busy ? 'Submitting…' : 'Submit report'}</button>
       </form>)}
     {status && <p role="status" className="mt-1 max-w-64">{status}</p>}
