@@ -7,7 +7,7 @@ import { ResizablePostLayout } from './ResizablePostLayout';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, CheckCircle2, Plus, X } from 'lucide-react';
+import { Check, CheckCircle2, ClipboardList, Plus, X } from 'lucide-react';
 import { getCommunityById, getMembershipForCommunity, listMyCommunitiesPage, type Community } from '@/lib/groups';
 import { createQuestion } from '@/lib/community';
 import { topicLabel } from '@/lib/post-presentation';
@@ -16,7 +16,9 @@ import { useAuth } from './AuthProvider';
 import { RelatedQuestions } from './RelatedQuestions';
 
 import { VISA_TYPES, EXPERIENCE_CATEGORIES } from '@/lib/post-categories';
-import { buildExperienceBody, EXPERIENCE_FIELDS, experienceStoryPrompt, readExperienceFields, type ExperienceFields } from '@/lib/experience-template';
+import { buildExperienceBody, EXPERIENCE_FIELDS, experienceStoryPrompt, insertSpeakerLine, interviewTemplate, readExperienceFields, SPEAKER_LINES, type ExperienceFields } from '@/lib/experience-template';
+
+const DETAILS_ID = 'post-details';
 
 export function AskQuestionForm({ experience = false, initialVisa }: { experience?: boolean; initialVisa?: string } = {}) {
   const { user, profile, loading } = useAuth();
@@ -48,6 +50,7 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
   const [selectionLoading, setSelectionLoading] = useState(false);
   const [selectionError, setSelectionError] = useState('');
   const submitLock = useRef<symbol | null>(null);
+  const detailsCaret = useRef<number | null>(null);
   const alive = useRef(true);
   const [draftLoaded, setDraftLoaded] = useState<string | null>(null);
   const publishedDraftKey = useRef<string | null>(null);
@@ -147,6 +150,27 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
     }
   }
 
+  // Speaker chips add a line at the last caret position in Details (or at the end).
+  function focusDetails(caret: number) {
+    setTimeout(() => {
+      const element = typeof document === 'undefined' ? null : document.getElementById?.(DETAILS_ID) as HTMLTextAreaElement | null;
+      element?.focus(); element?.setSelectionRange(caret, caret);
+    }, 0);
+  }
+  function addSpeaker(speaker: keyof typeof SPEAKER_LINES) {
+    const next = insertSpeakerLine(body, detailsCaret.current ?? body.length, speaker);
+    if (next.text.length > 10000) return;
+    setBody(next.text); detailsCaret.current = next.caret; focusDetails(next.caret);
+  }
+  function addInterviewTemplate() {
+    const template = interviewTemplate(visaType);
+    const next = body.trim() ? `${body.trimEnd()}\n\n${template}` : template;
+    if (next.length > 10000) return;
+    setBody(next); detailsCaret.current = next.length; focusDetails(next.length);
+  }
+  const rememberCaret = (event: { currentTarget: HTMLTextAreaElement }) => { detailsCaret.current = event.currentTarget.selectionStart; };
+  const templateFilled = EXPERIENCE_FIELDS.some(field => templateFields[field.key]?.trim());
+
   function addTag(value: string) {
     setSelectedTags((current) => normalizeTags([...current, value]));
     setTagInput('');
@@ -245,23 +269,31 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
             <input aria-label={experience ? 'Experience Title' : 'Question Title'} aria-describedby="post-title-help" required minLength={15} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={experience ? `My ${visaLabel} application experience` : 'Can I… / How should I…'}
               className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
           </label>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <label className="capitalize"><span className="font-bold text-slate-900 capitalize">Destination Country</span><input readOnly value={country} className="mt-2 w-full rounded-lg border border-slate-200 bg-blue-50 px-4 py-3 text-blue-900" /><span className="mt-1 block text-xs text-slate-500 capitalize">U.S. visa topics only for now.</span></label>
-            <label><span className="font-bold text-slate-900 capitalize">Visa Type <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Visa Type" required value={visaType} onChange={(event) => changeVisa(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600">{VISA_TYPES.map((type) => <option key={type} value={type}>{type === 'Family / spouse' ? 'Family / Spouse' : type.replace(/-/g, '')}</option>)}</select></label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {!experience && <label className="capitalize"><span className="font-bold text-slate-900 capitalize">Destination Country</span><input readOnly value={country} className="mt-2 w-full rounded-lg border border-slate-200 bg-blue-50 px-4 py-3 text-blue-900" /><span className="mt-1 block text-xs text-slate-500 capitalize">U.S. visa topics only for now.</span></label>}
+            <label className="block min-w-0"><span className="font-bold text-slate-900 capitalize">Visa Type <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Visa Type" required value={visaType} onChange={(event) => changeVisa(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600">{VISA_TYPES.map((type) => <option key={type} value={type}>{type === 'Family / spouse' ? 'Family / Spouse' : type.replace(/-/g, '')}</option>)}</select></label>
+            {experience && <label className="block min-w-0"><span className="font-bold text-slate-900 capitalize">Experience Category <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Experience Category" required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
           </div>
           {visaType === 'Other' && <p className="text-sm text-slate-600">Please mention your visa type in the title or details below.</p>}
-          {experience && <label className="block"><span className="font-bold text-slate-900 capitalize">Experience Category <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Experience Category" required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
 
-          <label className="block capitalize">
-            <span className="font-bold text-slate-900 capitalize">Details <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span>
-            <span id="post-body-help" className="mt-1 block text-sm text-slate-500 capitalize">Share the relevant context in at least 30 characters. Dates and timelines are optional.</span>
-            <CompactTextarea aria-label="Details" aria-describedby="post-body-help" required minLength={30} maxLength={10000} rows={3} placeholder={experience ? experienceStoryPrompt(visaType) : undefined} value={body} onChange={(event) => setBody(event.target.value)} className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
-          </label>
-          {experience && <fieldset className="min-w-0 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
-            <legend className="px-1 text-base font-semibold text-teal-900">Your {visaLabel} template</legend>
-            <p className="mb-4 text-sm leading-6 text-slate-600">Fill in what helps tell your story. These fields are optional; empty sections stay out of your post.</p>
-            <div className="grid gap-4 sm:grid-cols-2">{EXPERIENCE_FIELDS.map(field => <label key={field.key} className={`block min-w-0 text-sm font-semibold text-slate-800 ${field.key !== 'timeline' && field.key !== 'location' ? 'sm:col-span-2' : ''}`}>{field.label}<span className="ml-1 font-normal text-slate-500">(optional)</span><CompactTextarea aria-label={field.label} rows={2} maxLength={field.maxLength} placeholder={field.placeholder} value={templateFields[field.key] ?? ''} onChange={event => setTemplateFields(current => ({...current, [field.key]: event.target.value}))} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-normal leading-6 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100" /></label>)}</div>
-          </fieldset>}
+          <div className="block min-w-0">
+            <label htmlFor={DETAILS_ID} className="font-bold text-slate-900 capitalize">Details <span aria-hidden="true" className="text-rose-700 capitalize">*</span></label>
+            <span id="post-body-help" className="mt-1 block text-sm text-slate-500">{experience ? 'At least 30 characters. Use Me and VO to write your interview as a conversation.' : 'Share the relevant context in at least 30 characters. Dates and timelines are optional.'}</span>
+            {experience && <div role="toolbar" aria-label="Writing helpers" className="mt-3 flex flex-wrap items-center gap-2">
+              {(['me', 'vo'] as const).map(speaker => <button key={speaker} type="button" draggable onClick={() => addSpeaker(speaker)} onDragStart={event => { event.dataTransfer.setData('text/plain', `\n${SPEAKER_LINES[speaker]}`); event.dataTransfer.effectAllowed = 'copy'; }}
+                aria-label={speaker === 'me' ? 'Add a line you said' : 'Add a line the visa officer said'} title="Tap to add a line, or drag it into your text"
+                className="inline-flex min-h-9 cursor-grab items-center rounded-full border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:border-teal-400 hover:bg-teal-50 active:cursor-grabbing focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">{SPEAKER_LINES[speaker].replace(': ', '')}</button>)}
+              {category === 'Visa interview' && <button type="button" onClick={addInterviewTemplate} className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"><ClipboardList size={15} aria-hidden="true" />Use interview template</button>}
+            </div>}
+            <CompactTextarea id={DETAILS_ID} aria-label="Details" aria-describedby="post-body-help" required minLength={30} maxLength={10000} rows={3} placeholder={experience ? experienceStoryPrompt(visaType) : undefined} value={body}
+              onChange={(event) => { setBody(event.target.value); detailsCaret.current = event.target.selectionStart; }} onSelect={rememberCaret} onKeyUp={rememberCaret} onClick={rememberCaret}
+              className="mt-3 w-full min-w-0 rounded-lg border border-slate-300 px-4 py-3 leading-6 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
+          </div>
+          {experience && <details open={templateFilled || undefined} className="group min-w-0 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
+            <summary className="cursor-pointer text-base font-semibold text-teal-900">More details <span className="font-normal text-slate-500">(optional)</span></summary>
+            <p className="mt-2 mb-4 text-sm leading-6 text-slate-600">Empty fields stay out of your post.</p>
+            <div className="grid gap-4 sm:grid-cols-2">{EXPERIENCE_FIELDS.map(field => <label key={field.key} className="block min-w-0 text-sm font-semibold text-slate-800">{field.label}<CompactTextarea aria-label={field.label} rows={1} maxLength={field.maxLength} placeholder={field.placeholder} value={templateFields[field.key] ?? ''} onChange={event => setTemplateFields(current => ({...current, [field.key]: event.target.value}))} className="mt-2 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-normal leading-6 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100" /></label>)}</div>
+          </details>}
           {experience && <div className="space-y-2"><p className={`text-right text-xs tabular-nums ${postBody.length > 10000 ? 'text-rose-700' : 'text-slate-500'}`}>{postBody.length.toLocaleString()} / 10,000 characters</p><details className="rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-semibold text-teal-800">Preview experience</summary><div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{postBody || 'Your experience will appear here as you write.'}</div></details></div>}
           <div className="block">
             <span className="font-bold text-slate-900 capitalize">Tags <span className="text-sm font-normal text-slate-500 capitalize">(optional)</span></span>
