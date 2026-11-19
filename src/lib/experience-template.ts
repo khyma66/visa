@@ -67,3 +67,16 @@ export function interviewTemplate(visa: string): string {
     ['Interview experience', `${SPEAKER_LINES.me}Good morning, officer.`, `${SPEAKER_LINES.vo}Good morning.`].join('\n'),
   ].join('\n\n');
 }
+
+/** Example titles that show what a specific, useful experience title looks like. */
+export function experienceTitlePlaceholder(category: string, visaLabel: string): string {
+  switch (category) {
+    case 'Visa interview': return `e.g. ${visaLabel} interview in Hyderabad, approved on 2nd attempt`;
+    case 'Application & documents': return `e.g. ${visaLabel} application: documents and steps that worked`;
+    case 'Approval & timeline': return `e.g. ${visaLabel} approved after 3 months: my timeline`;
+    case 'Refusal & reapplication': return `e.g. ${visaLabel} refused under 214(b), approved on reapplying`;
+    case 'Renewal & extension': return `e.g. ${visaLabel} extension: what the renewal involved`;
+    case 'Travel & arrival': return `e.g. Arriving on ${visaLabel}: port of entry questions`;
+    default: return `e.g. My ${visaLabel} experience`;
+  }
+}
