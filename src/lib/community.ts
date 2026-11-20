@@ -4,7 +4,7 @@ import { canMessageAuthor, isImportedPost, selectedExperiences, usVisaPost, rece
 import { DEMO_ANSWERS, DEMO_CONVERSATIONS, DEMO_MESSAGES, DEMO_QUESTIONS, DEMO_USER } from './demo-data';
 import { getSupabase, isSupabaseConfigured } from './supabase/client';
 import { inferTags, normalizeTags } from './tagging';
-import { contextTags, createDiscoveryIndex, searchTerms, type DiscoveryContext } from './discovery';
+import { contextTags, createDiscoveryIndex, rareSearchTerms, searchTerms, type DiscoveryContext } from './discovery';
 import { conversationCursorFilter, conversationFolder, conversationFolderFilter, displayedUnreadIds, hasMessageOverlap, isMemberId, MESSAGE_PAGE_SIZE, normalizeMessageUsername, sortConversations, sortMessages, type ConversationCounts, type ConversationFolder } from './messaging-state';
 import type {
   Answer, CommunityFeed, Conversation, DirectMessage, NewQuestion, Question, RelatedQuestion,
@@ -392,8 +392,32 @@ export async function discoverQuestions(context: DiscoveryContext): Promise<Rela
   return withMemberReplyCounts(merged.slice(0, 5));
 }
 
+const compact = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+const termLabel = (term: string) => term.replace(/^[a-z]+(?=-|\d)/, letters => letters.toUpperCase());
+
+/** Similar posts for a post or a draft. Exact identifiers (221g, I-140, DS-160)
+ * are searched the same way as header search and shown first, because topic
+ * ranking alone surfaces generic threads. When a chosen visa leaves fewer than
+ * five matches, the search widens to all visas rather than showing nothing. */
+export async function discoverSimilarQuestions(context: DiscoveryContext): Promise<RelatedQuestion[]> {
+  const text = [context.title, context.body, context.draftText, context.commentText].filter(Boolean).join('\n');
+  const topics = contextTags(context);
+  const exact = Promise.all(rareSearchTerms(text).slice(0, 2).map(term => getQuestionPage({ search: term })
+    .then(page => page.questions
+      .filter(question => question.id !== context.id && compact(`${question.title}\n${question.body}`).includes(compact(term)))
+      .slice(0, 3)
+      .map((question): RelatedQuestion => ({ ...question, matched_tags: question.tags.filter(tag => topics.includes(tag)), match_reason: `Mentions ${termLabel(term)}` })))
+    .catch(() => [] as RelatedQuestion[]))).then(groups => groups.flat());
+  const ranked = await discoverQuestions(context);
+  const widened = context.visa_type && ranked.length < 5
+    ? await discoverQuestions({ ...context, visa_type: '' }).catch(() => [] as RelatedQuestion[]) : [];
+  const merged: RelatedQuestion[] = [];
+  for (const row of [...await exact, ...ranked, ...widened]) if (!merged.some(item => item.id === row.id)) merged.push(row);
+  return merged.slice(0, 5);
+}
+
 export async function relatedQuestions(question: Question, commentText = ''): Promise<RelatedQuestion[]> {
-  return discoverQuestions({ ...question, commentText });
+  return discoverSimilarQuestions({ ...question, commentText });
 }
 
 export async function voteQuestion(questionId: string, _userId: string, value: -1 | 1): Promise<number> {

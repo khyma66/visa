@@ -21,7 +21,7 @@ const dependencies = {
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'), react: hooks,
   'next/link': link, 'next/navigation': moduleUrl('export const useSearchParams=()=>new URLSearchParams();export const useParams=()=>({id:globalThis.__presentation.question?.id});'),
   'lucide-react': import.meta.resolve('lucide-react'), 'date-fns': import.meta.resolve('date-fns'),
-  '@/lib/community': moduleUrl('export const manageOwnContent=()=>{},acceptAnswer=()=>{},createAnswer=()=>{},getAnswerPage=()=>{},getDiscussionContext=()=>{},getQuestion=()=>{},sortAnswers=x=>x,voteAnswer=()=>{},voteQuestion=()=>{},getCommunitySource=()=>{},getQuestionPage=()=>{},discoverQuestions=()=>{};'),
+  '@/lib/community': moduleUrl('export const manageOwnContent=()=>{},acceptAnswer=()=>{},createAnswer=()=>{},getAnswerPage=()=>{},getDiscussionContext=()=>{},getQuestion=()=>{},sortAnswers=x=>x,voteAnswer=()=>{},voteQuestion=()=>{},getCommunitySource=()=>{},getQuestionPage=()=>{},discoverQuestions=()=>{},discoverSimilarQuestions=()=>Promise.resolve([]);'),
   '@/lib/realtime': moduleUrl('export const subscribeLive=()=>()=>{};'),
   '@/lib/supabase/client': moduleUrl('export const isSupabaseConfigured=false,getSupabase=()=>{throw new Error("Network not permitted in presentation test")};'),
   '@/lib/tag-directory': moduleUrl('export const archiveDirectoryPage=()=>{},directoryPage=()=>{};'),

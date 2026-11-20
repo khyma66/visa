@@ -7,7 +7,7 @@ import { ResizablePostLayout } from './ResizablePostLayout';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, CheckCircle2, ClipboardList, Plus, X } from 'lucide-react';
+import { Check, CheckCircle2, ClipboardList, Plus, Users, X } from 'lucide-react';
 import { getCommunityById, getMembershipForCommunity, listMyCommunitiesPage, type Community } from '@/lib/groups';
 import { createQuestion } from '@/lib/community';
 import { topicLabel } from '@/lib/post-presentation';
@@ -15,7 +15,8 @@ import { normalizeTags, POPULAR_POST_TAGS, suggestTags } from '@/lib/tagging';
 import { useAuth } from './AuthProvider';
 import { RelatedQuestions } from './RelatedQuestions';
 
-import { VISA_TYPES, EXPERIENCE_CATEGORIES } from '@/lib/post-categories';
+import { VISA_TYPES, EXPERIENCE_CATEGORIES, inferVisaType } from '@/lib/post-categories';
+import type { RelatedQuestion } from '@/lib/types';
 import { buildExperienceBody, EXPERIENCE_FIELDS, experienceStoryPrompt, experienceTitlePlaceholder, insertSpeakerLine, interviewTemplate, readExperienceFields, SPEAKER_LINES, type ExperienceFields } from '@/lib/experience-template';
 
 const DETAILS_ID = 'post-details';
@@ -29,7 +30,11 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const country = 'United States';
-  const [visaType, setVisaType] = useState(initialVisa && VISA_TYPES.includes(initialVisa) ? initialVisa : experience ? 'F-1 / OPT' : 'H-1B');
+  const [visaType, setVisaType] = useState(initialVisa && VISA_TYPES.includes(initialVisa) ? initialVisa : experience ? 'F-1 / OPT' : '');
+  // Questions start without a visa: a wrong default (it was H-1B) hid every match
+  // for other visas. Until the member picks one, it follows the visa their words describe.
+  const [visaChosen, setVisaChosen] = useState(experience || Boolean(initialVisa && VISA_TYPES.includes(initialVisa)));
+  const [similar, setSimilar] = useState<{ items: RelatedQuestion[]; loading: boolean }>({ items: [], loading: false });
   const [templateFields, setTemplateFields] = useState<ExperienceFields>({});
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
@@ -88,7 +93,7 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
         const draft = JSON.parse(saved) as { title?: unknown; body?: unknown; visaType?: unknown; tags?: unknown; tagInput?: unknown; category?: unknown; communityId?: unknown; templateFields?: unknown };
         if (typeof draft.title === 'string') setTitle(draft.title.slice(0, 180));
         if (typeof draft.body === 'string') setBody(draft.body.slice(0, 10000));
-        if (!experience && typeof draft.visaType === 'string' && VISA_TYPES.includes(draft.visaType)) setVisaType(draft.visaType);
+        if (!experience && typeof draft.visaType === 'string' && VISA_TYPES.includes(draft.visaType)) { setVisaType(draft.visaType); setVisaChosen((draft as { visaChosen?: unknown }).visaChosen !== false); }
         if (experience) setTemplateFields(readExperienceFields(draft.templateFields));
         if (Array.isArray(draft.tags)) setSelectedTags(normalizeTags(draft.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 5)));
         if (typeof draft.tagInput === 'string') setTagInput(draft.tagInput.slice(0, 40));
@@ -100,9 +105,9 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
   }, [draftKey, experience]);
   useEffect(() => {
     if (draftLoaded !== draftKey || publishedDraftKey.current === draftKey) return;
-    try { sessionStorage.setItem(draftKey, JSON.stringify({ title, body, visaType, tags: selectedTags, tagInput, category, communityId, ...(experience ? { templateFields } : {}) })); }
+    try { sessionStorage.setItem(draftKey, JSON.stringify({ title, body, visaType, visaChosen, tags: selectedTags, tagInput, category, communityId, ...(experience ? { templateFields } : {}) })); }
     catch { /* Keep editing available when browser storage is unavailable or full. */ }
-  }, [draftKey, draftLoaded, title, body, visaType, selectedTags, tagInput, category, communityId, experience, templateFields]);
+  }, [draftKey, draftLoaded, title, body, visaType, visaChosen, selectedTags, tagInput, category, communityId, experience, templateFields]);
   useEffect(() => {
     const controller = new AbortController();
     setCommunities([]); setCommunityNext(null); setCommunityError('');
@@ -137,12 +142,15 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
   const loginReturn = `/login?next=${encodeURIComponent(`${experience ? '/experiences/new' : '/ask'}${returnParams.size ? `?${returnParams}` : ''}`)}`;
 
   const postBody = experience ? buildExperienceBody(body, templateFields) : body;
+  // Until a visa is picked, use the one the question's own words describe.
+  const currentVisa = visaChosen ? visaType : inferVisaType(`${title}\n${body}`);
   const visaLabel = visaType.replace(/-/g, '');
   const suggestedTags = suggestTags(`${title}\n${postBody}`);
 
   function changeVisa(value: string) {
     if (!VISA_TYPES.includes(value)) return;
     setVisaType(value);
+    setVisaChosen(true);
     if (experience) {
       const url = new URL(window.location.href);
       url.searchParams.set('visa', value);
@@ -201,6 +209,7 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
     if (sos && !experience && normalizeTags(selectedTags).filter(tag => tag !== 'sos').length >= 5) {
       setError('SOS uses one of the five tag slots. Remove a tag before posting.'); return;
     }
+    if (!currentVisa) { setError('Choose the visa type your question is about.'); return; }
     const sourceUrl = sharedPath ? new URL(sharedPath, window.location.origin).href : '';
     const sharedBody = sourceUrl && !postBody.includes(sourceUrl) ? `${postBody.trim()}\n\nOriginal discussion: ${sourceUrl}` : postBody.trim();
     if (sharedBody.length > 10000) { setError(sourceUrl ? 'Shorten your post to make room for the original discussion link.' : 'Keep your experience within 10,000 characters.'); return; }
@@ -212,7 +221,7 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
     setError('');
     try {
       const id = await createQuestion(user.id, {
-        title: title.trim(), body: sharedBody, destination_country: country.trim(), visa_type: visaType, tags: normalizedTags,
+        title: title.trim(), body: sharedBody, destination_country: country.trim(), visa_type: currentVisa, tags: normalizedTags,
         ...(experience ? { post_kind: 'experience' as const, experience_category: category } : {}),
         ...(communityId ? { community_id: communityId } : {}),
       });
@@ -249,10 +258,10 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
   const visaFields = <>
           <div className="grid gap-4 sm:grid-cols-2">
             {!experience && <label className="capitalize"><span className="font-bold text-slate-900 capitalize">Destination Country</span><input readOnly value={country} className="mt-2 w-full rounded-lg border border-slate-200 bg-blue-50 px-4 py-3 text-blue-900" /><span className="mt-1 block text-xs text-slate-500 capitalize">U.S. visa topics only for now.</span></label>}
-            <label className="block min-w-0"><span className="font-bold text-slate-900 capitalize">Visa Type <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Visa Type" required value={visaType} onChange={(event) => changeVisa(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600">{VISA_TYPES.map((type) => <option key={type} value={type}>{type === 'Family / spouse' ? 'Family / Spouse' : type.replace(/-/g, '')}</option>)}</select></label>
+            <label className="block min-w-0"><span className="font-bold text-slate-900 capitalize">Visa Type <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Visa Type" aria-describedby={!visaChosen ? 'visa-type-help' : undefined} required value={currentVisa} onChange={(event) => changeVisa(event.target.value)} className={`mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600 ${currentVisa ? '' : 'text-slate-500'}`}>{!experience && <option value="" disabled>Select visa type</option>}{VISA_TYPES.map((type) => <option key={type} value={type}>{type === 'Family / spouse' ? 'Family / Spouse' : type.replace(/-/g, '')}</option>)}</select>{!visaChosen && <span id="visa-type-help" className="mt-1 block text-xs text-slate-500">{currentVisa ? 'Detected from your question. Change it if needed.' : 'Choose one, or it is detected as you type your question.'}</span>}</label>
             {experience && <label className="block min-w-0"><span className="font-bold text-slate-900 capitalize">Experience Category <span aria-hidden="true" className="text-rose-700 capitalize">*</span></span><select aria-label="Experience Category" required value={category} onChange={event => setCategory(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3">{EXPERIENCE_CATEGORIES.map(value => <option key={value}>{value}</option>)}</select></label>}
           </div>
-          {visaType === 'Other' && <p className="text-sm text-slate-600">Please mention your visa type in the title or details below.</p>}
+          {currentVisa === 'Other' && <p className="text-sm text-slate-600">Please mention your visa type in the title or details below.</p>}
   </>;
 
   if (loading) return <div className="mx-auto max-w-4xl p-8 capitalize">Loading your profile…</div>;
@@ -260,7 +269,7 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
   return (
     <main className="page-shell">
       <ResizablePostLayout mainLabel="Compose a post" relatedLabel="Related questions and posting guidance" related={<div className="space-y-4">
-        <RelatedQuestions drafting context={{ title, body: postBody, tags: normalizeTags([...selectedTags, tagInput, ...suggestedTags]), visa_type: visaType, destination_country: country }} />
+        <RelatedQuestions drafting onResults={(items, loading) => setSimilar({ items, loading })} context={{ title, body: postBody, tags: normalizeTags([...selectedTags, tagInput, ...suggestedTags]), visa_type: currentVisa, destination_country: country }} />
         {(experience ? ['Describe what happened in your own words.', 'Dates and waiting times can be approximate.', 'Add the outcome, or update your story when it changes.'] : ['Search first and review close matches.', 'Use a specific title with the visa type.', 'Return to accept the answer that solved your question.']).map((tip) => <div key={tip} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600"><CheckCircle2 className="mt-0.5 shrink-0 text-blue-600" size={18} />{tip}</div>)}
       </div>}>
       <section>
@@ -278,6 +287,11 @@ export function AskQuestionForm({ experience = false, initialVisa }: { experienc
             <input aria-label={experience ? 'Experience Title' : 'Question Title'} aria-describedby="post-title-help" required minLength={15} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={experience ? experienceTitlePlaceholder(category, visaLabel) : 'Can I… / How should I…'}
               className="mt-3 w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" />
           </label>
+          {/* On phones the matches sit far below the form: surface them where the title is written. */}
+          {title.trim().length >= 8 && similar.items.length > 0 && <a href="#related-posts" className="-mt-2 flex min-w-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700">
+            <Users size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+            <span className="min-w-0"><b>{similar.items.length} similar {similar.items.length === 1 ? (experience ? 'post' : 'question') : (experience ? 'posts' : 'questions')}</b> already on VisaThreads. Check them before posting<span className="mt-0.5 block truncate text-amber-900/80">{similar.items[0].title}</span></span>
+          </a>}
           {!experience && visaFields}
 
           <div className="block min-w-0">
