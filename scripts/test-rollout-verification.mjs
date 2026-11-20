@@ -226,3 +226,14 @@ test('playbook smoke rejects script-only content, wrong canonical/source and own
     assert(!JSON.stringify(p.records).includes(ownerSecret)); assert(!JSON.stringify(p.records).includes(playbookPost.body));
   }
 });
+test('playbook smoke expects the presented imported title and body, not raw source formatting', async () => {
+  // Stored archive text keeps markdown and a Telegram handle; the site presents it cleaned.
+  const raw = { ...playbookPost, title: '**Public question** & source', body: 'Hi @someone_here, public community content is rendered on the server, without client scripts.' };
+  const shownTitle = 'Public question & source';
+  const shownBody = 'Hi a member, public community content is rendered on the server, without client scripts.';
+  const render = (title, body) => { const pages = playbookDocuments(); const path = `/us/en/questions/${raw.id}`;
+    pages.set(path, `<html><head><title>${escapeHtml(title)} · VisaThreads</title><link rel="canonical" href="${origin}${path}"><meta name="robots" content="noindex, nofollow"></head><body><h1>${escapeHtml(title)}</h1><div>${escapeHtml(body)}</div></body></html>`);
+    return playbookProbe(pages); };
+  await verifyPlaybookPages(render(shownTitle, shownBody), { questions: [raw] });
+  await assert.rejects(verifyPlaybookPages(render(raw.title, raw.body), { questions: [raw] }), error => error.message === 'Playbook imported-thread-title verification failed.');
+});

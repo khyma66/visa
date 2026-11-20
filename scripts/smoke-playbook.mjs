@@ -1,4 +1,19 @@
+import { readFile } from 'node:fs/promises';
+import ts from 'typescript';
+
 const ORIGIN = 'https://visathreads.com';
+
+// Imported threads are displayed through the site's own presentation rules
+// (clean titles, no markdown or third-party handles); the stored archive is
+// unchanged. Compare pages with that presented form, from the same source.
+let presentation;
+async function presentedPost(row) {
+  presentation ??= readFile(new URL('../src/lib/post-presentation.ts', import.meta.url), 'utf8').then(source => {
+    const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
+    return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+  });
+  return (await presentation).usVisaPost(row);
+}
 export const PLAYBOOK_GUIDE_CHECKS = [
   { slug: 'h1b-petition-visa-status', title: 'H-1B: separate your petition, visa and status questions', source: 'https://travel.state.gov/content/travel/en/us-visas/employment/temporary-worker-visas.html' },
   { slug: 'f1-opt-planning-questions', title: 'F-1 and OPT: a planning checklist for your DSO conversation', source: 'https://travel.state.gov/content/travel/en/us-visas/study/student-visa.html' },
@@ -75,10 +90,12 @@ export async function verifyPlaybookPages(probe, feed, discovery = false) {
     && typeof row.body === 'string' && row.body.trim().length >= 40 && typeof row.title === 'string');
   requireCheck(imported, 'imported-fixture-available');
   const path = `/us/en/questions/${imported.id}`;
+  const shown = await presentedPost(imported);
+  requireCheck(shown && typeof shown.title === 'string' && typeof shown.body === 'string', 'imported-presentation');
   const thread = await page('imported-thread', path);
-  checkMetadata(thread, path, imported.title, 'imported-thread');
+  checkMetadata(thread, path, shown.title, 'imported-thread');
   const text = visible(thread);
-  requireCheck(text.includes(imported.title.replace(/\s+/g, ' ').trim())
-    && text.includes(imported.body.replace(/\s+/g, ' ').trim().slice(0, 160)), 'imported-server-content');
+  requireCheck(text.includes(shown.title.replace(/\s+/g, ' ').trim())
+    && text.includes(shown.body.replace(/\s+/g, ' ').trim().slice(0, 160)), 'imported-server-content');
   requireCheck(!thread.includes('application/ld+json'), 'imported-no-fabricated-schema');
 }
