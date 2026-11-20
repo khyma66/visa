@@ -9,7 +9,7 @@ import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Check, CheckCircle2, Ellipsis, MessageCircle } from 'lucide-react';
+import { Check, CheckCircle2, Ellipsis, MessageCircle, Users } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   acceptAnswer, createAnswer, getAnswerPage, getDiscussionContext, getQuestion, sortAnswers,
@@ -169,7 +169,7 @@ export function QuestionDetail({ initialQuestion = null, initialAnswers = [] }: 
                 <VoteControls key={`${question.id}:${user?.id}`} id={question.id} kind={imported?'archive_question':'question'} score={imported?0:question.vote_score} authorId={question.author_id} path={threadPath}/>
                 <Link href={`${threadPath}#reply`} onClick={()=>document.getElementById('reply-body')?.focus()} className="post-reply-action" title={`${question.answer_count} ${question.answer_count===1?'reply':'replies'}`} aria-label={`${question.answer_count} ${question.answer_count===1?'reply':'replies'}`}><MessageCircle size={20} aria-hidden="true"/><span className="post-reply-count" aria-hidden="true">{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(question.answer_count)}</span></Link>
                 <FollowIssueButton anchorId={question.id} title={question.title} tags={question.tags} path={threadPath} variant="toolbar"/>
-                <Link href="#related-posts" title="Related posts" aria-label={`Related posts for ${question.title}`} className="post-related-action">Related</Link>
+                <Link href="#related-posts" title="Find people with the same issue" aria-label={`Similar posts for ${question.title}`} className="post-related-action"><Users size={17} aria-hidden="true" />Similar</Link>
                 <PostActions content={question} onChanged={deleted=>{if(deleted)window.location.assign('/us/en');else void load();}} postId={question.id} path={threadPath} imported={imported}/>
               </div>
             </div>

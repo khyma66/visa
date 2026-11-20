@@ -22,7 +22,7 @@ const dependencies={
   './useIssueFollows':url('export const useIssueFollows=()=>globalThis.__issueTest.issues;'),
   './PostOriginBadge':url(`import React from ${JSON.stringify(react)};export const PostOriginBadge=()=>React.createElement('span',null,'Earlier discussion');`),
   '@/lib/post-presentation':url("export const isImportedPost=p=>String(p.id).startsWith('apify-'),topicLabel=t=>t;"),
-  '@/lib/community':url('export const discoverQuestions=async()=>[];'),
+  '@/lib/community':url('export const discoverQuestions=async()=>[],discoverSimilarQuestions=async()=>[];'),
   '@/lib/discovery':url("export const contextTags=c=>c.tags??[];"),
   '@/lib/realtime':url('export const subscribeLive=()=>()=>{};'),
 };

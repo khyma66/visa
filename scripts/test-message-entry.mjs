@@ -24,7 +24,7 @@ const dependencies={
   './demo-data':moduleUrl('export const DEMO_ANSWERS=[],DEMO_CONVERSATIONS=[],DEMO_MESSAGES=[],DEMO_QUESTIONS=[],DEMO_USER={};'),
   './supabase/client':moduleUrl('export const isSupabaseConfigured=true;export const getSupabase=()=>globalThis.__visaMessageEntryBackend();'),
   './tagging':moduleUrl('export const inferTags=()=>[],normalizeTags=()=>[];'),
-  './discovery':moduleUrl('export const contextTags=()=>[],createDiscoveryIndex=()=>({}),searchTerms=()=>[];'),
+  './discovery':moduleUrl('export const contextTags=()=>[],createDiscoveryIndex=()=>({}),rareSearchTerms=()=>[],searchTerms=()=>[];'),
   './messaging-state':stateUrl,
 };
 for(const [name,url] of Object.entries(dependencies)) communitySource=communitySource.replace(`'${name}'`,JSON.stringify(url));

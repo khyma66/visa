@@ -38,7 +38,7 @@ function toolbar(score, comment = false) {
   return h('div', { className: comment ? 'post-toolbar mt-4' : 'feed-post-toolbar mt-3' },
     h(VoteControls, { id: `fixture-${score}`, kind: comment ? 'answer' : 'question', score, authorId: null, path: '#fixture' }),
     !comment && h('a', { className: 'post-reply-action', href: '#reply', 'aria-label': `${replies} replies` }, h(MessageCircle, { size: 20 }), h('span', { className: 'post-reply-count' }, replies)),
-    !comment && h('a', { className: 'post-related-action', href: '#related' }, 'Related'),
+    !comment && h('a', { className: 'post-related-action', href: '#related' }, 'Similar'),
     h(ActionPopover, { label: 'More post options', trigger: h(Ellipsis, { size: 20 }) }, 'Render-only fixture'));
 }
 createServer(async (request, response) => {

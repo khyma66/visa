@@ -2,11 +2,11 @@
 
 import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Search } from 'lucide-react';
-import { discoverQuestions } from '@/lib/community';
+import { discoverSimilarQuestions } from '@/lib/community';
 import { contextTags, type DiscoveryContext } from '@/lib/discovery';
 import { subscribeLive } from '@/lib/realtime';
 import type { RelatedQuestion } from '@/lib/types';
@@ -14,7 +14,7 @@ import { useAuth } from './AuthProvider';
 import { PostOriginBadge } from './PostOriginBadge';
 import { FollowIssueButton } from './FollowIssueButton';
 
-export function RelatedQuestions({ context, drafting = false }: { context: DiscoveryContext; drafting?: boolean }) {
+export function RelatedQuestions({ context, drafting = false, onResults }: { context: DiscoveryContext; drafting?: boolean; onResults?: (items: RelatedQuestion[], loading: boolean) => void }) {
   const { user } = useAuth();
   const pathname = usePathname() || '/us/en';
   const [items, setItems] = useState<RelatedQuestion[]>([]);
@@ -22,6 +22,8 @@ export function RelatedQuestions({ context, drafting = false }: { context: Disco
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
   const key = JSON.stringify(context);
+  const report = useRef(onResults);
+  report.current = onResults;
   const tags = contextTags(context);
   const topicKey = tags.slice(0, 5).join('|');
   const hasContext = Boolean(context.id || (context.title ?? '').length + (context.body ?? '').length >= 8 || tags.length);
@@ -34,18 +36,20 @@ export function RelatedQuestions({ context, drafting = false }: { context: Disco
     if (!hasContext) { setItems([]); setLoading(false); setError(''); return; }
     setLoading(true); setError(''); setItems([]);
     const timer = setTimeout(() => {
-      void discoverQuestions(JSON.parse(key) as DiscoveryContext)
+      void discoverSimilarQuestions(JSON.parse(key) as DiscoveryContext)
         .then((rows) => { if (current) { setItems(rows); setError(''); } })
         .catch(() => { if (current) setError('Related Questions could not be loaded.'); })
         .finally(() => { if (current) setLoading(false); });
     }, 200);
     return () => { current = false; clearTimeout(timer); };
   }, [key, revision, hasContext]);
+  // The composer shows a count under its title; keep it in step with this panel.
+  useEffect(() => { report.current?.(items, loading); }, [items, loading]);
 
   return <section id="related-posts" aria-label="Also asked" aria-busy={loading} className="min-w-0 scroll-mt-24 border-b border-slate-200 bg-white pb-3">
     <div className="px-2 pb-2">
       <h2 className="text-2xl font-semibold leading-tight text-slate-900">Also asked</h2>
-      {drafting && <p className="mt-2 text-base leading-6 text-slate-500">Suggestions update as you type. Your draft is not published.</p>}
+      <p className="mt-2 text-base leading-6 text-slate-500">{drafting ? 'Suggestions update as you type. Your draft is not published.' : 'Similar questions from people with the same issue.'}</p>
       <p aria-live="polite" className="mt-2 text-xs text-slate-500">{loading ? 'Finding related questions...' : error || `${items.length} related ${items.length === 1 ? 'post' : 'posts'}`}</p>
       {items.length > 0 && <p className="mt-2 text-xs leading-5 text-slate-500">Same situation? Use Notify me to hear when members post about it.</p>}
       {error && <button onClick={() => setRevision((value) => value + 1)} className="mt-2 text-sm font-semibold text-blue-700 underline capitalize">Retry related questions</button>}

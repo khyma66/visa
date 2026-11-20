@@ -268,12 +268,12 @@ test('real disclosure starts collapsed with one accessible trigger and no expose
   assert.equal((html.match(/<button/g)??[]).length,1);
   assert.doesNotMatch(html,/private-action|>Save<|role="dialog"/);
 });
-test('cards expose replies and a text-labelled Related destination outside the action disclosure', () => {
+test('cards expose replies and a text-labelled Similar destination outside the action disclosure', () => {
   const html=renderToStaticMarkup(createElement(QuestionCard,{question}));
   assert.match(html,new RegExp(`/questions/${question.id}#reply`));
   assert.match(html,new RegExp(`/questions/${question.id}#related-posts`));
   assert.match(html,/class="post-related-action"/);
-  assert.match(html,/class="post-related-action">\s*Related\s*<\/a>/);
+  assert.match(html,/class="post-related-action">(?:<svg[^>]*>[\s\S]*?<\/svg>)?\s*Similar\s*<\/a>/);
   assert.doesNotMatch(html,/>Reply<|>Message user</);
 });
 
@@ -288,4 +288,14 @@ test('author menus identify ownership and put Edit/Delete before sharing', () =>
   assert.match(other, /aria-label="More post options"/);
   assert.doesNotMatch(other, /Edit post|Delete post|Manage your post/);
   setUser(null);
+});
+
+test('earlier discussions are labelled and explain why their authors cannot be messaged; member posts are not', () => {
+  const card = renderToStaticMarkup(createElement(QuestionCard, { question: imported }));
+  assert.match(visibleText(card), /Earlier discussion/);
+  assert.match(card, /cannot be messaged/, 'The author menu explains the missing Message option');
+  assertImportedPresentation(card);
+  const native = renderToStaticMarkup(createElement(QuestionCard, { question }));
+  assert.doesNotMatch(visibleText(native), /Earlier discussion/);
+  assert.doesNotMatch(native, /cannot be messaged/);
 });
