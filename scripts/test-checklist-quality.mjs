@@ -10,9 +10,11 @@ const dependencies={
   'react/jsx-runtime':import.meta.resolve('react/jsx-runtime'),
   'next/link':url('export default function Link(){return null;}'),
   'next/navigation':url('export const useRouter=()=>({push:href=>globalThis.__quality.pushes.push(href)});'),
-  'lucide-react':url('export const Bell=()=>null,MessageCircle=()=>null,MessageSquare=()=>null,Settings=()=>null;'),
+  'lucide-react':url('export const Bell=()=>null,BellRing=()=>null,MessageCircle=()=>null,MessageSquare=()=>null,Settings=()=>null;'),
   './AuthProvider':url('export const useAuth=()=>({user:globalThis.__quality.user,loading:false,demoMode:false});'),
   './NotificationProvider':url('export const useNotifications=()=>globalThis.__quality.state;'),
+  './useIssueFollows':url('export const useIssueFollows=()=>({follows:[],error:"",refresh(){},follow:async()=>{},unfollow:async()=>{}});'),
+  '@/lib/post-presentation':url('export const topicLabel=t=>t;'),
   '@/lib/notifications':url('export const getNotifications=page=>globalThis.__quality.get(page);export const readNotifications=(ids,user)=>globalThis.__quality.read(ids,user);'),
 };
 async function load(file){const source=await readFile(new URL(file,import.meta.url),'utf8');let code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;code=code.replace(/(from\s+)(['"])([^'"]+)\2/g,(_,prefix,quote,name)=>{assert(dependencies[name],name);return prefix+JSON.stringify(dependencies[name]);});return import(url(code));}
