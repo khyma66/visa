@@ -1,9 +1,27 @@
 {
   "source": "The Texas Tribune",
-  "retrievedAt": "2026-11-19T21:46:42.604Z",
-  "policyCheckedAt": "2026-11-19T21:46:42.604Z",
+  "retrievedAt": "2026-11-20T21:31:00.838Z",
+  "policyCheckedAt": "2026-11-20T21:31:00.838Z",
   "policyDigest": "83e8cafce5e3cba8d74297f86204f3a50ff06a6f6cd84ed93dac0bc33fc2d1d5",
   "articles": [
+    {
+      "id": "tt-253984",
+      "title": "Ken Paxton, feds agree to keep razor wire at Texas border for the next 30 years",
+      "url": "https://www.texastribune.org/2026/11/19/texas-border-wire-immigration-ken-paxton/",
+      "author": "Ayden Runnels",
+      "publishedAt": "2026-11-20T02:30:25.000Z",
+      "excerpt": "The agreement ends a legal dispute started in 2024 between Texas and the Biden administration when the state AG sued to stop Border Patrol from cutting the barrier.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-253984-c3c18b773ecb5a83",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/11/0601-Clinica-Hope-Border-PR-17.jpg?fit=1024%2C683&ssl=1",
+        "caption": "Texas National Guard soldiers, seen from Ciudad Juárez in Mexico, check concertina wire fencing in El Paso on June 1, 2024.",
+        "credit": "Paul Ratje for the Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
     {
       "id": "tt-252740",
       "title": "Ken Paxton drops lawsuit seeking to shut down immigration aid group FIEL Houston",
@@ -466,24 +484,6 @@
         "credit": "Lauren Crow for The Texas Tribune",
         "width": 1024,
         "height": 682
-      }
-    },
-    {
-      "id": "tt-243774",
-      "title": "A surge of ICE arrests and the shooting of a Venezuelan man strike fear into Austin neighborhoods",
-      "url": "https://www.texastribune.org/2026/09/21/texas-austin-ice-shooting-neighborhood/",
-      "author": "Alejandro Serrano, graphics by Alex Ford , Alex Ford",
-      "publishedAt": "2026-09-22T01:42:24.000Z",
-      "excerpt": "People who work near the site where ICE shot Wilber Rafael Garces Perez say the agency’s presence in the area has been constant amid President Trump’s mass deportation push.",
-      "publisher": "The Texas Tribune",
-      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
-      "photo": {
-        "id": "tt-243774-21fcb936e8ff20f6",
-        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260920-Austin-ICE-Shooting-JL-30.jpg?fit=1024%2C683&ssl=1",
-        "caption": "Protestors fill the intersection of West Anderson Lane and Research Boulevard in north Austin after an immigration enforcement agent shot and injured Wilber Rafael Garces Perez on Sept. 20, 2026.",
-        "credit": "Jacob Lujan/The Texas Tribune",
-        "width": 1024,
-        "height": 683
       }
     },
     {
