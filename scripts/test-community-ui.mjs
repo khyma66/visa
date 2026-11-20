@@ -195,8 +195,7 @@ test('question and experience forms clearly mark required editable fields and ke
         assert.equal(field(h, name).props.required, true, name);
         if (name !== 'Experience Category') assert.equal(field(h, name).props['aria-label'], name, 'Accessible names exclude decorative asterisks');
       }
-      if (experience) assert(!nodes(h.tree).some(node => node.type === 'label' && textOf(node).includes('Destination Country')), 'Experience form has no fixed-country field');
-      else assert.equal(field(h, 'Destination Country').props.readOnly, true);
+      assert(!nodes(h.tree).some(node => node.type === 'label' && textOf(node).includes('Destination Country')), 'No fixed-country field');
       if (!experience) assert.match(textOf(h.tree), /Dates and timelines are optional/);
       assert.equal(field(h, 'Community').props.required, undefined);
       assert.equal(nodes(h.tree).find(node => node.props['aria-label'] === 'Add a tag').props.required, undefined);
@@ -1023,5 +1022,15 @@ test('similar questions found while drafting appear under the title and link to 
     assert.match(textOf(chip), /2\s+similar\s+questions[\s\S]*221g administrative processing hold/);
     related.props.onResults([], false); h.render();
     assert(!nodes(h.tree).some(n => n.type === 'a' && n.props.href === '#related-posts'));
+  } finally { h.close(); }
+});
+
+test('the question title and visa come before the optional community picker', async () => {
+  const h = createHarness();
+  try {
+    h.render(AskQuestionForm); await h.settle();
+    const order = nodes(h.tree).filter(n => n.type === 'label' || n.type === 'summary').map(n => textOf(n));
+    const at = text => order.findIndex(value => value.includes(text));
+    assert(at('Question Title') >= 0 && at('Post in a community') > at('Question Title') && at('Post in a community') > at('Visa Type'));
   } finally { h.close(); }
 });

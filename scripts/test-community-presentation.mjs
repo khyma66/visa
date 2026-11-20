@@ -93,7 +93,7 @@ test('shared page gutter removes the second centered left rail without forcing r
   }
 });
 
-test('post actions keep votes grouped and Related visibly labelled at every size', async () => {
+test('post actions keep votes grouped and Similar visibly labelled at every size', async () => {
   const css = await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8');
   const actionStart = css.indexOf('/* One compact row when space allows;');
   const actionCss = css.slice(actionStart);
@@ -108,11 +108,11 @@ test('post actions keep votes grouped and Related visibly labelled at every size
   const html = render(QuestionCard, { question: native });
   assert.match(html, new RegExp(`/questions/${native.id}#related-posts`));
   assert.match(html, /class="post-related-action"/);
-  assert.match(html, /class="post-related-action">\s*Related\s*<\/a>/);
+  assert.match(html, /class="post-related-action">(?:<svg[^>]*>[\s\S]*?<\/svg>)?\s*Similar\s*<\/a>/);
   const detail = render(QuestionDetail, { initialQuestion: native }, { user: { id: bob } });
   assert.match(detail, /class="feed-post-toolbar post-toolbar mt-4"/);
   assert.match(detail, /href="#related-posts"/);
-  assert.match(detail, /class="post-related-action">Related<\/a>/);
+  assert.match(detail, /class="post-related-action">(?:<svg[^>]*>[\s\S]*?<\/svg>)?Similar<\/a>/);
   assert.match(render(RelatedQuestions, { context: native }), /id="related-posts"/);
 });
 

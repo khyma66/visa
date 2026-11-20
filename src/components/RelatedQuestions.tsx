@@ -46,7 +46,7 @@ export function RelatedQuestions({ context, drafting = false, onResults }: { con
   return <section id="related-posts" aria-label="Also asked" aria-busy={loading} className="min-w-0 scroll-mt-24 border-b border-slate-200 bg-white pb-3">
     <div className="px-2 pb-2">
       <h2 className="text-2xl font-semibold leading-tight text-slate-900">Also asked</h2>
-      {drafting && <p className="mt-2 text-base leading-6 text-slate-500">Suggestions update as you type. Your draft is not published.</p>}
+      <p className="mt-2 text-base leading-6 text-slate-500">{drafting ? 'Suggestions update as you type. Your draft is not published.' : 'Similar questions from people with the same issue.'}</p>
       <p aria-live="polite" className="mt-2 text-xs text-slate-500">{loading ? 'Finding related questions...' : error || `${items.length} related ${items.length === 1 ? 'post' : 'posts'}`}</p>
       {error && <button onClick={() => setRevision((value) => value + 1)} className="mt-2 text-sm font-semibold text-blue-700 underline capitalize">Retry related questions</button>}
     </div>
