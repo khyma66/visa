@@ -13,6 +13,18 @@ export type DiscoveryContext = {
 };
 
 const STOP_WORDS = new Set('a an and are as at be been but by can could did do does for from had has have how i if in is it its me my of on or our please should so that the their there they this to us was we were what when where which who will with would you your visa question help thanks thank'.split(' '));
+/** Specific identifiers that make a post findable on their own: form numbers,
+ * case codes and sections such as 221g, I-140, DS-160 or 214(b). Visa class
+ * names (H-1B, F-1, H-4) are excluded: they are too common to identify a post. */
+export function rareSearchTerms(text: string): string[] {
+  const visaClass = /^(?:[a-z][\s-]?\d[a-z]?|h[\s-]?1[\s-]?b|stem)$/i;
+  const found = [...text.matchAll(/\b(?:[a-z]{1,2}-?\d{2,4}(?:\([a-z]\))?[a-z]?|\d{3}(?:\s?\([a-z]\)|[a-jl-z]))(?![\w-])/gi)]
+    .map(match => match[0].replace(/\s+/g, '').toLowerCase())
+    .filter(term => !visaClass.test(term) && /\d{2,}/.test(term));
+  // 221g, 221(g) and 221 (g) are one identifier.
+  return [...new Map(found.map(term => [term.replace(/[^a-z0-9]/g, ''), term])).values()].slice(0, 3);
+}
+
 export function searchTerms(text: string): string[] {
   return [...new Set((text.toLowerCase().match(/[a-z0-9][a-z0-9-]{2,}/g) ?? [])
     .filter((word) => !STOP_WORDS.has(word)))].slice(0, 48);

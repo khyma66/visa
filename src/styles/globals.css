@@ -408,7 +408,7 @@
 .post-reply-action[data-accepted="true"] { background: #ecfdf5; color: #065f46; }
 .post-reply-count { font-variant-numeric: tabular-nums; }
 :is(.post-toolbar, .feed-post-toolbar) .post-options-trigger { width: var(--post-icon-width, 40px); min-width: var(--post-icon-width, 40px); padding: 0; }
-.post-related-action { padding-inline: 8px; }
+.post-related-action { padding-inline: 8px; gap: 4px; }
 :is(.post-toolbar, .feed-post-toolbar) svg { flex-shrink: 0; }
 .vote-error { max-width: 112px; margin-top: 6px; font-size: .75rem; line-height: 1.5; color: #be123c; }
 .post-preview-select:focus-visible { outline: 2px solid #115e59; outline-offset: 3px; }

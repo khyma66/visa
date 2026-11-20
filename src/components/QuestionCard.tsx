@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import {EditedLabel} from './EditedLabel';
-import { CheckCircle2, MessageCircle } from 'lucide-react';
+import { CheckCircle2, MessageCircle, Users } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 import type { Question } from '@/lib/types';
@@ -33,7 +33,7 @@ export function QuestionCard({ question, onTagSelect, onSelect, selected = false
             {question.title}
           </Link>
           {question.post_kind && question.post_kind !== 'question' && <p className="mt-2 text-xs font-semibold text-slate-600">{question.post_kind === 'experience' ? `Experience · ${question.experience_category}` : question.post_kind === 'promotion' ? 'Promotional post' : 'Discussion'}</p>}
-          {onSelect ? <button type="button" onClick={onSelect} aria-pressed={selected} aria-controls="feed-related" aria-label={`Show related posts for ${question.title}`} className="post-preview-select mt-2 block w-full rounded text-left text-base leading-6 text-slate-600">
+          {onSelect ? <button type="button" onClick={onSelect} aria-pressed={selected} aria-controls="feed-related" aria-label={`Show similar posts for ${question.title}`} title="Show similar posts" className="post-preview-select mt-2 block w-full rounded text-left text-base leading-6 text-slate-600">
             <span className="line-clamp-2 break-words">{question.body}</span>
           </button> : <p className="mt-2 line-clamp-2 break-words text-base leading-6 text-slate-600">{question.body}</p>}
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -45,8 +45,8 @@ export function QuestionCard({ question, onTagSelect, onSelect, selected = false
               {question.accepted_answer_id ? <CheckCircle2 size={20} aria-hidden="true" /> : <MessageCircle size={20} aria-hidden="true" />}
               <span className="post-reply-count" aria-hidden="true">{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(question.answer_count)}</span>
             </Link>
-            <Link href={`${path}#related-posts`} title="Related posts" aria-label={`Related posts for ${question.title}`} className="post-related-action">
-              Related
+            <Link href={`${path}#related-posts`} title="Find people with the same issue" aria-label={`Similar posts for ${question.title}`} className="post-related-action">
+              <Users size={17} aria-hidden="true" />Similar
             </Link>
 
             <PostActions content={question} postId={question.id} path={path} imported={imported}/>

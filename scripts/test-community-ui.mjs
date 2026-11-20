@@ -160,6 +160,7 @@ test('SOS link creates a tagged question and makes emergency limitations clear',
     assert.equal(field(h, 'Mark as SOS').props.checked, true);
     assert.match(textOf(h.tree), /call 911/);
     change(h, 'Question Title', 'Urgent question about visa appointment');
+    change(h, 'Visa Type', 'H-1B');
     change(h, 'Details', 'My appointment is approaching and I need help understanding the documents.');
     await publish(h);
     assert.equal(h.calls.find(call => call.name === 'createQuestion').args[1].tags[0], 'sos');
@@ -173,6 +174,7 @@ test('sharing to a joined community adds only a link to the original post', asyn
   try {
     h.render(AskQuestionForm); await h.settle();
     change(h, 'Question Title', 'Discussion about a visa appointment');
+    change(h, 'Visa Type', 'H-1B');
     change(h, 'Details', 'Sharing this for discussion in our community.');
     await publish(h);
     const payload=h.calls.find(call => call.name === 'createQuestion').args[1];
@@ -193,8 +195,7 @@ test('question and experience forms clearly mark required editable fields and ke
         assert.equal(field(h, name).props.required, true, name);
         if (name !== 'Experience Category') assert.equal(field(h, name).props['aria-label'], name, 'Accessible names exclude decorative asterisks');
       }
-      if (experience) assert(!nodes(h.tree).some(node => node.type === 'label' && textOf(node).includes('Destination Country')), 'Experience form has no fixed-country field');
-      else assert.equal(field(h, 'Destination Country').props.readOnly, true);
+      assert(!nodes(h.tree).some(node => node.type === 'label' && textOf(node).includes('Destination Country')), 'No fixed-country field');
       if (!experience) assert.match(textOf(h.tree), /Dates and timelines are optional/);
       assert.equal(field(h, 'Community').props.required, undefined);
       assert.equal(nodes(h.tree).find(node => node.props['aria-label'] === 'Add a tag').props.required, undefined);
@@ -211,6 +212,7 @@ test('guest drafts survive sign-in or signup navigation in the same tab', async 
     assert.equal(links.length, 2);
     for (const link of links) assert.equal(new URL(link.props.href, 'https://visathreads.com').searchParams.get('next'), '/ask?community=group-a');
     change(h, 'Question Title', 'My question about changing employers'); await h.settle();
+    change(h, 'Visa Type', 'H-1B');
     change(h, 'Details', 'I am changing employers and need to understand which documents are required.'); await h.settle();
     assert.equal(JSON.parse(storage.get('visathreads:question-draft:v1')).title, 'My question about changing employers');
     h.close();
@@ -983,4 +985,52 @@ test('speaker lines start on their own line at the caret', async () => {
   assert.deepEqual(insertSpeakerLine('',0,'me'),{text:'🔹Me: ',caret:6});
   assert.deepEqual(insertSpeakerLine('Hello\n',6,'vo'),{text:'Hello\n🔻VO: ',caret:12});
   assert.equal(insertSpeakerLine('AB',1,'me').text,'A\n🔹Me: B');
+});
+
+test('question visa starts empty, follows the question until chosen, and a missing visa blocks publishing', async () => {
+  const h = createHarness();
+  try {
+    h.render(AskQuestionForm); await h.settle();
+    assert.equal(field(h, 'Visa Type').props.value, '');
+    assert(nodes(field(h, 'Visa Type')).some(n => n.type === 'option' && n.props.value === '' && n.props.disabled));
+    change(h, 'Question Title', 'Can I travel while my case is pending?');
+    change(h, 'Details', 'I want to visit family for two weeks and need to know the risks first.');
+    await publish(h); h.render();
+    assert(!h.calls.some(c => c.name === 'createQuestion'));
+    assert.match(textOf(h.tree), /Choose the visa type your question is about/);
+    change(h, 'Question Title', 'STEM OPT extension pending, can I travel to India?');
+    assert.equal(field(h, 'Visa Type').props.value, 'F-1 / OPT', 'Detected from the title');
+    assert.match(textOf(h.tree), /Detected from your question/);
+    const related = nodes(h.tree).find(n => n.props?.drafting && n.props?.context);
+    assert.equal(related.props.context.visa_type, 'F-1 / OPT', 'Similar questions search the detected visa, not a default');
+    change(h, 'Visa Type', 'H-4'); change(h, 'Question Title', 'STEM OPT extension pending, H1B approved, can I travel?');
+    assert.equal(field(h, 'Visa Type').props.value, 'H-4', 'A chosen visa is never overwritten');
+    await publish(h); await h.settle();
+    assert.equal(h.calls.find(c => c.name === 'createQuestion').args[1].visa_type, 'H-4');
+  } finally { h.close(); }
+});
+
+test('similar questions found while drafting appear under the title and link to the list', async () => {
+  const h = createHarness();
+  try {
+    h.render(AskQuestionForm); await h.settle();
+    change(h, 'Question Title', 'H-1B stamping 221g administrative processing delay');
+    const related = nodes(h.tree).find(n => n.props?.drafting && n.props?.onResults);
+    related.props.onResults([{ id: 'q1', title: '221g administrative processing hold after stamping', tags: [], visa_type: 'H-1B', vote_score: 0, answer_count: 2, created_at: '2026-10-01T00:00:00Z' }, { id: 'q2', title: 'Stamping slots', tags: [], visa_type: 'H-1B', vote_score: 0, answer_count: 0, created_at: '2026-10-01T00:00:00Z' }], false); h.render();
+    const chip = nodes(h.tree).find(n => n.type === 'a' && n.props.href === '#related-posts');
+    assert(chip, 'A chip under the title links to the similar list');
+    assert.match(textOf(chip), /2\s+similar\s+questions[\s\S]*221g administrative processing hold/);
+    related.props.onResults([], false); h.render();
+    assert(!nodes(h.tree).some(n => n.type === 'a' && n.props.href === '#related-posts'));
+  } finally { h.close(); }
+});
+
+test('the question title and visa come before the optional community picker', async () => {
+  const h = createHarness();
+  try {
+    h.render(AskQuestionForm); await h.settle();
+    const order = nodes(h.tree).filter(n => n.type === 'label' || n.type === 'summary').map(n => textOf(n));
+    const at = text => order.findIndex(value => value.includes(text));
+    assert(at('Question Title') >= 0 && at('Post in a community') > at('Question Title') && at('Post in a community') > at('Visa Type'));
+  } finally { h.close(); }
 });
