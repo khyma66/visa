@@ -4,6 +4,7 @@ import { isImportedPost, topicLabel } from '@/lib/post-presentation';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { discoverQuestions } from '@/lib/community';
 import { contextTags, type DiscoveryContext } from '@/lib/discovery';
@@ -11,9 +12,11 @@ import { subscribeLive } from '@/lib/realtime';
 import type { RelatedQuestion } from '@/lib/types';
 import { useAuth } from './AuthProvider';
 import { PostOriginBadge } from './PostOriginBadge';
+import { FollowIssueButton } from './FollowIssueButton';
 
 export function RelatedQuestions({ context, drafting = false }: { context: DiscoveryContext; drafting?: boolean }) {
   const { user } = useAuth();
+  const pathname = usePathname() || '/us/en';
   const [items, setItems] = useState<RelatedQuestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -44,14 +47,15 @@ export function RelatedQuestions({ context, drafting = false }: { context: Disco
       <h2 className="text-2xl font-semibold leading-tight text-slate-900">Also asked</h2>
       {drafting && <p className="mt-2 text-base leading-6 text-slate-500">Suggestions update as you type. Your draft is not published.</p>}
       <p aria-live="polite" className="mt-2 text-xs text-slate-500">{loading ? 'Finding related questions...' : error || `${items.length} related ${items.length === 1 ? 'post' : 'posts'}`}</p>
+      {items.length > 0 && <p className="mt-2 text-xs leading-5 text-slate-500">Same situation? Use Notify me to hear when members post about it.</p>}
       {error && <button onClick={() => setRevision((value) => value + 1)} className="mt-2 text-sm font-semibold text-blue-700 underline capitalize">Retry related questions</button>}
     </div>
-    <div>{items.map((item) => <Link key={item.id} href={`/us/en/questions/${item.id}`} className="block rounded-lg px-2 py-3 hover:bg-slate-50">
+    <ul>{items.map((item) => <li key={item.id} className="rounded-lg hover:bg-slate-50"><Link href={`/us/en/questions/${item.id}`} className="block px-2 pt-3 pb-1">
       <p className="break-words text-thread-title font-semibold text-slate-800">{item.title}</p>
       {isImportedPost(item) && <div className="mt-1"><PostOriginBadge post={item} /></div>}
       <div className="mt-2 flex flex-wrap gap-1">{item.tags.slice(0, 3).map((tag) => <span key={tag} className={`max-w-full break-words rounded px-1.5 py-0.5 text-xs font-medium ${item.matched_tags?.includes(tag) ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{topicLabel(tag)}</span>)}</div>
       <p className="mt-2 text-xs text-slate-500" aria-label={`${item.answer_count} ${item.answer_count === 1 ? 'reply' : 'replies'}`}>{item.answer_count} {item.answer_count === 1 ? 'reply' : 'replies'}</p><p className="mt-1 text-xs text-slate-500">{item.match_reason ?? (item.matched_tags?.length ? `Shared topics: ${item.matched_tags.join(', ')}` : 'Similar wording')}</p>
-    </Link>)}</div>
+    </Link><div className="px-1 pb-2"><FollowIssueButton anchorId={item.id} title={item.title} tags={item.tags} path={pathname} /></div></li>)}</ul>
     {!items.length && !loading && !error && <div className="px-2 py-3 text-base leading-6 text-slate-500"><Search size={18} className="mb-2 text-slate-400" aria-hidden="true" />{hasContext ? (drafting ? 'No close match yet. Add more detail or publish your question.' : 'No related questions found yet.') : 'Search a visa topic to find related discussions.'}</div>}
   </section>;
 }
