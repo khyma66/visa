@@ -1,9 +1,27 @@
 {
   "source": "The Texas Tribune",
-  "retrievedAt": "2026-11-20T21:31:00.838Z",
-  "policyCheckedAt": "2026-11-20T21:31:00.838Z",
+  "retrievedAt": "2026-11-21T20:14:34.992Z",
+  "policyCheckedAt": "2026-11-21T20:14:34.992Z",
   "policyDigest": "83e8cafce5e3cba8d74297f86204f3a50ff06a6f6cd84ed93dac0bc33fc2d1d5",
   "articles": [
+    {
+      "id": "tt-254234",
+      "title": "Feds admit in court filing that Austin man who was deported held dual citizenship",
+      "url": "https://www.texastribune.org/2026/11/20/texas-man-deportation-federal-lawsuit-dismissal-sought/",
+      "author": "Uriel J. García, Alejandro Serrano",
+      "publishedAt": "2026-11-21T00:50:15.000Z",
+      "excerpt": "The Trump administration is asking a judge to dismiss a lawsuit filed by U.S. citizen Brian José Morales García, saying the government has immunity in immigration enforcement.",
+      "publisher": "The Texas Tribune",
+      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
+      "photo": {
+        "id": "tt-254234-cd387fb608ad03ac",
+        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/11/20261007-Trump-Paxton-Rally-JL-01-30.jpg?fit=1024%2C683&ssl=1",
+        "caption": "An Austin man detained in April 2026 as part of an immigration crackdown ordered by President Donald Trump, seen in San Antonio on Oct. 7, 2026, is suing for being deported to Mexico despite offering to provide authorities proof of citizenship.",
+        "credit": "Jacob Lujan/The Texas Tribune",
+        "width": 1024,
+        "height": 683
+      }
+    },
     {
       "id": "tt-253984",
       "title": "Ken Paxton, feds agree to keep razor wire at Texas border for the next 30 years",
@@ -484,24 +502,6 @@
         "credit": "Lauren Crow for The Texas Tribune",
         "width": 1024,
         "height": 682
-      }
-    },
-    {
-      "id": "tt-243721",
-      "title": "Venezuelan man shot by ICE in Austin said he tried to pull over before officers fired at him",
-      "url": "https://www.texastribune.org/2026/09/21/texas-austin-ice-shooting-victim-wilber-rafael-garces-perez/",
-      "author": "Uriel J. García, Alex Nguyen and Zach Leggio, Alex Nguyen, Zach Leggio, Laura Duclos",
-      "publishedAt": "2026-09-21T17:28:00.000Z",
-      "excerpt": "Wilber Rafael Garces Perez legally entered the country in 2024 via the CBP One app and applied for asylum, his attorneys said. But he missed a court hearing after the notice went to the wrong address.",
-      "publisher": "The Texas Tribune",
-      "permissionUrl": "https://www.texastribune.org/republishing-guidelines/",
-      "photo": {
-        "id": "tt-243721-1f0a2bdb21a9ab6c",
-        "url": "https://i0.wp.com/www.texastribune.org/wp-content/uploads/2026/09/20260921-ATX-ICE-Shooting-LULAC-Presser-LS-02.jpg?fit=1024%2C683&ssl=1",
-        "caption": "Kate Lincoln-Goldfinch, an immigration attorney representing Wilber Rafael Garces Pérez, who was shot by an immigration officer in Austin on Sunday, listens as Garces Pérez speaks on the phone from detention at a press conference on Monday, Sept. 21, 2026.",
-        "credit": "Leila Saidane for The Texas Tribune",
-        "width": 1024,
-        "height": 683
       }
     }
   ]
