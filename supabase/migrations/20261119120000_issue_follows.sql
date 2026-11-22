@@ -46,6 +46,9 @@ alter table private.member_notifications
   add constraint member_notifications_issue_once unique(user_id,question_id);
 create index member_notifications_issue_recent on private.member_notifications(user_id,created_at) where kind='issue';
 
+-- Members can turn followed-issue alerts off without unfollowing (future alerts only, like replies).
+alter table private.notification_preferences add column issue_in_app boolean not null default true;
+
 create function private.issue_topics(raw text[]) returns text[]
 language sql immutable set search_path='' as $$
   select coalesce((select array_agg(s.t order by s.first) from (
@@ -93,12 +96,30 @@ begin
   select count(*) into unread from private.member_notifications n where n.user_id=me and n.read_at is null and private.notification_visible(n);
   select count(*) into messages from public.direct_messages m join public.direct_conversations c on c.id=m.conversation_id
     where me in(c.user_one_id,c.user_two_id) and m.sender_id<>me and m.read_at is null and c.request_status in('accepted','pending');
-  select jsonb_build_object('reply_in_app',p.reply_in_app,'message_in_app',p.message_in_app,'reply_email',p.reply_email,'message_email',p.message_email)
+  select jsonb_build_object('reply_in_app',p.reply_in_app,'message_in_app',p.message_in_app,'issue_in_app',p.issue_in_app,'reply_email',p.reply_email,'message_email',p.message_email)
     into prefs from private.notification_preferences p where p.user_id=me;
   return jsonb_build_object('items',items,'unreadNotifications',unread,'unreadMessages',messages,
-    'preferences',coalesce(prefs,'{"reply_in_app":true,"message_in_app":true,"reply_email":false,"message_email":false}'::jsonb),
+    'preferences',coalesce(prefs,'{"reply_in_app":true,"message_in_app":true,"issue_in_app":true,"reply_email":false,"message_email":false}'::jsonb),
     'emailAvailable',false);
 end $$;
+
+create function private.set_notification_preferences(reply_in_app boolean,message_in_app boolean,issue_in_app boolean,reply_email boolean,message_email boolean,expected_user uuid) returns void
+language plpgsql security definer set search_path='' as $$
+declare me uuid := private.notification_member();
+begin
+  if expected_user is distinct from me then raise exception 'Account changed' using errcode='42501'; end if;
+  if reply_in_app is null or message_in_app is null or issue_in_app is null or reply_email is null or message_email is null then
+    raise exception 'Choose each notification preference' using errcode='22023'; end if;
+  if reply_email or message_email then raise exception 'Notification email delivery is not connected yet' using errcode='22023'; end if;
+  insert into private.notification_preferences(user_id,reply_in_app,message_in_app,issue_in_app,reply_email,message_email)
+    values(me,reply_in_app,message_in_app,issue_in_app,reply_email,message_email)
+    on conflict(user_id) do update set reply_in_app=excluded.reply_in_app,message_in_app=excluded.message_in_app,issue_in_app=excluded.issue_in_app,
+      reply_email=excluded.reply_email,message_email=excluded.message_email,updated_at=now();
+  perform realtime.send('{}'::jsonb,'changed','inbox:'||me::text,true);
+end $$;
+-- The original five-argument form stays for clients released before this migration; it leaves issue_in_app unchanged.
+create function public.set_notification_preferences(reply_in_app boolean,message_in_app boolean,issue_in_app boolean,reply_email boolean,message_email boolean,expected_user uuid) returns void
+language sql security invoker set search_path='' as $$select private.set_notification_preferences(reply_in_app,message_in_app,issue_in_app,reply_email,message_email,expected_user);$$;
 
 create function private.member_issue_follows() returns jsonb
 language plpgsql stable security definer set search_path='' as $$
@@ -176,17 +197,20 @@ begin
   where not exists(select 1 from public.direct_conversations c where c.request_status='blocked'
       and ((c.user_one_id=m.user_id and c.user_two_id=new.author_id) or (c.user_two_id=m.user_id and c.user_one_id=new.author_id)))
     and (select count(*) from private.member_notifications n where n.user_id=m.user_id and n.kind='issue' and n.created_at>now()-interval '1 day')<10
+    and coalesce((select p.issue_in_app from private.notification_preferences p where p.user_id=m.user_id),true)
   limit 500
   on conflict do nothing;
   return null;
 end $$;
 create trigger member_issue_notification after insert on public.questions for each row execute function private.create_issue_notifications();
 
-revoke all on function private.issue_topics(text[]),private.member_issue_follows(),public.member_issue_follows(),
+revoke all on function private.issue_topics(text[]),
+  private.set_notification_preferences(boolean,boolean,boolean,boolean,boolean,uuid),public.set_notification_preferences(boolean,boolean,boolean,boolean,boolean,uuid),private.member_issue_follows(),public.member_issue_follows(),
   private.follow_issue(text,text,text[],uuid),public.follow_issue(text,text,text[],uuid),
   private.unfollow_issue(text,uuid),public.unfollow_issue(text,uuid),private.create_issue_notifications()
   from public,anon,authenticated,service_role;
-grant execute on function private.member_issue_follows(),public.member_issue_follows(),
+grant execute on function private.set_notification_preferences(boolean,boolean,boolean,boolean,boolean,uuid),public.set_notification_preferences(boolean,boolean,boolean,boolean,boolean,uuid),
+  private.member_issue_follows(),public.member_issue_follows(),
   private.follow_issue(text,text,text[],uuid),public.follow_issue(text,text,text[],uuid),
   private.unfollow_issue(text,uuid),public.unfollow_issue(text,uuid) to authenticated;
 commit;

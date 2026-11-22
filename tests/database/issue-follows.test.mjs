@@ -166,3 +166,23 @@ test('existing reply and message notifications still work after the kind is exte
     await assert.rejects(()=>db.query("insert into private.member_notifications(user_id,actor_id,kind,question_id) values($1,$2,'issue',$3)",[alice,bob,anchor]),/check/);
   }finally{await db.exec('delete from public.answers;delete from public.direct_messages;');await clean();}
 });
+test('issue alerts toggle pauses future alerts without unfollowing; older clients keep the choice',async()=>{
+  const prefs=(issue,expected=alice)=>db.query('select public.set_notification_preferences(reply_in_app=>true,message_in_app=>true,issue_in_app=>$1,reply_email=>false,message_email=>false,expected_user=>$2)',[issue,expected]);
+  const legacy=()=>db.query('select public.set_notification_preferences(reply_in_app=>true,message_in_app=>true,reply_email=>false,message_email=>false,expected_user=>$1)',[alice]);
+  try{
+    await commitAs(alice,()=>follow(anchor));
+    assert.equal((await as(alice,'authenticated',()=>data())).preferences.issue_in_app,true,'on by default');
+    await commitAs(alice,()=>prefs(false));
+    await post(bob,['opt','stem-opt']);
+    let value=await as(alice,'authenticated',()=>data());
+    assert.equal(value.items.length,0);assert.equal(value.preferences.issue_in_app,false);
+    assert.equal((await as(alice,'authenticated',()=>follows())).length,1,'follows are kept');
+    await commitAs(alice,()=>legacy());
+    assert.equal((await as(alice,'authenticated',()=>data())).preferences.issue_in_app,false,'five-argument save leaves the toggle alone');
+    await as(bob,'authenticated',()=>assert.rejects(()=>prefs(true),/Account changed/));
+    await as(alice,'authenticated',()=>assert.rejects(()=>db.query('select public.set_notification_preferences(true,true,null,false,false,$1)',[alice]),/Choose each/));
+    await commitAs(alice,()=>prefs(true));
+    await post(bob,['opt','stem-opt']);
+    value=await as(alice,'authenticated',()=>data());assert.equal(value.items.length,1);assert.equal(value.items[0].kind,'issue');
+  }finally{await db.exec('delete from private.notification_preferences');await clean();}
+});

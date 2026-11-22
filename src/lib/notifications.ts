@@ -9,7 +9,7 @@ export type MemberNotification = {
   issue_anchor_id?: string | null; issue_title?: string | null;
 };
 export type NotificationPreferences = {
-  reply_in_app: boolean; message_in_app: boolean; reply_email: boolean; message_email: boolean;
+  reply_in_app: boolean; message_in_app: boolean; issue_in_app: boolean; reply_email: boolean; message_email: boolean;
 };
 export type NotificationData = {
   items: MemberNotification[]; unreadNotifications: number; unreadMessages: number;
@@ -17,7 +17,7 @@ export type NotificationData = {
 };
 export const EMPTY_NOTIFICATIONS: NotificationData = {
   items: [], unreadNotifications: 0, unreadMessages: 0, emailAvailable: false,
-  preferences: { reply_in_app: true, message_in_app: true, reply_email: false, message_email: false },
+  preferences: { reply_in_app: true, message_in_app: true, issue_in_app: true, reply_email: false, message_email: false },
 };
 export async function getNotifications(page = 0): Promise<NotificationData> {
   const { data, error } = await getSupabase().rpc('member_notification_data', { page_number: page }).abortSignal(AbortSignal.timeout(10000));

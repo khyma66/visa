@@ -12,7 +12,7 @@ export function NotificationSettings() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
-  useEffect(() => { setPreferences(data.preferences); }, [data.preferences.reply_in_app, data.preferences.message_in_app, data.preferences.reply_email, data.preferences.message_email]);
+  useEffect(() => { setPreferences(data.preferences); }, [data.preferences.reply_in_app, data.preferences.message_in_app, data.preferences.issue_in_app, data.preferences.reply_email, data.preferences.message_email]);
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!user || busy || demoMode) return;
@@ -23,7 +23,7 @@ export function NotificationSettings() {
   }
   return <section id="notification-settings" className="scroll-mt-24 p-5 sm:p-7">
     <h2 className="text-xl font-bold">Notification Preferences</h2>
-    <p className="mt-2 text-sm leading-6 text-slate-600">Choose Alerts For New Replies And Direct Messages. Changes Apply To Future Alerts. Unread Messages Remain Visible In Your Inbox.</p>
+    <p className="mt-2 text-sm leading-6 text-slate-600">Choose Alerts For New Replies, Direct Messages And New Posts About Issues You Follow. Changes Apply To Future Alerts. Unread Messages Remain Visible In Your Inbox.</p>
     {demoMode ? <p className="mt-4 text-sm text-slate-500">Sign In With A Real Account To Save Notification Preferences.</p> : !ready ? <p className="mt-4" role="status">Loading Preferences…</p> : loadError ? <div className="mt-4"><p role="alert" className="text-sm text-rose-700">{loadError}</p><button onClick={refresh} className="mt-2 text-sm font-semibold text-teal-800 underline">Try Again</button></div> : <form onSubmit={event => void save(event)}>
       <div className="mt-5 divide-y divide-slate-100">
         {([{ key: 'reply', label: 'Replies To My Posts' }, { key: 'message', label: 'Direct Messages' }] as const).map(({ key, label }) => <fieldset key={key} className="py-4">
@@ -33,6 +33,13 @@ export function NotificationSettings() {
             <label className="flex min-h-10 items-center gap-2 text-slate-500"><input type="checkbox" checked={preferences[`${key}_email`]} disabled={!data.emailAvailable || busy} aria-describedby="notification-email-status" onChange={event => setPreferences(value => ({ ...value, [`${key}_email`]: event.target.checked }))} className="h-4 w-4 accent-teal-700" />Email</label>
           </div>
         </fieldset>)}
+        <fieldset className="py-4">
+          <legend className="pt-3 text-sm font-semibold text-slate-900">New Posts About Issues I Follow</legend>
+          <div className="mt-2 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+            <label className="flex min-h-10 items-center gap-2"><input type="checkbox" checked={preferences.issue_in_app} disabled={busy} aria-describedby="issue-alert-help" onChange={event => { setPreferences(value => ({ ...value, issue_in_app: event.target.checked })); setStatus(''); }} className="h-4 w-4 accent-teal-700" />In-App Notifications</label>
+          </div>
+          <p id="issue-alert-help" className="mt-1 text-xs leading-5 text-slate-500">Turning This Off Pauses Alerts And Keeps The Issues You Follow. Manage Them In <a href="/notifications#followed-issues" className="font-semibold text-teal-800 underline">Notifications</a>.</p>
+        </fieldset>
       </div>
       <p id="notification-email-status" className="mt-3 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-600">{data.emailAvailable ? 'Email Is Optional And Off By Default. Alerts Go To Your Verified Account Email.' : 'Email Notifications Are Not Available Yet. In-App Alerts Work Without Email.'}</p>
       <button disabled={busy} type="submit" className="mt-4 min-h-11 rounded-lg bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50">{busy ? 'Saving…' : 'Save Preferences'}</button>

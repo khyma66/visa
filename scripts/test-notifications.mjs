@@ -22,7 +22,7 @@ async function load(file){let source=ts.transpileModule(await readFile(new URL(f
 const {NotificationLinks}=await load('../src/components/NotificationLinks.tsx');
 const {NotificationSettings}=await load('../src/components/NotificationSettings.tsx');
 const {NotificationsClient}=await load('../src/components/NotificationsClient.tsx');
-function setup({auth={},data={},state={},issues={}}={}){globalThis.__notificationTest={issues:{follows:[],error:'',refresh(){},follow:async()=>{},unfollow:async()=>{},...issues},auth:{user:{id:'member'},loading:false,demoMode:false,...auth},state:{ready:true,error:'',refresh(){},data:{items:[],unreadNotifications:0,unreadMessages:0,emailAvailable:false,preferences:{reply_in_app:true,message_in_app:true,reply_email:false,message_email:false},...data},...state}};}
+function setup({auth={},data={},state={},issues={}}={}){globalThis.__notificationTest={issues:{follows:[],error:'',refresh(){},follow:async()=>{},unfollow:async()=>{},...issues},auth:{user:{id:'member'},loading:false,demoMode:false,...auth},state:{ready:true,error:'',refresh(){},data:{items:[],unreadNotifications:0,unreadMessages:0,emailAvailable:false,preferences:{reply_in_app:true,message_in_app:true,issue_in_app:true,reply_email:false,message_email:false},...data},...state}};}
 const render=component=>renderToStaticMarkup(React.createElement(component));
 test('red dots are conditional and each icon announces its own unread count',()=>{
   setup();assert.doesNotMatch(render(NotificationLinks),/class="notification-dot"/);
@@ -39,7 +39,8 @@ test('unavailable unread status is not presented as successful zero unread',()=>
 test('per-type settings expose independent in-app choices and unavailable email is disabled',()=>{
   setup();const html=render(NotificationSettings);
   assert.match(html,/Replies To My Posts/);assert.match(html,/Direct Messages/);
-  assert.equal((html.match(/type="checkbox"/g)||[]).length,4);
+  assert.equal((html.match(/type="checkbox"/g)||[]).length,5);
+  assert.match(html,/New Posts About Issues I Follow/);assert.match(html,/href="\/notifications#followed-issues"/);
   assert.equal((html.match(/disabled=""/g)||[]).length,2);
   assert.match(html,/Email Notifications Are Not Available Yet/);
 });
@@ -68,4 +69,12 @@ test('Issues You Follow lists each follow with topics and an unfollow control; s
   setup({issues:{follows:null}});assert.match(render(NotificationsClient),/Loading Followed Issues/);
   setup({issues:{follows:null,error:'Followed issues could not be loaded.'}});html=render(NotificationsClient);
   assert.match(html,/Followed issues could not be loaded/);assert.doesNotMatch(html,/Not Following Any Issues/);
+});
+test('issue alert toggle reflects the saved choice and has no email option',()=>{
+  setup({data:{preferences:{reply_in_app:true,message_in_app:true,issue_in_app:false,reply_email:false,message_email:false}}});
+  const html=render(NotificationSettings);
+  const issue=html.slice(html.indexOf('New Posts About Issues I Follow'));
+  assert.equal((issue.match(/type="checkbox"/g)||[]).length,1);
+  assert.doesNotMatch(issue.match(/<input[^>]*>/)[0],/checked=""/);
+  assert.match(issue,/Keeps The Issues You Follow/);
 });
