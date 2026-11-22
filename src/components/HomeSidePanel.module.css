@@ -1,0 +1,12 @@
+.panel { display: flex; flex-direction: column; gap: 0.75rem; }
+.groups, .experiences, .related { min-width: 0; }
+
+/* Beside the posts (sticky rail), Groups and Experiences stay at the top and the
+   related posts fill the remaining, larger share with their own scroll. Stacked
+   under the posts on narrower screens, every segment keeps its natural height. */
+@container post-layout (min-width: 1000px) {
+  .panel { height: calc(100dvh - 7rem); }
+  .groups { flex: 0 1 auto; max-height: 38%; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
+  .experiences { flex: none; }
+  .related { flex: 1 1 0; min-height: 40%; overflow-y: auto; overscroll-behavior-y: contain; }
+}

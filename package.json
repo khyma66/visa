@@ -27,7 +27,7 @@
     "test:database": "node --test --test-concurrency=1 --test-timeout=60000 tests/database/*.test.mjs",
     "test:news": "node --test scripts/test-news.mjs scripts/test-section-content.mjs scripts/test-news-edge.mjs scripts/test-news-refresh.mjs scripts/test-news-client.mjs scripts/test-licensed-news.mjs",
     "test:groups": "node --test --test-timeout=60000 scripts/test-community-groups.mjs",
-    "test:community-ui": "node --test scripts/test-community-ui.mjs scripts/test-similar-discovery.mjs",
+    "test:community-ui": "node --test scripts/test-community-ui.mjs scripts/test-similar-discovery.mjs scripts/test-home-side-panel.mjs",
     "test:scale": "node --test --test-timeout=120000 scripts/test-community-scale.mjs",
     "test": "npm run test:isolation && npm run test:auth && npm run test:database && npm run test:security && npm run test:notices && npm run test:archive && npm run test:release && npm run test:realtime && npm run test:messaging && npm run test:message-entry && npm run test:presentation && npm run test:tags && npm run test:news && npm run test:groups && npm run test:community-ui && npm run test:scale && npm run test:feed-ui && npm run test:chatbot-removed && npm run test:dependencies && npm run test:analytics && npm run test:destinations",
     "check:bundle": "node scripts/check-bundle.mjs",
