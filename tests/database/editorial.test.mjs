@@ -66,6 +66,43 @@ before(async()=>{
 });
 after(()=>db.close());
 async function transaction(fn){await db.exec('begin');try{return await fn();}finally{await db.exec('rollback');}}
+test('publisher requires the current website policy without creating acceptance or enabling the queue',()=>transaction(async()=>{
+  await db.query("insert into public.policy_acceptances values($1,'2026-11-05-preview-v4')",[author]);
+  const currentPolicy=await read('20261105060304_post_view_privacy_notice_v4.sql');
+  await db.exec(currentPolicy.match(/create or replace function private\.community_write_guard\(\)[\s\S]*?\$\$;/)[0]);
+  await db.exec("create policy record_current_policy on public.policy_acceptances to authenticated with check (policy_version in ('2026-11-02-preview-v3','2026-11-05-preview-v4'))");
+  await db.exec(await read('20261112042514_editorial_accept_current_policy.sql'));
+  assert.equal(await scalar('select private.editorial_author_eligible($1)',[author]),true);
+  assert.equal(await scalar('select private.editorial_author_eligible($1)',[outsider]),false);
+  assert.equal(await scalar('select enabled from private.editorial_settings'),false);
+  assert.equal(await scalar("select active from cron.job where jobname='visathreads-reviewed-editorial'"),false);
+  assert.equal(await scalar('select count(*)::int from private.editorial_consents'),0);
+}));
+test('safe update migration fixes start, publish and shutdown without altering their access controls',()=>transaction(async()=>{
+  const original=await read('20261104035529_reviewed_editorial_queue.sql');
+  for(const name of ['private.editorial_owner_action','private.editorial_publish_due']) {
+    const match=[...original.matchAll(/create function [\s\S]*?\$\$;/g)].find(m=>m[0].includes(`function ${name}(`));
+    await db.exec(match[0].replace('create function','create or replace function'));
+  }
+  await db.exec(await read('20261112053951_editorial_safeupdate_singleton.sql'));
+  for(const [name,expected] of [
+    ['private.editorial_owner_action(text,jsonb)',"enabled=(payload->>'enabled')::boolean where singleton=true"],
+    ['private.editorial_publish_due()','last_published_at=now() where singleton=true'],
+    ['private.editorial_stop_all()','enabled=false where singleton=true']
+  ]) assert.ok((await scalar('select pg_get_functiondef($1::regprocedure)',[name])).includes(expected));
+  await claims(); await action('controls',{enabled:true,confirmation:'START APPROVED PUBLISHING'});
+  await db.exec('reset role'); assert.equal(await scalar('select enabled from private.editorial_settings'),true);
+  await scalar('select private.editorial_stop_all()');
+  assert.equal(await scalar('select enabled from private.editorial_settings'),false);
+}));
+test('sitewide 12-post limit preserves individual permissions and fake views setting',()=>transaction(async()=>{
+  const sql=(await read('20261112213049_editorial_raise_sitewide_limit.sql')).replace(/^begin;\n/i,'').replace(/commit;\s*$/i,'');
+  await db.exec(sql);
+  const settings=(await db.query('select daily_limit,monthly_limit,tactical_views_enabled from private.editorial_settings where singleton=true')).rows[0];
+  assert.equal(settings.daily_limit,12);assert.equal(settings.monthly_limit,372);
+  assert.equal(await scalar("select pg_get_constraintdef(oid) like '%<= 3%' from pg_constraint where conrelid='private.editorial_consents'::regclass and conname='editorial_consents_daily_limit_check'"),true);
+  assert.equal(await scalar('select count(*)::int from private.editorial_consents'),0);
+}));
 async function claims(user=owner,role='authenticated'){
   await db.exec('reset role');
   await db.query("select set_config('request.jwt.claims',$1,true)",[user?JSON.stringify({sub:user,session_id:session}):'{}']);
