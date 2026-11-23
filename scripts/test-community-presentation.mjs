@@ -31,6 +31,8 @@ const dependencies = {
   './ReportButton': moduleUrl('export const ReportButton=()=>null;'),
   './RelatedQuestions': moduleUrl('export const RelatedQuestions=()=>null;'),
   './FollowIssueButton': moduleUrl('export const FollowIssueButton=()=>null;'),
+  // The home rail's Groups and Experiences segments are covered by test-home-side-panel.
+  './HomeSidePanel': moduleUrl('export const HomeSidePanel=({children})=>children;'),
   './AssistantPanel': moduleUrl('export const AssistantPanel=()=>null;'),
 };
 dependencies['@/lib/messaging-state'] = moduleUrl(transpile(await readFile(new URL('../src/lib/messaging-state.ts',import.meta.url),'utf8')));
