@@ -19,7 +19,7 @@ const hooks = moduleUrl(`import * as React from ${JSON.stringify(reactUrl)};
 const dependencies = {
   '@/lib/feature-access': moduleUrl(transpile(await readFile(new URL('../src/lib/feature-access.ts',import.meta.url),'utf8'))),
   'react/jsx-runtime': import.meta.resolve('react/jsx-runtime'), react: hooks,
-  'next/link': link, 'next/navigation': moduleUrl('export const useSearchParams=()=>new URLSearchParams();export const useParams=()=>({id:globalThis.__presentation.question?.id});'),
+  'next/link': link, 'next/navigation': moduleUrl('export const useSearchParams=()=>new URLSearchParams();export const useParams=()=>({id:globalThis.__presentation.question?.id});export const usePathname=()=>\'/us/en\';'),
   'lucide-react': import.meta.resolve('lucide-react'), 'date-fns': import.meta.resolve('date-fns'),
   '@/lib/community': moduleUrl('export const manageOwnContent=()=>{},acceptAnswer=()=>{},createAnswer=()=>{},getAnswerPage=()=>{},getDiscussionContext=()=>{},getQuestion=()=>{},sortAnswers=x=>x,voteAnswer=()=>{},voteQuestion=()=>{},getCommunitySource=()=>{},getQuestionPage=()=>{},discoverQuestions=()=>{},discoverSimilarQuestions=()=>Promise.resolve([]);'),
   '@/lib/realtime': moduleUrl('export const subscribeLive=()=>()=>{};'),
@@ -30,6 +30,7 @@ const dependencies = {
   './Avatar': moduleUrl(`import React from ${JSON.stringify(reactUrl)};export const Avatar=()=>React.createElement('span',{'aria-label':'Member avatar'});`),
   './ReportButton': moduleUrl('export const ReportButton=()=>null;'),
   './RelatedQuestions': moduleUrl('export const RelatedQuestions=()=>null;'),
+  './FollowIssueButton': moduleUrl('export const FollowIssueButton=()=>null;'),
   // The home rail's Groups and Experiences segments are covered by test-home-side-panel.
   './HomeSidePanel': moduleUrl('export const HomeSidePanel=({children})=>children;'),
   './AssistantPanel': moduleUrl('export const AssistantPanel=()=>null;'),

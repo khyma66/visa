@@ -14,13 +14,15 @@ const dependencies={
   'lucide-react':import.meta.resolve('lucide-react'),
   './AuthProvider':url('export const useAuth=()=>globalThis.__notificationTest.auth;'),
   './NotificationProvider':url('export const useNotifications=()=>globalThis.__notificationTest.state;'),
+  './useIssueFollows':url('export const useIssueFollows=()=>globalThis.__notificationTest.issues;'),
+  '@/lib/post-presentation':url("export const topicLabel=t=>t.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');"),
   '@/lib/notifications':url('export const getNotifications=async()=>globalThis.__notificationTest.state.data, readNotifications=async()=>{},saveNotificationPreferences=async()=>{};'),
 };
 async function load(file){let source=ts.transpileModule(await readFile(new URL(file,import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;for(const [key,value]of Object.entries(dependencies))source=source.replaceAll(`from '${key}'`,`from ${JSON.stringify(value)}`).replaceAll(`from "${key}"`,`from ${JSON.stringify(value)}`);return import(url(source));}
 const {NotificationLinks}=await load('../src/components/NotificationLinks.tsx');
 const {NotificationSettings}=await load('../src/components/NotificationSettings.tsx');
 const {NotificationsClient}=await load('../src/components/NotificationsClient.tsx');
-function setup({auth={},data={},state={}}={}){globalThis.__notificationTest={auth:{user:{id:'member'},loading:false,demoMode:false,...auth},state:{ready:true,error:'',refresh(){},data:{items:[],unreadNotifications:0,unreadMessages:0,emailAvailable:false,preferences:{reply_in_app:true,message_in_app:true,reply_email:false,message_email:false},...data},...state}};}
+function setup({auth={},data={},state={},issues={}}={}){globalThis.__notificationTest={issues:{follows:[],error:'',refresh(){},follow:async()=>{},unfollow:async()=>{},...issues},auth:{user:{id:'member'},loading:false,demoMode:false,...auth},state:{ready:true,error:'',refresh(){},data:{items:[],unreadNotifications:0,unreadMessages:0,emailAvailable:false,preferences:{reply_in_app:true,message_in_app:true,issue_in_app:true,reply_email:false,message_email:false},...data},...state}};}
 const render=component=>renderToStaticMarkup(React.createElement(component));
 test('red dots are conditional and each icon announces its own unread count',()=>{
   setup();assert.doesNotMatch(render(NotificationLinks),/class="notification-dot"/);
@@ -37,7 +39,8 @@ test('unavailable unread status is not presented as successful zero unread',()=>
 test('per-type settings expose independent in-app choices and unavailable email is disabled',()=>{
   setup();const html=render(NotificationSettings);
   assert.match(html,/Replies To My Posts/);assert.match(html,/Direct Messages/);
-  assert.equal((html.match(/type="checkbox"/g)||[]).length,4);
+  assert.equal((html.match(/type="checkbox"/g)||[]).length,5);
+  assert.match(html,/New Posts About Issues I Follow/);assert.match(html,/href="\/notifications#followed-issues"/);
   assert.equal((html.match(/disabled=""/g)||[]).length,2);
   assert.match(html,/Email Notifications Are Not Available Yet/);
 });
@@ -49,4 +52,29 @@ test('signed-out notifications require login; empty and failure states differ',(
 test('alerts use protected destination links, show unread text and escape untrusted titles',()=>{
   setup({data:{items:[{id:'n1',kind:'reply',actor_username:'bob',title:'<script>bad</script>',href:'/questions/123#answer-456',created_at:'2026-11-04T10:00:00Z',read_at:null}]}});
   const html=render(NotificationsClient);assert.match(html,/href="\/questions\/123#answer-456"/);assert.match(html,/Unread/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);
+});
+test('followed-issue alerts hide the poster, link to the new post and offer unfollow',()=>{
+  setup({data:{items:[{id:'n2',kind:'issue',actor_username:null,title:'Another STEM OPT gap',href:'/us/en/questions/abc',issue_anchor_id:'apify-1',issue_title:'OPT unemployment <b>days</b>',created_at:'2026-11-04T10:00:00Z',read_at:null}]}});
+  const html=render(NotificationsClient);
+  assert.match(html,/New Post About An Issue You Follow/);assert.match(html,/href="\/us\/en\/questions\/abc"/);
+  assert.doesNotMatch(html,/u\/null/);assert.match(html,/lucide-bell-ring/);
+  assert.match(html,/aria-label="Unfollow OPT unemployment &lt;b&gt;days&lt;\/b&gt;"/);assert.doesNotMatch(html,/<b>days/);
+});
+test('Issues You Follow lists each follow with topics and an unfollow control; states are distinct',()=>{
+  setup({issues:{follows:[{id:'f1',anchor_id:'apify-1',title:'Cap gap question',topics:['cap-gap','h1b'],created_at:'2026-11-04T10:00:00Z'}]}});
+  let html=render(NotificationsClient);
+  assert.match(html,/Issues You Follow/);assert.match(html,/href="\/us\/en\/questions\/apify-1"/);
+  assert.match(html,/Topics: Cap Gap, H1b/);assert.match(html,/aria-label="Unfollow Cap gap question"/);
+  setup();assert.match(render(NotificationsClient),/Not Following Any Issues Yet/);
+  setup({issues:{follows:null}});assert.match(render(NotificationsClient),/Loading Followed Issues/);
+  setup({issues:{follows:null,error:'Followed issues could not be loaded.'}});html=render(NotificationsClient);
+  assert.match(html,/Followed issues could not be loaded/);assert.doesNotMatch(html,/Not Following Any Issues/);
+});
+test('issue alert toggle reflects the saved choice and has no email option',()=>{
+  setup({data:{preferences:{reply_in_app:true,message_in_app:true,issue_in_app:false,reply_email:false,message_email:false}}});
+  const html=render(NotificationSettings);
+  const issue=html.slice(html.indexOf('New Posts About Issues I Follow'));
+  assert.equal((issue.match(/type="checkbox"/g)||[]).length,1);
+  assert.doesNotMatch(issue.match(/<input[^>]*>/)[0],/checked=""/);
+  assert.match(issue,/Keeps The Issues You Follow/);
 });

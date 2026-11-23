@@ -27,6 +27,7 @@ const dependencies = {
   '@/lib/realtime': moduleUrl(`export function subscribeLive(){throw new Error('Unexpected subscription during render');}`),
   './Avatar': moduleUrl(`export function Avatar(){return null;}`),
   './RelatedQuestions': moduleUrl(`export function RelatedQuestions(){return null;}`),
+  './FollowIssueButton': moduleUrl(`export function FollowIssueButton(){return null;}`),
   './AssistantPanel': moduleUrl(`export function AssistantPanel(){return null;}`),
   './AuthProvider': auth,
   '@/lib/supabase/client': moduleUrl(`export const isSupabaseConfigured=false;export function getSupabase(){throw new Error('Unexpected network call');}`),
