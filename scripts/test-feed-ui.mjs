@@ -26,6 +26,7 @@ const dependencies = {
   './AuthProvider': dataUrl('export function useAuth(){return globalThis.__feedHarness.auth ?? {user:null,demoMode:true};}'),
   './QuestionCard': dataUrl('export function QuestionCard(){return null;}'),
   './RelatedQuestions': dataUrl('export function RelatedQuestions(){return null;}'),
+  './HomeSidePanel': dataUrl('export function HomeSidePanel({children}){return children;}'),
 };
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText.replace(/(from\s+)(['"])([^'"]+)\2/g, (_match, prefix, _quote, name) => {
   assert(dependencies[name], `Unmapped dependency ${name}`);

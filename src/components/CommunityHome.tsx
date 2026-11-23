@@ -12,6 +12,7 @@ import { subscribeLive } from '@/lib/realtime';
 import { QuestionCard } from './QuestionCard';
 import { useAuth } from './AuthProvider';
 import { RelatedQuestions } from './RelatedQuestions';
+import { HomeSidePanel } from './HomeSidePanel';
 import { ResizablePostLayout } from './ResizablePostLayout';
 
 import { EXPERIENCE_CATEGORIES, VISA_TYPES } from '@/lib/post-categories';
@@ -254,7 +255,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
 
   return (
     <main className="page-shell">
-      <ResizablePostLayout mainLabel="Posts" relatedLabel="Community discovery" related={<div id="home-feed-aside" className="feed-discovery min-w-0 space-y-5">
+      <ResizablePostLayout mainLabel="Posts" relatedLabel="Community discovery" related={<HomeSidePanel visaType={visaType}><div id="home-feed-aside" className="min-w-0 space-y-5">
           {(selectedPost || search || tag) && <div id="feed-related" className="scroll-mt-24">
             {selectedPost && <p aria-live="polite" className="mb-3 border-l-2 border-teal-800 pl-3 text-sm text-slate-600">Related To <span className="block break-words font-semibold text-slate-900">{selectedPost.title}</span></p>}
             <RelatedQuestions key={selectedPost?.id ?? `${search}:${tag}`} context={selectedPost ?? { title: search, tags: tag ? [tag] : [] }} />
@@ -267,7 +268,7 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
           <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4"><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Member Discussions</h2><p className="mt-2 text-sm leading-6 text-slate-600">See questions and experiences shared directly by VisaThreads members.</p><button onClick={() => { setOrigin(origin === 'member' ? '' : 'member'); updateQuery({ origin: origin === 'member' ? '' : 'member' }); }} className="mt-3 text-sm font-semibold text-teal-800 hover:underline capitalize">{origin === 'member' ? 'Show all posts' : 'See member posts'} <ArrowUpRight className="inline" size={13} aria-hidden="true" /></button></section>
           {popularTags.length > 0 && <section className="border-b border-slate-200 px-2 pb-5"><div className="flex items-center gap-2"><Tags size={17} className="shrink-0 text-slate-500" aria-hidden="true" /><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Topics in This Feed</h2></div><div className="mt-3 flex flex-wrap gap-2">{popularTags.map(([name, count]) => <button key={name} onClick={() => selectTag(name)} className="max-w-full break-words rounded bg-blue-50 px-2 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">{topicLabel(name)}<span className="ml-1.5 text-xs text-blue-500">{count}</span></button>)}</div><Link href="/us/en/tags" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-blue-700 capitalize">All Tags<ArrowUpRight size={13} aria-hidden="true" /></Link></section>}
 
-        </div>}>
+        </div></HomeSidePanel>}>
         <div id="home-feed-main" className="min-w-0">
           <header className="feed-heading flex flex-wrap items-center justify-between gap-4">
             <div className="capitalize"><p className="mb-2 text-sm font-semibold text-teal-800 capitalize">Your visa journey, together</p><h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl capitalize">{experience ? 'U.S. Visa Experiences' : initialKind === 'discussion' ? 'U.S. Visa Discussions' : 'U.S. Visa Community'}</h1><p className="mt-2 max-w-2xl text-base leading-6 text-slate-600">{experience ? 'First-hand stories selected from existing discussions, alongside experiences shared here. Original dates and replies are preserved. Personal accounts are not verified outcomes or legal advice.' : 'Ask about U.S. visas and find people with the same issue: every post shows similar questions and experiences.'}</p></div>
