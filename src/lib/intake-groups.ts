@@ -57,30 +57,35 @@ function apiError(error: { code?: string; message?: string }, fallback: string) 
   return new Error(fallback);
 }
 
-function checkIntake(visa: string, intake: Pick<Intake, 'term' | 'year'>) {
+/** Only F-1 groups have Spring/Fall intakes; other visa groups are by university. */
+export const INTAKE_VISA = 'F-1 / OPT';
+export function hasIntakes(visa: string) { return visa === INTAKE_VISA; }
+
+function checkIntake(visa: string, intake: Pick<Intake, 'term' | 'year'> | null) {
   if (!GROUP_VISA_TYPES.includes(visa as GroupVisaType)) throw new Error('Choose a supported visa type.');
-  if (intake.term !== 'spring' && intake.term !== 'fall') throw new Error('Choose a Spring or Fall intake.');
+  if (!hasIntakes(visa)) { if (intake) throw new Error('Intakes apply to F-1 groups only.'); return; }
+  if (!intake || (intake.term !== 'spring' && intake.term !== 'fall')) throw new Error('Choose a Spring or Fall intake.');
   if (!Number.isInteger(intake.year)) throw new Error('Choose an upcoming intake.');
 }
 
-export async function listIntakeGroups(visa: string, intake: Pick<Intake, 'term' | 'year'>, signal?: AbortSignal): Promise<IntakeGroup[]> {
+export async function listIntakeGroups(visa: string, intake: Pick<Intake, 'term' | 'year'> | null, signal?: AbortSignal): Promise<IntakeGroup[]> {
   checkIntake(visa, intake);
-  let query = client().from('community_directory').select('id,slug,display_name,university,member_count')
-    .eq('group_visa_type', visa).eq('intake_term', intake.term).eq('intake_year', intake.year)
-    .order('member_count', { ascending: false }).order('slug', { ascending: true }).limit(24);
+  let query = client().from('community_directory').select('id,slug,display_name,university,member_count').eq('group_visa_type', visa);
+  query = intake ? query.eq('intake_term', intake.term).eq('intake_year', intake.year) : query.is('intake_term', null);
+  query = query.order('member_count', { ascending: false }).order('slug', { ascending: true }).limit(24);
   if (signal) query = query.abortSignal(signal);
   const { data, error } = await query;
   if (error) throw apiError(error, 'Groups could not be loaded. Please retry.');
   return (data ?? []) as IntakeGroup[];
 }
 
-/** Returns the existing group when one already matches this visa, intake and university. */
-export async function createIntakeGroup(input: { visa: string; intake: Pick<Intake, 'term' | 'year'>; university: string; expectedUser: string }): Promise<CreatedIntakeGroup> {
+/** Returns the existing group when one already matches this visa, intake (F-1 only) and university. */
+export async function createIntakeGroup(input: { visa: string; intake: Pick<Intake, 'term' | 'year'> | null; university: string; expectedUser: string }): Promise<CreatedIntakeGroup> {
   checkIntake(input.visa, input.intake);
   const university = normalizeUniversity(input.university);
   if (!UUID.test(input.expectedUser)) throw new Error('Log in again to create a group.');
   const { data, error } = await client().rpc('create_intake_group', {
-    target_visa: input.visa, target_term: input.intake.term, target_year: input.intake.year,
+    target_visa: input.visa, target_term: input.intake?.term ?? null, target_year: input.intake?.year ?? null,
     university_name: university, expected_user: input.expectedUser,
   });
   if (error) throw apiError(error, 'The group could not be created. Please retry.');

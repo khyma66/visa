@@ -54,6 +54,7 @@ test('visa intake groups reuse communities with validated, deduplicated, rate-li
     for (const id of [member, other]) await db.query('insert into auth.users values($1)', [id]);
     const legacy = await scalar("insert into communities(name,display_name,slug) values('h1b-visa','H1BVisaHolders','h1b-visa') returning id");
     await apply(db, '20261122120000_visa_intake_groups');
+    await apply(db, '20261124120000_visa_groups_without_intake');
 
     await t.test('existing communities keep their IDs and expose null intake fields', async () => {
       await actor(null, 'anon');
@@ -87,7 +88,7 @@ test('visa intake groups reuse communities with validated, deduplicated, rate-li
     await t.test('different intakes and visas are separate groups; long names fit the address rules', () => isolated(async () => {
       await actor(member);
       const fall = await create(); const spring = await create('F-1 / OPT', 'spring');
-      const work = await create('H-4 / EAD', 'spring', year, 'Massachusetts Institute of Technology and Extra Long Campus');
+      const work = await create('H-4 / EAD', null, null, 'Massachusetts Institute of Technology and Extra Long Campus');
       assert.equal(new Set([fall.id, spring.id, work.id]).size, 3);
       assert(work.slug.length <= 40 && /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(work.slug) && !work.slug.includes('--'), work.slug);
       assert.equal(await scalar('select category from communities where id=$1', [work.id]), 'Family');
@@ -98,6 +99,32 @@ test('visa intake groups reuse communities with validated, deduplicated, rate-li
       ['short university', ['F-1 / OPT', 'fall', year, 'MI'], /university name/], ['symbols', ['F-1 / OPT', 'fall', year, '<script>x</script>'], /university name/],
       ['too long', ['F-1 / OPT', 'fall', year, 'U'.repeat(61)], /university name/], ['numbers only', ['F-1 / OPT', 'fall', year, '12345'], /university name/],
     ]) await t.test(`rejects ${label}`, () => isolated(async () => { await actor(member); await assert.rejects(() => create(...args), pattern); }));
+    await t.test('non-F-1 groups are by university only, with their own address and description', () => isolated(async () => {
+      await actor(member);
+      const result = await create('H-1B', null, null, 'Stanford University');
+      assert.equal(result.created, true);
+      assert.match(result.slug, /^h1b-stanford-university-[0-9a-f]{4}$/);
+      const row = (await db.query('select display_name,category,description,intake_term,intake_year,university from community_directory where id=$1', [result.id])).rows[0];
+      assert.deepEqual([row.display_name, row.category, row.intake_term, row.intake_year, row.university], ['H1BStanfordUniversity', 'Work visas', null, null, 'Stanford University']);
+      assert.match(row.description, /^H-1B members at Stanford University:/);
+      await actor(other);
+      assert.deepEqual(await create('H-1B', null, null, 'stanford  university', other), { id: result.id, slug: result.slug, created: false });
+      await actor(member);
+      assert.notEqual((await create('F-1 / OPT', 'fall', year, 'Stanford University')).id, result.id, 'F-1 intake groups stay separate');
+    }));
+    for (const [label, args, pattern] of [
+      ['non-F-1 intake', ['H-1B', 'fall', year], /F-1 groups only/], ['non-F-1 year only', ['B1/B2', null, year], /F-1 groups only/],
+      ['F-1 without intake', ['F-1 / OPT', null, null], /Spring or Fall/],
+    ]) await t.test(`rejects ${label}`, () => isolated(async () => { await actor(member); await assert.rejects(() => create(...args), pattern); }));
+    await t.test('the table rejects intakes on non-F-1 groups', () => isolated(async () => {
+      await assert.rejects(() => db.query("update communities set group_visa_type='H-1B',intake_term='fall',intake_year=$1,university='Some University' where id=$2", [year, legacy]), /communities_intake_fields/);
+    }));
+    await t.test('the table rejects F-1 groups without an intake', () => isolated(async () => {
+      await assert.rejects(() => db.query("update communities set group_visa_type='F-1 / OPT',university='Some University' where id=$1", [legacy]), /communities_intake_fields/);
+    }));
+    await t.test('the table accepts a non-F-1 group by university only', () => isolated(async () => {
+      await db.query("update communities set group_visa_type='B1/B2',university='Some University' where id=$1", [legacy]);
+    }));
     await t.test('requires the signed-in account the browser expects', () => isolated(async () => {
       await actor(member); await assert.rejects(() => create('F-1 / OPT', 'fall', year, 'Stanford University', other), /Account changed/);
     }));

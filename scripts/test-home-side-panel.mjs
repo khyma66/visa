@@ -79,8 +79,11 @@ function nodes(node) { return Array.isArray(node) ? node.flatMap(nodes) : node &
 function textOf(node) { return Array.isArray(node) ? node.map(textOf).join('') : node == null || typeof node === 'boolean' ? '' : typeof node === 'object' ? textOf(node.props?.children) : String(node); }
 const find = (h, predicate, label) => { const result = nodes(h.tree).find(predicate); assert(result, `Missing ${label}`); return result; };
 const button = (h, label) => find(h, (node) => node.type === 'button' && textOf(node).trim() === label, `${label} button`);
+const form = (h) => find(h, (node) => node.type === 'form', 'form');
+const field = (h) => find(h, (node) => node.type === 'input', 'university field');
+async function submitUniversity(h, value) { field(h).props.onChange({ target: { value } }); h.render(); await form(h).props.onSubmit({ preventDefault() {} }); h.render(); await h.settle(); }
 const pressed = (h, group) => nodes(find(h, (node) => node.props?.role === 'group' && node.props['aria-label'] === group, group)).filter((node) => node.type === 'button' && node.props['aria-pressed']).map((node) => textOf(node));
-const filters = (query) => Object.fromEntries(query.ops.filter(([op]) => op === 'eq').map(([, key, value]) => [key, value]));
+const filters = (query) => Object.fromEntries(query.ops.filter(([op]) => op === 'eq' || op === 'is').map(([, key, value]) => [key, value]));
 async function click(h, label) { button(h, label).props.onClick(); h.render(); await h.settle(); }
 
 test('upcoming intakes roll forward from the current date instead of a fixed year', () => {
@@ -111,110 +114,119 @@ test('rail uses one tab strip for Groups and Experiences, then the related posts
     assert.match(related.props.className, /feed-discovery/);
   } finally { h.close(); }
 });
-test('groups follow the feed visa; only F-1 offers Spring and Fall intakes', async () => {
+test('every visa lists its groups; only F-1 adds Spring and Fall intakes', async () => {
   const h = new Harness();
   const intakes = upcomingIntakes(new Date(), 3);
-  h.onSelect = (query) => ({ data: filters(query).group_visa_type === 'F-1 / OPT' ? [group('Arizona State University', 'f1-fall27-arizona-state-university-ab12', 4)] : [], error: null });
+  h.onSelect = (query) => ({ data: filters(query).group_visa_type === 'H-1B' ? [group('Stanford University', 'h1b-stanford-university-ab12', 2)] : filters(query).group_visa_type === 'F-1 / OPT' ? [group('Arizona State University', 'f1-fall27-arizona-state-ab12', 4)] : [], error: null });
   try {
     h.render(VisaGroups, { visaType: 'H-1B' }); await h.settle();
     assert.deepEqual(pressed(h, 'Group visa type'), ['H1B']);
     assert.equal(nodes(h.tree).some((node) => node.props?.role === 'group' && /intake$/.test(node.props['aria-label'] ?? '')), false, 'No intake tabs for H1B');
-    assert.equal(h.selects.length, 0, 'Non-F-1 visas do not query intake groups');
-    assert.match(textOf(h.tree), /H1B groups by university and intake are coming soon/);
-    const placeholder = find(h, (node) => node.type === 'button' && /coming soon/.test(textOf(node)), 'coming-soon create button');
-    assert.equal(placeholder.props.disabled, true);
+    assert.doesNotMatch(textOf(h.tree), /coming soon/i, 'No placeholder');
+    assert.deepEqual(filters(h.selects[0]), { group_visa_type: 'H-1B', intake_term: null }, 'Non-F-1 groups are listed without an intake');
+    assert.equal(find(h, (node) => typeof node.props?.href === 'string' && textOf(node).includes('Stanford University'), 'H1B group').props.href, '/us/en/c/h1b-stanford-university-ab12');
     await click(h, 'F1 / OPT');
     assert.deepEqual(pressed(h, 'F1 / OPT intake'), [intakes[0].label]);
-    assert.deepEqual(pressed(h, 'Group visa type'), ['F1 / OPT']);
-    assert.equal(h.selects[0].table, 'community_directory');
-    assert.deepEqual(filters(h.selects[0]), { group_visa_type: 'F-1 / OPT', intake_term: intakes[0].term, intake_year: intakes[0].year });
-    assert(h.selects[0].ops.some(([op, n]) => op === 'limit' && n === 24), 'Group reads are bounded');
+    assert.deepEqual(filters(h.selects.at(-1)), { group_visa_type: 'F-1 / OPT', intake_term: intakes[0].term, intake_year: intakes[0].year });
+    assert(h.selects.at(-1).ops.some(([op, n]) => op === 'limit' && n === 24), 'Group reads are bounded');
     await click(h, intakes[1].label);
     assert.deepEqual(filters(h.selects.at(-1)), { group_visa_type: 'F-1 / OPT', intake_term: intakes[1].term, intake_year: intakes[1].year });
-    assert.deepEqual(pressed(h, 'F1 / OPT intake'), [intakes[1].label]);
-    const entry = find(h, (node) => typeof node.props?.href === 'string' && textOf(node).includes('Arizona State University'), 'group link');
-    assert.equal(entry.props.href, '/us/en/c/f1-fall27-arizona-state-university-ab12');
-    assert.match(textOf(entry), /4 members/);
+    assert.match(textOf(find(h, (node) => typeof node.props?.href === 'string' && textOf(node).includes('Arizona State University'), 'F1 group')), /4 members/);
     const before = h.selects.length; await click(h, intakes[1].label);
     assert.equal(h.selects.length, before, 'Re-selecting the current intake does not refetch');
   } finally { h.close(); }
 });
-test('signed-in members create a university group for the selected visa and intake', async () => {
+test('signed-in members create F-1 intake groups and university groups for other visas', async () => {
   const h = new Harness();
-  const intakes = upcomingIntakes();
-  let created = false;
-  h.onSelect = () => ({ data: created ? [group('Arizona State University', 'f1-spring27-arizona-state-ab12', 1)] : [], error: null });
-  h.onRpc = () => { created = true; return { data: { id: '22222222-2222-4222-8222-000000000001', slug: 'f1-spring27-arizona-state-ab12', created: true }, error: null }; };
+  const intakes = upcomingIntakes(new Date(), 3);
+  const made = [];
+  h.onSelect = (query) => ({ data: made.filter((item) => item.visa === filters(query).group_visa_type).map((item) => group(item.name, item.slug, 1)), error: null });
+  h.onRpc = (_name, args) => { const slug = args.target_visa === 'H-1B' ? 'h1b-arizona-state-ab12' : 'f1-spring27-arizona-state-ab12'; made.push({ visa: args.target_visa, name: args.university_name, slug }); return { data: { id: '22222222-2222-4222-8222-000000000001', slug, created: true }, error: null }; };
   try {
     h.render(VisaGroups, { visaType: 'F-1 / OPT' }); await h.settle();
-    await click(h, `Create F1 / OPT · ${intakes[0].label} group`);
-    const input = find(h, (node) => node.type === 'input' && node.props.id === 'visa-group-university', 'university field');
-    assert.equal(input.props.autoFocus, true); assert.equal(input.props.maxLength, 60);
-    assert(nodes(h.tree).some((node) => node.type === 'label' && node.props.htmlFor === 'visa-group-university'));
-    input.props.onChange({ target: { value: 'X' } }); h.render();
-    await find(h, (node) => node.type === 'form', 'form').props.onSubmit({ preventDefault() {} }); h.render();
+    await click(h, 'Create group');
+    assert.equal(field(h).props.autoFocus, true); assert.equal(field(h).props.maxLength, 60);
+    assert(nodes(h.tree).some((node) => node.type === 'label' && node.props.htmlFor === 'visa-group-university' && textOf(node).includes(`F1 / OPT · ${intakes[0].label}`)));
+    await submitUniversity(h, 'X');
     assert.equal(h.rpcs.length, 0, 'Invalid names never reach the server');
     assert.match(textOf(h.tree), /3–60 letters/);
-    find(h, (node) => node.type === 'input', 'field').props.onChange({ target: { value: '  Arizona  State University ' } }); h.render();
+    field(h).props.onChange({ target: { value: 'Arizona' } }); h.render();
     assert.doesNotMatch(textOf(h.tree), /3–60 letters/, 'Typing clears the error');
-    await find(h, (node) => node.type === 'form', 'form').props.onSubmit({ preventDefault() {} }); h.render(); await h.settle();
-    assert.deepEqual(h.rpcs, [{ name: 'create_intake_group', args: { target_visa: 'F-1 / OPT', target_term: intakes[0].term, target_year: intakes[0].year, university_name: 'Arizona State University', expected_user: member } }]);
+    await submitUniversity(h, '  Arizona  State University ');
+    assert.deepEqual(h.rpcs.at(-1), { name: 'create_intake_group', args: { target_visa: 'F-1 / OPT', target_term: intakes[0].term, target_year: intakes[0].year, university_name: 'Arizona State University', expected_user: member } });
     assert.match(textOf(h.tree), /Group created: Open Arizona State University/);
-    assert(nodes(h.tree).filter((node) => typeof node.props?.href === 'string' && node.props.href === '/us/en/c/f1-spring27-arizona-state-ab12').length >= 2, 'Notice and refreshed list link to the group');
     assert(!nodes(h.tree).some((node) => node.type === 'form'), 'Form closes after success');
+    await click(h, 'H1B');
+    await click(h, 'Create group');
+    await submitUniversity(h, 'Arizona State University');
+    assert.deepEqual(h.rpcs.at(-1).args, { target_visa: 'H-1B', target_term: null, target_year: null, university_name: 'Arizona State University', expected_user: member }, 'Non-F-1 groups are created without an intake');
+    assert(nodes(h.tree).some((node) => node.props?.href === '/us/en/c/h1b-arizona-state-ab12'));
   } finally { h.close(); }
 });
-
 test('an existing group is offered instead of a duplicate, and server errors stay in the form', async () => {
   const h = new Harness();
   const responses = [
-    { data: { id: '22222222-2222-4222-8222-000000000009', slug: 'h1b-fall27-stanford-university-cd34', created: false }, error: null },
+    { data: { id: '22222222-2222-4222-8222-000000000009', slug: 'h1b-stanford-university-cd34', created: false }, error: null },
     { data: null, error: { code: 'P0001', message: 'Too many requests. Please try again later.' } },
   ];
   h.onRpc = () => responses.shift();
   try {
-    h.render(VisaGroups, { visaType: 'F-1 / OPT' }); await h.settle();
-    const open = () => click(h, nodes(h.tree).map(textOf).find((text) => /^Create F1 \/ OPT/.test(text.trim())).trim());
-    await open();
-    find(h, (node) => node.type === 'input', 'field').props.onChange({ target: { value: 'Stanford University' } }); h.render();
-    await find(h, (node) => node.type === 'form', 'form').props.onSubmit({ preventDefault() {} }); h.render(); await h.settle();
+    h.render(VisaGroups, { visaType: 'H-1B' }); await h.settle();
+    await click(h, 'Create group');
+    await submitUniversity(h, 'Stanford University');
     assert.match(textOf(h.tree), /This group already exists: Open Stanford University/);
-    await open();
-    find(h, (node) => node.type === 'input', 'field').props.onChange({ target: { value: 'Another University' } }); h.render();
-    await find(h, (node) => node.type === 'form', 'form').props.onSubmit({ preventDefault() {} }); h.render();
+    await click(h, 'Create group');
+    field(h).props.onChange({ target: { value: 'Another University' } }); h.render();
+    await form(h).props.onSubmit({ preventDefault() {} }); h.render();
     assert.match(textOf(find(h, (node) => node.props?.role === 'alert', 'alert')), /several groups today/);
-    assert.equal(find(h, (node) => node.type === 'input', 'field').props.value, 'Another University', 'Draft is kept after an error');
+    assert.equal(field(h).props.value, 'Another University', 'Draft is kept after an error');
     await click(h, 'Cancel');
     assert(!nodes(h.tree).some((node) => node.type === 'form'));
   } finally { h.close(); }
 });
-
 test('signed-out visitors see groups and a login link that returns to the same page', async () => {
   const h = new Harness();
   h.auth = { user: null };
   try {
     h.render(VisaGroups, {}); await h.settle();
     assert.deepEqual(pressed(h, 'Group visa type'), ['F1 / OPT'], 'Defaults to the first group visa');
-    const login = find(h, (node) => typeof node.props?.href === 'string' && textOf(node).includes('Log in to create a group'), 'login link');
+    const login = find(h, (node) => typeof node.props?.href === 'string' && textOf(node).includes('Create group'), 'login link');
     assert.equal(login.props.href, `/login?next=${encodeURIComponent('/us/en?visa=H-1B&sort=score')}#sign-in`);
-    assert(!nodes(h.tree).some((node) => node.type === 'button' && /^Create/.test(textOf(node))));
+    assert(!nodes(h.tree).some((node) => node.type === 'button' && /Create group/.test(textOf(node))));
     assert.equal(h.selects.length, 1, 'Groups are still listed for visitors');
   } finally { h.close(); }
 });
-
-test('group load failures explain the problem and retry', async () => {
+test('group load failures explain the problem and retry, keeping Create available', async () => {
   const h = new Harness();
   let fail = true;
   h.onSelect = () => fail ? { data: null, error: { code: '42P01', message: 'relation missing' } } : { data: [], error: null };
   try {
     h.render(VisaGroups, {}); await h.settle();
     assert.match(textOf(h.tree), /not available on this environment yet/);
-    assert(nodes(h.tree).some((node) => node.type === 'button' && /^Create F1/.test(textOf(node))), 'The create placeholder stays visible while the list is unavailable');
+    assert(nodes(h.tree).some((node) => node.type === 'button' && textOf(node).includes('Create group')));
     fail = false; await click(h, 'Retry');
-    assert.match(textOf(h.tree), /groups yet/);
+    assert.match(textOf(h.tree), /No groups yet\. Create the first one\./);
   } finally { h.close(); }
 });
 
+test('the rail puts Create group in the top-right of the Groups tab and opens the form below', async () => {
+  const h = new Harness();
+  try {
+    let tree = h.render(HomeSidePanel, { visaType: 'H-1B', children: 'RELATED' });
+    const strip = tree.props.children[0].props.children[0];
+    const [tabs, action] = strip.props.children;
+    assert.equal(tabs.props.role, 'tablist');
+    assert.equal(textOf(action).trim(), 'Create group', 'Create sits beside the tabs on the right');
+    assert.match(strip.props.className, /justify-between/);
+    action.props.onClick(); tree = h.render();
+    assert.equal(tree.props.children[0].props.children[0].props.children[1].props['aria-expanded'], true);
+    const groups = nodes(tree).find((node) => node.type === VisaGroups);
+    assert.equal(groups.props.formOpen, true, 'The rail opens the groups form');
+    h.auth = { user: null }; tree = h.render();
+    const login = tree.props.children[0].props.children[0].props.children[1];
+    assert.equal(login.props.href, `/login?next=${encodeURIComponent('/us/en?visa=H-1B&sort=score')}#sign-in`);
+  } finally { h.close(); }
+});
 test('experiences offer one entry per visa type linking to its filtered experiences section', () => {
   const h = new Harness();
   try {
@@ -228,24 +240,23 @@ test('experiences offer one entry per visa type linking to its filtered experien
   } finally { h.close(); }
 });
 
-test('rail: Groups and Experiences use about a fifth of the height; related posts fill the rest; phones stack naturally', async () => {
+test('rail: Groups and Experiences size to content up to a quarter, without scrollbars; phones stack naturally', async () => {
   const css = await read('../src/components/HomeSidePanel.module.css');
   const desktop = css.slice(css.indexOf('@container post-layout (min-width: 1000px)'));
   const rule = (name) => desktop.match(new RegExp(`\\.${name} \\{([^}]+)\\}`))[1];
-  assert.match(rule('top'), /flex: 0 0 20%/, 'Groups and Experiences take 20% of the rail');
-  assert.match(rule('top'), /overflow: hidden/, 'The top segment never grows past its share');
+  assert.match(rule('top'), /flex: 0 0 auto/, 'Sized to its content');
+  assert.match(rule('top'), /max-height: 25%/, 'At most a quarter of the rail');
+  assert.match(rule('body'), /scrollbar-width: none/, 'No visible scrollbar');
+  assert.match(desktop, /\.body::-webkit-scrollbar \{ display: none; \}/);
   assert.match(rule('related'), /flex: 1 1 0/); assert.match(rule('related'), /overflow-y: auto/);
   assert.match(rule('panel'), /height: 100%/, 'The rail fills the posts height');
-  assert.match(rule('body'), /overflow-y: auto/, 'Tab content scrolls inside its share');
   const plain = css.replace(/\/\*[\s\S]*?\*\//g, '');
   assert.doesNotMatch(plain.slice(0, plain.indexOf('@container')), /height|flex: 0 0/, 'Phones keep natural heights');
-  assert.doesNotMatch(panelSource, /\bw-\[\d|min-w-\[\d|whitespace-nowrap|overflow-x-hidden/, 'No fixed widths that could scroll a phone page sideways');
-  assert.match(css, /\.scrollRow \{ overflow-x: auto/, 'Long visa and intake rows scroll sideways inside their own box');
+  assert.doesNotMatch(panelSource, /\bw-\[\d|min-w-\[\d|whitespace-nowrap|overflow-x-hidden|coming soon/i);
   const home = await read('../src/components/CommunityHome.tsx');
   assert.match(home, /related=\{<HomeSidePanel visaType=\{visaType\}><div id="home-feed-aside"/);
   assert(home.indexOf('<RelatedQuestions') > home.indexOf('<HomeSidePanel') && home.indexOf('</HomeSidePanel>') > home.indexOf('Topics in This Feed'));
 });
-
 test('home fills the viewport: title-only header, compact filters below it, scrolling post list', async () => {
   const home = await read('../src/components/CommunityHome.tsx');
   const globals = await read('../src/styles/globals.css');
