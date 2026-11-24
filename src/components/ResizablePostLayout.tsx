@@ -10,8 +10,10 @@ const MIN_SPLIT_WIDTH = 1000;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** One ratio and resize preference for every content page with a supporting panel. */
-export function ResizablePostLayout({ children, related, mainLabel = 'Post', relatedLabel = 'Also asked panel', className = '' }: {
+export function ResizablePostLayout({ children, related, mainLabel = 'Post', relatedLabel = 'Also asked panel', className = '', fill = false }: {
   children: ReactNode; related: ReactNode; mainLabel?: string; relatedLabel?: string; className?: string;
+  /** Panels fill the parent's height and scroll internally when beside each other. */
+  fill?: boolean;
 }) {
   const id = useId();
   const container = useRef<HTMLDivElement>(null);
@@ -69,7 +71,7 @@ export function ResizablePostLayout({ children, related, mainLabel = 'Post', rel
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
 
-  return <div className={`${styles.container} ${className}`}>
+  return <div className={`${styles.container} ${fill ? styles.fill : ''} ${className}`}>
     <div ref={container} className={`${styles.layout} ${dragging ? styles.dragging : ''}`} style={{ '--post-split': `${split}fr`, '--related-split': `${100 - split}fr` } as CSSProperties}>
       <div id={`${id}-post`} className={styles.post}>{children}</div>
       <div role="separator" tabIndex={0} aria-label={mainLabel} aria-orientation="vertical"

@@ -93,32 +93,42 @@ test('upcoming intakes roll forward from the current date instead of a fixed yea
   for (const bad of ['MI', '12345', '<b>x</b>', 'U'.repeat(61)]) assert.throws(() => normalizeUniversity(bad), /3–60/);
 });
 
-test('rail stacks Groups, then Experiences, then the related posts it is given', () => {
+test('rail uses one tab strip for Groups and Experiences, then the related posts it is given', () => {
   const h = new Harness();
   try {
     const tree = h.render(HomeSidePanel, { visaType: 'H-1B', children: 'RELATED CONTENT' });
-    const [groups, experiences, related] = tree.props.children;
-    assert.equal(groups.type, VisaGroups); assert.equal(groups.props.visaType, 'H-1B');
-    assert.equal(experiences.type, VisaExperiences);
-    assert.equal(related.type, 'section'); assert.equal(related.props['aria-label'], 'Related posts');
+    const [top, related] = tree.props.children;
+    assert.equal(top.props['aria-label'], 'Groups and experiences');
+    const tabs = nodes(top).filter((node) => node.props?.role === 'tab').map((node) => textOf(node).trim());
+    assert.deepEqual(tabs, ['Groups', 'Experiences']);
+    const panels = nodes(top).filter((node) => node.props?.role === 'tabpanel');
+    assert.equal(panels.length, 2);
+    assert.equal(panels[0].props.hidden, false, 'Groups is the default tab');
+    assert.equal(panels[1].props.hidden, true, 'Experiences waits for its tab');
+    assert.equal(nodes(panels[0]).find((node) => node.type === VisaGroups)?.props.visaType, 'H-1B');
+    assert.equal(related.props['aria-label'], 'Related posts');
     assert.equal(related.props.children, 'RELATED CONTENT');
-    assert.match(related.props.className, /\brelated\b/); assert.match(related.props.className, /feed-discovery/);
+    assert.match(related.props.className, /feed-discovery/);
   } finally { h.close(); }
 });
-
-test('groups follow the feed visa, switch visa and intake sub-tabs, and link to each group', async () => {
+test('groups follow the feed visa; only F-1 offers Spring and Fall intakes', async () => {
   const h = new Harness();
-  const intakes = upcomingIntakes();
+  const intakes = upcomingIntakes(new Date(), 3);
   h.onSelect = (query) => ({ data: filters(query).group_visa_type === 'F-1 / OPT' ? [group('Arizona State University', 'f1-fall27-arizona-state-university-ab12', 4)] : [], error: null });
   try {
     h.render(VisaGroups, { visaType: 'H-1B' }); await h.settle();
     assert.deepEqual(pressed(h, 'Group visa type'), ['H1B']);
-    assert.deepEqual(pressed(h, 'H1B intake'), [intakes[0].label]);
-    assert.equal(h.selects[0].table, 'community_directory');
-    assert.deepEqual(filters(h.selects[0]), { group_visa_type: 'H-1B', intake_term: intakes[0].term, intake_year: intakes[0].year });
-    assert(h.selects[0].ops.some(([op, n]) => op === 'limit' && n === 24), 'Group reads are bounded');
-    assert.match(textOf(h.tree), new RegExp(`No H1B · ${intakes[0].label} groups yet`));
+    assert.equal(nodes(h.tree).some((node) => node.props?.role === 'group' && /intake$/.test(node.props['aria-label'] ?? '')), false, 'No intake tabs for H1B');
+    assert.equal(h.selects.length, 0, 'Non-F-1 visas do not query intake groups');
+    assert.match(textOf(h.tree), /H1B groups by university and intake are coming soon/);
+    const placeholder = find(h, (node) => node.type === 'button' && /coming soon/.test(textOf(node)), 'coming-soon create button');
+    assert.equal(placeholder.props.disabled, true);
     await click(h, 'F1 / OPT');
+    assert.deepEqual(pressed(h, 'F1 / OPT intake'), [intakes[0].label]);
+    assert.deepEqual(pressed(h, 'Group visa type'), ['F1 / OPT']);
+    assert.equal(h.selects[0].table, 'community_directory');
+    assert.deepEqual(filters(h.selects[0]), { group_visa_type: 'F-1 / OPT', intake_term: intakes[0].term, intake_year: intakes[0].year });
+    assert(h.selects[0].ops.some(([op, n]) => op === 'limit' && n === 24), 'Group reads are bounded');
     await click(h, intakes[1].label);
     assert.deepEqual(filters(h.selects.at(-1)), { group_visa_type: 'F-1 / OPT', intake_term: intakes[1].term, intake_year: intakes[1].year });
     assert.deepEqual(pressed(h, 'F1 / OPT intake'), [intakes[1].label]);
@@ -129,7 +139,6 @@ test('groups follow the feed visa, switch visa and intake sub-tabs, and link to 
     assert.equal(h.selects.length, before, 'Re-selecting the current intake does not refetch');
   } finally { h.close(); }
 });
-
 test('signed-in members create a university group for the selected visa and intake', async () => {
   const h = new Harness();
   const intakes = upcomingIntakes();
@@ -138,7 +147,7 @@ test('signed-in members create a university group for the selected visa and inta
   h.onRpc = () => { created = true; return { data: { id: '22222222-2222-4222-8222-000000000001', slug: 'f1-spring27-arizona-state-ab12', created: true }, error: null }; };
   try {
     h.render(VisaGroups, { visaType: 'F-1 / OPT' }); await h.settle();
-    await click(h, `Create a F1 / OPT · ${intakes[0].label} group`);
+    await click(h, `Create F1 / OPT · ${intakes[0].label} group`);
     const input = find(h, (node) => node.type === 'input' && node.props.id === 'visa-group-university', 'university field');
     assert.equal(input.props.autoFocus, true); assert.equal(input.props.maxLength, 60);
     assert(nodes(h.tree).some((node) => node.type === 'label' && node.props.htmlFor === 'visa-group-university'));
@@ -164,8 +173,8 @@ test('an existing group is offered instead of a duplicate, and server errors sta
   ];
   h.onRpc = () => responses.shift();
   try {
-    h.render(VisaGroups, { visaType: 'H-1B' }); await h.settle();
-    const open = () => click(h, nodes(h.tree).map(textOf).find((text) => /^Create a H1B/.test(text.trim())).trim());
+    h.render(VisaGroups, { visaType: 'F-1 / OPT' }); await h.settle();
+    const open = () => click(h, nodes(h.tree).map(textOf).find((text) => /^Create F1 \/ OPT/.test(text.trim())).trim());
     await open();
     find(h, (node) => node.type === 'input', 'field').props.onChange({ target: { value: 'Stanford University' } }); h.render();
     await find(h, (node) => node.type === 'form', 'form').props.onSubmit({ preventDefault() {} }); h.render(); await h.settle();
@@ -188,7 +197,7 @@ test('signed-out visitors see groups and a login link that returns to the same p
     assert.deepEqual(pressed(h, 'Group visa type'), ['F1 / OPT'], 'Defaults to the first group visa');
     const login = find(h, (node) => typeof node.props?.href === 'string' && textOf(node).includes('Log in to create a group'), 'login link');
     assert.equal(login.props.href, `/login?next=${encodeURIComponent('/us/en?visa=H-1B&sort=score')}#sign-in`);
-    assert(!nodes(h.tree).some((node) => node.type === 'button' && /^Create a/.test(textOf(node))));
+    assert(!nodes(h.tree).some((node) => node.type === 'button' && /^Create/.test(textOf(node))));
     assert.equal(h.selects.length, 1, 'Groups are still listed for visitors');
   } finally { h.close(); }
 });
@@ -200,7 +209,7 @@ test('group load failures explain the problem and retry', async () => {
   try {
     h.render(VisaGroups, {}); await h.settle();
     assert.match(textOf(h.tree), /not available on this environment yet/);
-    assert(!nodes(h.tree).some((node) => node.type === 'button' && /^Create a/.test(textOf(node))), 'No create action while groups are unavailable');
+    assert(nodes(h.tree).some((node) => node.type === 'button' && /^Create F1/.test(textOf(node))), 'The create placeholder stays visible while the list is unavailable');
     fail = false; await click(h, 'Retry');
     assert.match(textOf(h.tree), /groups yet/);
   } finally { h.close(); }
@@ -219,22 +228,36 @@ test('experiences offer one entry per visa type linking to its filtered experien
   } finally { h.close(); }
 });
 
-test('rail layout keeps top segments visible, gives related posts the largest share, and fits phones', async () => {
+test('rail: Groups and Experiences use about a fifth of the height; related posts fill the rest; phones stack naturally', async () => {
   const css = await read('../src/components/HomeSidePanel.module.css');
   const desktop = css.slice(css.indexOf('@container post-layout (min-width: 1000px)'));
-  assert(desktop.length > 50, 'Desktop rules apply only beside the posts');
   const rule = (name) => desktop.match(new RegExp(`\\.${name} \\{([^}]+)\\}`))[1];
+  assert.match(rule('top'), /flex: 0 0 20%/, 'Groups and Experiences take 20% of the rail');
+  assert.match(rule('top'), /overflow: hidden/, 'The top segment never grows past its share');
   assert.match(rule('related'), /flex: 1 1 0/); assert.match(rule('related'), /overflow-y: auto/);
-  const related = Number(rule('related').match(/min-height: (\d+)%/)[1]);
-  const groups = Number(rule('groups').match(/max-height: (\d+)%/)[1]);
-  assert(related > groups, 'Related posts get more height than Groups');
-  assert.match(rule('experiences'), /flex: none/);
-  assert.match(rule('panel'), /height: calc\(100dvh - 7rem\)/, 'Matches the sticky rail height');
-  const mobile = css.replace(/\/\*[\s\S]*?\*\//g, '').slice(0, css.replace(/\/\*[\s\S]*?\*\//g, '').indexOf('@container'));
-  assert.doesNotMatch(mobile, /(?:height|width):\s*[1-9]/, 'Stacked layout keeps natural heights and widths');
-  assert.doesNotMatch(panelSource, /\bw-\[\d|min-w-\[\d|whitespace-nowrap|overflow-x/, 'No fixed widths that could scroll a phone page sideways');
-  assert.match(panelSource, /flex flex-wrap gap-1\.5 lg:gap-1/, 'Sub-tabs wrap at phone width');
+  assert.match(rule('panel'), /height: 100%/, 'The rail fills the posts height');
+  assert.match(rule('body'), /overflow-y: auto/, 'Tab content scrolls inside its share');
+  const plain = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(plain.slice(0, plain.indexOf('@container')), /height|flex: 0 0/, 'Phones keep natural heights');
+  assert.doesNotMatch(panelSource, /\bw-\[\d|min-w-\[\d|whitespace-nowrap|overflow-x-hidden/, 'No fixed widths that could scroll a phone page sideways');
+  assert.match(css, /\.scrollRow \{ overflow-x: auto/, 'Long visa and intake rows scroll sideways inside their own box');
   const home = await read('../src/components/CommunityHome.tsx');
   assert.match(home, /related=\{<HomeSidePanel visaType=\{visaType\}><div id="home-feed-aside"/);
   assert(home.indexOf('<RelatedQuestions') > home.indexOf('<HomeSidePanel') && home.indexOf('</HomeSidePanel>') > home.indexOf('Topics in This Feed'));
+});
+
+test('home fills the viewport: title-only header, compact filters below it, scrolling post list', async () => {
+  const home = await read('../src/components/CommunityHome.tsx');
+  const globals = await read('../src/styles/globals.css');
+  const header = home.slice(home.indexOf('<header className="home-heading'), home.indexOf('</header>'));
+  assert.match(home, /<main className="page-shell home-workspace">/);
+  assert.match(home, /<ResizablePostLayout fill className="home-fit min-h-0 flex-1"/);
+  assert.doesNotMatch(header, /<p /, 'No description under the title');
+  for (const control of ['Search visa questions', 'aria-label="Experience category"', 'aria-label="Post source"', 'aria-label="Filter by visa"', '>Experience</Link>'])
+    assert(header.indexOf(control) > header.indexOf('feed-toolbar'), `${control} sits in the filters below the title`);
+  assert.match(header, /lg:inline-flex"><span className="sr-only">Sort<\/span><select/, 'Desktop uses one compact sort control');
+  assert.match(header, /aria-label=\{experience \? 'Sort experiences' : 'Sort questions'\} className="flex items-center gap-1 overflow-x-auto overscroll-x-contain \[scrollbar-width:none\] lg:hidden"/, 'Phones keep sort buttons in one scrolling row');
+  assert.match(home, /id="question-list" aria-label="Community questions" aria-busy=\{loading\} className="mt-1\.5 min-w-0 lg:mt-1 scroll-mt-24 lg:min-h-0 lg:flex-1 lg:overflow-y-auto/, 'Only the posts scroll on desktop');
+  assert.match(globals, /#main-content > \.home-workspace \{ container: home-workspace \/ inline-size;/);
+  assert.match(globals, /@container home-workspace \(min-width: 1000px\) \{\s*\.home-fit \{ height: calc\(100dvh - 65px - 22px\); \}/);
 });

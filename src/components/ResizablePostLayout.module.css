@@ -15,6 +15,10 @@
   .divider:hover::before, .divider:focus-visible::before, .dragging .divider::before { width: 2px; background: #64748b; }
   .divider:focus-visible::before { outline: 2px solid #2563eb; outline-offset: 2px; }
   .related { position: sticky; top: 6rem; max-height: calc(100dvh - 7rem); overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+  /* Fill mode: the parent sets the height; each panel scrolls within it. */
+  .fill .layout { height: 100%; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  .fill .post { height: 100%; min-height: 0; }
+  .fill .related { position: relative; top: auto; max-height: none; height: 100%; min-height: 0; overflow: hidden; }
   .dragging { cursor: col-resize; user-select: none; }
   .dragging * { cursor: col-resize !important; }
 }

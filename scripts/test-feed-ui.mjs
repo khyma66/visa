@@ -497,7 +497,7 @@ test('each visa scopes all five sorts before Experience navigation on both feeds
     try {
       h.render({experience});await h.settle();
       const elements=nodes(h.tree);
-      assert(elements.findIndex(n=>n.props?.['aria-label']==='Filter by visa')<elements.findIndex(n=>n.props?.['aria-label']===(experience?'Sort experiences':'Sort questions')));
+      assert(elements.some(n=>n.props?.['aria-label']==='Filter by visa') && elements.some(n=>n.props?.['aria-label']===(experience?'Sort experiences':'Sort questions')));
       assert.equal(button(h,visa.replace(/-/g,'')).props['aria-pressed'],true);
       for (const [label,sort] of [['New','newest'],['Active','activity'],['Top','score'],['Unanswered','unanswered'],['SOS','newest']]) {
         button(h,label).props.onClick();h.render();await h.settle();
@@ -515,15 +515,16 @@ test('each visa scopes all five sorts before Experience navigation on both feeds
         const create=nodes(h.tree).filter(n=>n.props?.href&&textOf(n).includes('Create Experience'));
         assert(create.length>0);
         for(const item of create) assert.equal(new URL(item.props.href,'https://visa.test').searchParams.get('visa'),visa);
-        const primaryCreate=create.find(item=>nodes(nodes(h.tree).find(n=>n.props?.['aria-label']==='Sort experiences')).includes(item));
-        assert(primaryCreate,'The selected visa has a primary Create Experience action');
-        assert.match(primaryCreate.props.className,/(?:^| )col-span-full(?: |$)/,'Create spans the phone control row so its label remains readable');
+        const header=nodes(h.tree).find(n=>n.type==='header');
+        const primaryCreate=create.find(item=>nodes(header).includes(item));
+        assert(primaryCreate,'The selected visa has a primary Create Experience action beside the title');
+        assert.match(primaryCreate.props.className,/(?:^| )shrink-0(?: |$)/,'Create keeps its full label');
       }
     } finally {h.close();}
   }
 });
 
-test('Experience is green only as the current view; its sort remains accessible without looking like the current page', async () => {
+test('the selected sort is green on both feeds; Experience shows the current view without fixed green', async () => {
   for(const experience of [false,true]) {
     const h=new Harness('');
     try {
@@ -532,12 +533,15 @@ test('Experience is green only as the current view; its sort remains accessible 
       assert(link);assert.match(link.props.className,/feed-sort-button/);
       assert.equal(link.props.prefetch,false,'Hover must not trigger navigation or data loading');
       if(experience) {
-        assert.match(link.props.className,/(?:^| )bg-teal-700(?: |$)/);
-        assert.match(link.props.className,/hover:bg-teal-800/);
+        // Current view: a light marker with its own hover, never the solid selected green.
+        assert.match(link.props.className,/bg-teal-50 text-teal-900 ring-1 ring-inset ring-teal-600 hover:bg-teal-100/);
+        assert.doesNotMatch(link.props.className,/(?:^| )bg-teal-700(?: |$)/);
+        // Solid green follows the selected sort as it changes.
         for(const label of ['New','Top','Active','Unanswered','SOS']) {
           button(h,label).props.onClick();h.render();await h.settle();
           assert.equal(button(h,label).props['aria-pressed'],true);
-          assert.doesNotMatch(button(h,label).props.className,/(?:^| )bg-teal-700(?: |$)/);
+          assert.match(button(h,label).props.className,/(?:^| )bg-teal-700(?: |$)/);
+          for(const other of ['New','Top','Active','Unanswered','SOS'].filter(item=>item!==label)) assert.doesNotMatch(button(h,other).props.className,/(?:^| )bg-teal-700(?: |$)/);
         }
         button(h,'Reset filters').props.onClick();h.render();await h.settle();
         assert.equal(button(h,'New').props['aria-pressed'],true);
