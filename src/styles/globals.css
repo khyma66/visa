@@ -440,5 +440,5 @@
 }
 @media (min-width: 1024px) {
   /* Desktop toolbar: one compact row of filters, and controls sized to match. */
-  #main-content > .home-workspace .feed-toolbar :is(button, a) { min-height: 2.25rem; }
+  #main-content > .home-workspace .feed-toolbar :is(button, a) { min-height: 2rem; }
 }
