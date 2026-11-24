@@ -431,3 +431,14 @@
   .vote-controls, .post-reply-action, .post-related-action, :is(.post-toolbar, .feed-post-toolbar) .post-options-trigger { outline: 1px solid ButtonText; outline-offset: -1px; }
   .vote-controls button[aria-pressed="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
 }
+
+/* Home feed: beside the side rail, the header stays compact and the post list
+   and rail scroll inside the viewport. Narrower layouts keep normal page flow. */
+#main-content > .home-workspace { container: home-workspace / inline-size; padding-block: 14px 16px; }
+@container home-workspace (min-width: 1000px) {
+  .home-fit { height: calc(100dvh - 65px - 30px); }
+}
+@media (min-width: 1024px) {
+  /* Desktop toolbar: one compact row of filters, and controls sized to match. */
+  #main-content > .home-workspace .feed-toolbar :is(button, a) { min-height: 2.25rem; }
+}

@@ -1,12 +1,15 @@
-.panel { display: flex; flex-direction: column; gap: 0.75rem; }
-.groups, .experiences, .related { min-width: 0; }
+/* Phone and tablet: segments keep their natural height and the page scrolls. */
+.panel, .top, .body, .related, .groupList { min-width: 0; }
+.scrollRow { overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; padding-bottom: 2px; }
+.scrollRow::-webkit-scrollbar { display: none; }
 
-/* Beside the posts (sticky rail), Groups and Experiences stay at the top and the
-   related posts fill the remaining, larger share with their own scroll. Stacked
-   under the posts on narrower screens, every segment keeps its natural height. */
+/* Beside the posts: Groups and Experiences take about a fifth of the rail's
+   height; related posts take the rest and scroll on their own. */
 @container post-layout (min-width: 1000px) {
-  .panel { height: calc(100dvh - 7rem); }
-  .groups { flex: 0 1 auto; max-height: 38%; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
-  .experiences { flex: none; }
-  .related { flex: 1 1 0; min-height: 40%; overflow-y: auto; overscroll-behavior-y: contain; }
+  .panel { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: .75rem; }
+  .top { display: flex; flex: 0 0 20%; flex-direction: column; min-height: 0; overflow: hidden; border-bottom: 1px solid #e2e8f0; padding-bottom: .5rem; }
+  .body { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding-top: .5rem; }
+  .body[hidden] { display: none; }
+  .groupList { flex: 1 1 auto; min-height: 2.5rem; overflow-y: auto; overscroll-behavior-y: contain; }
+  .related { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 }

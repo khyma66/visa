@@ -186,7 +186,10 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     const url = new URL(window.location.href);
     if (value > 1) url.searchParams.set('page', String(value)); else url.searchParams.delete('page');
     if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url);
-    document.getElementById('question-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const list = document.getElementById('question-list');
+    // On desktop the list itself scrolls, so reset it before aligning the page.
+    if (list) list.scrollTop = 0;
+    list?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   const matchesFilters = useMemo(() => (question: Question) => {
@@ -254,8 +257,8 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
     () => setRevision((value) => value + 1)), [liveTopics, user?.id]);
 
   return (
-    <main className="page-shell">
-      <ResizablePostLayout mainLabel="Posts" relatedLabel="Community discovery" related={<HomeSidePanel visaType={visaType}><div id="home-feed-aside" className="min-w-0 space-y-5">
+    <main className="page-shell home-workspace">
+      <ResizablePostLayout fill className="home-fit min-h-0 flex-1" mainLabel="Posts" relatedLabel="Community discovery" related={<HomeSidePanel visaType={visaType}><div id="home-feed-aside" className="min-w-0 space-y-5">
           {(selectedPost || search || tag) && <div id="feed-related" className="scroll-mt-24">
             {selectedPost && <p aria-live="polite" className="mb-3 border-l-2 border-teal-800 pl-3 text-sm text-slate-600">Related To <span className="block break-words font-semibold text-slate-900">{selectedPost.title}</span></p>}
             <RelatedQuestions key={selectedPost?.id ?? `${search}:${tag}`} context={selectedPost ?? { title: search, tags: tag ? [tag] : [] }} />
@@ -269,32 +272,36 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
           {popularTags.length > 0 && <section className="border-b border-slate-200 px-2 pb-5"><div className="flex items-center gap-2"><Tags size={17} className="shrink-0 text-slate-500" aria-hidden="true" /><h2 className="text-thread-title font-semibold text-slate-900 capitalize">Topics in This Feed</h2></div><div className="mt-3 flex flex-wrap gap-2">{popularTags.map(([name, count]) => <button key={name} onClick={() => selectTag(name)} className="max-w-full break-words rounded bg-blue-50 px-2 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">{topicLabel(name)}<span className="ml-1.5 text-xs text-blue-500">{count}</span></button>)}</div><Link href="/us/en/tags" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-blue-700 capitalize">All Tags<ArrowUpRight size={13} aria-hidden="true" /></Link></section>}
 
         </div></HomeSidePanel>}>
-        <div id="home-feed-main" className="min-w-0">
-          <header className="feed-heading flex flex-wrap items-center justify-between gap-4">
-            <div className="capitalize"><p className="mb-2 text-sm font-semibold text-teal-800 capitalize">Your visa journey, together</p><h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl capitalize">{experience ? 'U.S. Visa Experiences' : initialKind === 'discussion' ? 'U.S. Visa Discussions' : 'U.S. Visa Community'}</h1><p className="mt-2 max-w-2xl text-base leading-6 text-slate-600">{experience ? 'First-hand stories selected from existing discussions, alongside experiences shared here. Original dates and replies are preserved. Personal accounts are not verified outcomes or legal advice.' : 'Ask about U.S. visas and find people with the same issue: every post shows similar questions and experiences.'}</p></div>
-            {!experience && <Link href={askHref} className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-800 capitalize"><Plus size={17} aria-hidden="true" />Ask a Question</Link>}
+
+        <div id="home-feed-main" className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
+          <header className="home-heading flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-teal-100 bg-gradient-to-r from-[#effaf6] to-[#f2f7ff] px-4 py-2 sm:px-5">
+            <div className="min-w-0 flex-1 capitalize"><h1 className="truncate text-xl font-semibold leading-7 text-slate-950 sm:text-2xl capitalize">{experience ? 'U.S. Visa Experiences' : initialKind === 'discussion' ? 'U.S. Visa Discussions' : 'U.S. Visa Community'}</h1><p className="line-clamp-2 text-sm leading-5 text-slate-600 sm:hidden">{experience ? 'First-hand stories from existing discussions and shared experiences. Original dates and replies are preserved.' : 'Ask about U.S. visas and find people with the same issue.'}</p></div>
+            <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
+              <label className="relative block min-w-0 flex-1 capitalize sm:w-56 xl:w-80">
+                <span className="sr-only capitalize">Search visa questions</span><Search className="absolute left-3.5 top-2.5 text-slate-500" size={17} aria-hidden="true" />
+                <input value={search} maxLength={200} onChange={(event) => { setSearch(event.target.value); updateQuery({ q: event.target.value }); }} placeholder="Search questions, visa types, and tags" className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" />
+              </label>
+              {!experience && <Link href={askHref} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-teal-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-800 capitalize"><Plus size={16} aria-hidden="true" /><span className="hidden min-[420px]:inline">Ask</span><span className="sr-only min-[420px]:hidden">Ask a Question</span></Link>}
+            </div>
           </header>
 
-          <label className="relative my-4 block capitalize">
-            <span className="sr-only capitalize">Search visa questions</span><Search className="absolute left-3.5 top-3 text-slate-500" size={18} aria-hidden="true" />
-            <input value={search} maxLength={200} onChange={(event) => { setSearch(event.target.value); updateQuery({ q: event.target.value }); }} placeholder="Search questions, visa types, and tags" className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" />
-          </label>
-
-          {experience && <label className="mb-4 flex flex-wrap items-center gap-2 text-sm">Experience Category<select value={category} onChange={event => { setCategory(event.target.value); updateQuery({ category: event.target.value }); }} className="rounded border px-3 py-2"><option value="" className="capitalize">All Experience Categories</option>{EXPERIENCE_CATEGORIES.map(value => <option key={value} value={value}>{value.replace(/\b\w/g, letter => letter.toUpperCase())}</option>)}</select></label>}
-          <section id="question-list" aria-label="Community questions" aria-busy={loading} className="min-w-0 scroll-mt-24">
-            {sortMode === 'sos' && !experience && <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><strong>Urgent community questions</strong><p>Replies are not immediate or guaranteed. If someone is in immediate danger in the U.S., call 911.</p><Link href={askHref} className="mt-2 inline-block font-semibold underline">Post an SOS question</Link></div>}
-            <div className="feed-controls">
+          <div className="feed-toolbar mt-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 sm:px-3 lg:mt-1 lg:py-1">
               <div role="group" aria-label="Filter by visa">
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                  {FEED_VISAS.map((value) => <button key={value || 'all'} type="button" onClick={() => selectVisa(value)} aria-pressed={visaType === value} className={`min-h-11 rounded-full border px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${visaType === value ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50'}`}>{value.replace(/-/g, '') || 'All visas'}</button>)}
+                <div className="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain pb-0.5 lg:pb-0 [scrollbar-width:none] sm:gap-2">
+                  {FEED_VISAS.map((value) => <button key={value || 'all'} type="button" onClick={() => selectVisa(value)} aria-pressed={visaType === value} className={`min-h-11 shrink-0 rounded-full border px-3 py-2 text-sm font-medium lg:px-2.5 lg:py-0 lg:leading-8 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${visaType === value ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50'}`}>{value.replace(/-/g, '') || 'All visas'}</button>)}
                   {filtered && <button type="button" onClick={resetFilters} aria-label="Reset filters" className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"><X size={14} aria-hidden="true" />Clear filters</button>}
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 items-center gap-1 border-t border-slate-100 pt-3 min-[380px]:grid-cols-3 sm:flex sm:flex-wrap" role="group" aria-label={experience ? 'Sort experiences' : 'Sort questions'}>
+              <div className="mt-1 flex items-center gap-1 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-1 [scrollbar-width:none] lg:mt-0 lg:border-0 lg:pt-0 sm:flex-wrap lg:flex-nowrap" role="group" aria-label={experience ? 'Sort experiences' : 'Sort questions'}>
                 {SORTS.map(([value, label]) => <button key={value} type="button" onClick={() => selectSort(value)} aria-pressed={sortMode === value} className={`feed-sort-button capitalize rounded-lg px-1 py-2 text-sm font-semibold sm:px-3 ${sortMode === value ? experience ? 'bg-slate-100 text-slate-900 ring-1 ring-inset ring-slate-300' : 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-teal-50 hover:text-teal-900'}`}>{label}</button>)}
                 <Link href={experienceHref} prefetch={false} aria-current={experience ? 'page' : undefined} className={`feed-sort-button inline-flex min-h-11 items-center justify-center rounded-lg px-1 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 sm:px-3 ${experience ? 'bg-teal-700 text-white hover:bg-teal-800' : 'text-slate-600 hover:bg-teal-50 hover:text-teal-900'}`}>Experience</Link>
                 {experience && <Link href={createExperienceHref} prefetch={false} className="col-span-full inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 sm:ml-auto"><Plus size={16} aria-hidden="true" />Create Experience</Link>}
               </div>
+          </div>
+
+          <section id="question-list" aria-label="Community questions" aria-busy={loading} className="mt-2 min-w-0 lg:mt-0.5 scroll-mt-24 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+          {experience && <label className="mb-4 flex flex-wrap items-center gap-2 text-sm">Experience Category<select value={category} onChange={event => { setCategory(event.target.value); updateQuery({ category: event.target.value }); }} className="rounded border px-3 py-2"><option value="" className="capitalize">All Experience Categories</option>{EXPERIENCE_CATEGORIES.map(value => <option key={value} value={value}>{value.replace(/\b\w/g, letter => letter.toUpperCase())}</option>)}</select></label>}
+            {sortMode === 'sos' && !experience && <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><strong>Urgent community questions</strong><p>Replies are not immediate or guaranteed. If someone is in immediate danger in the U.S., call 911.</p><Link href={askHref} className="mt-2 inline-block font-semibold underline">Post an SOS question</Link></div>}
               {(experience || initialKind || tag) && <div className="mt-3 flex flex-wrap items-center gap-2">
                 {(experience || initialKind) && <select aria-label="Post source" value={origin} onChange={event => { const value = event.target.value as typeof origin; setOrigin(value); updateQuery({ origin: value }); }} className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-medium text-slate-700"><option value="" className="capitalize">All Posts</option><option value="member" className="capitalize">Member Posts</option><option value="earlier" className="capitalize">Earlier Discussions</option></select>}
                 {!experience && initialKind && <select aria-label="Post type" value={kind} onChange={(event) => { const value = event.target.value as PostKind; setKind(value); updateQuery({ type: value }); }} className="max-w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-600"><option value="" className="capitalize">All Post Types</option><option value="question" className="capitalize">Questions</option><option value="discussion" className="capitalize">Discussions & experiences</option><option value="promotion" className="capitalize">Promotional posts</option></select>}
@@ -302,7 +309,6 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
               </div>}
               <span aria-live="polite" aria-atomic="true" className="sr-only">{loading ? refreshing ? 'Updating results…' : 'Loading questions...' : `${pageQuestions.length} posts on page ${currentPage}`}</span>
               {origin === 'earlier' && <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">Previously published discussions use neutral public aliases. You can reply here, but the original contributor is not a VisaThreads member and cannot receive direct messages.</p>}
-            </div>
             {!loading && feedUnavailable && <p className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">Some discussions are temporarily unavailable. Please try again later.</p>}
             {error && <div role="alert" className="my-3 rounded-lg bg-rose-50 p-4 text-sm text-rose-800">{error} <button onClick={() => setRevision((value) => value + 1)} className="font-semibold underline capitalize">Retry</button></div>}
             {loading && !refreshing ? <div role="status" aria-label="Loading questions" className="divide-y divide-slate-100">{[1, 2, 3, 4].map((item) => <div key={item} className="space-y-3 py-5"><div className="h-5 w-2/5 animate-pulse rounded bg-slate-100" /><div className="h-6 w-4/5 animate-pulse rounded bg-slate-100" /><div className="h-10 animate-pulse rounded bg-slate-100" /></div>)}</div> : <>
