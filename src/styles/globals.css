@@ -434,9 +434,9 @@
 
 /* Home feed: beside the side rail, the header stays compact and the post list
    and rail scroll inside the viewport. Narrower layouts keep normal page flow. */
-#main-content > .home-workspace { container: home-workspace / inline-size; padding-block: 14px 16px; }
+#main-content > .home-workspace { container: home-workspace / inline-size; padding-block: 10px 12px; }
 @container home-workspace (min-width: 1000px) {
-  .home-fit { height: calc(100dvh - 65px - 30px); }
+  .home-fit { height: calc(100dvh - 65px - 22px); }
 }
 @media (min-width: 1024px) {
   /* Desktop toolbar: one compact row of filters, and controls sized to match. */

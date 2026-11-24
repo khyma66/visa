@@ -252,8 +252,12 @@ test('home fills the viewport beside the rail with a compact header and a scroll
   assert.match(home, /<main className="page-shell home-workspace">/);
   assert.match(home, /<ResizablePostLayout fill className="home-fit min-h-0 flex-1"/);
   assert.match(home, /<header className="home-heading /, 'Compact header row');
-  assert.match(home, /id="question-list" aria-label="Community questions" aria-busy=\{loading\} className="mt-2 min-w-0 lg:mt-0\.5 scroll-mt-24 lg:min-h-0 lg:flex-1 lg:overflow-y-auto/, 'Only the posts scroll on desktop');
+  assert(home.indexOf('feed-toolbar') > home.indexOf('<header className="home-heading') && home.indexOf('feed-toolbar') < home.indexOf('</header>'), 'Filters and sort live inside the header card');
+  assert.match(home, /id="question-list" aria-label="Community questions" aria-busy=\{loading\} className="mt-1\.5 min-w-0 lg:mt-1 scroll-mt-24 lg:min-h-0 lg:flex-1 lg:overflow-y-auto/, 'Only the posts scroll on desktop');
   assert.match(home, /overflow-x-auto overscroll-x-contain pb-0\.5 lg:pb-0/, 'Visa filters stay on one scrolling row');
+  assert.match(home, /className="hidden items-center gap-1\.5 text-xs font-medium text-slate-500 lg:inline-flex">Sort<select aria-label=\{experience \? 'Sort experiences' : 'Sort questions'\} value=\{sortMode\}/, 'Desktop uses one compact sort control');
+  assert.match(home, /feed-sort-button capitalize shrink-0 rounded-lg px-3 py-2 text-sm font-semibold lg:hidden/, 'Phones keep the sort buttons');
+  assert.match(home, /feed-toolbar basis-full border-t border-teal-100\/80 pt-1\.5 lg:flex lg:items-center/, 'Visa filters and sort share one desktop row');
   assert.match(globals, /#main-content > \.home-workspace \{ container: home-workspace \/ inline-size;/);
-  assert.match(globals, /@container home-workspace \(min-width: 1000px\) \{\s*\.home-fit \{ height: calc\(100dvh - 65px - 30px\); \}/);
+  assert.match(globals, /@container home-workspace \(min-width: 1000px\) \{\s*\.home-fit \{ height: calc\(100dvh - 65px - 22px\); \}/);
 });
