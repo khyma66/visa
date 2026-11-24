@@ -20,7 +20,7 @@ import { EXPERIENCE_CATEGORIES, VISA_TYPES } from '@/lib/post-categories';
 const PAGE_SIZE = 20;
 const DEFAULT_VISA = 'F-1 / OPT';
 const FEED_VISAS = [DEFAULT_VISA, ...VISA_TYPES.filter(value => value !== DEFAULT_VISA), ''];
-const selectClass = 'h-10 min-w-28 max-w-full shrink truncate rounded-lg border border-slate-200 bg-white pl-2 pr-7 text-sm font-medium text-slate-700 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-100 sm:max-w-40 lg:h-9';
+const selectClass = 'h-10 min-w-28 max-w-full flex-1 shrink truncate rounded-lg border border-slate-200 bg-white pl-2 pr-7 text-sm font-medium text-slate-700 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-100 sm:max-w-40 sm:flex-none lg:h-9';
 const SORTS = [['newest', 'New'], ['activity', 'Active'], ['score', 'Top'], ['unanswered', 'Unanswered'], ['sos', 'SOS']] as const;
 type SortMode = typeof SORTS[number][0];
 type PostKind = '' | 'question' | 'discussion' | 'promotion';
@@ -275,14 +275,14 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
         </div></HomeSidePanel>}>
 
         <div id="home-feed-main" className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
-          <header className="home-heading rounded-xl border border-teal-100 bg-gradient-to-r from-[#effaf6] to-[#f2f7ff] px-3 py-2 sm:px-4 lg:py-1.5">
+          <header className="home-heading rounded-xl border border-teal-100 bg-gradient-to-r from-[#effaf6] to-[#f2f7ff] px-3 py-2.5 sm:px-4 lg:px-5 lg:py-2.5">
             <div className="flex items-center justify-between gap-3">
               <h1 className="min-w-0 truncate text-xl font-semibold leading-8 text-slate-950 sm:text-2xl capitalize">{experience ? 'U.S. Visa Experiences' : initialKind === 'discussion' ? 'U.S. Visa Discussions' : 'U.S. Visa Community'}</h1>
               {experience
                 ? <Link href={createExperienceHref} prefetch={false} className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full bg-teal-700 px-3.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-800 lg:min-h-9 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"><Plus size={16} aria-hidden="true" /><span className="sr-only min-[420px]:not-sr-only">Create Experience</span><span aria-hidden="true" className="min-[420px]:hidden">Create</span></Link>
-                : <Link href={askHref} className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full bg-teal-700 px-3.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-800 lg:min-h-9 capitalize"><Plus size={16} aria-hidden="true" /><span className="hidden min-[420px]:inline">Ask</span><span className="sr-only min-[420px]:hidden">Ask a Question</span></Link>}
+                : <Link href={askHref} className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full bg-teal-700 px-3.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-800 lg:min-h-9 capitalize"><Plus size={16} aria-hidden="true" /><span aria-hidden="true">Ask</span><span className="sr-only">Ask a Question</span></Link>}
             </div>
-            <div className="feed-toolbar mt-1.5 flex flex-col gap-1.5 border-t border-teal-100/80 pt-1.5 lg:mt-1 lg:gap-1 lg:pt-1">
+            <div className="feed-toolbar mt-2 flex flex-col gap-2 border-t border-teal-100/80 pt-2">
               <div className="flex flex-wrap items-center gap-1.5 lg:flex-nowrap">
                 <label className="relative block min-w-0 basis-full capitalize sm:min-w-36 sm:basis-auto sm:flex-1">
                   <span className="sr-only capitalize">Search visa questions</span><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} aria-hidden="true" />
@@ -293,10 +293,11 @@ export function CommunityHome({ initialKind = '', experience = false }: { initia
                 {!experience && initialKind && <select aria-label="Post type" value={kind} onChange={(event) => { const value = event.target.value as PostKind; setKind(value); updateQuery({ type: value }); }} className={selectClass}><option value="" className="capitalize">All Post Types</option><option value="question" className="capitalize">Questions</option><option value="discussion" className="capitalize">Discussions & experiences</option><option value="promotion" className="capitalize">Promotional posts</option></select>}
                 {/* Desktop: one compact sort control; phones get the buttons below. */}
                 <label className="hidden min-w-0 shrink items-center lg:inline-flex"><span className="sr-only">Sort</span><select aria-label={experience ? 'Sort experiences' : 'Sort questions'} value={sortMode} onChange={(event) => selectSort(event.target.value as SortMode)} className={selectClass}>{SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                <Link href={experienceHref} prefetch={false} aria-current={experience ? 'page' : undefined} className={`feed-sort-button inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${experience ? 'bg-teal-50 text-teal-900 ring-1 ring-inset ring-teal-600 hover:bg-teal-100' : 'text-slate-600 hover:bg-teal-50 hover:text-teal-900'}`}>Experience</Link>
+                <Link href={experienceHref} prefetch={false} aria-current={experience ? 'page' : undefined} className={`feed-sort-button hidden min-h-10 shrink-0 lg:inline-flex items-center justify-center rounded-lg px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${experience ? 'bg-teal-50 text-teal-900 ring-1 ring-inset ring-teal-600 hover:bg-teal-100' : 'text-slate-600 hover:bg-teal-50 hover:text-teal-900'}`}>Experience</Link>
               </div>
               <div role="group" aria-label={experience ? 'Sort experiences' : 'Sort questions'} className="flex items-center gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] lg:hidden">
                 {SORTS.map(([value, label]) => <button key={value} type="button" onClick={() => selectSort(value)} aria-pressed={sortMode === value} className={`feed-sort-button capitalize shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${sortMode === value ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-teal-50 hover:text-teal-900'}`}>{label}</button>)}
+                  <Link href={experienceHref} prefetch={false} aria-current={experience ? 'page' : undefined} className={`feed-sort-button inline-flex min-h-10 shrink-0 lg:hidden items-center justify-center rounded-lg px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${experience ? 'bg-teal-50 text-teal-900 ring-1 ring-inset ring-teal-600 hover:bg-teal-100' : 'text-slate-600 hover:bg-teal-50 hover:text-teal-900'}`}>Experience</Link>
               </div>
               <div role="group" aria-label="Filter by visa" className="min-w-0">
                 <div className="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain [scrollbar-width:none]">

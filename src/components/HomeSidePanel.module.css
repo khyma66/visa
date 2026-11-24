@@ -1,15 +1,15 @@
 /* Phone and tablet: segments keep their natural height and the page scrolls. */
-.panel, .top, .body, .related, .groupList { min-width: 0; }
-.scrollRow { overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; padding-bottom: 2px; }
+.panel, .top, .body, .related { min-width: 0; }
+.scrollRow { overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
 .scrollRow::-webkit-scrollbar { display: none; }
 
-/* Beside the posts: Groups and Experiences take about a fifth of the rail's
-   height; related posts take the rest and scroll on their own. */
+/* Beside the posts: Groups and Experiences size to their content, up to a
+   quarter of the rail, with no visible scrollbar; related posts take the rest. */
 @container post-layout (min-width: 1000px) {
   .panel { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: .75rem; }
-  .top { display: flex; flex: 0 0 20%; flex-direction: column; min-height: 0; overflow: hidden; border-bottom: 1px solid #e2e8f0; padding-bottom: .5rem; }
-  .body { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding-top: .5rem; }
+  .top { display: flex; flex: 0 0 auto; flex-direction: column; max-height: 25%; min-height: 0; overflow: hidden; border-bottom: 1px solid #e2e8f0; padding-bottom: .5rem; }
+  .body { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding-top: .375rem; scrollbar-width: none; }
+  .body::-webkit-scrollbar { display: none; }
   .body[hidden] { display: none; }
-  .groupList { flex: 1 1 auto; min-height: 2.5rem; overflow-y: auto; overscroll-behavior-y: contain; }
   .related { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 }
